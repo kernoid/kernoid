@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH gone AS (\n                   DELETE FROM mail_changes WHERE (account_id, object_type, modseq, object_id) IN (\n                       SELECT account_id, object_type, modseq, object_id FROM mail_changes\n                       WHERE changed_at < $1 ORDER BY changed_at LIMIT $2)\n                   RETURNING account_id, modseq),\n               floors AS (\n                   UPDATE mail_accounts m SET changes_floor = greatest(m.changes_floor, g.modseq)\n                   FROM (SELECT account_id, max(modseq) AS modseq FROM gone GROUP BY account_id) g\n                   WHERE m.account_id = g.account_id\n                   RETURNING 1)\n               SELECT count(*) AS \"count!\" FROM gone",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "57ee0bb625a83e8d16a2615922796e05bee5ebdf47f8c744b507c05d05886351"
+}

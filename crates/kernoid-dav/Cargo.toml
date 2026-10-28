@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+[package]
+name = "kernoid-dav"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+calcard = "0.3.14"
+chrono = "0.4.45"
+chrono-tz = "0.10.4"
+hashify = "0.2.9"
+http = "1.5.0"
+kernoid-groupware = { version = "0.1.0", path = "../kernoid-groupware" }
+mail-parser = { version = "0.11.9", features = ["full_encoding"] }
+quick-xml = "0.41.0"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+tracing = "0.1.44"
+uuid = { version = "1.28.0", features = ["v7"] }
+
+[dev-dependencies]
+serde_json = "1.0.154"
+kernoid-events = { path = "../kernoid-events" }
+kernoid-identity = { path = "../kernoid-identity" }
+kernoid-mail = { path = "../kernoid-mail" }
+kernoid-store = { path = "../kernoid-store" }
+object_store = "0.14.2"
+sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres", "macros", "migrate"] }
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros"] }

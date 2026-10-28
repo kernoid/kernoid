@@ -1,0 +1,77 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT e.calendar_id, e.resource_name, e.uid, e.size, c.timezone\n             FROM calendar_events e JOIN calendars c ON c.id = e.calendar_id\n             WHERE e.id = $1 AND e.account_id = $2 FOR UPDATE OF e",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "calendar_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "calendar_events",
+            "name": "calendar_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "resource_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "calendar_events",
+            "name": "resource_name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "uid",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "calendar_events",
+            "name": "uid"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "size",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "calendar_events",
+            "name": "size"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "timezone",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "calendars",
+            "name": "timezone"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "ee90b3c2fc9935c0eab281e46d8130dd542447698c684da1e49c5805fe6d5046"
+}

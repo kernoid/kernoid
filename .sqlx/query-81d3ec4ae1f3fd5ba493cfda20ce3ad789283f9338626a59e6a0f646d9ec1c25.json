@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT key_authorization FROM acme_challenges WHERE token = $1 AND expires_at > now()",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "key_authorization",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "acme_challenges",
+            "name": "key_authorization"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "81d3ec4ae1f3fd5ba493cfda20ce3ad789283f9338626a59e6a0f646d9ec1c25"
+}

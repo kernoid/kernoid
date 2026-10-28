@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (SELECT 1 FROM emails WHERE account_id = $1 AND message_id = $2\n                                  AND received_at > now() - make_interval(days => $3)) AS \"duplicate!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "duplicate!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "9ef48dc29d1c74e11bda5be85132720020a5de4e45bd0b7b852c0109da4eed7a"
+}

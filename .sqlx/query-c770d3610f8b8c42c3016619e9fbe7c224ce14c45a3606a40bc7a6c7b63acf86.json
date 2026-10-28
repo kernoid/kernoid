@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE sessions SET terminated_at = now() - interval '2 days' WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c770d3610f8b8c42c3016619e9fbe7c224ce14c45a3606a40bc7a6c7b63acf86"
+}

@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO tenant_keys (tenant_id, number, wrapped, main_key) VALUES ($1, $2, $3, $4)\n             ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4",
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "01ec80355d928bd0be04ed06cd58a1f4376622e7ec465e7dbc6c10a0b102501f"
+}

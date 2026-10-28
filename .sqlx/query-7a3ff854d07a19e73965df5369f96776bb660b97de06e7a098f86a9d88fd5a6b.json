@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT DISTINCT creator FROM events WHERE event_type = 'account.added'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "creator",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "events",
+            "name": "creator"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "7a3ff854d07a19e73965df5369f96776bb660b97de06e7a098f86a9d88fd5a6b"
+}

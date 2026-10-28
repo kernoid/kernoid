@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO saml_logouts (request_id, instance_id, idp_id, expires_at)\n             VALUES ($1, $2, $3, now() + make_interval(secs => $4))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid",
+        "Uuid",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cd57726d083b90ce33266de3c7b1e8f711c06bd301762d85b3c69bdb55461956"
+}

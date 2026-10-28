@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT secret_sealed FROM account_totp WHERE account_id = $1 AND (confirmed_at IS NOT NULL) = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "secret_sealed",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "account_totp",
+            "name": "secret_sealed"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "4da755e6c3c6431f51d642cab569cc4951a6ce2ca9ef56605cc65eda4bba9c50"
+}

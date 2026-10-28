@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO acme_orders (domain, attempts, next_attempt_at, last_error)\n                         VALUES ($1, $2, now() + make_interval(secs => $3), $4)\n                         ON CONFLICT (domain) DO UPDATE SET attempts = $2,\n                             next_attempt_at = now() + make_interval(secs => $3), last_error = $4",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int4",
+        "Float8",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e665d063480ae2a183707fd4d1652be410f2afb76c8314053abcbfa68320b7c8"
+}

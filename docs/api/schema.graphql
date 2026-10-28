@@ -1,0 +1,1371 @@
+type Account {
+	id: String!
+	tenant: String!
+	address: String!
+	displayName: String!
+}
+
+type AccountDetails {
+	id: String!
+	tenant: String!
+	address: String!
+	displayName: String!
+	active: Boolean!
+	"""
+	A shared mailbox: nobody logs in as it.
+	"""
+	shared: Boolean!
+	"""
+	A drive: a file store of the tenant; nobody logs in as it.
+	"""
+	drive: Boolean!
+}
+
+type AccountLink {
+	identityProvider: String!
+	subject: String!
+	createdAt: DateTime!
+}
+
+type AccountService {
+	service: String!
+	"""
+	`on` or `requested`.
+	"""
+	state: String!
+}
+
+type Application {
+	id: String!
+	name: String!
+	"""
+	`confidential` or `public`.
+	"""
+	kind: String!
+	project: String
+	redirectUris: [String!]!
+	postLogoutRedirectUris: [String!]!
+	mfaRequired: Boolean!
+	active: Boolean!
+	options: ApplicationOptions!
+}
+
+type ApplicationCreated {
+	id: String!
+	"""
+	For a confidential application: its secret, shown this once.
+	"""
+	clientSecret: String
+}
+
+"""
+What an application may do beyond the basic flow, and how it learns of logouts.
+"""
+type ApplicationOptions {
+	"""
+	`opaque` or `jwt` (RFC 9068).
+	"""
+	accessTokenFormat: String!
+	"""
+	May ask for `offline_access`, with the person's consent.
+	"""
+	offlineAccess: Boolean!
+	"""
+	Asks the person to agree before the first login.
+	"""
+	consentRequired: Boolean!
+	backchannelLogoutUri: String
+	frontchannelLogoutUri: String
+}
+
+type AuthRequest {
+	id: String!
+	"""
+	The name of the application asking.
+	"""
+	application: String!
+	scopes: [String!]!
+	"""
+	`none`, `login`, `consent`, `select_account` – what the login UI must respect.
+	"""
+	prompt: [String!]!
+	"""
+	The session may be at most this many seconds old.
+	"""
+	maxAge: Int
+	expiresAt: DateTime!
+}
+
+type CollectionGrantObject {
+	kind: String!
+	collection: String!
+	"""
+	`account` or `group`.
+	"""
+	granteeKind: String!
+	granteeId: String!
+	granteeName: String!
+	level: String!
+}
+
+type CollectionImportResult {
+	stored: Int!
+	"""
+	UIDs of the objects not stored.
+	"""
+	refused: [String!]!
+}
+
+type CollectionObject {
+	owner: String!
+	ownerName: String!
+	"""
+	`calendar` or `addressbook`.
+	"""
+	kind: String!
+	id: String!
+	name: String!
+	color: String
+	isDefault: Boolean!
+	"""
+	The caller's level: `freebusy`, `read`, `rsvp`, `write` or `admin` (an owner's).
+	"""
+	level: String!
+}
+
+"""
+What an account agreed an application may have.
+"""
+type Consent {
+	application: String!
+	applicationName: String!
+	scopes: [String!]!
+	grantedAt: DateTime!
+}
+
+type CreatedSession {
+	id: String!
+	"""
+	The session token: shown this once, sent as `Authorization: Bearer <token>`.
+	"""
+	token: String!
+	expiresAt: DateTime!
+	account: Account!
+	"""
+	After a password login: keep it for this address and send it with the next login (`deviceToken`).
+	"""
+	deviceToken: String
+}
+
+"""
+Implement the DateTime<Utc> scalar
+
+The input/output is a string in RFC3339 format.
+"""
+scalar DateTime
+
+"""
+A drive: a file store of the tenant, reached through grants.
+"""
+type DriveObject {
+	id: String!
+	name: String!
+	active: Boolean!
+}
+
+type ExchangedIdpLogin {
+	session: CreatedSession!
+	"""
+	The auth request the login was for – finish it next.
+	"""
+	authRequest: String
+}
+
+"""
+A grant on an account's files or a drive.
+"""
+type FileGrantObject {
+	"""
+	`account` or `group`.
+	"""
+	granteeKind: String!
+	granteeId: String!
+	granteeName: String!
+	"""
+	A directory; null: the whole store.
+	"""
+	node: String
+	"""
+	Letters of `randws`.
+	"""
+	rights: String!
+}
+
+"""
+An account's files as its administrators see them.
+"""
+type FilesOverview {
+	usedBytes: Int!
+	"""
+	The account's own quota; null when the tenant's default holds.
+	"""
+	quota: Int
+	"""
+	What holds: the account's own quota or the tenant's default; null for no limit.
+	"""
+	effectiveQuota: Int
+}
+
+type Group {
+	id: String!
+	name: String!
+	"""
+	Account ids.
+	"""
+	members: [String!]!
+	"""
+	Addresses mail to the group arrives at; it goes to every member.
+	"""
+	addresses: [String!]!
+}
+
+type IdentityProviderObject {
+	id: String!
+	name: String!
+	kind: String!
+	issuer: String!
+	clientId: String!
+	scopes: [String!]!
+	domains: [String!]!
+	autoCreate: Boolean!
+	autoLink: Boolean!
+	hasSecret: Boolean!
+	active: Boolean!
+	"""
+	Register this at the provider: the redirect URI (OpenID Connect) or the ACS URL (SAML).
+	"""
+	redirectUri: String!
+	samlSsoUrl: String
+	samlCertificates: [String!]!
+	samlEmailAttribute: String
+	samlNameAttribute: String
+	samlSignRequests: Boolean!
+	samlSloUrl: String
+	"""
+	The display name follows the provider's at every login.
+	"""
+	syncProfile: Boolean!
+	"""
+	Offered to everyone on the login page; creates accounts where the tenant allows registration.
+	"""
+	register: Boolean!
+	"""
+	Serves the domains of every tenant of the instance.
+	"""
+	instanceWide: Boolean!
+}
+
+type IdentityProviderSummary {
+	id: String!
+	name: String!
+}
+
+type Instance {
+	id: String!
+	name: String!
+	primaryDomain: String!
+}
+
+type InstanceDetails {
+	id: String!
+	name: String!
+	primaryDomain: String!
+	domains: [String!]!
+	"""
+	The instance's own login UI; without one, kernoid's at `/login`.
+	"""
+	loginUiUrl: String
+	"""
+	The WebAuthn RP ID its passkeys are bound to.
+	"""
+	passkeyRpId: String!
+}
+
+type InstanceRole {
+	name: String!
+	permissions: [String!]!
+	tenantPermissions: [String!]!
+	builtin: Boolean!
+}
+
+type InstanceRoles {
+	roles: [InstanceRole!]!
+	assignments: [RoleAssignment!]!
+}
+
+"""
+A scalar that can represent any JSON value.
+"""
+scalar JSON
+
+type LinkProposal {
+	email: String!
+	provider: String!
+	mayRegister: Boolean!
+}
+
+type LoginPolicy {
+	usernames: Boolean!
+	emailLogin: Boolean!
+}
+
+type MailDns {
+	domain: String!
+	records: [RecordCheck!]!
+}
+
+type MailGrantObject {
+	"""
+	`account` or `group`.
+	"""
+	granteeKind: String!
+	granteeId: String!
+	granteeName: String!
+	"""
+	Null: the whole store.
+	"""
+	mailbox: String
+	"""
+	IMAP ACL rights (RFC 4314).
+	"""
+	rights: String!
+	sendAs: Boolean!
+}
+
+type MailOverview {
+	"""
+	A shared mailbox: nobody logs in as it.
+	"""
+	shared: Boolean!
+	usedBytes: Int!
+	"""
+	The account's own quota; null when the tenant's default holds.
+	"""
+	quota: Int
+	"""
+	What holds; null for no limit.
+	"""
+	effectiveQuota: Int
+	mailboxes: [MailboxObject!]!
+}
+
+type MailRetention {
+	"""
+	Days emails stay in the accounts' Trash; null keeps them.
+	"""
+	trashDays: Int
+	"""
+	Days emails stay in the accounts' Junk; null keeps them.
+	"""
+	junkDays: Int
+}
+
+type MailboxObject {
+	id: String!
+	parentId: String
+	name: String!
+	role: String
+	totalEmails: Int!
+	unreadEmails: Int!
+}
+
+type MboxImportResult {
+	imported: Int!
+	"""
+	Messages refused: not a message, too large, over the quota.
+	"""
+	failed: Int!
+}
+
+type MutationRoot {
+	"""
+	Logs in: checks address and password at the instance of this host and creates a session.
+	"""
+	createSession(address: String!, password: String!, lifetimeSeconds: Int, deviceToken: String): CreatedSession!
+	"""
+	Finishes an auth request with the session of the bearer token; returns the URL to send the browser to. With
+	`CONSENT_REQUIRED`, show what the application asks for and finish again with `consent: true`.
+	"""
+	finishAuthRequest(id: String!, consent: Boolean): String!
+	"""
+	Withdraws one's own consent to an application, and the application's tokens – offline access included.
+	"""
+	revokeMyConsent(application: String!): Boolean!
+	"""
+	Ends an auth request without a login (`login_required`, `consent_required`, `interaction_required`,
+	`account_selection_required`, `access_denied`); returns the URL that tells the application.
+	"""
+	declineAuthRequest(id: String!, error: String!): String!
+	"""
+	Starts a login with a passkey – no address, no password.
+	"""
+	startPasskeyLogin: PasskeyChallenge!
+	"""
+	Finishes a passkey login and creates a session.
+	"""
+	finishPasskeyLogin(challengeId: String!, credential: JSON!, lifetimeSeconds: Int): CreatedSession!
+	"""
+	Checks a TOTP code as a further check of the current session.
+	"""
+	checkTotp(code: String!): Session!
+	"""
+	Starts a passkey check of the current session.
+	"""
+	startPasskeyCheck: PasskeyChallenge!
+	"""
+	Finishes a passkey check of the current session.
+	"""
+	finishPasskeyCheck(challengeId: String!, credential: JSON!): Session!
+	"""
+	Proposes a TOTP secret for the session's account (needs a recent session).
+	"""
+	startTotp: TotpSetup!
+	"""
+	Confirms the proposed TOTP secret with a first code.
+	"""
+	confirmTotp(code: String!): Boolean!
+	"""
+	Generates new recovery codes (needs a recent session); earlier ones stop working. Shown this once.
+	"""
+	generateRecoveryCodes: [String!]!
+	"""
+	Uses a recovery code as a further check of the current session.
+	"""
+	checkRecoveryCode(code: String!): Session!
+	"""
+	Removes TOTP from the session's account.
+	"""
+	removeTotp: Boolean!
+	"""
+	Starts registering a passkey for the session's account (needs a recent session).
+	"""
+	startPasskeyRegistration: PasskeyChallenge!
+	"""
+	Finishes registering a passkey; returns its id.
+	"""
+	finishPasskeyRegistration(challengeId: String!, name: String!, credential: JSON!): String!
+	"""
+	Removes a passkey of the session's account.
+	"""
+	removePasskey(id: String!): Boolean!
+	"""
+	Logs out: ends the session of the bearer token.
+	"""
+	terminateSession: Boolean!
+	"""
+	Logs out like `terminateSession`; if the session came from a SAML provider with single logout, returns where
+	to send the browser next, to log out there too.
+	"""
+	logout: String
+	"""
+	Starts a login at an identity provider; returns where to send the browser.
+	"""
+	startIdpLogin(identityProvider: String!, authRequest: String, loginHint: String): String!
+	"""
+	Exchanges the result of a login at an identity provider (`<login id>.<code>`) for a session – once.
+	"""
+	exchangeIdpLogin(login: String!, lifetimeSeconds: Int): ExchangedIdpLogin!
+	"""
+	Ends a session of the bearer token's own account.
+	"""
+	terminateMySession(id: String!): Boolean!
+	"""
+	Changes the own password: needs a recent session and the current password; other sessions end.
+	"""
+	changePassword(currentPassword: String!, newPassword: String!): Boolean!
+	"""
+	Changes the own display name.
+	"""
+	updateProfile(displayName: String!): Boolean!
+	renameTenant(name: String!): Boolean!
+	"""
+	Sets whether every login to an application of the tenant needs a second factor, and how many days accounts
+	without one may still log in (`mfaGraceDays`, 0 to 365); needs `policies.manage`.
+	"""
+	setTenantPolicy(mfaRequired: Boolean!, mfaGraceDays: Int): Tenant!
+	"""
+	Switches a compiled-in module on or off for the tenant (needs `tenant.manage`).
+	"""
+	setTenantModule(module: String!, enabled: Boolean!): Boolean!
+	"""
+	Claims a mail domain; returns the TXT record that proves it (needs `domains.manage`).
+	"""
+	addTenantDomain(domain: String!): TenantDomain!
+	"""
+	Verifies a domain by its TXT record (needs `domains.manage`), or without DNS with `trust` (needs
+	`tenants.manage`).
+	"""
+	verifyTenantDomain(domain: String!, trust: Boolean! = false): Boolean!
+	removeTenantDomain(domain: String!): Boolean!
+	"""
+	Creates an account (needs `accounts.manage`); returns its id.
+	"""
+	addAccount(address: String!, displayName: String!, password: String): String!
+	"""
+	Changes an account's display name, login name or active state (needs `accounts.manage`).
+	"""
+	updateAccount(id: String!, displayName: String, primaryAddress: String, active: Boolean): Boolean!
+	addAlias(account: String!, address: String!): Boolean!
+	removeAlias(account: String!, address: String!): Boolean!
+	"""
+	Sets an account's password and ends its sessions (needs `accounts.manage` and every permission it holds).
+	"""
+	setAccountPassword(account: String!, password: String!): Boolean!
+	"""
+	Removes all second factors of an account (needs `accounts.manage` and every permission it holds).
+	"""
+	resetSecondFactors(account: String!): Boolean!
+	terminateAccountSession(account: String!, session: String!): Boolean!
+	"""
+	Creates a group (needs `groups.manage`); returns its id.
+	"""
+	addGroup(name: String!): String!
+	renameGroup(id: String!, name: String!): Boolean!
+	"""
+	Removes a group; refused while it holds roles.
+	"""
+	removeGroup(id: String!): Boolean!
+	"""
+	Adds an account to a group; for a group holding roles also the permission to assign them.
+	"""
+	addGroupMember(group: String!, account: String!): Boolean!
+	removeGroupMember(group: String!, account: String!): Boolean!
+	"""
+	Gives a group an address on a verified domain of the tenant; mail to it goes to every member.
+	"""
+	addGroupAddress(group: String!, address: String!): Boolean!
+	removeGroupAddress(group: String!, address: String!): Boolean!
+	"""
+	Defines a role of the tenant's own, or changes its permissions (needs `roles.manage`).
+	"""
+	defineRole(name: String!, permissions: [String!]!): Boolean!
+	deleteRole(name: String!): Boolean!
+	"""
+	Assigns a role to an account or group of the tenant (needs `roles.manage`).
+	"""
+	grantRole(role: String!, principalKind: String!, principalId: String!): Boolean!
+	"""
+	Takes a role back; the tenant's last `tenant_admin` assignment cannot be revoked.
+	"""
+	revokeRole(role: String!, principalKind: String!, principalId: String!): Boolean!
+	"""
+	Creates a project (needs `projects.manage`); returns its id.
+	"""
+	addProject(name: String!): String!
+	"""
+	Renames a project or changes its settings (needs `projects.manage`).
+	"""
+	updateProject(id: String!, name: String, roleAssertion: Boolean, roleCheck: Boolean): Project!
+	"""
+	Removes a project without applications and authorizations.
+	"""
+	removeProject(id: String!): Boolean!
+	"""
+	Adds a role to a project, or changes its display name and group (needs `projects.manage`).
+	"""
+	setProjectRole(project: String!, key: String!, displayName: String!, group: String): Boolean!
+	removeProjectRole(project: String!, key: String!): Boolean!
+	"""
+	Gives an account or group a role of a project (needs `authorizations.manage`).
+	"""
+	grantProjectRole(project: String!, role: String!, principalKind: String!, principalId: String!): Boolean!
+	revokeProjectRole(project: String!, role: String!, principalKind: String!, principalId: String!): Boolean!
+	"""
+	Grants a project to another tenant – by id or verified mail domain – with some of its roles (needs
+	`projects.manage`).
+	"""
+	grantProject(project: String!, tenant: String!, roles: [String!]!): Boolean!
+	"""
+	Takes a grant back, once that tenant holds none of the project's roles.
+	"""
+	revokeProjectGrant(project: String!, tenant: String!): Boolean!
+	"""
+	Registers an application in a project (needs `applications.manage`).
+	"""
+	addApplication(project: String!, name: String!, kind: String!, redirectUris: [String!]!, postLogoutRedirectUris: [String!]! = []): ApplicationCreated!
+	"""
+	Changes an application (needs `applications.manage`).
+	"""
+	updateApplication(id: String!, name: String, project: String, redirectUris: [String!], postLogoutRedirectUris: [String!], active: Boolean): Application!
+	"""
+	Sets whether logins to one application need a second factor (needs `applications.manage`).
+	"""
+	setApplicationPolicy(id: String!, mfaRequired: Boolean!): Application!
+	"""
+	Sets an application's options (needs `applications.manage`): `accessTokenFormat` is `opaque` or `jwt`.
+	"""
+	setApplicationOptions(id: String!, accessTokenFormat: String, offlineAccess: Boolean, consentRequired: Boolean, backchannelLogoutUri: String, frontchannelLogoutUri: String): Application!
+	"""
+	Withdraws an account's consent to an application, and the application's tokens for it (needs
+	`accounts.manage` and every permission the account holds).
+	"""
+	revokeConsent(account: String!, application: String!): Boolean!
+	"""
+	Replaces the secret of a confidential application; returns it, shown this once.
+	"""
+	newClientSecret(id: String!): String!
+	"""
+	Connects an identity provider (needs `identity_providers.manage`; with `instanceWide`, for every tenant of the
+	instance, `instance.manage`); returns its id.
+	"""
+	addIdentityProvider(name: String!, issuer: String!, clientId: String! = "", clientSecret: String, scopes: [String!]! = [], domains: [String!]! = [], autoCreate: Boolean! = false, autoLink: Boolean! = false, syncProfile: Boolean! = false, register: Boolean! = false, instanceWide: Boolean! = false, saml: SamlInput): String!
+	"""
+	Changes an identity provider (needs `identity_providers.manage`).
+	"""
+	updateIdentityProvider(id: String!, name: String, issuer: String, clientId: String, scopes: [String!], domains: [String!], autoCreate: Boolean, autoLink: Boolean, syncProfile: Boolean, register: Boolean, active: Boolean, saml: SamlInput): Boolean!
+	"""
+	Sets the client secret, or removes it with null (needs `identity_providers.manage`).
+	"""
+	setIdentityProviderSecret(id: String!, clientSecret: String): Boolean!
+	removeIdentityProvider(id: String!): Boolean!
+	"""
+	Whether kernoid reaches the provider as configured.
+	"""
+	checkIdentityProvider(id: String!): Boolean!
+	"""
+	Unlinks an external identity from an account (needs `accounts.manage`).
+	"""
+	unlinkAccount(account: String!, identityProvider: String!, subject: String!): Boolean!
+	"""
+	A new SCIM token for the tenant's directory (needs `provisioning.manage`).
+	"""
+	addScimToken(name: String!): ScimTokenCreated!
+	removeScimToken(id: String!): Boolean!
+	renameInstance(name: String!): Boolean!
+	addInstanceDomain(domain: String!): Boolean!
+	removeInstanceDomain(domain: String!): Boolean!
+	setPrimaryDomain(domain: String!): Boolean!
+	"""
+	Sends logins to a login UI of the instance's own (an HTTPS URL), or back to kernoid's (`null`); needs
+	`instance.manage`.
+	"""
+	setLoginUi(url: String): Boolean!
+	"""
+	Creates a tenant (needs `tenants.manage`); returns its id.
+	"""
+	addTenant(name: String!): String!
+	"""
+	Renames, deactivates or reactivates a tenant (needs `tenants.manage`).
+	"""
+	updateTenant(id: String!, name: String, active: Boolean): Boolean!
+	"""
+	Defines an instance role of the instance's own, or changes its permissions – instance permissions apply at the
+	instance, tenant permissions in every tenant (needs `instance_roles.manage`).
+	"""
+	defineInstanceRole(name: String!, permissions: [String!]!): Boolean!
+	deleteInstanceRole(name: String!): Boolean!
+	"""
+	Binds passkeys to another RP ID: a domain of the instance or a parent domain of one (needs
+	`instance.manage`). Passkeys registered under the former RP ID stop working.
+	"""
+	setPasskeyRpId(rpId: String!): Boolean!
+	"""
+	Assigns an instance role (needs `instance_roles.manage`).
+	"""
+	grantInstanceRole(role: String!, principalKind: String!, principalId: String!): Boolean!
+	"""
+	Takes an instance role back; the last `instance_admin` stays.
+	"""
+	revokeInstanceRole(role: String!, principalKind: String!, principalId: String!): Boolean!
+	"""
+	Creates a signing key (needs `instance.manage`); returns its id.
+	"""
+	addSigningKey: String!
+	activateSigningKey(kid: String!): Boolean!
+	removeSigningKey(kid: String!): Boolean!
+	"""
+	Creates a shared mailbox (needs `accounts.manage`); returns its id.
+	"""
+	addSharedMailbox(address: String!, displayName: String!): String!
+	"""
+	Sets an account's mail quota; null for the tenant's default (needs `accounts.manage`).
+	"""
+	setMailQuota(account: String!, bytes: Int): Boolean!
+	"""
+	Sets the tenant's default mail quota; null for no limit (needs `tenant.manage`).
+	"""
+	setTenantMailQuota(bytes: Int): Boolean!
+	"""
+	Sets how many days emails stay in the accounts' Trash and Junk; null keeps them (needs `tenant.manage`).
+	"""
+	setMailRetention(trashDays: Int, junkDays: Int): Boolean!
+	"""
+	Stores the messages of an mbox in a mailbox of an account (by id or role), with their keywords (needs
+	`accounts.manage`).
+	"""
+	importMbox(account: String!, mailbox: String!, mbox: String!): MboxImportResult!
+	"""
+	Grants an account or a group access to an account's mail (needs `accounts.manage`).
+	"""
+	setMailAccess(account: String!, granteeKind: String!, granteeId: String!, mailbox: String, rights: String!, sendAs: Boolean! = false): Boolean!
+	"""
+	Removes a grant on an account's mail (needs `accounts.manage`).
+	"""
+	removeMailAccess(account: String!, granteeKind: String!, granteeId: String!, mailbox: String): Boolean!
+	"""
+	Saves a Sieve script, checked first (needs `accounts.manage`).
+	"""
+	putSieveScript(account: String!, name: String!, content: String!, activate: Boolean! = false): Boolean!
+	"""
+	Removes a Sieve script (needs `accounts.manage`).
+	"""
+	removeSieveScript(account: String!, name: String!): Boolean!
+	"""
+	Chooses the Sieve script that runs; null for none (needs `accounts.manage`).
+	"""
+	activateSieveScript(account: String!, name: String): Boolean!
+	"""
+	Stores a message (RFC 5322 as text) in a mailbox of an account – by id or role, the inbox if none (needs
+	`accounts.manage`); returns the email's id.
+	"""
+	importMail(account: String!, message: String!, mailbox: String): String!
+	"""
+	Shares the session's account's mail with an account (by address) or a group (`$name`) of its tenant.
+	"""
+	shareMyMail(grantee: String!, mailbox: String, rights: String!): Boolean!
+	"""
+	Stops sharing the session's account's mail with someone.
+	"""
+	unshareMyMail(grantee: String!, mailbox: String): Boolean!
+	"""
+	Starts a registration and sends a code to the email address; returns the registration's id.
+	"""
+	register(email: String!, password: String!, displayName: String!, nativeAddress: String, username: String): String!
+	"""
+	Finishes a registration with the code; returns the new account's id.
+	"""
+	confirmRegistration(id: String!, code: String!): String!
+	"""
+	Links the provider login of a proposal to the bearer token's account.
+	"""
+	confirmIdpLink(login: String!): Boolean!
+	"""
+	Creates a separate account for the provider login of a proposal, where registration is open, and logs it in.
+	"""
+	registerInstead(login: String!, lifetimeSeconds: Int): ExchangedIdpLogin!
+	"""
+	Starts linking a provider to the bearer token's account; returns where to send the browser.
+	"""
+	startIdpLink(identityProvider: String!): String!
+	"""
+	Creates an account without an address of the tenant (needs `accounts.manage`); returns its id.
+	"""
+	addExternalAccount(displayName: String!, email: String, username: String): String!
+	"""
+	Grants a service – `mail` or `files` (needs `accounts.manage`).
+	"""
+	grantService(account: String!, service: String!): Boolean!
+	"""
+	Takes a service away (needs `accounts.manage`).
+	"""
+	revokeService(account: String!, service: String!): Boolean!
+	"""
+	Gives an account a username, or takes it away with null (needs `accounts.manage`).
+	"""
+	setUsername(account: String!, username: String): Boolean!
+	"""
+	Sets an account's contact address (needs `accounts.manage`).
+	"""
+	setContactEmail(account: String!, email: String, verified: Boolean! = false): Boolean!
+	"""
+	Sets how the tenant's accounts log in (needs `policies.manage`).
+	"""
+	setLoginPolicy(usernames: Boolean!, emailLogin: Boolean!): Boolean!
+	"""
+	Opens or closes registration and names its domains (needs `policies.manage`).
+	"""
+	setTenantRegistration(allowed: Boolean!, domains: [String!]! = []): Boolean!
+	"""
+	Sets who gets a service when an account is created, and whether it needs approval (needs `policies.manage`).
+	"""
+	setServicePolicy(service: String!, assign: String!, approval: Boolean!): Boolean!
+	"""
+	Names the tenant where people without an address of a tenant register (needs `instance.manage`).
+	"""
+	setRegistrationTenant(tenant: String): Boolean!
+	"""
+	Grants an account or a group a level on a calendar or address book (needs `accounts.manage`).
+	"""
+	setCollectionAccess(account: String!, collection: String!, granteeKind: String!, granteeId: String!, level: String!): Boolean!
+	"""
+	Removes a grant on a calendar or address book (needs `accounts.manage`).
+	"""
+	removeCollectionAccess(account: String!, collection: String!, granteeKind: String!, granteeId: String!): Boolean!
+	"""
+	Stores the events of an iCalendar file or the contacts of a vCard file (needs `accounts.manage`).
+	"""
+	importCollection(account: String!, collection: String!, content: String!): CollectionImportResult!
+	"""
+	Shares a calendar or address book the session owns or administers with an address or `$group`.
+	"""
+	shareCollection(owner: String!, collection: String!, grantee: String!, level: String!): Boolean!
+	"""
+	Stops sharing a calendar or address book with someone.
+	"""
+	unshareCollection(owner: String!, collection: String!, grantee: String!): Boolean!
+	"""
+	Sets an account's files quota; null for the tenant's default (needs `accounts.manage`).
+	"""
+	setFilesQuota(account: String!, bytes: Int): Boolean!
+	"""
+	Creates a drive of the tenant (needs `accounts.manage`); its id.
+	"""
+	addDrive(name: String!): String!
+	"""
+	Grants rights on an account's files or a drive – a directory, or the whole store when `node` is null –
+	replacing an earlier grant there (needs `accounts.manage`).
+	"""
+	setFileAccess(account: String!, granteeKind: String!, granteeId: String!, node: String, rights: String!): Boolean!
+	"""
+	Removes a grant on an account's files or a drive (needs `accounts.manage`).
+	"""
+	removeFileAccess(account: String!, granteeKind: String!, granteeId: String!, node: String): Boolean!
+	"""
+	Sets the tenant's default files quota; null for no limit (needs `tenant.manage`).
+	"""
+	setTenantFilesQuota(bytes: Int): Boolean!
+}
+
+type Passkey {
+	id: String!
+	name: String!
+	createdAt: DateTime!
+	lastUsedAt: DateTime
+}
+
+"""
+A WebAuthn challenge: `options` for the browser, `id` to send back with its answer.
+"""
+type PasskeyChallenge {
+	id: String!
+	options: JSON!
+}
+
+type Permissions {
+	account: String!
+	tenant: String!
+	permissions: [String!]!
+}
+
+type Project {
+	id: String!
+	name: String!
+	roleAssertion: Boolean!
+	roleCheck: Boolean!
+	roles: [ProjectRole!]!
+}
+
+type ProjectAuthorization {
+	role: String!
+	"""
+	The tenant that gave it.
+	"""
+	tenant: String!
+	principalKind: String!
+	principalId: String!
+}
+
+type ProjectGrant {
+	project: String!
+	projectName: String!
+	owner: String!
+	tenant: String!
+	tenantName: String!
+	roles: [String!]!
+}
+
+type ProjectRole {
+	key: String!
+	displayName: String!
+	group: String
+}
+
+"""
+Every query: sessions and login, and administration.
+"""
+type QueryRoot {
+	"""
+	The instance reached under the host of this request; null if there is none.
+	"""
+	instance: Instance
+	"""
+	The name and version of this kernoid.
+	"""
+	version: Version!
+	"""
+	A pending OpenID Connect auth request – for the login UI to show who is asking.
+	"""
+	authRequest(id: String!): AuthRequest!
+	"""
+	The second factors of the session's account.
+	"""
+	secondFactors: SecondFactors!
+	"""
+	The passkeys of the session's account.
+	"""
+	passkeys: [Passkey!]!
+	"""
+	The session of the bearer token.
+	"""
+	session: Session!
+	"""
+	Where an address logs in: the identity provider its domain is routed to, if any.
+	"""
+	loginOptions(address: String!): IdentityProviderSummary
+	"""
+	The applications the bearer token's account agreed to.
+	"""
+	myConsents: [Consent!]!
+	"""
+	The valid sessions of the bearer token's account, newest first.
+	"""
+	mySessions: [SessionSummaryObject!]!
+	"""
+	The tenant administered (needs `directory.read`).
+	"""
+	tenant: Tenant!
+	"""
+	The tenant's verified domains as mail domains: the DNS records to publish and whether they are published
+	(reads DNS, changes nothing).
+	"""
+	mailDns: [MailDns!]!
+	"""
+	The caller's permissions for the tenant administered.
+	"""
+	permissions: Permissions!
+	"""
+	The tenant's accounts (needs `directory.read`).
+	"""
+	accounts: [AccountDetails!]!
+	account(id: String!): AccountDetails!
+	"""
+	An account's valid sessions (needs `accounts.manage`).
+	"""
+	accountSessions(account: String!): [SessionSummaryObject!]!
+	"""
+	The applications an account agreed to (needs `accounts.manage`).
+	"""
+	accountConsents(account: String!): [Consent!]!
+	"""
+	The tenant's groups (needs `directory.read`).
+	"""
+	groups: [Group!]!
+	"""
+	The tenant's roles – built in and its own – and who holds them (needs `directory.read`).
+	"""
+	roles: Roles!
+	"""
+	The tenant's projects (needs `directory.read`).
+	"""
+	projects: [Project!]!
+	project(id: String!): Project!
+	"""
+	Who holds which role of a project – for a granted project only the tenant's own (needs `directory.read`).
+	"""
+	projectAuthorizations(project: String!): [ProjectAuthorization!]!
+	"""
+	The tenants a project is granted to (needs `directory.read`).
+	"""
+	projectGrants(project: String!): [ProjectGrant!]!
+	"""
+	The projects other tenants have granted to this one (needs `directory.read`).
+	"""
+	grantedProjects: [ProjectGrant!]!
+	"""
+	The tenant's applications (needs `directory.read`).
+	"""
+	applications: [Application!]!
+	application(id: String!): Application!
+	"""
+	The instance with all its domains (needs `instance.read`).
+	"""
+	instanceDetails: InstanceDetails!
+	"""
+	The instance's tenants (needs `instance.read`).
+	"""
+	tenants: [TenantSummary!]!
+	"""
+	The instance roles and who holds them (needs `instance.read`).
+	"""
+	instanceRoles: InstanceRoles!
+	"""
+	The tenant's identity providers (needs `directory.read`).
+	"""
+	identityProviders: [IdentityProviderObject!]!
+	identityProvider(id: String!): IdentityProviderObject!
+	"""
+	The external identities linked to an account (needs `directory.read`).
+	"""
+	accountLinks(account: String!): [AccountLink!]!
+	"""
+	The tenant's SCIM tokens (needs `directory.read`).
+	"""
+	scimTokens: [ScimToken!]!
+	"""
+	The instance's signing keys (needs `instance.read`).
+	"""
+	signingKeys: [SigningKey!]!
+	"""
+	An account's mail: usage, quota and mailboxes (needs `accounts.manage`).
+	"""
+	accountMail(account: String!): MailOverview!
+	"""
+	The tenant's default mail quota (needs `directory.read`).
+	"""
+	tenantMailQuota: Int
+	"""
+	The tenant's mail retention (needs `directory.read`).
+	"""
+	mailRetention: MailRetention!
+	"""
+	A mailbox of an account (by id or role) as mbox (needs `accounts.manage`); for large mailboxes use the REST
+	route, which streams.
+	"""
+	exportMailbox(account: String!, mailbox: String!): String!
+	"""
+	Who may use an account's mail (needs `accounts.manage`).
+	"""
+	mailAccess(account: String!): [MailGrantObject!]!
+	"""
+	An account's Sieve scripts (needs `accounts.manage`).
+	"""
+	sieveScripts(account: String!): [SieveScriptObject!]!
+	"""
+	The queue of outgoing mail of the instance's tenants (needs `instance.read`).
+	"""
+	mailQueue(limit: Int! = 100): [QueuedRecipientObject!]!
+	"""
+	The mail shared with the session's account.
+	"""
+	sharedMail: [SharedStoreObject!]!
+	"""
+	Who may use the session's account's mail.
+	"""
+	myMailAccess: [MailGrantObject!]!
+	"""
+	What registering offers at this instance.
+	"""
+	registrationOptions: RegistrationOptions!
+	"""
+	The providers offered to everyone on the login page.
+	"""
+	loginProviders: [IdentityProviderSummary!]!
+	"""
+	What a provider login that found an account with its verified address proposes; does not use the code up.
+	"""
+	linkProposal(login: String!): LinkProposal!
+	"""
+	The services of an account (needs `directory.read`).
+	"""
+	accountServices(account: String!): [AccountService!]!
+	"""
+	How the tenant's accounts log in (needs `directory.read`).
+	"""
+	loginPolicy: LoginPolicy!
+	"""
+	Whether people may register with the tenant, and on which domains (needs `directory.read`).
+	"""
+	tenantRegistration: TenantRegistration!
+	"""
+	The tenant's rules for each service (needs `directory.read`).
+	"""
+	servicePolicies: [ServicePolicyObject!]!
+	"""
+	An account's calendars and address books (needs `accounts.manage`).
+	"""
+	collections(account: String!): [CollectionObject!]!
+	"""
+	Who may use an account's calendars and address books (needs `accounts.manage`).
+	"""
+	collectionAccess(account: String!): [CollectionGrantObject!]!
+	"""
+	A calendar as iCalendar or an address book as vCard (needs `accounts.manage`).
+	"""
+	exportCollection(account: String!, collection: String!): String!
+	"""
+	The session's calendars and address books, and those shared with it.
+	"""
+	myCollections: [CollectionObject!]!
+	"""
+	Who may use a calendar or address book the session owns or administers.
+	"""
+	myCollectionAccess(owner: String!, collection: String!): [CollectionGrantObject!]!
+	"""
+	An account's files: usage and quota (needs `accounts.manage`).
+	"""
+	accountFiles(account: String!): FilesOverview!
+	"""
+	The tenant's default files quota (needs `directory.read`).
+	"""
+	tenantFilesQuota: Int
+	"""
+	The tenant's drives (needs `directory.read`).
+	"""
+	drives: [DriveObject!]!
+	"""
+	Who may use an account's files or a drive (needs `accounts.manage`).
+	"""
+	fileAccess(account: String!): [FileGrantObject!]!
+}
+
+type QueuedRecipientObject {
+	message: String!
+	address: String!
+	status: String!
+	attempts: Int!
+	nextAttemptAt: DateTime!
+	lastError: String
+}
+
+"""
+A DNS record a mail domain needs.
+"""
+type RecordCheck {
+	"""
+	`MX`, `SPF`, `DKIM` or `DMARC`.
+	"""
+	kind: String!
+	name: String!
+	"""
+	`MX` or `TXT`.
+	"""
+	recordType: String!
+	expected: String!
+	found: [String!]!
+	"""
+	`ok`, `missing` or `different`.
+	"""
+	status: String!
+}
+
+type RegistrationOptions {
+	"""
+	People without an address of their own may register.
+	"""
+	open: Boolean!
+	"""
+	Domains on which new accounts may take an address – a mailbox.
+	"""
+	domains: [String!]!
+	usernames: Boolean!
+	"""
+	kernoid can send the code; without it, registering works only with providers.
+	"""
+	byEmail: Boolean!
+}
+
+type RoleAssignment {
+	role: String!
+	"""
+	`account` or `group`.
+	"""
+	principalKind: String!
+	principalId: String!
+}
+
+type RoleInfo {
+	name: String!
+	permissions: [String!]!
+	builtin: Boolean!
+}
+
+type Roles {
+	roles: [RoleInfo!]!
+	assignments: [RoleAssignment!]!
+}
+
+"""
+The settings of a SAML 2.0 provider.
+"""
+input SamlInput {
+	"""
+	Where kernoid sends the AuthnRequest (HTTP-Redirect binding).
+	"""
+	ssoUrl: String!
+	"""
+	The provider's signing certificates, base64 DER or PEM.
+	"""
+	certificates: [String!]!
+	emailAttribute: String
+	nameAttribute: String
+	"""
+	Sign AuthnRequests with kernoid's SAML key.
+	"""
+	signRequests: Boolean! = false
+	"""
+	The provider's single logout service (HTTP-Redirect binding).
+	"""
+	sloUrl: String
+}
+
+type ScimToken {
+	id: String!
+	name: String!
+	createdAt: DateTime!
+	lastUsedAt: DateTime
+}
+
+type ScimTokenCreated {
+	id: String!
+	"""
+	Shown this once.
+	"""
+	token: String!
+	"""
+	The SCIM base URL to give the directory.
+	"""
+	endpoint: String!
+}
+
+"""
+The second factors of an account.
+"""
+type SecondFactors {
+	totp: Boolean!
+	passkeys: Int!
+	recoveryCodesLeft: Int!
+	"""
+	The tenant requires a second factor.
+	"""
+	required: Boolean!
+	"""
+	The account has none yet and may log in without one until then.
+	"""
+	setupDue: DateTime
+}
+
+type ServicePolicyObject {
+	service: String!
+	"""
+	`none`, `native` or `all`.
+	"""
+	assign: String!
+	approval: Boolean!
+}
+
+type Session {
+	id: String!
+	account: Account!
+	"""
+	The checks the session passed, e.g. `password`.
+	"""
+	checks: [String!]!
+	createdAt: DateTime!
+	expiresAt: DateTime!
+}
+
+type SessionSummaryObject {
+	id: String!
+	checks: [String!]!
+	createdAt: DateTime!
+	expiresAt: DateTime!
+	clientAddress: String
+	userAgent: String
+}
+
+type SharedStoreObject {
+	"""
+	The owner's account id – the JMAP account id.
+	"""
+	account: String!
+	address: String!
+	displayName: String!
+	"""
+	Rights on the whole store.
+	"""
+	rights: String!
+	sendAs: Boolean!
+}
+
+type SieveScriptObject {
+	name: String!
+	content: String!
+	active: Boolean!
+}
+
+type SigningKey {
+	kid: String!
+	algorithm: String!
+	state: String!
+	createdAt: DateTime!
+	stateSince: DateTime!
+}
+
+type Tenant {
+	id: String!
+	instance: String!
+	name: String!
+	active: Boolean!
+	mfaRequired: Boolean!
+	mfaGraceDays: Int!
+	domains: [TenantDomain!]!
+	modules: [String!]!
+}
+
+type TenantDomain {
+	domain: String!
+	verified: Boolean!
+	"""
+	For a domain not verified yet: the TXT record to publish.
+	"""
+	recordName: String
+	recordValue: String
+}
+
+type TenantRegistration {
+	allowed: Boolean!
+	domains: [String!]!
+}
+
+type TenantSummary {
+	id: String!
+	name: String!
+	active: Boolean!
+}
+
+type TotpSetup {
+	"""
+	The secret in base32.
+	"""
+	secret: String!
+	"""
+	`otpauth://` URI for a QR code.
+	"""
+	uri: String!
+	"""
+	The URI as a QR code: an SVG image as a `data:` URL.
+	"""
+	qrCode: String!
+}
+
+type Version {
+	name: String!
+	version: String!
+}
+
+"""
+Directs the executor to include this field or fragment only when the `if` argument is true.
+"""
+directive @include(if: Boolean!) on FIELD | FRAGMENT_SPREAD | INLINE_FRAGMENT
+"""
+Directs the executor to skip this field or fragment when the `if` argument is true.
+"""
+directive @skip(if: Boolean!) on FIELD | FRAGMENT_SPREAD | INLINE_FRAGMENT
+"""
+Provides a scalar specification URL for specifying the behavior of custom scalar types.
+"""
+directive @specifiedBy(url: String!) on SCALAR
+schema {
+	query: QueryRoot
+	mutation: MutationRoot
+}

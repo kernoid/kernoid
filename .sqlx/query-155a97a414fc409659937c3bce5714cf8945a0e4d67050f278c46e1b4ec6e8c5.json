@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT 1 AS \"notified!\" FROM pg_notify($1, '')",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "notified!",
+        "type_info": "Int4",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "155a97a414fc409659937c3bce5714cf8945a0e4d67050f278c46e1b4ec6e8c5"
+}

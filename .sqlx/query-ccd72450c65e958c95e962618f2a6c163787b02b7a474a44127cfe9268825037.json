@@ -1,0 +1,263 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT p.id, p.tenant_id, p.instance_id, p.name, p.issuer, p.client_id, p.scopes, p.domains,\n                      p.auto_create, p.auto_link, p.active, p.kind, p.saml_sso_url, p.saml_certificates,\n                      p.saml_email_attribute, p.saml_name_attribute, p.sync_profile, p.saml_sign_requests,\n                      p.saml_slo_url, p.register,\n                      EXISTS (SELECT 1 FROM identity_provider_secrets s WHERE s.idp_id = p.id) AS \"has_secret!\"\n               FROM identity_providers p WHERE p.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "identity_providers",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "tenant_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "identity_providers",
+            "name": "tenant_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "instance_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "identity_providers",
+            "name": "instance_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "identity_providers",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "issuer",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "identity_providers",
+            "name": "issuer"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "client_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "identity_providers",
+            "name": "client_id"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "scopes",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "identity_providers",
+            "name": "scopes"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "domains",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "identity_providers",
+            "name": "domains"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "auto_create",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "identity_providers",
+            "name": "auto_create"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "auto_link",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "identity_providers",
+            "name": "auto_link"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "active",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "identity_providers",
+            "name": "active"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "identity_providers",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "saml_sso_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "identity_providers",
+            "name": "saml_sso_url"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "saml_certificates",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "identity_providers",
+            "name": "saml_certificates"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "saml_email_attribute",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "identity_providers",
+            "name": "saml_email_attribute"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "saml_name_attribute",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "identity_providers",
+            "name": "saml_name_attribute"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "sync_profile",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "identity_providers",
+            "name": "sync_profile"
+          }
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "saml_sign_requests",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "identity_providers",
+            "name": "saml_sign_requests"
+          }
+        }
+      },
+      {
+        "ordinal": 18,
+        "name": "saml_slo_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "identity_providers",
+            "name": "saml_slo_url"
+          }
+        }
+      },
+      {
+        "ordinal": 19,
+        "name": "register",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "identity_providers",
+            "name": "register"
+          }
+        }
+      },
+      {
+        "ordinal": 20,
+        "name": "has_secret!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+      false,
+      false,
+      true,
+      false,
+      null
+    ]
+  },
+  "hash": "ccd72450c65e958c95e962618f2a6c163787b02b7a474a44127cfe9268825037"
+}

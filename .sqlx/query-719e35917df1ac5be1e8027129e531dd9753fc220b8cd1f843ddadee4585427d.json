@@ -1,0 +1,101 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, idp_id, verifier, nonce, auth_request_id, saml_request_id, link_account FROM idp_logins\n             WHERE state_hash = $1 AND instance_id = $2 AND expires_at > now() AND handoff_hash IS NULL",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "idp_logins",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "idp_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "idp_logins",
+            "name": "idp_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "verifier",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "idp_logins",
+            "name": "verifier"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "nonce",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "idp_logins",
+            "name": "nonce"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "auth_request_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "idp_logins",
+            "name": "auth_request_id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "saml_request_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "idp_logins",
+            "name": "saml_request_id"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "link_account",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "idp_logins",
+            "name": "link_account"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "719e35917df1ac5be1e8027129e531dd9753fc220b8cd1f843ddadee4585427d"
+}

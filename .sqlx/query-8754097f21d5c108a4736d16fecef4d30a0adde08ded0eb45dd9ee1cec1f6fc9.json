@@ -1,0 +1,33 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO emails (id, account_id, thread_id, size, received_at, sent_at, message_id, in_reply_to,\n                                   \"references\", subject, from_addresses, to_addresses, cc_addresses, bcc_addresses,\n                                   reply_to, sender, preview, has_attachment, keywords, body_search)\n               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19,\n                       to_tsvector('simple', $20))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8",
+        "Timestamptz",
+        "Timestamptz",
+        "Text",
+        "TextArray",
+        "TextArray",
+        "Text",
+        "Jsonb",
+        "Jsonb",
+        "Jsonb",
+        "Jsonb",
+        "Jsonb",
+        "Jsonb",
+        "Text",
+        "Bool",
+        "TextArray",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8754097f21d5c108a4736d16fecef4d30a0adde08ded0eb45dd9ee1cec1f6fc9"
+}

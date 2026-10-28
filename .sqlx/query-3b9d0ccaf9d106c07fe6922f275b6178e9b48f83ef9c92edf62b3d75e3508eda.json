@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO projection_cursors (name) VALUES ('p')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "3b9d0ccaf9d106c07fe6922f275b6178e9b48f83ef9c92edf62b3d75e3508eda"
+}

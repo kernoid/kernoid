@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM known_devices WHERE expires_at < now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "87662a17f07123dbbf2ae5b56fecaa4a0d3db65b6708ed3e854e3665ee17fd91"
+}

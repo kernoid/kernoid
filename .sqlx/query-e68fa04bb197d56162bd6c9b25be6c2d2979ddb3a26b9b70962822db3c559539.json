@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT wrapped, main_key FROM tenant_keys WHERE tenant_id = $1 AND number = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "wrapped",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "tenant_keys",
+            "name": "wrapped"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "main_key",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "tenant_keys",
+            "name": "main_key"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "e68fa04bb197d56162bd6c9b25be6c2d2979ddb3a26b9b70962822db3c559539"
+}

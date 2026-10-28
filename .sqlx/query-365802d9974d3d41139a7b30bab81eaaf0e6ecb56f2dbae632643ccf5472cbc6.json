@@ -1,0 +1,196 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.id, a.tenant_id, t.instance_id, a.name, a.kind, a.redirect_uris, a.post_logout_redirect_uris, a.project_id, a.mfa_required, a.active,\n                    a.access_token_format, a.offline_access, a.consent_required, a.backchannel_logout_uri, a.frontchannel_logout_uri\n             FROM applications a JOIN tenants t ON t.id = a.tenant_id WHERE a.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "tenant_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "tenant_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "instance_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "tenants",
+            "name": "instance_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "redirect_uris",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "redirect_uris"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "post_logout_redirect_uris",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "post_logout_redirect_uris"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "project_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "project_id"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "mfa_required",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "mfa_required"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "active",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "active"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "access_token_format",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "access_token_format"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "offline_access",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "offline_access"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "consent_required",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "consent_required"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "backchannel_logout_uri",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "backchannel_logout_uri"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "frontchannel_logout_uri",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "frontchannel_logout_uri"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "365802d9974d3d41139a7b30bab81eaaf0e6ecb56f2dbae632643ccf5472cbc6"
+}

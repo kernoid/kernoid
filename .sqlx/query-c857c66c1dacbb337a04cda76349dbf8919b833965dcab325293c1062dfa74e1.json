@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE tenant_keys SET wrapped = $3, main_key = $4\n             WHERE tenant_id = $1 AND number = $2 AND wrapped = $5",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4",
+        "Bytea",
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c857c66c1dacbb337a04cda76349dbf8919b833965dcab325293c1062dfa74e1"
+}

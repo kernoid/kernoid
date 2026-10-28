@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM projection_cursors",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "ca1ee89627703e60ddcb2575b8fcdf87c2a5d86e84b8642d4d002cae79c50e00"
+}

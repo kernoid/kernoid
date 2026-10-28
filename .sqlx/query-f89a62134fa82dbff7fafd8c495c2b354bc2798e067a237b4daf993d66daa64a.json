@@ -1,0 +1,143 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT c.used_at, c.expires_at > now() AS \"fresh!\", c.session_id, c.account_id,\n                      r.id AS auth_request, r.instance_id, r.application_id, r.redirect_uri, r.scopes, r.nonce,\n                      r.code_challenge\n               FROM authorization_codes c JOIN auth_requests r ON r.id = c.auth_request_id\n               WHERE c.code_hash = $1\n               FOR UPDATE OF c",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "used_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "authorization_codes",
+            "name": "used_at"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "fresh!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "session_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "authorization_codes",
+            "name": "session_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "account_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "authorization_codes",
+            "name": "account_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "auth_request",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "auth_requests",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "instance_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "auth_requests",
+            "name": "instance_id"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "application_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "auth_requests",
+            "name": "application_id"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "redirect_uri",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "auth_requests",
+            "name": "redirect_uri"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "scopes",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "auth_requests",
+            "name": "scopes"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "nonce",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "auth_requests",
+            "name": "nonce"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "code_challenge",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "auth_requests",
+            "name": "code_challenge"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      true,
+      null,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "f89a62134fa82dbff7fafd8c495c2b354bc2798e067a237b4daf993d66daa64a"
+}

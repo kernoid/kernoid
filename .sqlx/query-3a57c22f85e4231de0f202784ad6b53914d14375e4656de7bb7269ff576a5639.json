@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE accounts SET created_at = now() - interval '15 days'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "3a57c22f85e4231de0f202784ad6b53914d14375e4656de7bb7269ff576a5639"
+}

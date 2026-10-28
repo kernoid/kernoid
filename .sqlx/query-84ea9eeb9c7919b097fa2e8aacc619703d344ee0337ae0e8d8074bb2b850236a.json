@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE calendar_events SET schedule_tag = schedule_tag + 1 WHERE id = $1 RETURNING schedule_tag",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "schedule_tag",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "calendar_events",
+            "name": "schedule_tag"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "84ea9eeb9c7919b097fa2e8aacc619703d344ee0337ae0e8d8074bb2b850236a"
+}

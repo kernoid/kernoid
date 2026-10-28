@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE calendars SET\n                 name = coalesce($3, name),\n                 description = CASE WHEN $4 THEN $5 ELSE description END,\n                 color = CASE WHEN $6 THEN $7 ELSE color END,\n                 sort_order = coalesce($8, sort_order),\n                 timezone = CASE WHEN $9 THEN $10 ELSE timezone END,\n                 is_default = coalesce($11, is_default),\n                 is_subscribed = coalesce($12, is_subscribed),\n                 is_visible = coalesce($13, is_visible)\n             WHERE id = $1 AND account_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Bool",
+        "Text",
+        "Bool",
+        "Text",
+        "Int8",
+        "Bool",
+        "Text",
+        "Bool",
+        "Bool",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "39620257635e303e00204e9bcb1093d25698ea09ac31350496183ee3de0d7aa6"
+}

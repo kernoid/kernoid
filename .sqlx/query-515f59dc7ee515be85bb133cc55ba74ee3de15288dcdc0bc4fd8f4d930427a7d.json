@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO identity_providers\n                         (id, tenant_id, name, kind, issuer, client_id, scopes, domains, auto_create, auto_link,\n                          saml_sso_url, saml_certificates, saml_email_attribute, saml_name_attribute, instance_id,\n                          sync_profile, saml_sign_requests, saml_slo_url, register)\n                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "TextArray",
+        "TextArray",
+        "Bool",
+        "Bool",
+        "Text",
+        "TextArray",
+        "Text",
+        "Text",
+        "Uuid",
+        "Bool",
+        "Bool",
+        "Text",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "515f59dc7ee515be85bb133cc55ba74ee3de15288dcdc0bc4fd8f4d930427a7d"
+}

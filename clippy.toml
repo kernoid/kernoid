@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SQL only through sqlx's checked macros (query!, query_as!, query_scalar!), see crates/kernoid-store/src/lib.rs.
+disallowed-methods = [
+    { path = "sqlx::query", reason = "use sqlx::query! – checked at build time" },
+    { path = "sqlx::query_as", reason = "use sqlx::query_as! – checked at build time" },
+    { path = "sqlx::query_scalar", reason = "use sqlx::query_scalar! – checked at build time" },
+    { path = "sqlx::query_with", reason = "use sqlx::query! – checked at build time" },
+    { path = "sqlx::query_as_with", reason = "use sqlx::query_as! – checked at build time" },
+    { path = "sqlx::query_scalar_with", reason = "use sqlx::query_scalar! – checked at build time" },
+    { path = "sqlx::raw_sql", reason = "use the checked macros" },
+]
+disallowed-types = [
+    { path = "sqlx::QueryBuilder", reason = "builds SQL at run time; use the checked macros" },
+]

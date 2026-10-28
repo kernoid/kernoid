@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE file_accounts SET used_bytes = greatest(used_bytes + $2, 0) WHERE account_id = $1 RETURNING used_bytes",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "used_bytes",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "file_accounts",
+            "name": "used_bytes"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f1d7fe42076f40175aef185c3faca6e03d6190dca09d3e8f6be9a301c9d0c103"
+}

@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (SELECT 1 FROM emails WHERE thread_id = $1) AS \"others!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "others!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "f0e50eafd2af7430c4cbe1cce50d6ac40046c358cf028e3ab44a19eb687d3a8d"
+}

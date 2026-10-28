@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO application_secrets (application_id, secret_hash) VALUES ($1, $2)\n                     ON CONFLICT (application_id) DO UPDATE SET secret_hash = excluded.secret_hash, changed_at = now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "348a4d8cdb7ba0ed390c82ba7c07a50683d69ce1c85b78b0b2e87539304d4c19"
+}

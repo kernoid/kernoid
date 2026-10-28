@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT has_column_privilege($1, 'mailbox_expunged', 'modseq', 'UPDATE') AS \"modseq!\",\n                  has_column_privilege($1, 'mailbox_expunged', 'uid', 'UPDATE') AS \"uid!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "modseq!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "uid!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Name"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "7c805c331aca0265187d2aa11ad3395d2ba171b68bd9817eb3118830dce98577"
+}

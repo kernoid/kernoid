@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (SELECT 1 FROM file_contents WHERE prefix = $1) AS \"named!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "named!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "8f1e951fc5e613d1f7da24b3a189e39ce56541342b2c4ecf9b9ce721eebe74f1"
+}

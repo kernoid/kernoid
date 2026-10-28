@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE addressbooks SET is_default = false WHERE account_id = $1 AND is_default",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "88fe9eb1f7ccd41ed8581e42fe2f251259f0047f6d5b4ab59331a5276ed6de90"
+}

@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO instance_roles (instance_id, name, permissions) VALUES ($1, $2, $3)\n                     ON CONFLICT (instance_id, name) DO UPDATE SET permissions = $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "05cf97b0d5545e308ca59c901a1d8edeaae1b0a1a6d6b2e8b32f183705c6ded4"
+}

@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT domain, chain_pem, key_sealed, updated_at FROM tls_certificates\n             WHERE $1::timestamptz IS NULL OR updated_at > $1 ORDER BY updated_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "domain",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tls_certificates",
+            "name": "domain"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "chain_pem",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tls_certificates",
+            "name": "chain_pem"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "key_sealed",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "tls_certificates",
+            "name": "key_sealed"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "tls_certificates",
+            "name": "updated_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "d0d9fe8c6d75075d65b7fc6f0a1fce8cc4e96033e73adab6bd2a41f6c3d3501d"
+}

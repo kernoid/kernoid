@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: MIT
+# kernoid's terminal app: mail, files, calendars and contacts over JMAP. A first-party app under MIT – a workspace of
+# its own, apart from the server's (AGPL), so it shares neither code nor the lock file with it: only the protocols
+# connect them. Dependencies are exact (`=`) and at least two weeks old when taken (`scripts/check-age.py`).
+[workspace]
+
+[package]
+name = "kernoid-tui"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.94"
+license = "MIT"
+repository = "https://github.com/kernoid/kernoid"
+description = "kernoid in the terminal: mail, files, calendars and contacts over JMAP"
+publish = false
+
+[[bin]]
+name = "kernoid-tui"
+path = "src/main.rs"
+
+[dependencies]
+base64 = "=0.22.1"
+chrono = { version = "=0.4.45", default-features = false, features = ["clock", "std"] }
+clap = { version = "=4.6.7", features = ["derive", "env"] }
+directories = "=6.0.0"
+hickory-proto = { version = "=0.26.3", default-features = false, features = ["std"] }
+html2text = "=0.17.1"
+iana-time-zone = "=0.1.65"
+ratatui = "=0.30.2"
+rpassword = "=7.5.4"
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.151"
+toml = { version = "=1.1.6", default-features = false, features = ["parse", "serde"] }
+ureq = { version = "=3.4.2", default-features = false, features = ["rustls", "platform-verifier"] }
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }

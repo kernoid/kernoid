@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access_tokens\n                 (token_hash, instance_id, application_id, account_id, session_id, auth_request_id, scopes, expires_at)\n             VALUES ($1, $2, $3, $4, $5, $6, $7, now() + make_interval(secs => $8))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "TextArray",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "abffec9aad6331377526b1958906063183a1695d0ac62e1d4387ab4ab2b701fb"
+}

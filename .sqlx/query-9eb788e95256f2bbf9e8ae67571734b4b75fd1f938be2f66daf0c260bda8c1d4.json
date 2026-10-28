@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT session_id FROM idp_sessions\n             WHERE idp_id = $1 AND name_id = $2 AND (cardinality($3::text[]) = 0 OR session_index = ANY ($3))",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "session_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "idp_sessions",
+            "name": "session_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "9eb788e95256f2bbf9e8ae67571734b4b75fd1f938be2f66daf0c260bda8c1d4"
+}

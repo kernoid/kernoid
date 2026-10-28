@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO mail_accounts (account_id, tenant_id)\n             SELECT id, tenant_id FROM accounts WHERE id = $1\n             ON CONFLICT (account_id) DO NOTHING\n             RETURNING account_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "account_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "mail_accounts",
+            "name": "account_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "271381a2921cc384aaf8e888494db15e40907610f2d0efa152d80680153e534e"
+}

@@ -1,0 +1,156 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Format, lints, the sqlx query cache, tests against PostgreSQL and the API files of the documentation; the web
+# SDK, login UI and web app (types, tests, build); the terminal app (its own Cargo workspace: format, lints, tests);
+# the licence checks (REUSE, no Stalwart Enterprise License material); known vulnerabilities and licences of the
+# dependencies; the container image builds, and is pushed to ghcr.io from main and version tags. Actions are pinned
+# by commit, with the version as a comment.
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18.6-alpine3.24
+        env:
+          POSTGRES_USER: kernoid
+          POSTGRES_PASSWORD: kernoid
+        ports: ['5432:5432']
+        options: --health-cmd "pg_isready -U kernoid" --health-interval 2s --health-retries 30
+    env:
+      DATABASE_URL: postgres://kernoid:kernoid@localhost:5432/kernoid
+      # Without debug info target/ stays small enough for the runner's disk (the linker died with SIGBUS once).
+      CARGO_PROFILE_DEV_DEBUG: "0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Rust toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@2201cc584a476d1b508be977bbe4b7d1c7a52e9c # v2.9.3
+      - name: sqlx CLI
+        run: cargo install sqlx-cli@0.9.0 --locked --no-default-features --features postgres,rustls
+      - name: Migrations apply
+        run: cargo sqlx migrate run --source crates/kernoid-store/migrations
+      - name: Query cache (.sqlx) matches the queries and the schema
+        run: cargo sqlx prepare --workspace --check -- --all-targets
+      - run: cargo fmt --check
+      - run: cargo clippy --locked --all-targets
+      - name: The API files of the documentation (docs/) match the code
+        run: |
+          df -h .
+          cargo build --locked -q --bin kernoid
+          ./target/debug/kernoid openapi | diff - docs/_data/openapi.json
+          ./target/debug/kernoid graphql-schema | diff - docs/api/schema.graphql
+      - run: cargo test --locked
+      - if: always()
+        run: df -h .
+
+  # The terminal app: a Cargo workspace of its own (MIT), apart from the server's.
+  tui:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/tui
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Rust toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@2201cc584a476d1b508be977bbe4b7d1c7a52e9c # v2.9.3
+        with:
+          workspaces: apps/tui
+      - run: cargo fmt --check
+      - run: cargo clippy --locked --all-targets
+      - run: cargo test --locked
+      - run: cargo build --locked --release
+
+  web:
+    runs-on: ubuntu-latest
+    container: docker.io/library/node:26.11.1-trixie-slim
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: npm install --global --ignore-scripts --no-audit --no-fund pnpm@12.12.0
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run check
+      - run: pnpm test
+      - run: pnpm run build
+
+  # Known vulnerabilities, licences and sources of the dependencies (deny.toml, apps/tui/deny.toml; pnpm's audit for
+  # web/). Separate from the image: an advisory published today fails this job, not the release of unrelated changes.
+  deps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Server
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+      - name: Terminal app
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          manifest-path: apps/tui/Cargo.toml
+      - name: Web
+        working-directory: web
+        run: |
+          npm install --global --ignore-scripts --no-audit --no-fund pnpm@12.12.0
+          pnpm audit
+
+  licences:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: No Stalwart Enterprise License material
+        run: ./scripts/check-sel.sh
+      - uses: fsfe/reuse-action@9a55738c6490d015afe69ad187520395d2b7a1fa # v6.0.0
+
+  # Builds the image for every change; pushes it to ghcr.io/kernoid/kernoid only from main and version tags, and only
+  # once the other jobs passed: `main` and `sha-<commit>` from main, the version (`0.1.0`, `0.1`) from a tag `v0.1.0`.
+  image:
+    needs: [rust, tui, web, licences]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      PUSH: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ghcr.io/kernoid/kernoid
+          tags: |
+            type=raw,value=main,enable={{is_default_branch}}
+            type=sha,format=long,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+      - if: env.PUSH == 'true'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64
+          push: ${{ env.PUSH == 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Layers that did not change (the web build, the toolchain stage) come from GitHub's cache.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

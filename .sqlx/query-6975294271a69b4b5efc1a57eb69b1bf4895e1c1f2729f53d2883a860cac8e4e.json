@@ -1,0 +1,78 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE logout_notifications SET next_attempt_at = now() + make_interval(secs => $1),\n                   attempts = attempts + 1\n               WHERE (session_id, application_id) IN (\n                   SELECT session_id, application_id FROM logout_notifications\n                   WHERE delivered_at IS NULL AND next_attempt_at <= now() AND attempts < $2\n                   ORDER BY next_attempt_at LIMIT $3 FOR UPDATE SKIP LOCKED)\n               RETURNING session_id, application_id, account_id, instance_id, attempts",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "session_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "logout_notifications",
+            "name": "session_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "application_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "logout_notifications",
+            "name": "application_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "account_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "logout_notifications",
+            "name": "account_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "instance_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "logout_notifications",
+            "name": "instance_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "attempts",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "logout_notifications",
+            "name": "attempts"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Float8",
+        "Int4",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "6975294271a69b4b5efc1a57eb69b1bf4895e1c1f2729f53d2883a860cac8e4e"
+}

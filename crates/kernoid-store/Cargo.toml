@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+[package]
+name = "kernoid-store"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+aead-stream = { version = "0.6.0", features = ["alloc"] }
+bytes = "1.12.1"
+chrono = "0.4.45"
+chacha20poly1305 = { version = "0.11.0", default-features = false, features = ["alloc", "zeroize"] }
+futures-util = { version = "0.3.34", default-features = false }
+getrandom = "0.4.3"
+kernoid-config = { version = "0.1.0", path = "../kernoid-config" }
+object_store = { version = "0.14.2", features = ["aws"] }
+sha2 = "0.11.1"
+sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "tls-rustls-ring-webpki", "postgres", "migrate", "macros", "uuid", "chrono", "json"] }
+thiserror = "2.0.21"
+tokio = { version = "1.54.1", features = ["rt"] }
+tracing = "0.1.44"
+uuid = "1.26.1"
+zeroize = "1.9.1"
+
+[dev-dependencies]
+bytes = "1.12.1"
+kernoid-config = { path = "../kernoid-config" }
+object_store = "0.14.2"
+sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres", "macros", "migrate"] }
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "time"] }
+uuid = { version = "1.26.1", features = ["v4"] }

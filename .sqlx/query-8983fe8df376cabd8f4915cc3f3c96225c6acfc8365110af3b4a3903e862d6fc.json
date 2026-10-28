@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT selector, public_key FROM dkim_keys WHERE domain = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "selector",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "dkim_keys",
+            "name": "selector"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "public_key",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "dkim_keys",
+            "name": "public_key"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "8983fe8df376cabd8f4915cc3f3c96225c6acfc8365110af3b4a3903e862d6fc"
+}

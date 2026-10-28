@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE signing_keys SET state = 'active', state_since = now() WHERE instance_id = $1 AND kid = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "365c842dc71dfb668b5394623483b32614f67cd0acc09dba13a5e081a2e89b16"
+}

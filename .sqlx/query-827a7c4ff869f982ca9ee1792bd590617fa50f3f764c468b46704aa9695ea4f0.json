@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE outbound_recipients SET attempts = attempts + 1, next_attempt_at = $3, leased_until = NULL,\n                 last_error = $4\n             WHERE message_id = $1 AND address = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Timestamptz",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "827a7c4ff869f982ca9ee1792bd590617fa50f3f764c468b46704aa9695ea4f0"
+}

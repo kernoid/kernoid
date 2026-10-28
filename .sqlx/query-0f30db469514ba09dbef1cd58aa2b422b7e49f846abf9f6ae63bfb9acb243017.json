@@ -1,0 +1,88 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT c.owner_id, a.display_name, a.primary_address, c.collection_type, c.collection_id, c.level\n               FROM collection_access c JOIN accounts a ON a.id = c.owner_id\n               WHERE a.active AND a.id <> $1\n                 AND EXISTS (SELECT 1 FROM account_services s WHERE s.account_id = a.id AND s.service = 'mail' AND s.state = 'on')\n                 AND (c.grantee_account = $1\n                      OR c.grantee_group IN (SELECT group_id FROM group_members WHERE account_id = $1))\n                 AND (EXISTS (SELECT 1 FROM calendars k WHERE k.id = c.collection_id AND k.account_id = c.owner_id)\n                      OR EXISTS (SELECT 1 FROM addressbooks b WHERE b.id = c.collection_id AND b.account_id = c.owner_id))\n               ORDER BY a.display_name, c.collection_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "owner_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "collection_access",
+            "name": "owner_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "display_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "accounts",
+            "name": "display_name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "primary_address",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "accounts",
+            "name": "primary_address"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "collection_type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "collection_access",
+            "name": "collection_type"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "collection_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "collection_access",
+            "name": "collection_id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "level",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "collection_access",
+            "name": "level"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "0f30db469514ba09dbef1cd58aa2b422b7e49f846abf9f6ae63bfb9acb243017"
+}

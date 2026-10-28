@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT f.tenant_id, c.prefix, c.parts, c.size, c.sha256\n             FROM file_contents c JOIN file_accounts f ON f.account_id = c.account_id WHERE c.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tenant_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "file_accounts",
+            "name": "tenant_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "prefix",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "file_contents",
+            "name": "prefix"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "parts",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "file_contents",
+            "name": "parts"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "size",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "file_contents",
+            "name": "size"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "sha256",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "file_contents",
+            "name": "sha256"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "52b47d19fdcfd5370704881829d4291ad972a0b74b43d78c85f6e3c1b0a1101e"
+}

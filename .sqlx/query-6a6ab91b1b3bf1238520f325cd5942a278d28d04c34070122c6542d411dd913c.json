@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT tenant_id, number, wrapped, main_key FROM tenant_keys\n         WHERE main_key IS DISTINCT FROM $1 ORDER BY tenant_id, number",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tenant_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "tenant_keys",
+            "name": "tenant_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "number",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "tenant_keys",
+            "name": "number"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "wrapped",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "tenant_keys",
+            "name": "wrapped"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "main_key",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "tenant_keys",
+            "name": "main_key"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "6a6ab91b1b3bf1238520f325cd5942a278d28d04c34070122c6542d411dd913c"
+}

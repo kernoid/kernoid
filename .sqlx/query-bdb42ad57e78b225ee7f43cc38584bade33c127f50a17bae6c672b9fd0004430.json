@@ -1,0 +1,72 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT f.node_id, f.grantee_account, f.grantee_group, f.rights,\n                      coalesce(a.primary_address, a.email, a.display_name, '$' || g.name) AS \"name!\"\n               FROM file_access f\n               LEFT JOIN accounts a ON a.id = f.grantee_account\n               LEFT JOIN groups g ON g.id = f.grantee_group\n               WHERE f.owner_id = $1 AND ($2::uuid IS NULL OR f.node_id = $2)\n               ORDER BY f.node_id NULLS FIRST, 5",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "node_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "file_access",
+            "name": "node_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "grantee_account",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "file_access",
+            "name": "grantee_account"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "grantee_group",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "file_access",
+            "name": "grantee_group"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "rights",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "file_access",
+            "name": "rights"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "name!",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      false,
+      null
+    ]
+  },
+  "hash": "bdb42ad57e78b225ee7f43cc38584bade33c127f50a17bae6c672b9fd0004430"
+}

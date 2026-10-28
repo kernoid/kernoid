@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE identity_providers SET name = $2, issuer = $3, client_id = $4, scopes = $5, domains = $6,\n                         auto_create = $7, auto_link = $8, kind = $9, saml_sso_url = $10, saml_certificates = $11,\n                         saml_email_attribute = $12, saml_name_attribute = $13, sync_profile = $14,\n                         saml_sign_requests = $15, saml_slo_url = $16, register = $17\n                     WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "TextArray",
+        "TextArray",
+        "Bool",
+        "Bool",
+        "Text",
+        "Text",
+        "TextArray",
+        "Text",
+        "Text",
+        "Bool",
+        "Bool",
+        "Text",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e3546e4206d71986fa1e52d3c576f71b7999de965ecd17f2fe6332a59230061b"
+}

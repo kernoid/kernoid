@@ -1,0 +1,59 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT m.tenant_id, m.modseq, m.used_bytes, coalesce(a.mail_quota, t.default_mail_quota) AS mail_quota\n             FROM mail_accounts m JOIN accounts a ON a.id = m.account_id JOIN tenants t ON t.id = a.tenant_id\n             WHERE m.account_id = $1 FOR UPDATE OF m",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tenant_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "mail_accounts",
+            "name": "tenant_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "modseq",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "mail_accounts",
+            "name": "modseq"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "used_bytes",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "mail_accounts",
+            "name": "used_bytes"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "mail_quota",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "f62b87871060b078acee6830a0364dd9254d43ed3d2dd9948ae393dddb1ba077"
+}

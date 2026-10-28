@@ -1,0 +1,14 @@
+{
+  "name": "kernoid",
+  "short_name": "kernoid",
+  "description": "Log in and manage your account",
+  "start_url": "/login/account",
+  "scope": "/login/",
+  "display": "standalone",
+  "background_color": "#0B0D10",
+  "theme_color": "#0B0D10",
+  "icons": [
+    { "src": "/login/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/login/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

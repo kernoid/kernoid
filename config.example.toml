@@ -1,0 +1,56 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Configuration of a kernoid process. Every key can also be set from the environment: KERNOID__DATABASE__URL sets
+# database.url. Start with `kernoid --config config.toml serve`; `kernoid check-config` shows what kernoid read.
+
+# Roles this process takes on; "all" is every role. For now there is one: "api" (web interface and API).
+roles = ["all"]
+
+[http]
+listen = "0.0.0.0:8080"
+# Reverse proxies whose Forwarded / X-Forwarded-* headers are believed (addresses or networks). Empty: none.
+trusted_proxies = []
+# How instances are reached from outside; issuer and links are built from it and the primary domain. "http" only for
+# trying kernoid out without TLS.
+public_scheme = "https"
+# Prometheus metrics at /metrics on an internal address; leave out for none.
+# metrics_listen = "127.0.0.1:9090"
+
+# Serve HTTPS directly; leave out behind a reverse proxy (Caddy, nginx, Traefik …) that terminates TLS.
+# [http.tls]
+# certificate = "/etc/kernoid/tls/fullchain.pem"
+# key = "/etc/kernoid/tls/key.pem"
+
+[database]
+# Runtime role; it needs no rights of its own – `kernoid migrate` grants them. Use TLS when PostgreSQL is on another
+# host: append ?sslmode=verify-full.
+url = "postgres://kernoid_app:change-me@localhost/kernoid"
+# Owner of the schema, for `kernoid migrate` only; do not give it to the serving processes.
+migrate_url = "postgres://kernoid_owner:change-me@localhost/kernoid"
+max_connections = 10
+statement_timeout_ms = 30000              # 0: no limit
+idle_in_transaction_timeout_ms = 10000    # 0: no limit
+
+[blob]
+kind = "s3"                         # or "memory": lost on exit, for trying kernoid out only
+endpoint = "http://localhost:3900"  # e.g. Garage; leave out for AWS
+region = "garage"                   # as configured in the object storage
+bucket = "kernoid"
+access_key_id = "kernoid"
+secret_access_key = "change-me"
+allow_http = true                   # only for object storage on the same host or network
+
+[encryption]
+# 64 hex characters (`openssl rand -hex 32`). Encrypts the tenant keys that all content is encrypted with: without it,
+# content cannot be read again – keep a copy apart from the database and the object storage.
+main_key = "change-me"
+# After changing main_key: the old key here until `kernoid keys status` shows none left (`kernoid keys rewrap`).
+previous_main_keys = []
+
+# Modules are off unless switched on; each has its own settings in its table.
+# [modules.jitsi]
+# enabled = true
+
+[log]
+# filter = "info,kernoid_events=debug"  # default: RUST_LOG, else "info"
+format = "text"                     # or "json"
+# otlp_endpoint = "http://otel-collector:4318/v1/traces"   # send traces to an OpenTelemetry collector

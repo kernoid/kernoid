@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (SELECT 1 FROM file_contents WHERE prefix = $1) AS \"shared!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "shared!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "dd7720beb207200869265e8ef2f07939b6aa096f094328dc8bcfc7191cfa77e9"
+}

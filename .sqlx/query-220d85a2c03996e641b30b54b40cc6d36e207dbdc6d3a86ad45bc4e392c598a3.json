@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM tenant_keys",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "220d85a2c03996e641b30b54b40cc6d36e207dbdc6d3a86ad45bc4e392c598a3"
+}

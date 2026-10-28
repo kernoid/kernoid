@@ -1,0 +1,58 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+[package]
+name = "kernoid-smtp"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+aws-lc-rs = "1.18.2"
+base64 = "0.22.1"
+bytes = "1.12.1"
+chrono = "0.4.45"
+idna = "1.1.0"
+kernoid-config = { version = "0.1.0", path = "../kernoid-config" }
+kernoid-groupware = { version = "0.1.0", path = "../kernoid-groupware" }
+kernoid-identity = { version = "0.1.0", path = "../kernoid-identity" }
+kernoid-mail = { version = "0.1.0", path = "../kernoid-mail" }
+kernoid-oidc = { version = "0.1.0", path = "../kernoid-oidc" }
+kernoid-store = { version = "0.1.0", path = "../kernoid-store" }
+mail-builder = "1.0.0"
+mail-auth = { version = "0.13.3", default-features = false, features = ["aws-lc-rs", "arc"] }
+mail-parser = { version = "0.11.9", features = ["full_encoding"] }
+rustls = { version = "0.23.46", default-features = false, features = ["aws-lc-rs", "std", "tls12"] }
+rustls-webpki = { version = "0.103.16", default-features = false, features = ["aws-lc-rs", "std"] }
+sha2 = "0.11.1"
+smtp-proto = "0.2.5"
+thiserror = "2.0.21"
+tokio = { version = "1.54.1", features = ["net", "io-util", "time", "sync", "rt", "macros"] }
+tokio-rustls = { version = "0.26.6", default-features = false }
+tokio-util = "0.7.20"
+sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres", "macros", "uuid", "chrono"] }
+tracing = "0.1.44"
+uuid = { version = "1.28.0", features = ["v7"] }
+webpki-roots = "1.0.10"
+x509-cert = "0.2.5"
+zeroize = "1.9.1"
+
+[dev-dependencies]
+base64 = "0.22.1"
+bytes = "1.12.1"
+chrono = "0.4.45"
+tokio-util = "0.7.20"
+kernoid-identity = { path = "../kernoid-identity" }
+mail-auth = { version = "0.13.3", default-features = false, features = ["aws-lc-rs", "arc"] }
+rustls = { version = "0.23.46", default-features = false, features = ["aws-lc-rs", "std", "tls12"] }
+tokio-rustls = { version = "0.26.6", default-features = false }
+kernoid-events = { path = "../kernoid-events" }
+kernoid-store = { path = "../kernoid-store" }
+object_store = "0.14.2"
+rcgen = { version = "0.14.10", default-features = false, features = ["aws_lc_rs", "pem"] }
+sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres", "macros", "migrate"] }
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros"] }

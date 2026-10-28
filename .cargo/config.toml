@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+[env]
+# sqlx checks queries against the cache in .sqlx/, so building needs no database. After adding or changing a query,
+# run `cargo sqlx prepare --workspace -- --all-targets` against a migrated database and commit .sqlx/; CI checks
+# that the cache matches the queries and the schema.
+SQLX_OFFLINE = "true"

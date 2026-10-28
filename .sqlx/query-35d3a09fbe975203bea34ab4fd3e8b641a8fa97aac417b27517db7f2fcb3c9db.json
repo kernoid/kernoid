@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT DISTINCT a.role, r.permissions AS \"permissions?\"\n               FROM role_assignments a\n               LEFT JOIN tenant_roles r ON r.tenant_id = a.tenant_id AND r.name = a.role\n               WHERE a.tenant_id = $1\n                 AND ((a.principal_kind = 'account' AND a.principal_id = $2)\n                   OR (a.principal_kind = 'group'\n                       AND a.principal_id IN (SELECT group_id FROM group_members WHERE account_id = $2)))",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "role",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "role_assignments",
+            "name": "role"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "permissions?",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "tenant_roles",
+            "name": "permissions"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "35d3a09fbe975203bea34ab4fd3e8b641a8fa97aac417b27517db7f2fcb3c9db"
+}

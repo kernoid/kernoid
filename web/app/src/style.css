@@ -1,0 +1,247 @@
+/* SPDX-License-Identifier: MIT */
+/* kernoid's colours (brand/README.md), as in the login UI: dark by default, light when the system is light – unless
+   the account chose one (data-theme, theme.ts). */
+:root {
+  --bg: #0b0d10;
+  --panel: #11151a;
+  --raised: #171c22;
+  --line: #222a33;
+  --text: #d8ffff;
+  --muted: #8fa3a8;
+  --mint: #3ddc97;
+  --accent: #3ddc97;
+  --accent-text: #0b0d10;
+  --violet: #9b8cff;
+  --error: #ff7a7a;
+  --radius: 8px;
+  color-scheme: dark;
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f4f7f8;
+    --panel: #ffffff;
+    --raised: #eef3f5;
+    --line: #d6dee2;
+    --text: #052345;
+    --muted: #4c6170;
+    --mint: #0f7f52;
+    --accent: #0f7f52;
+    --accent-text: #ffffff;
+    --violet: #5b47d6;
+    --error: #b42318;
+    color-scheme: light;
+  }
+}
+
+:root[data-theme="light"] {
+  --bg: #f4f7f8;
+  --panel: #ffffff;
+  --raised: #eef3f5;
+  --line: #d6dee2;
+  --text: #052345;
+  --muted: #4c6170;
+  --mint: #0f7f52;
+  --accent: #0f7f52;
+  --accent-text: #ffffff;
+  --violet: #5b47d6;
+  --error: #b42318;
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+html, body, #app { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--text); }
+a { color: var(--accent); }
+h2 { font-size: 1.2rem; margin: 8px 0 12px; }
+h3 { font-size: 1rem; margin: 20px 0 8px; }
+.muted { color: var(--muted); }
+.small { font-size: 0.85rem; }
+.pad { padding: 16px; }
+.grow { flex: 1; }
+.error { color: var(--error); margin: 8px 16px; }
+.center { display: grid; place-content: center; height: 100%; text-align: center; padding: 16px; }
+
+button, select, input, textarea {
+  font: inherit;
+  color: inherit;
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 6px 10px;
+}
+button { cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: 0.5; cursor: default; }
+button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
+button.quiet { background: transparent; border-color: transparent; }
+button.danger { color: var(--error); }
+button.wide { width: 100%; margin-bottom: 12px; }
+input:focus, textarea:focus, select:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+textarea { width: 100%; resize: vertical; }
+
+.shell { display: grid; grid-template-rows: auto 1fr; height: 100%; }
+.bar { display: flex; align-items: center; gap: 24px; padding: 8px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.brand { font: 700 1.15rem ui-monospace, "IBM Plex Mono", monospace; letter-spacing: 0.02em; }
+.brand b { color: var(--violet); }
+.brand i { font-style: normal; color: var(--mint); }
+.bar nav { display: flex; gap: 4px; }
+.bar nav a { color: var(--muted); text-decoration: none; padding: 6px 12px; border-radius: var(--radius); }
+.bar nav a.active { color: var(--text); background: var(--raised); }
+.bar .who { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 0.9rem; }
+
+.three { display: grid; grid-template-columns: 200px minmax(260px, 360px) 1fr; min-height: 0; }
+.two { display: grid; grid-template-columns: minmax(260px, 360px) 1fr; min-height: 0; }
+.side, .list, .read { overflow: auto; min-height: 0; border-right: 1px solid var(--line); }
+.read { border-right: 0; padding: 12px 20px; }
+.side { padding: 12px; background: var(--panel); }
+
+.boxes, .items, .attachments, .participants { list-style: none; margin: 0; padding: 0; }
+.boxes button { width: 100%; display: flex; justify-content: space-between; background: transparent; border-color: transparent; text-align: left; }
+.boxes button.active { background: var(--raised); border-color: var(--line); }
+.count { color: var(--accent); font-weight: 600; }
+.search { padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.search input { width: 100%; }
+.search.row { display: flex; gap: 8px; align-items: center; }
+.items button { width: 100%; display: grid; gap: 2px; text-align: left; background: transparent; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding: 10px 12px; }
+.items button.active { background: var(--raised); }
+.items button.unread .who, .items button.unread .subject { font-weight: 700; }
+.items .line { display: flex; justify-content: space-between; gap: 8px; }
+.items .time { color: var(--muted); font-size: 0.85rem; white-space: nowrap; }
+.items .subject, .items .preview, .items .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.items .preview { color: var(--muted); font-size: 0.9rem; }
+.flag { color: var(--error); }
+
+.actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 12px; }
+.actions.end { justify-content: flex-end; margin: 16px 0 0; }
+.headers { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 0 0 16px; font-size: 0.92rem; }
+.headers dt { color: var(--muted); }
+.headers dd { margin: 0; word-break: break-word; }
+.body { white-space: pre-wrap; word-break: break-word; font: inherit; border-top: 1px solid var(--line); padding-top: 12px; }
+
+.overlay { position: fixed; inset: 0; background: rgb(0 0 0 / 0.45); display: grid; place-items: center; padding: 16px; z-index: 10; }
+.dialog { width: min(640px, 100%); max-height: 100%; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; }
+.dialog label { display: block; margin-bottom: 10px; }
+.dialog label > span { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 3px; }
+.dialog label input:not([type="checkbox"]), .dialog label select { width: 100%; }
+.dialog label.inline { display: flex; align-items: center; gap: 8px; }
+.dialog label.inline > span { margin: 0; color: var(--text); }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.answer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: var(--radius); margin: 10px 0; }
+
+.calendar { display: grid; grid-template-rows: auto auto auto 1fr; min-height: 0; padding: 12px 16px; gap: 8px; }
+.toolbar { display: flex; align-items: center; gap: 8px; }
+.toolbar h2 { margin: 0 0 0 8px; }
+.legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 0.85rem; }
+.chip { display: inline-flex; align-items: center; gap: 6px; }
+.chip i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.month { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-template-rows: auto repeat(6, minmax(90px, 1fr)); border: 1px solid var(--line); border-radius: var(--radius); overflow: auto; min-height: 0; }
+.weekday { padding: 4px 6px; font-size: 0.8rem; color: var(--muted); border-bottom: 1px solid var(--line); min-height: 0; }
+.day { border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 4px; display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow: hidden; }
+.day.other { background: var(--panel); color: var(--muted); }
+.day.today .date { background: var(--accent); color: var(--accent-text); border-radius: 999px; padding: 0 6px; }
+.date { font-size: 0.8rem; align-self: flex-start; }
+.event { text-align: left; font-size: 0.8rem; padding: 1px 4px; border-width: 0 0 0 3px; border-radius: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.event .time { color: var(--muted); }
+
+@media (max-width: 760px) {
+  .three, .two { grid-template-columns: 1fr; }
+  .side { display: none; }
+  .bar { gap: 8px; flex-wrap: wrap; }
+  .month { grid-template-rows: auto repeat(6, minmax(64px, 1fr)); }
+  .event .time { display: none; }
+}
+.body.html { white-space: normal; }
+.files { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+.file input { display: none; }
+.file span { display: inline-block; cursor: pointer; padding: 6px 10px; border: 1px dashed var(--line); border-radius: var(--radius); color: var(--muted); }
+.files .chip button { padding: 0 4px; }
+
+.files { display: grid; grid-template-rows: auto auto auto auto 1fr; align-content: start; min-height: 0; overflow: auto; padding: 12px 16px; gap: 8px; }
+.files.dropping { outline: 2px dashed var(--accent); outline-offset: -6px; }
+.trail { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; }
+.trail button { padding: 4px 6px; }
+label.button { display: inline-block; cursor: pointer; padding: 6px 10px; background: var(--raised); border: 1px solid var(--line); border-radius: var(--radius); }
+label.button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
+label.button.disabled { opacity: 0.5; cursor: default; }
+.nodes { width: 100%; border-collapse: collapse; }
+.nodes td { padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.nodes td.name { width: 100%; word-break: break-word; }
+.nodes td.end { white-space: nowrap; text-align: right; }
+.nodes td:not(.name) { white-space: nowrap; }
+.nodes .folder { padding: 0; font-weight: 600; text-align: left; }
+.nodes .folder::before { content: "▸ "; color: var(--muted); }
+.files-shell { grid-template-columns: 220px 1fr; }
+.files-shell .side .boxes button { display: grid; gap: 1px; justify-content: stretch; }
+.progress { display: grid; grid-template-columns: minmax(0, 1fr) 2fr auto; align-items: center; gap: 8px; }
+.progress progress { width: 100%; }
+.shares li.row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+
+/* The account (account/AccountView.tsx) and how programs connect (account/Connect.tsx). */
+.page { overflow: auto; min-height: 0; padding: 20px 24px 48px; }
+.page > * { max-width: 760px; }
+.page h1 { font-size: 1.5rem; margin: 0; }
+.page section { border-top: 1px solid var(--line); padding: 12px 0 16px; margin-top: 12px; }
+.page label { display: block; }
+.page label > span { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 3px; }
+.page label.inline { display: inline-flex; align-items: center; gap: 6px; }
+.page label.inline > span { margin: 0; color: var(--text); font-size: 1rem; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.row input:not([type="radio"]):not([type="checkbox"]) { flex: 1; min-width: 200px; }
+.stack { display: grid; gap: 10px; max-width: 420px; }
+.rows { list-style: none; margin: 0 0 10px; padding: 0; }
+.rows li { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.notice { color: var(--accent); }
+.qr { background: #fff; padding: 8px; border-radius: var(--radius); }
+.secret { font-family: ui-monospace, "IBM Plex Mono", monospace; letter-spacing: 0.05em; word-break: break-all; }
+.codes { columns: 2; font-family: ui-monospace, "IBM Plex Mono", monospace; }
+code { font-family: ui-monospace, "IBM Plex Mono", monospace; font-size: 0.92em; background: var(--raised); padding: 1px 5px; border-radius: 4px; word-break: break-all; }
+.connect h3 { margin-top: 18px; }
+.steps { padding-left: 18px; }
+.steps li { margin: 4px 0; }
+.settings { border-collapse: collapse; }
+.settings td { padding: 4px 12px 4px 0; border-bottom: 1px solid var(--line); }
+.bar .who a { text-decoration: none; padding: 6px 10px; border-radius: var(--radius); }
+.bar .who a.active { background: var(--raised); color: var(--text); }
+
+/* Files shown in place (files/Viewer.tsx). */
+.nodes .file { padding: 0; text-align: left; color: var(--accent); }
+a.button { display: inline-block; text-decoration: none; color: inherit; padding: 6px 10px; background: var(--raised); border: 1px solid var(--line); border-radius: var(--radius); }
+.viewer .sheet { width: min(1100px, 100%); height: min(860px, 100%); display: grid; grid-template-rows: auto 1fr; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.viewer .toolbar { padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.viewer .toolbar h2 { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.viewer .stage { min-height: 0; overflow: auto; display: grid; place-items: center; padding: 12px; }
+.viewer .stage img, .viewer .stage video { max-width: 100%; max-height: 100%; object-fit: contain; }
+.viewer .stage audio { width: min(520px, 100%); }
+.viewer .stage iframe { width: 100%; height: 100%; border: 0; background: #fff; }
+.viewer .stage pre.text { place-self: stretch; margin: 0; white-space: pre-wrap; word-break: break-word; font: 0.9rem/1.5 ui-monospace, "IBM Plex Mono", monospace; }
+
+/* Administration (admin/). */
+.admin-shell { grid-template-columns: 220px 1fr; }
+.admin-shell .side h3 { margin: 14px 4px 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+.tenant-pick { display: grid; gap: 3px; margin-bottom: 8px; }
+.tenant-pick select { width: 100%; }
+.page.admin > * { max-width: 980px; }
+.head { margin-bottom: 4px; flex-wrap: wrap; }
+.head h1 { margin: 0; }
+.page .stack label input:not([type="checkbox"]), .page .stack label select, .page .stack label textarea,
+.dialog label textarea { width: 100%; }
+.page .stack { max-width: 520px; }
+.page label small, .dialog label small { display: block; margin-top: 2px; }
+.dialog.wide { width: min(820px, 100%); }
+.dialog label.inline small { display: inline; }
+.ok { color: var(--accent); }
+.warn { color: var(--error); }
+.filter { width: 100%; max-width: 420px; margin: 8px 0; }
+.row .label { min-width: 70px; }
+.row label { display: inline-flex; align-items: center; gap: 6px; }
+.row label > span:empty { display: none; }
+.permissions { border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 12px; margin: 0 0 10px; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px 12px; }
+.permissions legend { color: var(--muted); font-size: 0.85rem; padding: 0 4px; }
+.records code.small { font-size: 0.8rem; }
+@media (max-width: 760px) {
+  .admin-shell .side { display: block; }
+  .admin-shell { grid-template-columns: 1fr; }
+  .pair { grid-template-columns: 1fr; }
+}

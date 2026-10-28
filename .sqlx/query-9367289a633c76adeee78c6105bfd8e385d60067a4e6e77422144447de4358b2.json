@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (SELECT 1 FROM accounts WHERE id = $1 AND tenant_id = $2 AND kind = 'person') AS \"account!\",\n                      EXISTS (SELECT 1 FROM groups WHERE id = $1 AND tenant_id = $2) AS \"group!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "account!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "group!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "9367289a633c76adeee78c6105bfd8e385d60067a4e6e77422144447de4358b2"
+}

@@ -1,0 +1,33 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT main_key, count(*) AS \"count!\" FROM tenant_keys GROUP BY main_key",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "main_key",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "tenant_keys",
+            "name": "main_key"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "count!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      true,
+      null
+    ]
+  },
+  "hash": "843c9a1fed660e0c063b77050e075a09a1094b312022f7f0e767e6e498085ca5"
+}

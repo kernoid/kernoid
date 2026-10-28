@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO tls_certificates (domain, chain_pem, key_sealed, not_after)\n         VALUES ('login.firma.de', $1, $2, now() + interval '60 days')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b5b6b30832a3444defdfe18f283c3f10dd55d22717f2623ce8012a70f6016bdb"
+}

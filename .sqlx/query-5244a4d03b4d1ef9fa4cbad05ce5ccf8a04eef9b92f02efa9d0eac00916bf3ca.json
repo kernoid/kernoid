@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM mail_access WHERE owner_id = $1 AND mailbox_id IS NOT DISTINCT FROM $2\n                     AND grantee_account IS NOT DISTINCT FROM $3 AND grantee_group IS NOT DISTINCT FROM $4",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5244a4d03b4d1ef9fa4cbad05ce5ccf8a04eef9b92f02efa9d0eac00916bf3ca"
+}

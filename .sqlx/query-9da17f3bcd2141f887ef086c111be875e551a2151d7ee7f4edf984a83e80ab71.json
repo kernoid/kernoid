@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE sessions SET checks = array_append(checks, $2) WHERE id = $1 AND NOT ($2 = ANY(checks))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9da17f3bcd2141f887ef086c111be875e551a2151d7ee7f4edf984a83e80ab71"
+}

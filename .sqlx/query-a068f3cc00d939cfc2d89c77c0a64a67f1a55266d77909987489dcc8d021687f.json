@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE sessions SET created_at = now() - interval '20 minutes'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "a068f3cc00d939cfc2d89c77c0a64a67f1a55266d77909987489dcc8d021687f"
+}

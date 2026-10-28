@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+[package]
+name = "kernoid-imap"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+base64 = "0.22.1"
+bytes = "1.12.1"
+chrono = "0.4.45"
+hashify = "0.2.9"
+kernoid-config = { version = "0.1.0", path = "../kernoid-config" }
+kernoid-identity = { version = "0.1.0", path = "../kernoid-identity" }
+kernoid-mail = { version = "0.1.0", path = "../kernoid-mail" }
+mail-parser = { version = "0.11.9", features = ["full_encoding"] }
+rustls = { version = "0.23.46", default-features = false, features = ["aws-lc-rs", "std", "tls12"] }
+tokio = { version = "1.54.1", features = ["net", "io-util", "time", "sync", "rt", "macros"] }
+tokio-rustls = { version = "0.26.6", default-features = false }
+tokio-util = "0.7.20"
+tracing = "0.1.44"
+uuid = { version = "1.28.0", features = ["v7"] }
+
+[dev-dependencies]
+base64 = "0.22.1"
+kernoid-events = { path = "../kernoid-events" }
+kernoid-store = { path = "../kernoid-store" }
+object_store = "0.14.2"
+rcgen = { version = "0.14.10", default-features = false, features = ["aws_lc_rs", "pem"] }
+sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres", "macros", "migrate"] }
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros"] }

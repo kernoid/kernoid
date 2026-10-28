@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO consents (account_id, application_id, scopes, granted_at) VALUES ($1, $2, $3, $4)\n                     ON CONFLICT (account_id, application_id) DO UPDATE SET scopes = $3, granted_at = $4",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "TextArray",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b1c96a66dec4be61a3c2c6259d9f1dc31c6106aa5617a09f89e9e93ed3cb79d0"
+}

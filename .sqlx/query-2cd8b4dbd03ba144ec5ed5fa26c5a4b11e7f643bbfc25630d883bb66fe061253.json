@@ -1,0 +1,247 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, thread_id, size, received_at, sent_at, message_id, in_reply_to, \"references\", subject,\n                      from_addresses, to_addresses, cc_addresses, bcc_addresses, reply_to, sender, preview,\n                      has_attachment, keywords,\n                      array(SELECT mailbox_id FROM email_mailboxes WHERE email_id = e.id ORDER BY mailbox_id) AS \"mailboxes!\",\n                      array(SELECT uid FROM email_mailboxes WHERE email_id = e.id ORDER BY mailbox_id) AS \"uids!\"\n               FROM emails e WHERE account_id = $1 AND id = ANY($2)\n               ORDER BY received_at DESC, id DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "emails",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "thread_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "emails",
+            "name": "thread_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "size",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "emails",
+            "name": "size"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "received_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "emails",
+            "name": "received_at"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "sent_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "emails",
+            "name": "sent_at"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "message_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "emails",
+            "name": "message_id"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "in_reply_to",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "emails",
+            "name": "in_reply_to"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "references",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "emails",
+            "name": "references"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "subject",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "emails",
+            "name": "subject"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "from_addresses",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "emails",
+            "name": "from_addresses"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "to_addresses",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "emails",
+            "name": "to_addresses"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "cc_addresses",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "emails",
+            "name": "cc_addresses"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "bcc_addresses",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "emails",
+            "name": "bcc_addresses"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "reply_to",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "emails",
+            "name": "reply_to"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "sender",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "emails",
+            "name": "sender"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "preview",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "emails",
+            "name": "preview"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "has_attachment",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "emails",
+            "name": "has_attachment"
+          }
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "keywords",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "emails",
+            "name": "keywords"
+          }
+        }
+      },
+      {
+        "ordinal": 18,
+        "name": "mailboxes!",
+        "type_info": "UuidArray",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 19,
+        "name": "uids!",
+        "type_info": "Int8Array",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "2cd8b4dbd03ba144ec5ed5fa26c5a4b11e7f643bbfc25630d883bb66fe061253"
+}

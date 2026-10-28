@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO tenant_service_policies (tenant_id, service, assign, approval) VALUES ($1, $2, $3, $4)\n                     ON CONFLICT (tenant_id, service) DO UPDATE SET assign = $3, approval = $4",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e6153fe474aa7404ce5b3a6be9aab0e4349e89fc0097df683aad2dace2e4aa03"
+}

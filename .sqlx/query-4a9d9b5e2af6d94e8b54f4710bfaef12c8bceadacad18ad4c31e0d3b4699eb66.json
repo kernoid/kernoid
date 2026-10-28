@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT 1 AS \"granted!\" FROM kernoid_grant_runtime('kernoid_test_runtime')",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "granted!",
+        "type_info": "Int4",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "4a9d9b5e2af6d94e8b54f4710bfaef12c8bceadacad18ad4c31e0d3b4699eb66"
+}

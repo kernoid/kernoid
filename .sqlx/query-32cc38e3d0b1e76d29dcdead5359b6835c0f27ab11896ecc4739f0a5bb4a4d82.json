@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT DISTINCT role FROM project_authorizations\n             WHERE project_id = $1\n               AND ((principal_kind = 'account' AND principal_id = $2)\n                 OR (principal_kind = 'group'\n                     AND principal_id IN (SELECT group_id FROM group_members WHERE account_id = $2)))",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "role",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "project_authorizations",
+            "name": "role"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "32cc38e3d0b1e76d29dcdead5359b6835c0f27ab11896ecc4739f0a5bb4a4d82"
+}

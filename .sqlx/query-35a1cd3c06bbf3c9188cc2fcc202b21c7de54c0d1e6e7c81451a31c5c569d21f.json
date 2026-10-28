@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE tenant_keys SET wrapped = ''",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "35a1cd3c06bbf3c9188cc2fcc202b21c7de54c0d1e6e7c81451a31c5c569d21f"
+}

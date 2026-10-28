@@ -1,0 +1,10 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "preserve",
+    "jsxImportSource": "solid-js",
+    "types": ["vite/client"],
+    "paths": { "@kernoid/sdk": ["../sdk/src/index.ts"] }
+  },
+  "include": ["src", "test"]
+}

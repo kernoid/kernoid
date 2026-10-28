@@ -1,0 +1,5 @@
+---
+layout: null
+permalink: /api/openapi.json
+---
+{{ site.data.openapi | jsonify }}

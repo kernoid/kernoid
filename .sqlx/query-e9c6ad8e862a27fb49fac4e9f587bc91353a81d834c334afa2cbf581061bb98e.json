@@ -1,0 +1,47 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.tenant_id, a.display_name,\n                      coalesce(array_agg(lower(d.address) ORDER BY d.is_primary DESC, d.address)\n                               FILTER (WHERE d.address IS NOT NULL), '{}') AS \"addresses!\"\n               FROM accounts a LEFT JOIN addresses d ON d.account_id = a.id\n               WHERE a.id = $1 AND a.active\n               GROUP BY a.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tenant_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "accounts",
+            "name": "tenant_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "display_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "accounts",
+            "name": "display_name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "addresses!",
+        "type_info": "TextArray",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "e9c6ad8e862a27fb49fac4e9f587bc91353a81d834c334afa2cbf581061bb98e"
+}

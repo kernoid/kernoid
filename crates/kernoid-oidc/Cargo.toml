@@ -1,0 +1,47 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+[package]
+name = "kernoid-oidc"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+aws-lc-rs = { version = "1.18.2", features = ["ring-io"] }
+base64 = "0.22.1"
+chrono = { version = "0.4.45", features = ["serde"] }
+getrandom = "0.4.3"
+kernoid-events = { version = "0.1.0", path = "../kernoid-events" }
+kernoid-identity = { version = "0.1.0", path = "../kernoid-identity" }
+kernoid-store = { version = "0.1.0", path = "../kernoid-store" }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+sha2 = "0.11.1"
+sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres", "macros", "uuid", "chrono", "json"] }
+thiserror = "2.0.21"
+tokio = { version = "1.54.1", features = ["rt", "net"] }
+tracing = "0.1.44"
+uppsala = "=0.10.1"
+bergshamra = { version = "=0.9.2", default-features = false, features = ["aws-lc"] }
+miniz_oxide = "=0.9.1"
+rcgen = { version = "0.14.10", default-features = false, features = ["aws_lc_rs"] }
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls", "json", "form", "http2"] }
+url = "2.5.8"
+uuid = { version = "1.28.0", features = ["v7", "serde"] }
+zeroize = "1.9.1"
+
+[dev-dependencies]
+rcgen = "0.14.10"
+axum = "0.8.9"
+aws-lc-rs = { version = "1.18.2", features = ["ring-io"] }
+base64 = "0.22.1"
+kernoid-store = { path = "../kernoid-store" }
+serde_json = "1.0.154"
+sha2 = "0.11.1"
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "net"] }
+url = "2.5.8"

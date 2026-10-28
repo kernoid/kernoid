@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE tenants SET mfa_required = $2,\n                         mfa_required_since = CASE WHEN $2 THEN $3::timestamptz END WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bool",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9f5c037d70dd6f3f47a97d1fc1d5e1db19336ae74c9f6ddd721bf44be1fa47ad"
+}

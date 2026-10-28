@@ -1,0 +1,89 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT r.id, a.name, r.scopes, r.prompt, r.max_age, r.expires_at\n             FROM auth_requests r JOIN applications a ON a.id = r.application_id\n             WHERE r.id = $1 AND r.instance_id = $2 AND r.session_id IS NULL AND r.expires_at > now()",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "auth_requests",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "scopes",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "auth_requests",
+            "name": "scopes"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "prompt",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "auth_requests",
+            "name": "prompt"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "max_age",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "auth_requests",
+            "name": "max_age"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "expires_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "auth_requests",
+            "name": "expires_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "a7af45a1b58ec7f29d1a1b55ccad68005eaa537d08988555402a2878b6fa0bb3"
+}

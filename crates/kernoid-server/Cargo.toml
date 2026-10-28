@@ -1,0 +1,77 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+[package]
+name = "kernoid-server"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+async-graphql = { version = "7.2.1", features = ["chrono"] }
+async-graphql-axum = "7.2.1"
+axum = "0.8.9"
+axum-server = { version = "0.8.0", features = ["tls-rustls-no-provider"] }
+base64 = "0.22.1"
+bytes = "1.12.1"
+futures-util = { version = "0.3.34", default-features = false }
+chrono = { version = "0.4.45", features = ["serde"] }
+instant-acme = { version = "0.8.5", default-features = false, features = ["aws-lc-rs", "hyper-rustls", "rcgen"] }
+ipnet = "2.12.2"
+kernoid-config = { version = "0.1.0", path = "../kernoid-config" }
+kernoid-identity = { version = "0.1.0", path = "../kernoid-identity" }
+kernoid-dav = { version = "0.1.0", path = "../kernoid-dav" }
+kernoid-files = { version = "0.1.0", path = "../kernoid-files" }
+kernoid-groupware = { version = "0.1.0", path = "../kernoid-groupware" }
+kernoid-jmap = { version = "0.1.0", path = "../kernoid-jmap" }
+kernoid-mail = { version = "0.1.0", path = "../kernoid-mail" }
+kernoid-oidc = { version = "0.1.0", path = "../kernoid-oidc" }
+kernoid-smtp = { version = "0.1.0", path = "../kernoid-smtp" }
+kernoid-store = { version = "0.1.0", path = "../kernoid-store" }
+metrics = "0.24.6"
+percent-encoding = "2.3.2"
+metrics-exporter-prometheus = { version = "0.18.3", default-features = false }
+rustls = { version = "0.23.46", default-features = false, features = ["aws-lc-rs", "std", "tls12"] }
+rustls-pki-types = "1.15.1"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres", "macros", "chrono"] }
+thiserror = "2.0.21"
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "signal", "net", "sync"] }
+tower-http = { version = "0.6.11", features = ["request-id", "trace", "propagate-header", "timeout", "limit", "catch-panic", "util", "fs", "cors"] }
+tracing = "0.1.44"
+url = "2.5.8"
+utoipa = { version = "6.0.0", features = ["axum_extras", "chrono"] }
+utoipa-axum = "0.3.0"
+uuid = { version = "1.28.0", features = ["v4"] }
+x509-cert = "0.2.5"
+zeroize = "1.9.1"
+
+[dev-dependencies]
+chrono = "0.4.45"
+kernoid-jmap = { path = "../kernoid-jmap" }
+kernoid-mail = { path = "../kernoid-mail" }
+base64 = "0.22.1"
+aws-lc-rs = "1.18.2"
+http-body-util = "0.1.5"
+kernoid-config = { path = "../kernoid-config" }
+kernoid-events = { path = "../kernoid-events" }
+kernoid-identity = { path = "../kernoid-identity" }
+kernoid-oidc = { path = "../kernoid-oidc" }
+kernoid-store = { path = "../kernoid-store" }
+rcgen = "0.14.10"
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "json"] }
+serde_json = "1.0.154"
+sha2 = "0.11.1"
+sqlx = { version = "0.9.0", default-features = false, features = ["postgres", "runtime-tokio", "macros", "migrate"] }
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "time"] }
+tower = { version = "0.5.3", features = ["util"] }
+url = "2.5.8"
+uuid = { version = "1.28.0", features = ["v4"] }
+webauthn-authenticator-rs = { version = "0.5.5", features = ["softpasskey"] }
+webauthn-rs = { version = "0.5.5", features = ["conditional-ui", "danger-allow-state-serialisation"] }
+webauthn-rs-proto = "0.5.5"

@@ -1,0 +1,180 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# kernoid on one public test machine: kernoid with every role, PostgreSQL, Garage as S3-compatible object storage and
+# Caddy in front, which obtains the certificates – for the instance's web host and for the mail host, whose files
+# kernoid reads for SMTP and IMAP. README.md says how to set it up. A test setup: no backups, one machine.
+name: kernoid-test
+
+services:
+  kernoid:
+    # Built by CI from main (README.md, Updating); KERNOID_IMAGE picks another tag or an image built here.
+    image: ${KERNOID_IMAGE:-ghcr.io/kernoid/kernoid:main}
+    pull_policy: missing
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      s3: { condition: service_healthy }
+      # Healthy once Caddy holds the mail host's certificate: kernoid does not start without the files.
+      caddy: { condition: service_healthy }
+    environment: &kernoid-env
+      KERNOID__DATABASE__URL: postgres://kernoid_app:${KERNOID_APP_PASSWORD:?set in .env}@postgres/kernoid
+      KERNOID__BLOB__KIND: s3
+      KERNOID__BLOB__ENDPOINT: http://s3:3900
+      KERNOID__BLOB__REGION: garage
+      KERNOID__BLOB__ALLOW_HTTP: "true"
+      KERNOID__BLOB__BUCKET: kernoid
+      KERNOID__BLOB__ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?set in .env}
+      KERNOID__BLOB__SECRET_ACCESS_KEY: ${S3_SECRET_KEY:?set in .env}
+      KERNOID__ENCRYPTION__MAIN_KEY: ${KERNOID_MAIN_KEY:?set in .env}
+      # Caddy terminates TLS for HTTP; only its address may set the forwarded headers.
+      KERNOID__HTTP__PUBLIC_SCHEME: https
+      KERNOID__HTTP__TRUSTED_PROXIES: '["172.30.47.10/32"]'
+      # Mail. Inside the container kernoid listens on high ports (it runs without root); the host publishes the
+      # usual ones below.
+      KERNOID__SMTP__HOSTNAME: ${MAIL_HOST:?set in .env}
+      KERNOID__SMTP__LISTEN: 0.0.0.0:2525
+      KERNOID__SMTP__SUBMISSION_LISTEN: 0.0.0.0:5587
+      KERNOID__SMTP__SUBMISSIONS_LISTEN: 0.0.0.0:5465
+      KERNOID__IMAP__LISTEN: 0.0.0.0:5143
+      KERNOID__IMAP__TLS_LISTEN: 0.0.0.0:5993
+      # Caddy's certificate for the mail host; kernoid reads it again when Caddy renews it.
+      KERNOID__MAIL__TLS__CERTIFICATE: /caddy/caddy/certificates/${ACME_CA_DIR:?set in .env}/${MAIL_HOST}/${MAIL_HOST}.crt
+      KERNOID__MAIL__TLS__KEY: /caddy/caddy/certificates/${ACME_CA_DIR}/${MAIL_HOST}/${MAIL_HOST}.key
+      KERNOID__MAIL__NOTIFICATION_FROM: ${NOTIFICATION_FROM:?set in .env}
+    volumes:
+      - caddy-data:/caddy:ro
+    ports:
+      - "25:2525"
+      - "587:5587"
+      - "465:5465"
+      - "143:5143"
+      - "993:5993"
+    networks:
+      kernoid: {}
+    restart: unless-stopped
+
+  # Brings the schema up to date before kernoid starts. Only this step knows the owner's password.
+  migrate:
+    image: ${KERNOID_IMAGE:-ghcr.io/kernoid/kernoid:main}
+    pull_policy: missing
+    command: ["migrate"]
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      <<: *kernoid-env
+      KERNOID__DATABASE__MIGRATE_URL: postgres://kernoid_owner:${KERNOID_OWNER_PASSWORD:?set in .env}@postgres/kernoid
+    networks:
+      kernoid: {}
+
+  # Caddy runs as the same user as kernoid (65532, distroless "nonroot"), so that kernoid can read the certificate
+  # files Caddy writes with mode 0600. This step hands Caddy's volumes to that user.
+  caddy-owner:
+    image: docker.io/library/caddy:2.11.7-alpine
+    user: "0"
+    command: ["chown", "-R", "65532:65532", "/data", "/config"]
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+    network_mode: none
+
+  caddy:
+    image: docker.io/library/caddy:2.11.7-alpine
+    user: "65532:65532"
+    depends_on:
+      caddy-owner: { condition: service_completed_successfully }
+    environment:
+      KERNOID_HOST: ${KERNOID_HOST:?set in .env}
+      MAIL_HOST: ${MAIL_HOST}
+      ACME_EMAIL: ${ACME_EMAIL:?set in .env}
+      ACME_CA: ${ACME_CA:?set in .env}
+    # Ports below 1024 without root; Docker sets this by default, it is spelled out here.
+    sysctls:
+      net.ipv4.ip_unprivileged_port_start: 0
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    networks:
+      kernoid: { ipv4_address: 172.30.47.10 }
+    healthcheck:
+      test: ["CMD", "test", "-f", "/data/caddy/certificates/${ACME_CA_DIR}/${MAIL_HOST}/${MAIL_HOST}.crt"]
+      interval: 5s
+      start_period: 5m
+      retries: 60
+    restart: unless-stopped
+
+  postgres:
+    image: docker.io/library/postgres:18.6-alpine3.24
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+      KERNOID_OWNER_PASSWORD: ${KERNOID_OWNER_PASSWORD:?set in .env}
+      KERNOID_APP_PASSWORD: ${KERNOID_APP_PASSWORD:?set in .env}
+    volumes:
+      - ../compose/postgres-init.sh:/docker-entrypoint-initdb.d/kernoid.sh:ro
+      - postgres:/var/lib/postgresql
+    networks:
+      kernoid: {}
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "kernoid"]
+      interval: 2s
+      retries: 30
+    restart: unless-stopped
+
+  # Garage on one node, as in deploy/compose.
+  s3:
+    build:
+      dockerfile_inline: |
+        FROM docker.io/dxflrs/garage:v2.4.1 AS garage
+        FROM docker.io/library/alpine:3.24.3
+        COPY --from=garage /garage /usr/local/bin/garage
+    image: kernoid-garage:v2.4.1-alpine3.24.3
+    command: ["/bin/sh", "/garage-start.sh"]
+    environment:
+      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:?set in .env}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?set in .env}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:?set in .env}
+    configs:
+      - source: garage
+        target: /etc/garage.toml
+    volumes:
+      - ../compose/garage-start.sh:/garage-start.sh:ro
+      - garage-meta:/var/lib/garage/meta
+      - garage-data:/var/lib/garage/data
+    networks:
+      kernoid: {}
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/ready"]
+      interval: 2s
+      retries: 60
+    restart: unless-stopped
+
+networks:
+  # A fixed range, so that Caddy has a fixed address for KERNOID__HTTP__TRUSTED_PROXIES.
+  kernoid:
+    ipam:
+      config:
+        - subnet: 172.30.47.0/24
+
+configs:
+  garage:
+    content: |
+      metadata_dir = "/var/lib/garage/meta"
+      data_dir = "/var/lib/garage/data"
+      db_engine = "lmdb"
+      replication_factor = 1
+      rpc_bind_addr = "[::]:3901"
+      rpc_public_addr = "127.0.0.1:3901"
+
+      [s3_api]
+      s3_region = "garage"
+      api_bind_addr = "[::]:3900"
+
+volumes:
+  postgres:
+  garage-meta:
+  garage-data:
+  caddy-data:
+  caddy-config:

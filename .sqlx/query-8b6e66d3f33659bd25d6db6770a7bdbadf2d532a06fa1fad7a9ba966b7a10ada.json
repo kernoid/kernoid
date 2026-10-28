@@ -1,0 +1,37 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                 EXISTS (SELECT 1 FROM role_assignments WHERE principal_kind = 'group' AND principal_id = $1)\n                     AS \"tenant_roles!\",\n                 EXISTS (SELECT 1 FROM instance_role_assignments WHERE principal_kind = 'group' AND principal_id = $1)\n                     AS \"instance_roles!\",\n                 EXISTS (SELECT 1 FROM project_authorizations WHERE principal_kind = 'group' AND principal_id = $1)\n                     AS \"project_roles!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tenant_roles!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "instance_roles!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "project_roles!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "8b6e66d3f33659bd25d6db6770a7bdbadf2d532a06fa1fad7a9ba966b7a10ada"
+}

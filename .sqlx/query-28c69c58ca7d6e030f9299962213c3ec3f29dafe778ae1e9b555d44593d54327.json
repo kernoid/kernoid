@@ -1,0 +1,43 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT resource_name AS \"resource_name!\", change FROM groupware_changes\n               WHERE account_id = $1 AND collection_id = $2 AND modseq > $3 AND modseq <= $4\n                 AND object_type IN ('event', 'contact') AND resource_name IS NOT NULL\n               ORDER BY modseq",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "resource_name!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "groupware_changes",
+            "name": "resource_name"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "change",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "groupware_changes",
+            "name": "change"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      true,
+      false
+    ]
+  },
+  "hash": "28c69c58ca7d6e030f9299962213c3ec3f29dafe778ae1e9b555d44593d54327"
+}

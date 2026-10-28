@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: MIT
+# cargo-deny: what the terminal app's dependencies may be (CI, job `deps`). Known vulnerabilities fail the build,
+# licences must keep the app usable under MIT, crates come only from crates.io. A finding that does not affect the
+# app is ignored below with a reason, never silently.
+
+[graph]
+all-features = true
+
+[advisories]
+# Unmaintained crates are reported, but only those the app depends on directly fail the build.
+unmaintained = "workspace"
+ignore = []
+
+[licenses]
+confidence-threshold = 0.93
+# Permissive licences, so that the app stays usable under MIT – and MPL-2.0, whose copyleft covers only its own files
+# (option-ext, through dirs); they stay under the MPL.
+allow = ["0BSD", "MPL-2.0", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "BSL-1.0", "CC0-1.0", "CDLA-Permissive-2.0", "ISC", "MIT", "MIT-0", "Unicode-3.0", "Unlicense", "Zlib"]
+
+[bans]
+multiple-versions = "allow"
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

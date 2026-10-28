@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE addresses SET is_primary = true WHERE account_id = $1 AND address = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1929f7ff51b0c11a68ef3e3b8c5bf843e3f63fe4057105bc2afc18d548be86db"
+}

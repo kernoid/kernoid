@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT secret_sealed FROM account_totp",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "secret_sealed",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "account_totp",
+            "name": "secret_sealed"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "243e625d5bb826116f6d0bc4ff58aaa3dacd09f679e44b15a26e51231f5d42be"
+}

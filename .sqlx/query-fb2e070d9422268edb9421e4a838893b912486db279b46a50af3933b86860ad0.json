@@ -1,0 +1,53 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT t.instance_id, a.id, a.tenant_id\n                   FROM addresses ad JOIN accounts a ON a.id = ad.account_id JOIN tenants t ON t.id = a.tenant_id\n                   WHERE ad.address = $1\n                     AND EXISTS (SELECT 1 FROM account_services s\n                                 WHERE s.account_id = a.id AND s.service = ANY($2) AND s.state = 'on')",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "instance_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "tenants",
+            "name": "instance_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "accounts",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "tenant_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "accounts",
+            "name": "tenant_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "fb2e070d9422268edb9421e4a838893b912486db279b46a50af3933b86860ad0"
+}

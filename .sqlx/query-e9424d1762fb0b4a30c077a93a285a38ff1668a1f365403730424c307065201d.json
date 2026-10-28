@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO acme_challenges (token, key_authorization, expires_at)\n                 VALUES ($1, $2, now() + make_interval(secs => $3))\n                 ON CONFLICT (token) DO UPDATE SET key_authorization = excluded.key_authorization",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e9424d1762fb0b4a30c077a93a285a38ff1668a1f365403730424c307065201d"
+}

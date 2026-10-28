@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE mta_sts_policies SET mx = ARRAY['mail.remote.example']",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "4f7d0166eccfa88ef4cd811f63517ebe76206e2a7542fc7930ffd199b46faf4d"
+}

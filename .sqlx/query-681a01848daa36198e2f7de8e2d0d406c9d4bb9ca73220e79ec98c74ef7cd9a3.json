@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT resource_name FROM calendar_events WHERE calendar_id = $1 AND uid = $2 AND resource_name <> $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "resource_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "calendar_events",
+            "name": "resource_name"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "681a01848daa36198e2f7de8e2d0d406c9d4bb9ca73220e79ec98c74ef7cd9a3"
+}

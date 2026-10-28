@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT u.account_id FROM account_usernames u JOIN accounts a ON a.id = u.account_id\n             JOIN tenants t ON t.id = a.tenant_id\n             WHERE u.instance_id = $1 AND u.username = $2 AND t.usernames",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "account_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "account_usernames",
+            "name": "account_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "e71fa6b5dcccb8e552cecd953292286ac6d9c4b186c2de4d2a53621082bbb85f"
+}

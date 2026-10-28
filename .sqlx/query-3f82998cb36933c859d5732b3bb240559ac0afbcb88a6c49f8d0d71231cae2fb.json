@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO acme_challenges (token, key_authorization, expires_at)\n         VALUES ('tok-1', 'tok-1.thumbprint', now() + interval '1 hour')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "3f82998cb36933c859d5732b3bb240559ac0afbcb88a6c49f8d0d71231cae2fb"
+}

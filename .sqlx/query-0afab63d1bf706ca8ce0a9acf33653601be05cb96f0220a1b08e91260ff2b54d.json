@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE login_failures SET window_start = window_start - interval '16 minutes'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "0afab63d1bf706ca8ce0a9acf33653601be05cb96f0220a1b08e91260ff2b54d"
+}

@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE applications SET access_token_format = $2, offline_access = $3, consent_required = $4,\n                         backchannel_logout_uri = $5, frontchannel_logout_uri = $6\n                     WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Bool",
+        "Bool",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "dd45d99390d7238faceb4c1883fc1b7ff06032ff7969a2823a25b74ca2bf3e05"
+}

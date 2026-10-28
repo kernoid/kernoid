@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO blob_garbage (tenant_id, key, due_at) VALUES ($1, $2, $3)\n         ON CONFLICT (tenant_id, key) DO UPDATE SET due_at = least(blob_garbage.due_at, EXCLUDED.due_at)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "58b498d644f2ac92024c535c59de7673a57e2744150a872cfa3ac116cec91cdd"
+}

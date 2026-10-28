@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM sessions\n             WHERE expires_at < now() - interval '1 day' OR terminated_at < now() - interval '1 day'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "f50733725b8ca895a759a08be9c3f5d5205997c3912add14bb3a4d51c075ad81"
+}

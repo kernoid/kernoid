@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (SELECT 1 FROM calendars WHERE id = $1 AND account_id = $2) AS \"calendar!\",\n                      EXISTS (SELECT 1 FROM addressbooks WHERE id = $1 AND account_id = $2) AS \"addressbook!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "calendar!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "addressbook!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "ad3988edb6870928d975cbb42cee724f1617a7693c69a3ff4dc480a086292500"
+}

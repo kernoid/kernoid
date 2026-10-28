@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (SELECT 1 FROM addresses ad JOIN tenants t ON t.id = ad.tenant_id\n                              WHERE ad.address = $2)\n                   OR EXISTS (SELECT 1 FROM account_emails WHERE instance_id = $1 AND email = $2)\n                   OR EXISTS (SELECT 1 FROM account_usernames WHERE instance_id = $1 AND username = $2) AS \"taken!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "taken!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "d046d5979725fd99afb2e05d36defa0d64c3be9540d21420be455b0632c0632f"
+}

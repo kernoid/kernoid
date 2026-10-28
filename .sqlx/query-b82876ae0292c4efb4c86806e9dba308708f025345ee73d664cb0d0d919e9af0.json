@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT m.account_id, em.mailbox_id, em.uid\n               FROM email_mailboxes em\n               JOIN mailboxes m ON m.id = em.mailbox_id\n               JOIN accounts a ON a.id = m.account_id\n               JOIN tenants t ON t.id = a.tenant_id\n               WHERE (m.role = 'trash' AND em.added_at < now() - make_interval(days => t.trash_retention_days))\n                  OR (m.role = 'junk' AND em.added_at < now() - make_interval(days => t.junk_retention_days))\n               ORDER BY m.account_id, em.mailbox_id\n               LIMIT $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "account_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "mailboxes",
+            "name": "account_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "mailbox_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "email_mailboxes",
+            "name": "mailbox_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "uid",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "email_mailboxes",
+            "name": "uid"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "b82876ae0292c4efb4c86806e9dba308708f025345ee73d664cb0d0d919e9af0"
+}

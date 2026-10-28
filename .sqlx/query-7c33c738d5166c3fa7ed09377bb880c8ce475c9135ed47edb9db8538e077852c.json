@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT coalesce(f.used_bytes, 0) AS \"used_bytes!\", coalesce(a.files_quota, t.default_files_quota) AS quota\n               FROM accounts a JOIN tenants t ON t.id = a.tenant_id\n               LEFT JOIN file_accounts f ON f.account_id = a.id\n               WHERE a.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "used_bytes!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "quota",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "7c33c738d5166c3fa7ed09377bb880c8ce475c9135ed47edb9db8538e077852c"
+}

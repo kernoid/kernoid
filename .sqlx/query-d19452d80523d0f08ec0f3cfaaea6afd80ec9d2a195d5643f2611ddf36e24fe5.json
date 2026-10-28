@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "CREATE ROLE kernoid_test_runtime NOLOGIN",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "d19452d80523d0f08ec0f3cfaaea6afd80ec9d2a195d5643f2611ddf36e24fe5"
+}

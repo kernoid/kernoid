@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT credentials_sealed FROM acme_accounts WHERE directory = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "credentials_sealed",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "acme_accounts",
+            "name": "credentials_sealed"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b97bf2710dd9b308875dd591431024640f4ee7b3e0b5887ee9c92cadc0f087c7"
+}

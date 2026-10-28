@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE events SET creator = 'x'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "50a841351eaea7669b1d253f6141ccd95c450f59a813a4b7b91e081cfbadbe52"
+}

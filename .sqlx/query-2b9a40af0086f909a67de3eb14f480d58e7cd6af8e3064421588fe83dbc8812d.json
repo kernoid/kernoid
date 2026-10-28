@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO mta_sts_policies (domain, policy_id, mode, mx, expires_at)\n         VALUES ('remote.example', '20261024', 'enforce', ARRAY['mx.remote.example'], now() + interval '1 day')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "2b9a40af0086f909a67de3eb14f480d58e7cd6af8e3064421588fe83dbc8812d"
+}

@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO accounts (id, tenant_id, display_name, primary_address, kind)\n                     VALUES ($1, $2, $3, $4, 'shared')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2ea619d4083c0d86bf82b9d5f416b23b475eac6e351bbba2f65ab047eb0a4f20"
+}

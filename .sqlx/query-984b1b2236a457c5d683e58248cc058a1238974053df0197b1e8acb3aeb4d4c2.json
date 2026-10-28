@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE tenants SET mfa_required_since = now() - interval '15 days'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "984b1b2236a457c5d683e58248cc058a1238974053df0197b1e8acb3aeb4d4c2"
+}

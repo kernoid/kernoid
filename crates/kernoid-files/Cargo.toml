@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+[package]
+name = "kernoid-files"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+bytes = "1.12.1"
+chrono = { version = "0.4.45", features = ["serde"] }
+futures-util = { version = "0.3.34", default-features = false }
+kernoid-store = { version = "0.1.0", path = "../kernoid-store" }
+sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres", "macros", "uuid", "chrono"] }
+thiserror = "2.0.21"
+uuid = { version = "1.28.0", features = ["v4", "v7"] }
+
+[dev-dependencies]
+chrono = "0.4.45"
+kernoid-events = { path = "../kernoid-events" }
+kernoid-identity = { path = "../kernoid-identity" }
+object_store = "0.14.2"
+sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres", "macros", "migrate"] }
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros"] }

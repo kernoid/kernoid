@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT domain FROM outbound_recipients\n             WHERE status = 'queued' AND next_attempt_at <= now() AND (leased_until IS NULL OR leased_until < now())\n             ORDER BY next_attempt_at LIMIT 1 FOR UPDATE SKIP LOCKED",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "domain",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "outbound_recipients",
+            "name": "domain"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "635dc15a010e22ecdf763908a1db8010941658bb358e6ae1aa283e9d4d8957d9"
+}

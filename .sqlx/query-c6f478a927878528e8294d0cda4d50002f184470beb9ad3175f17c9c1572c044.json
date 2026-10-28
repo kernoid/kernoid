@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO saml_sp_keys (instance_id, private_sealed, certificate) VALUES ($1, $2, $3)\n                 ON CONFLICT (instance_id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c6f478a927878528e8294d0cda4d50002f184470beb9ad3175f17c9c1572c044"
+}

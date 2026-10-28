@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO tenant_roles (tenant_id, name, permissions) VALUES ($1, $2, $3)\n                     ON CONFLICT (tenant_id, name) DO UPDATE SET permissions = excluded.permissions",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "35e6df52c897069060016b6b5f3c20fa3fc0a097844e66ddc4e018d14fee76ac"
+}

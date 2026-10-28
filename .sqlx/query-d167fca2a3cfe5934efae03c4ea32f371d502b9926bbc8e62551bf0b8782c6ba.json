@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM file_contents WHERE node_id = ANY($1) RETURNING prefix, parts, size",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "prefix",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "file_contents",
+            "name": "prefix"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "parts",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "file_contents",
+            "name": "parts"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "size",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "file_contents",
+            "name": "size"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "d167fca2a3cfe5934efae03c4ea32f371d502b9926bbc8e62551bf0b8782c6ba"
+}

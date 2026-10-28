@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+[package]
+name = "kernoid-identity"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+argon2 = "0.6.0"
+aws-lc-rs = "1.18.2"
+base64 = "0.22.1"
+chrono = { version = "0.4.45", features = ["serde"] }
+getrandom = "0.4.3"
+hickory-resolver = "0.26.3"
+kernoid-events = { version = "0.1.0", path = "../kernoid-events" }
+kernoid-store = { version = "0.1.0", path = "../kernoid-store" }
+qrcode = { version = "0.14.1", default-features = false, features = ["svg"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+sha2 = "0.11.1"
+sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres", "macros", "uuid", "chrono"] }
+thiserror = "2.0.21"
+tokio = { version = "1.54.1", features = ["rt"] }
+tracing = "0.1.44"
+url = "2.5.8"
+uuid = { version = "1.28.0", features = ["v7", "serde"] }
+webauthn-rs = { version = "0.5.5", features = ["conditional-ui", "danger-allow-state-serialisation"] }
+zeroize = "1.9.1"
+
+[dev-dependencies]
+argon2 = "0.6.0"
+aws-lc-rs = "1.18.2"
+chrono = "0.4.45"
+kernoid-store = { path = "../kernoid-store" }
+serde_json = "1.0.154"
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "time"] }
+uuid = { version = "1.28.0", features = ["v7"] }
+webauthn-authenticator-rs = { version = "0.5.5", features = ["softpasskey"] }
+webauthn-rs = { version = "0.5.5", features = ["conditional-ui", "danger-allow-state-serialisation"] }
+webauthn-rs-proto = "0.5.5"

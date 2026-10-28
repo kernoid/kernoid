@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Caddy in front of kernoid (compose.yaml): HTTPS for the instance's host, and a certificate for the mail host that
+# kernoid serves for SMTP and IMAP. One CA only – no fallback to another – so that the certificate files stay where
+# compose.yaml looks for them (ACME_CA_DIR).
+{
+	email {$ACME_EMAIL}
+	cert_issuer acme {$ACME_CA}
+}
+
+{$KERNOID_HOST} {
+	reverse_proxy kernoid:8080
+}
+
+# Only for the certificate: mail clients talk to kernoid directly.
+{$MAIL_HOST} {
+	respond "Mail only: SMTP, submission, IMAP." 404
+}

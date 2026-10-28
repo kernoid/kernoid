@@ -1,0 +1,167 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT c.id, c.resource_name, c.dead_properties, c.name, c.description, c.color, c.sort_order, c.timezone, c.components, c.is_default,\n                      c.is_subscribed, c.is_visible,\n                      greatest((SELECT max(modseq) FROM groupware_changes g\n                                WHERE g.account_id = c.account_id AND (g.object_id = c.id OR g.collection_id = c.id)), 0)\n                          AS \"modseq!\"\n               FROM calendars c WHERE c.account_id = $1 ORDER BY c.sort_order, c.name, c.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "calendars",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "resource_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "calendars",
+            "name": "resource_name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "dead_properties",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "calendars",
+            "name": "dead_properties"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "calendars",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "description",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "calendars",
+            "name": "description"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "color",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "calendars",
+            "name": "color"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "sort_order",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "calendars",
+            "name": "sort_order"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "timezone",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "calendars",
+            "name": "timezone"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "components",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "calendars",
+            "name": "components"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "is_default",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "calendars",
+            "name": "is_default"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "is_subscribed",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "calendars",
+            "name": "is_subscribed"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "is_visible",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "calendars",
+            "name": "is_visible"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "modseq!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "81b12ba2c1c4e0bc9dc2091ea8f87c7d8676195bb27f0ffae017ad83fafa7938"
+}

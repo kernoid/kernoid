@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE known_devices SET last_used_at = now(), expires_at = now() + make_interval(secs => $2)\n                     WHERE token_hash = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "eecdaca8116665a47d980d1d8ff3110abcdc577399c767da469fe4852315db0f"
+}

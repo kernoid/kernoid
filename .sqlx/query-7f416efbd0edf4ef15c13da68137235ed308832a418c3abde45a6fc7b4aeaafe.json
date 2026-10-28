@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT coalesce(max(sequence), 0) AS \"last!\" FROM events\n           WHERE instance_id = $1 AND aggregate_type = $2 AND aggregate_id = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "last!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "7f416efbd0edf4ef15c13da68137235ed308832a418c3abde45a6fc7b4aeaafe"
+}

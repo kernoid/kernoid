@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (SELECT 1 FROM tenant_domains WHERE domain = $1 AND verified) AS \"served!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "served!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "494888ad4c87314b890d00bb1e5c4e895237c7f365fc472fb74c93d38880bcc3"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO events (instance_id, owner, aggregate_type, aggregate_id, sequence, event_type, revision, payload, creator) VALUES (gen_random_uuid(), gen_random_uuid(), 'account', 'a', 1, 'account.added', 1, '{}', 'system')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "326d405b65a28c1bfdf20d91c956307b309dae40a6feb34ba0c1b0d73b566af4"
+}

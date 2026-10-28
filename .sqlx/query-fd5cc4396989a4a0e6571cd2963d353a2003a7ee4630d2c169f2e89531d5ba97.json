@@ -1,0 +1,66 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT g.id, g.tenant_id, g.name,\n                      coalesce(array_agg(m.account_id ORDER BY m.account_id) FILTER (WHERE m.account_id IS NOT NULL), '{}')\n                          AS \"members!: Vec<Uuid>\",\n                      array(SELECT ad.address FROM addresses ad WHERE ad.group_id = g.id ORDER BY ad.address)\n                          AS \"addresses!\"\n               FROM groups g LEFT JOIN group_members m ON m.group_id = g.id\n               WHERE g.tenant_id = $1\n               GROUP BY g.id ORDER BY g.name",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "groups",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "tenant_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "groups",
+            "name": "tenant_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "groups",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "members!: Vec<Uuid>",
+        "type_info": "UuidArray",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "addresses!",
+        "type_info": "TextArray",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "fd5cc4396989a4a0e6571cd2963d353a2003a7ee4630d2c169f2e89531d5ba97"
+}

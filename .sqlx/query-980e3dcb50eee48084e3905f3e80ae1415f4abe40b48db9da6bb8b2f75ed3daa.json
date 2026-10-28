@@ -1,0 +1,140 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT m.id, m.parent_id, m.name, m.role, m.sort_order, m.is_subscribed, m.uid_validity, m.uid_next,\n                      count(em.email_id) AS \"total!\",\n                      count(em.email_id) FILTER (WHERE NOT e.keywords && ARRAY['$seen', '$draft']) AS \"unread!\",\n                      count(DISTINCT e.thread_id) AS \"threads!\",\n                      count(DISTINCT e.thread_id) FILTER (WHERE EXISTS (\n                          SELECT 1 FROM emails t WHERE t.thread_id = e.thread_id\n                          AND NOT t.keywords && ARRAY['$seen', '$draft'])) AS \"unread_threads!\"\n               FROM mailboxes m\n               LEFT JOIN email_mailboxes em ON em.mailbox_id = m.id\n               LEFT JOIN emails e ON e.id = em.email_id\n               WHERE m.account_id = $1\n               GROUP BY m.id\n               ORDER BY m.sort_order, m.name",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "mailboxes",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "parent_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "mailboxes",
+            "name": "parent_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "mailboxes",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "role",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "mailboxes",
+            "name": "role"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "sort_order",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "mailboxes",
+            "name": "sort_order"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "is_subscribed",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "mailboxes",
+            "name": "is_subscribed"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "uid_validity",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "mailboxes",
+            "name": "uid_validity"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "uid_next",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "mailboxes",
+            "name": "uid_next"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "total!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 9,
+        "name": "unread!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 10,
+        "name": "threads!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 11,
+        "name": "unread_threads!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "980e3dcb50eee48084e3905f3e80ae1415f4abe40b48db9da6bb8b2f75ed3daa"
+}

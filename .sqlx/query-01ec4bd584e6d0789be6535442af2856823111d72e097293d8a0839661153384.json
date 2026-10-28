@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE addressbooks SET\n                 name = coalesce($3, name),\n                 description = CASE WHEN $4 THEN $5 ELSE description END,\n                 sort_order = coalesce($6, sort_order),\n                 is_default = coalesce($7, is_default),\n                 is_subscribed = coalesce($8, is_subscribed)\n             WHERE id = $1 AND account_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Bool",
+        "Text",
+        "Int8",
+        "Bool",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "01ec4bd584e6d0789be6535442af2856823111d72e097293d8a0839661153384"
+}

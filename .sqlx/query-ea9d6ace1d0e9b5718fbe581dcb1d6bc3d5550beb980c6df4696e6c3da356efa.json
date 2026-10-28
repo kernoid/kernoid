@@ -1,0 +1,54 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT t.mfa_required, t.mfa_grace_days,\n                      greatest(t.mfa_required_since, a.created_at) + make_interval(days => t.mfa_grace_days)\n                          AS \"grace_until?\",\n                      (EXISTS (SELECT 1 FROM account_totp WHERE account_id = a.id AND confirmed_at IS NOT NULL)\n                       OR EXISTS (SELECT 1 FROM account_passkeys WHERE account_id = a.id)) AS \"has_factor!\"\n               FROM accounts a JOIN tenants t ON t.id = a.tenant_id WHERE a.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "mfa_required",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "tenants",
+            "name": "mfa_required"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "mfa_grace_days",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "tenants",
+            "name": "mfa_grace_days"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "grace_until?",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "has_factor!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "ea9d6ace1d0e9b5718fbe581dcb1d6bc3d5550beb980c6df4696e6c3da356efa"
+}

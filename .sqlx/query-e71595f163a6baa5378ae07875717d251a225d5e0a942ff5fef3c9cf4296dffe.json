@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE mail_accounts SET modseq = modseq + 1 WHERE account_id = $1 RETURNING modseq",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "modseq",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "mail_accounts",
+            "name": "modseq"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "e71595f163a6baa5378ae07875717d251a225d5e0a942ff5fef3c9cf4296dffe"
+}
