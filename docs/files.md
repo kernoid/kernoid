@@ -13,7 +13,7 @@ the [web app]({{ '/app/' | relative_url }}) has them too. The design is
 [RFC 0005](https://github.com/kernoid/kernoid/blob/main/rfcs/0005-files.md).
 
 {: .note }
-Links for people without an account follow with the beta.
+Links for people without an account follow with 0.2.
 
 ## Turning files on
 
@@ -109,5 +109,5 @@ from writing the same file, and a file written again keeps its earlier content a
 - **Content** is encrypted with the tenant's key before it goes to object storage.
 
 {: .note }
-OPEN: links (beta), uploads that resume after a broken connection, searching inside files, symbolic links, moving
+OPEN: links (0.2), uploads that resume after a broken connection, searching inside files, symbolic links, moving
 between stores over WebDAV, emptying the trash after a time.

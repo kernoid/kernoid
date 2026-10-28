@@ -9,7 +9,7 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 ## [0.1.0] – 2026-10-28
 
-The first release: the alpha. kernoid runs an organisation's email, logins and files as one system on PostgreSQL and
+The first release, a pre-release. kernoid runs an organisation's email, logins and files as one system on PostgreSQL and
 S3-compatible object storage, in one container image. It is for trying out and testing – not yet for data that must
 not be lost: there has been no external security audit (planned before 1.0), and the formats may still change.
 
@@ -66,7 +66,7 @@ not be lost: there has been no external security audit (planned before 1.0), and
 
 Marked `OPEN` in the documentation, among them: public links to files, resumable uploads, SRS for forwarded mail,
 OAUTHBEARER and LDAP, IMAP `SORT` and `THREAD`, a week and a day view, an audit log in the web app, a Kubernetes
-operator (beta).
+operator – planned for 0.2.
 
 [Unreleased]: https://github.com/kernoid/kernoid/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/kernoid/kernoid/releases/tag/v0.1.0

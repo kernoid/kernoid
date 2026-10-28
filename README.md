@@ -11,10 +11,12 @@
 **kernoid** is one self-hostable system for an organisation's core: an account is created once and is at the same
 time the mailbox, the login for single sign-on and the owner of files. Free software in Rust – everything included.
 
-> **Status:** 0.1.0, the alpha – identity and single sign-on (OpenID Connect, SAML and OIDC federation, SCIM), mail
+> **Status:** 0.1.0, a pre-release – identity and single sign-on (OpenID Connect, SAML and OIDC federation, SCIM), mail
 > (SMTP, JMAP, IMAP), calendars and contacts (CalDAV, CardDAV, JMAP), files (JMAP, WebDAV, team folders), a web app
 > with administration and a terminal app. For trying out and testing: no external security audit yet, and formats
-> may still change ([changelog](CHANGELOG.md)). The design is in the [whitepaper](https://github.com/kernoid/whitepaper).
+> may still change ([changelog](CHANGELOG.md)). Next is 0.2 – public links, LDAP, a Kubernetes operator, the core
+> completed, virus scanning and Jitsi as the first modules; the first stable release, ready for production, is planned
+> for summer 2027. The design is in the [whitepaper](https://github.com/kernoid/whitepaper).
 
 **Documentation:** [kernoid.dev](https://kernoid.dev) – built from [`docs/`](docs/). **Website:** [kernoid.org](https://kernoid.org).
 

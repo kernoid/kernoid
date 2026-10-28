@@ -13,10 +13,10 @@ login and the owner of files are the same account. It runs as a self-hosted serv
 object storage and is free software under the AGPL.
 {: .fs-5 .fw-300 }
 
-**Status:** early development, towards the alpha. The base and the identity part are built – instances and tenants,
-accounts, groups, roles, projects, sessions with second factors, OpenID Connect and the administration API – and so
-are mail, calendars and contacts, a first part of files and the web app (see the
-[roadmap in the whitepaper](https://github.com/kernoid/whitepaper)). Nothing here is ready for production yet.
+**Status:** 0.1, a pre-release – identity and single sign-on, mail, calendars and contacts, files, the web app and the
+terminal app are there to try out and test ([changelog](https://github.com/kernoid/kernoid/blob/main/CHANGELOG.md)).
+Nothing here is ready for production yet: the first stable release is planned for summer 2027, after 0.2 (public
+links, LDAP, a Kubernetes operator, the first modules) and an external security audit.
 {: .warning }
 
 | Page | What it covers |

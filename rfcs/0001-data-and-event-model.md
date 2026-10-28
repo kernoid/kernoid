@@ -4,8 +4,8 @@
 - **Status:** draft, 2026-10-23; implemented: sections 1–3 (instances, tenants, accounts), the password login and the
   OpenID Connect code flow, TOTP and passkeys of section 7 (`kernoid-identity`, `kernoid-oidc`, `kernoid-server`)
 - **Scope:** the objects kernoid is built from, how they are stored as events, how requests find their instance and
-  tenant, and the decisions that follow for consistency, keys, APIs and the login. It is the basis for the alpha
-  (identity and mail).
+  tenant, and the decisions that follow for consistency, keys, APIs and the login. It is the basis for everything
+  else (identity first, then mail).
 
 Statements about ZITADEL refer to its documentation and source as of 2026-10-23 (release v4.20.0); sources are
 linked where used. kernoid takes over concepts, not code, unless marked otherwise.
@@ -519,7 +519,7 @@ As in ZITADEL, a project is "the vessel that holds your Applications and Roles"
   `groups.manage`. It cannot deactivate an account holding more, nor change the members of a group that holds roles.
 - **OPEN:** filters beyond `eq` on the three attributes; `If-None-Match` for reads.
 
-## 8. Actions and hooks (after the beta)
+## 8. Actions and hooks (before 1.0)
 
 Third-party services integrate from outside. The shape follows ZITADEL's Actions V2
 ([concept](https://zitadel.com/docs/concepts/features/actions_v2),

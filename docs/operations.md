@@ -40,7 +40,7 @@ one or more `worker` processes. **Several workers share the work without doing i
 A second worker is for availability more than for load: if one stops, the other carries on.
 
 Deployment today: Docker Compose – `deploy/compose` to try kernoid out, `deploy/test` for a public test machine
-behind Caddy, with mail (its `README.md` walks through the setup). A Kubernetes operator is planned for the beta.
+behind Caddy, with mail (its `README.md` walks through the setup). A Kubernetes operator is planned for 0.2.
 
 ## TLS and reverse proxies
 

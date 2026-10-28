@@ -82,7 +82,7 @@ calendars and contacts, [0005](rfcs/0005-files.md) files. Change the RFC with th
 - **Modules** (connections to one particular outside service, e.g. Jitsi) live in this repository, are compiled in,
   off by default and switched on per installation and per tenant; a module that is off opens no ports and runs no
   jobs. There is no way to load foreign code into the process: others integrate from outside through actions and
-  hooks (planned after the beta), which see a public, versioned set of events – never the internal ones.
+  hooks (planned before 1.0), which see a public, versioned set of events – never the internal ones.
 - **HTTP:** every API operation exists in REST (with `#[utoipa::path]`, so it appears in `/openapi.json`) and in
   GraphQL, with the same permission checks – which live in one place: the `admin_*` functions of `kernoid-identity`
   and `kernoid-oidc` take an `Admin` and check its permissions; handlers only translate. Errors are `Problem`s –

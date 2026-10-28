@@ -2,7 +2,7 @@
 # RFC 0005 – Files
 
 - **Status:** draft, 2026-10-28; implemented: all sections (`kernoid-files`, migration 0032; `kernoid-jmap`;
-  `kernoid-server`'s `webdav`). Links for people without an account (11.3) follow with the beta.
+  `kernoid-server`'s `webdav`). Links for people without an account (11.3) follow with 0.2.
 - **Scope:** how files and directories are stored (sections 1–7), how programs reach them (JMAP: 8, WebDAV: 9, the
   web app: 10), how they are counted (13), shared (11) and kept by the tenant rather than a person (drives, 12).
 
@@ -206,9 +206,9 @@ projected into `file_access`, like mail's and calendars' (RFC 0002, 12.2; RFC 00
 - **OPEN:** a change of a group's members changes what its members see without a journal entry; clients see it at
   their next full sync.
 
-### 11.3 Links (beta)
+### 11.3 Links (0.2)
 
-Links for people without an account – with or without a password and an expiry – follow with the beta.
+Links for people without an account – with or without a password and an expiry – follow with 0.2.
 
 ## 12. Drives
 
