@@ -7,7 +7,7 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 ## [Unreleased]
 
-## [0.1.0] – OPEN (the day of the tag)
+## [0.1.0] – 2026-10-28
 
 The first release: the alpha. kernoid runs an organisation's email, logins and files as one system on PostgreSQL and
 S3-compatible object storage, in one container image. It is for trying out and testing – not yet for data that must
