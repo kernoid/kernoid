@@ -237,7 +237,18 @@ export interface FileLink {
   nodeId: string;
   expires: string | null;
   hasPassword: boolean;
+  /** Its contents can be seen and downloaded. */
+  mayRead: boolean;
+  /** Files can be added to it (a folder); without `mayRead` a drop box. */
+  mayAdd: boolean;
   created: string;
+}
+
+/** What a link lets people do: view, view and add, or only add (a folder). */
+export type LinkMode = "view" | "add" | "drop";
+
+export function linkMode(link: Pick<FileLink, "mayRead" | "mayAdd">): LinkMode {
+  return !link.mayAdd ? "view" : link.mayRead ? "add" : "drop";
 }
 
 const LINKS = [FILENODE, FILE_LINKS];
@@ -252,11 +263,19 @@ export async function links(jmap: Jmap, accountId: string, node: FileNode): Prom
 }
 
 /** Makes a link; answers its address – the only time it can be shown. */
-export async function createLink(jmap: Jmap, accountId: string, node: FileNode, expires: string | null, password: string | null): Promise<string> {
+export async function createLink(
+  jmap: Jmap,
+  accountId: string,
+  node: FileNode,
+  mode: LinkMode,
+  expires: string | null,
+  password: string | null,
+): Promise<string> {
+  const rights = { mayRead: mode !== "drop", mayAdd: mode !== "view" };
   const result = await jmap.call<{ created?: Record<string, { token: string }>; notCreated?: Record<string, { type: string; description?: string }> }>(
     LINKS,
     "FileLink/set",
-    { accountId, create: { l: { nodeId: node.id, expires, password } } },
+    { accountId, create: { l: { nodeId: node.id, ...rights, expires, password } } },
   );
   const made = result.created?.l;
   if (!made) {

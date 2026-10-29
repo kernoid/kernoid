@@ -215,7 +215,7 @@ fn tokens(headers: &RequestHeaders<'_>) -> Vec<String> {
 }
 
 /// A media type for a file by its name, where the client sent none of use.
-fn guess(name: &str) -> &'static str {
+pub(crate) fn guess(name: &str) -> &'static str {
     let extension = name.rsplit_once('.').map(|(_, extension)| extension.to_ascii_lowercase()).unwrap_or_default();
     match extension.as_str() {
         "txt" => "text/plain",

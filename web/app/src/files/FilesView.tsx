@@ -14,6 +14,7 @@ import {
   type FileLink,
   type FileNode,
   LEVELS,
+  type LinkMode,
   NO_RIGHTS,
   type Principal,
   type Rights,
@@ -28,6 +29,7 @@ import {
   formatSize,
   isDirectory,
   level,
+  linkMode,
   links,
   linksAvailable,
   move,
@@ -527,14 +529,19 @@ function LinkDialog(props: { account: string; node: FileNode; onClose: () => voi
     const form = new FormData(event.currentTarget as HTMLFormElement);
     const date = String(form.get("expires") ?? "");
     const password = String(form.get("password") ?? "");
+    const mode = (String(form.get("mode") ?? "view") as LinkMode) || "view";
     // The link works through the whole day chosen.
     const expires = date ? new Date(`${date}T23:59:59`).toISOString() : null;
     void run(async () => {
-      setMade(await createLink(jmap, props.account, props.node, expires, password || null));
+      setMade(await createLink(jmap, props.account, props.node, mode, expires, password || null));
       (event.currentTarget as HTMLFormElement | null)?.reset();
     });
   };
   const when = (date: string) => new Date(date).toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" });
+  // People may add files through a link to a folder the user may add to.
+  const adds = () => isDirectory(props.node) && (props.node.myRights?.mayAddChildren ?? false);
+  const modeLabel = (mode: LinkMode) =>
+    ({ view: t("View and download"), add: t("View, download and add files"), drop: t("Only add files (drop box)") })[mode];
 
   return (
     <div class="overlay" role="dialog" aria-modal="true" aria-label={t("Links")}>
@@ -542,7 +549,11 @@ function LinkDialog(props: { account: string; node: FileNode; onClose: () => voi
         <h2>
           {t("Links")} „{props.node.name}“
         </h2>
-        <p class="muted small">{t("Anyone with a link can view and download what it leads to – without an account.")}</p>
+        <p class="muted small">
+          {adds()
+            ? t("Anyone with a link can view and download what it leads to, or add files to it – without an account.")
+            : t("Anyone with a link can view and download what it leads to – without an account.")}
+        </p>
         <Show when={made()}>
           {(url) => (
             <div class="notice">
@@ -562,8 +573,9 @@ function LinkDialog(props: { account: string; node: FileNode; onClose: () => voi
               {(link: FileLink) => (
                 <tr>
                   <td class="small">
-                    {t("made {date}", { date: when(link.created) })}
+                    {modeLabel(linkMode(link))}
                     <div class="muted">
+                      {t("made {date}", { date: when(link.created) })} ·{" "}
                       {link.expires ? t("valid until {date}", { date: when(link.expires) }) : t("no expiry")}
                       {link.hasPassword ? ` · ${t("with password")}` : ""}
                     </div>
@@ -580,6 +592,14 @@ function LinkDialog(props: { account: string; node: FileNode; onClose: () => voi
         </table>
         <form onSubmit={make}>
           <h3>{t("New link")}</h3>
+          <Show when={adds()}>
+            <label>
+              <span>{t("People can")}</span>
+              <select name="mode">
+                <For each={["view", "add", "drop"] as LinkMode[]}>{(mode) => <option value={mode}>{modeLabel(mode)}</option>}</For>
+              </select>
+            </label>
+          </Show>
           <label>
             <span>{t("Valid until (optional)")}</span>
             <input type="date" name="expires" min={new Date().toISOString().slice(0, 10)} />

@@ -323,7 +323,12 @@ fn rest() -> OpenApiRouter<AppState> {
 
 /// The OpenAPI description of the REST API, as `/openapi.json` serves it.
 pub fn openapi() -> utoipa::openapi::OpenApi {
-    rest().split_for_parts().1
+    rest().merge(rest_transfers()).split_for_parts().1
+}
+
+/// REST routes that take files of any size: their own limits, with the other transfers.
+fn rest_transfers() -> OpenApiRouter<AppState> {
+    OpenApiRouter::new().routes(routes!(file_links::add))
 }
 
 /// The GraphQL schema in SDL.
@@ -332,7 +337,9 @@ pub fn graphql_schema() -> String {
 }
 
 pub fn router(state: AppState, modules: Router, http: &Http) -> Router {
-    let (rest, openapi) = rest().with_state(state.clone()).split_for_parts();
+    let (rest, mut openapi) = rest().with_state(state.clone()).split_for_parts();
+    let (rest_transfers, transfers_openapi) = rest_transfers().split_for_parts();
+    openapi.merge(transfers_openapi);
     // A login UI of the instance's own, on another origin, calls the API from the browser (cors.rs).
     let rest = rest.layer(axum::middleware::from_fn_with_state(state.clone(), cors::login_ui));
     let openapi = Arc::new(openapi);
@@ -409,6 +416,7 @@ pub fn router(state: AppState, modules: Router, http: &Http) -> Router {
         .route("/jmap/files/{account}/{node}", axum::routing::put(jmap::write_file))
         .layer(mail_cors)
         .merge(webdav::routes())
+        .merge(rest_transfers)
         .layer(axum::extract::DefaultBodyLimit::max(transfer_limit))
         .layer(RequestBodyLimitLayer::new(transfer_limit))
         .layer(TimeoutLayer::with_status_code(StatusCode::REQUEST_TIMEOUT, TRANSFER_TIMEOUT))

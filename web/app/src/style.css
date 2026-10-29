@@ -304,4 +304,6 @@ button.link { padding: 0; border: 0; background: none; color: var(--accent); }
 .link-page { max-width: 960px; margin: 0 auto; padding: 16px; }
 .link-page h1 { font-family: var(--mono, monospace); }
 .link-page form.dialog { margin: 32px auto; max-width: 420px; }
+.link-page.dropping { outline: 2px dashed var(--accent); outline-offset: -6px; }
+.link-page .add-files { display: grid; gap: 8px; }
 a.button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }

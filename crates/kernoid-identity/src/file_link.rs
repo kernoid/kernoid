@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Links to files for people without an account (RFC 0005, 11.3): one file, or one directory with all below it, to
-//! read – with an expiry and a password if wanted. Adding and removing a link are events on the owning account; the
+//! read – or a directory to add files to, or both –, with an expiry and a password if wanted. Adding and removing a link are events on the owning account; the
 //! token (SHA-256) and the password (Argon2id) are written to `file_links` in the transaction of the event. Who may
 //! link what is the caller's to decide (JMAP checks `mayShare`). Opening a link causes no events: wrong passwords are
 //! counted in `file_link_failures`, a link opened with its password gets an access token for a while.
@@ -21,6 +21,20 @@ pub const ACCESS_LIFETIME: Duration = Duration::from_secs(12 * 60 * 60);
 const MAX_FAILURES: i32 = 10;
 const FAILURE_WINDOW: Duration = Duration::from_secs(15 * 60);
 
+/// What a link lets people do – at least one of them. Adding is for directories only: it puts new files in, never
+/// replaces one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LinkRights {
+    pub read: bool,
+    pub add: bool,
+}
+
+impl Default for LinkRights {
+    fn default() -> Self {
+        Self { read: true, add: false }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FileLinkInfo {
     pub id: Uuid,
@@ -28,6 +42,7 @@ pub struct FileLinkInfo {
     pub node: Uuid,
     pub expires_at: Option<DateTime<Utc>>,
     pub password: bool,
+    pub rights: LinkRights,
     pub created_by: String,
     pub created_at: DateTime<Utc>,
 }
@@ -39,6 +54,7 @@ pub struct OpenLink {
     pub owner: Uuid,
     pub node: Uuid,
     pub needs_password: bool,
+    pub rights: LinkRights,
 }
 
 fn store_error(error: sqlx::Error) -> IdentityError {
@@ -61,6 +77,7 @@ impl Identity {
         &self,
         owner: Uuid,
         node: Uuid,
+        rights: LinkRights,
         expires_at: Option<DateTime<Utc>>,
         password: Option<&str>,
         creator: &str,
@@ -68,12 +85,17 @@ impl Identity {
         if expires_at.is_some_and(|expires| expires <= Utc::now()) {
             return Err(IdentityError::Refused("the link would have expired already".into()));
         }
-        let exists = sqlx::query_scalar!("SELECT id FROM file_nodes WHERE id = $1 AND account_id = $2", node, owner)
-            .fetch_optional(self.pool())
-            .await
-            .map_err(store_error)?;
-        if exists.is_none() {
-            return Err(IdentityError::NotFound("the file"));
+        if !rights.read && !rights.add {
+            return Err(IdentityError::Refused("a link lets people read, add or both".into()));
+        }
+        let node_type =
+            sqlx::query_scalar!("SELECT node_type FROM file_nodes WHERE id = $1 AND account_id = $2", node, owner)
+                .fetch_optional(self.pool())
+                .await
+                .map_err(store_error)?
+                .ok_or(IdentityError::NotFound("the file"))?;
+        if rights.add && node_type != "directory" {
+            return Err(IdentityError::Refused("files can be added through a link to a directory only".into()));
         }
         let password_hash = match password {
             Some(password) => {
@@ -97,8 +119,8 @@ impl Identity {
                 crate::account::project(connection, events).await?;
                 sqlx::query!(
                     "INSERT INTO file_links (id, owner_id, node_id, token_hash, password_hash, expires_at, created_by,
-                                             created_at)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, now())",
+                                             created_at, may_read, may_add)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, now(), $8, $9)",
                     id,
                     owner,
                     node,
@@ -106,6 +128,8 @@ impl Identity {
                     password_hash,
                     expires_at,
                     who,
+                    rights.read,
+                    rights.add,
                 )
                 .execute(&mut *connection)
                 .await?;
@@ -123,7 +147,14 @@ impl Identity {
                     if !state.exists {
                         return Err(IdentityError::NotFound("the account"));
                     }
-                    Ok(vec![AccountEvent::FileLinkAdded { id, node, expires_at, password: has_password }])
+                    Ok(vec![AccountEvent::FileLinkAdded {
+                        id,
+                        node,
+                        expires_at,
+                        password: has_password,
+                        read: rights.read,
+                        add: rights.add,
+                    }])
                 },
                 store,
             )
@@ -149,7 +180,8 @@ impl Identity {
     /// The links to `owner`'s files – to one node, or all.
     pub async fn file_links(&self, owner: Uuid, node: Option<Uuid>) -> Result<Vec<FileLinkInfo>> {
         let rows = sqlx::query!(
-            "SELECT id, node_id, expires_at, password_hash IS NOT NULL AS \"password!\", created_by, created_at
+            "SELECT id, node_id, expires_at, password_hash IS NOT NULL AS \"password!\", created_by, created_at,
+                    may_read, may_add
              FROM file_links WHERE owner_id = $1 AND ($2::uuid IS NULL OR node_id = $2) ORDER BY created_at",
             owner,
             node,
@@ -165,6 +197,7 @@ impl Identity {
                 node: row.node_id,
                 expires_at: row.expires_at,
                 password: row.password,
+                rights: LinkRights { read: row.may_read, add: row.may_add },
                 created_by: row.created_by,
                 created_at: row.created_at,
             })
@@ -174,7 +207,7 @@ impl Identity {
     /// The link of `token` at `instance`, if it has not expired and its owner and tenant are active.
     pub async fn open_file_link(&self, instance: Uuid, token: &str) -> Result<Option<OpenLink>> {
         let row = sqlx::query!(
-            "SELECT l.id, l.owner_id, l.node_id, l.password_hash IS NOT NULL AS \"needs_password!\"
+            "SELECT l.id, l.owner_id, l.node_id, l.password_hash IS NOT NULL AS \"needs_password!\", l.may_read, l.may_add
              FROM file_links l
              JOIN accounts a ON a.id = l.owner_id
              JOIN tenants t ON t.id = a.tenant_id
@@ -191,6 +224,7 @@ impl Identity {
             owner: row.owner_id,
             node: row.node_id,
             needs_password: row.needs_password,
+            rights: LinkRights { read: row.may_read, add: row.may_add },
         }))
     }
 

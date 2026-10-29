@@ -707,6 +707,8 @@ impl Context<'_> {
                     "nodeId": link.node.to_string(),
                     "expires": link.expires_at.map_or(Value::Null, utc),
                     "hasPassword": link.password,
+                    "mayRead": link.rights.read,
+                    "mayAdd": link.rights.add,
                     "created": utc(link.created_at),
                 })
             })
@@ -722,8 +724,9 @@ impl Context<'_> {
         )])
     }
 
-    /// kernoid's `FileLink/set`: makes links (`nodeId`, `expires`, `password`) to nodes the caller may share – each
-    /// created link answers its `id` and its `token`, shown this once – and destroys them. Links are not updated.
+    /// kernoid's `FileLink/set`: makes links (`nodeId`, `mayRead`, `mayAdd`, `expires`, `password`) to nodes the caller
+    /// may share – never letting people do more than the caller may – each created link answers its `id` and its
+    /// `token`, shown this once – and destroys them. Links are not updated.
     pub async fn file_link_set(&mut self, args: Map<String, Value>) -> MethodResult {
         let (owner, files, access) = self.file_store(&args).await?;
         let identity = self.jmap.identity.clone().ok_or_else(|| MethodError::new("unknownMethod", "no links here"))?;
@@ -744,6 +747,18 @@ impl Context<'_> {
                     if !view.rights(node).contains(Rights::SHARE) {
                         return Err(forbidden("a link needs mayShare"));
                     }
+                    let flag = |name: &str, default: bool| match object.get(name) {
+                        None => Ok(default),
+                        Some(Value::Bool(value)) => Ok(*value),
+                        Some(_) => Err(invalid_properties(format!("{name} is a boolean"))),
+                    };
+                    let rights = kernoid_identity::file_link::LinkRights {
+                        read: flag("mayRead", true)?,
+                        add: flag("mayAdd", false)?,
+                    };
+                    if rights.add && !view.rights(node).contains(Rights::ADD) {
+                        return Err(forbidden("a link that adds needs mayAddChildren"));
+                    }
                     let expires = match object.get("expires") {
                         None | Some(Value::Null) => None,
                         Some(Value::String(date)) => Some(
@@ -758,10 +773,12 @@ impl Context<'_> {
                         Some(Value::String(password)) => Some(password.as_str()),
                         Some(_) => return Err(invalid_properties("password is a string or null")),
                     };
-                    identity.add_file_link(owner, node, expires, password, &who).await.map_err(|error| match error {
-                        kernoid_identity::IdentityError::Refused(reason) => invalid_properties(reason),
-                        kernoid_identity::IdentityError::NotFound(_) => invalid_properties("nodeId names a node"),
-                        _ => json!({ "type": "serverFail" }),
+                    identity.add_file_link(owner, node, rights, expires, password, &who).await.map_err(|error| {
+                        match error {
+                            kernoid_identity::IdentityError::Refused(reason) => invalid_properties(reason),
+                            kernoid_identity::IdentityError::NotFound(_) => invalid_properties("nodeId names a node"),
+                            _ => json!({ "type": "serverFail" }),
+                        }
                     })
                 }
                 .await;

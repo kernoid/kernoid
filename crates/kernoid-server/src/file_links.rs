@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Links to files for people without an account (RFC 0005, 11.3): what a link opens, its directories' contents and
-//! downloads – anonymous, read only, within the file or directory the link names. A link with a password is opened
+//! downloads – anonymous, within the file or directory the link names –, and files added to a directory where the link
+//! lets people add (`mayAdd`; without `mayRead` a drop box: nothing in it is shown). A link with a password is opened
 //! with `POST /v1/links/{token}/unlock`, whose access token the other requests carry as `access`. The web app's
 //! `link.html` shows them; links are made with JMAP's `FileLink/set`.
 
@@ -13,7 +14,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use chrono::{DateTime, Utc};
-use kernoid_files::{FileAccess, Files, NodeInfo, NodeType, Rights, View};
+use kernoid_files::{FileAccess, Files, NewNode, NodeInfo, NodeType, OnExists, Rights, SetOptions, View};
 use kernoid_identity::file_link::OpenLink;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -46,9 +47,25 @@ pub(crate) struct LinkNodeView {
 }
 
 #[derive(Debug, Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct LinkView {
     /// What the link names.
     node: LinkNodeView,
+    /// Its contents can be seen and downloaded.
+    may_read: bool,
+    /// Files can be added to it (a directory).
+    may_add: bool,
+}
+
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
+pub(crate) struct AddQuery {
+    /// The access token from `unlock`, for a link with a password.
+    access: Option<String>,
+    /// The directory to add to: the link's own unless it names one below it (for a link that reads too).
+    parent: Option<String>,
+    /// The file's name; one taken already gets a number – `report (2).pdf` –, nothing is replaced.
+    name: String,
 }
 
 #[derive(Debug, Serialize, utoipa::ToSchema)]
@@ -105,15 +122,21 @@ async fn opened(
         owner: link.owner,
         owned: false,
         store: Rights::NONE,
-        nodes: HashMap::from([(link.node, Rights::READ)]),
+        nodes: HashMap::from([(link.node, rights(&link))]),
     };
     let view = files.view(access).await.map_err(|_| Box::new(not_found()))?;
     Ok((files, link, view))
 }
 
-/// A node the link reaches: what it names, or something below it.
+fn rights(link: &OpenLink) -> Rights {
+    let read = if link.rights.read { "r" } else { "" };
+    let add = if link.rights.add { "a" } else { "" };
+    Rights::parse(&format!("{read}{add}"))
+}
+
+/// A node the link reaches: what it names, or – if it reads – something below it.
 fn within<'a>(view: &'a View, link: &OpenLink, id: Uuid) -> Option<&'a NodeInfo> {
-    let node = view.node(id).filter(|node| view.readable(node.id))?;
+    let node = view.node(id).filter(|node| view.readable(node.id) || node.id == link.node)?;
     (id == link.node || view.ancestors(id).contains(&link.node)).then_some(node)
 }
 
@@ -149,7 +172,10 @@ pub(crate) async fn link(
         Err(response) => return *response,
     };
     match within(&view, &link, link.node) {
-        Some(node) => Json(LinkView { node: node_view(node, &link) }).into_response(),
+        Some(node) => {
+            Json(LinkView { node: node_view(node, &link), may_read: link.rights.read, may_add: link.rights.add })
+                .into_response()
+        }
         None => not_found(),
     }
 }
@@ -204,7 +230,7 @@ pub(crate) async fn nodes(
         },
     };
     match within(&view, &link, parent) {
-        Some(directory) if directory.node_type == NodeType::Directory => {}
+        Some(directory) if directory.node_type == NodeType::Directory && link.rights.read => {}
         _ => return not_found(),
     }
     let mut children: Vec<&NodeInfo> =
@@ -278,4 +304,66 @@ pub(crate) async fn download(
     }
     response.headers_mut().insert(header::CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
     response
+}
+
+/// Adds a file – the request's body, streamed – to the directory a link names (or one below it, for a link that reads
+/// too), where the link lets people add. It counts against the owner's quota and is scanned like every upload.
+#[utoipa::path(post, path = "/v1/links/{token}/files", tag = "links", params(AddQuery),
+    request_body(content = Vec<u8>, content_type = "application/octet-stream"), responses(
+    (status = 201, description = "the file as it is now named", body = LinkNodeView),
+    (status = 400, description = "the name is not allowed", body = Problem),
+    (status = 401, description = "the link has a password: unlock it first", body = PasswordRequired),
+    (status = 403, description = "the link does not let people add files", body = Problem),
+    (status = 404, description = "no such link or directory", body = Problem),
+    (status = 413, description = "the file is too large", body = Problem),
+    (status = 507, description = "the owner's quota does not leave room for it", body = Problem),
+))]
+pub(crate) async fn add(
+    State(state): State<AppState>,
+    CurrentInstance(instance): CurrentInstance,
+    Path(token): Path<String>,
+    Query(query): Query<AddQuery>,
+    headers: HeaderMap,
+    body: axum::body::Body,
+) -> Response {
+    let opening = LinkQuery { access: query.access.clone(), ..LinkQuery::default() };
+    let (files, link, view) = match opened(&state, instance.id, &token, &opening).await {
+        Ok(opened) => opened,
+        Err(response) => return *response,
+    };
+    if !link.rights.add {
+        return Problem::new(StatusCode::FORBIDDEN).detail("this link does not let people add files").into_response();
+    }
+    let parent = match query.parent.as_deref() {
+        None => link.node,
+        Some(id) => match Uuid::parse_str(id) {
+            Ok(id) if id == link.node || link.rights.read => id,
+            _ => return not_found(),
+        },
+    };
+    match within(&view, &link, parent) {
+        Some(directory) if directory.node_type == NodeType::Directory => {}
+        _ => return not_found(),
+    }
+    // Checked before the content is stored, not after.
+    if let Err(error) = kernoid_files::check_name(&query.name) {
+        return crate::jmap::write_problem(error);
+    }
+    let sent = headers.get(header::CONTENT_TYPE).and_then(|value| value.to_str().ok());
+    let sent = sent.map(|kind| kind.split(';').next().unwrap_or_default().trim().to_owned());
+    let media_type = sent
+        .filter(|kind| !kind.is_empty() && kind != "application/octet-stream")
+        .and_then(|kind| kernoid_files::check_media_type(&kind).ok())
+        .unwrap_or_else(|| crate::webdav::guess(&query.name).to_owned());
+    let added = async {
+        let content = files.store(link.owner, body.into_data_stream()).await?;
+        let new = NewNode::file(Some(parent), query.name.clone(), content, Some(media_type));
+        let options = SetOptions { on_exists: OnExists::Rename, ..SetOptions::default() };
+        files.create(&view.access, new, &options).await
+    }
+    .await;
+    match added {
+        Ok(written) => (StatusCode::CREATED, Json(node_view(&written.node, &link))).into_response(),
+        Err(error) => crate::jmap::write_problem(error),
+    }
 }

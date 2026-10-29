@@ -6108,6 +6108,139 @@
         }
       }
     },
+    "/v1/links/{token}/files": {
+      "post": {
+        "tags": [
+          "links"
+        ],
+        "summary": "Adds a file – the request's body, streamed – to the directory a link names (or one below it, for a link that reads\ntoo), where the link lets people add. It counts against the owner's quota and is scanned like every upload.",
+        "operationId": "add",
+        "parameters": [
+          {
+            "name": "access",
+            "in": "query",
+            "description": "The access token from `unlock`, for a link with a password.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "parent",
+            "in": "query",
+            "description": "The directory to add to: the link's own unless it names one below it (for a link that reads too).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "description": "The file's name; one taken already gets a number – `report (2).pdf` –, nothing is replaced.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "int32",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "the file as it is now named",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkNodeView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "the name is not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "the link has a password: unlock it first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasswordRequired"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "the link does not let people add files",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "no such link or directory",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "the file is too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "507": {
+            "description": "the owner's quota does not leave room for it",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/links/{token}/nodes": {
       "get": {
         "tags": [
@@ -10427,9 +10560,19 @@
       "LinkView": {
         "type": "object",
         "required": [
-          "node"
+          "node",
+          "mayRead",
+          "mayAdd"
         ],
         "properties": {
+          "mayAdd": {
+            "type": "boolean",
+            "description": "Files can be added to it (a directory)."
+          },
+          "mayRead": {
+            "type": "boolean",
+            "description": "Its contents can be seen and downloaded."
+          },
           "node": {
             "$ref": "#/components/schemas/LinkNodeView",
             "description": "What the link names."

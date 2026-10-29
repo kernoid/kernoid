@@ -384,23 +384,26 @@ pub(crate) async fn write_file(
     let kind = headers.get(header::CONTENT_TYPE).and_then(|value| value.to_str().ok());
     match jmap.write_file(&caller, &account, &node, kind, body.into_data_stream()).await {
         Ok(answer) => Json(answer).into_response(),
-        Err(error) => {
-            use kernoid_files::FilesError;
-            let status = match &error {
-                FilesError::NotFound(_) => StatusCode::NOT_FOUND,
-                FilesError::Invalid(_) => StatusCode::BAD_REQUEST,
-                FilesError::TooLarge { .. } => StatusCode::PAYLOAD_TOO_LARGE,
-                FilesError::OverQuota => StatusCode::INSUFFICIENT_STORAGE,
-                FilesError::Forbidden(_) => StatusCode::FORBIDDEN,
-                FilesError::Refused(refused) => return refused_problem(refused),
-                _ => {
-                    tracing::warn!(%error, "a direct write");
-                    return Problem::new(StatusCode::INTERNAL_SERVER_ERROR).into_response();
-                }
-            };
-            Problem::new(status).detail(error.to_string()).into_response()
-        }
+        Err(error) => write_problem(error),
     }
+}
+
+/// A file that could not be written, as a problem – a direct write, or a file added through a link.
+pub(crate) fn write_problem(error: kernoid_files::FilesError) -> Response {
+    use kernoid_files::FilesError;
+    let status = match &error {
+        FilesError::NotFound(_) => StatusCode::NOT_FOUND,
+        FilesError::Invalid(_) => StatusCode::BAD_REQUEST,
+        FilesError::TooLarge { .. } => StatusCode::PAYLOAD_TOO_LARGE,
+        FilesError::OverQuota => StatusCode::INSUFFICIENT_STORAGE,
+        FilesError::Forbidden(_) => StatusCode::FORBIDDEN,
+        FilesError::Refused(refused) => return refused_problem(refused),
+        _ => {
+            tracing::warn!(%error, "a file was not written");
+            return Problem::new(StatusCode::INTERNAL_SERVER_ERROR).into_response();
+        }
+    };
+    Problem::new(status).detail(error.to_string()).into_response()
 }
 
 /// The push stream (RFC 8620, 7.3): a `state` event whenever the mail of the caller's account or of one shared with

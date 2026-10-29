@@ -2,7 +2,7 @@
 # RFC 0005 – Files
 
 - **Status:** draft, 2026-10-28; implemented: all sections (`kernoid-files`, migration 0032; `kernoid-jmap`;
-  `kernoid-server`'s `webdav`); links (11.3, migration 0038) since 0.2.
+  `kernoid-server`'s `webdav`); links (11.3, migrations 0038 and 0042) since 0.2.
 - **Scope:** how files and directories are stored (sections 1–7), how programs reach them (JMAP: 8, WebDAV: 9, the
   web app: 10), how they are counted (13), shared (11) and kept by the tenant rather than a person (drives, 12).
 
@@ -229,15 +229,19 @@ projected into `file_access`, like mail's and calendars' (RFC 0002, 12.2; RFC 00
 ### 11.3 Links
 
 A **link** opens one file, or one directory with all below it, for reading to anyone who has it – without an
-account.
+account –, or lets them add files to a directory, or both.
 
 - **Who:** whoever has `mayShare` on the node – the owner, or those it was shared with on – makes and removes links,
   through kernoid's JMAP extension `https://kernoid.dev/jmap/file-links`: `FileLink/get` (all, those of a `nodeId`,
-  or `ids`) and `FileLink/set` (create with `nodeId`, `expires` and `password`, each optional but the first; destroy).
-  There is no update: a changed link is a new one. The session's capability names where links open
+  or `ids`) and `FileLink/set` (create with `nodeId`, `mayRead`, `mayAdd`, `expires` and `password`, each optional
+  but the first; destroy). There is no update: a changed link is a new one. The session's capability names where links open
   (`urlTemplate`, `https://<instance>/app/link.html#{token}`).
+- **What it lets people do:** `mayRead` (true unless given) – see, list and download; `mayAdd` (false unless given) –
+  add files, to a directory only. At least one. A link never lets people do more than its maker may: adding needs
+  `mayAddChildren` on the directory. A link that adds without reading is a **drop box**: people put files in without
+  seeing what is there – not even what they put in themselves.
 - **Events:** making and removing a link are administration, `account.file_link_added` (link id, node, expiry,
-  whether it has a password) and `account.file_link_removed` on the owning account, so they appear in its audit log.
+  whether it has a password, `read`, `add`; an event without the last two read only) and `account.file_link_removed` on the owning account, so they appear in its audit log.
   The **token** (256 random bits) is shown once, in the answer to `FileLink/set`; `file_links` keeps its SHA-256 and
   the password's Argon2id hash – written in the transaction of the event, never in it (RFC 0001, 8).
 - **Opening:** `GET /v1/links/{token}` names what the link opens, `…/nodes` lists a directory within it, and
@@ -245,11 +249,17 @@ account.
   unknown. A link with a password answers 401 until `POST /v1/links/{token}/unlock` with the password, whose access
   token (12 hours, `file_link_access`) the other requests carry as `access`. Anonymous callers cause no events: wrong
   passwords are counted per link (`file_link_failures`; ten in 15 minutes close the link for the rest of them).
+- **Adding:** `POST /v1/links/{token}/files?name=…` with the content as the body (streamed, with the limits of every
+  upload) adds a file to the linked directory – or, for a link that reads too, to a directory below it (`parent`).
+  A name already taken gets a number (`report (2).pdf`); nothing is replaced, renamed or removed through a link. The
+  file belongs to the store's owner and counts against its quota (section 13); the malware scanner sees it as every
+  upload. Like opening, adding causes no events – files are data (section 1).
 - A link ends when it expires, is removed, or its node is destroyed; it does not work while the owner or the tenant is
   deactivated.
 - The web app opens links on its page `link.html`: the token stays in the URL's fragment, which browsers do not send
   to the server or in `Referer`.
-- **OPEN:** links that let people add files ("file drop"); links that reveal their token again later (they would
+- **OPEN:** limits on how much a link may add (beyond the quota) and a notice to the owner when something comes in;
+  links that reveal their token again later (they would
   need it sealed instead of hashed); limits on downloads per link.
 
 ## 12. Drives

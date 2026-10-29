@@ -63,8 +63,10 @@ tenant. Rights add up down the tree: what is granted on a folder holds for every
 ## Links
 
 A **link** opens a file, or a folder with all below it, to anyone who has it – to view and download, without an
-account. Whoever may share something may make links to it: in the web app (Link), or with kernoid's JMAP extension
-`https://kernoid.dev/jmap/file-links` (`FileLink/get`, `FileLink/set` with `nodeId`, `expires` and `password`).
+account. A link to a folder may also let people **add files** to it, or only that: a **drop box**, where they put
+files in without seeing what is there. Whoever may share something may make links to it: in the web app (Link, "People
+can"), or with kernoid's JMAP extension `https://kernoid.dev/jmap/file-links` (`FileLink/get`, `FileLink/set` with
+`nodeId`, `mayRead`, `mayAdd`, `expires` and `password`); a link that adds needs the right to add to the folder.
 
 - A link may expire and may have a **password**. The address is shown once, when the link is made – kernoid keeps
   only a hash of it –, and goes to `https://<instance domain>/app/link.html#<token>` (the session's
@@ -72,6 +74,9 @@ account. Whoever may share something may make links to it: in the web app (Link)
 - The page asks `GET /v1/links/<token>`, `…/nodes` and `…/download/<node>`; a password is given at
   `POST /v1/links/<token>/unlock`, whose access token opens the link for twelve hours. Ten wrong passwords in a quarter
   of an hour close the link for the rest of it.
+- Files are added with `POST /v1/links/<token>/files?name=<name>` (the content as the body; `parent` for a folder
+  below, where the link reads too). A name already taken gets a number – nothing is ever replaced through a link. What
+  comes in belongs to the owner and counts against the owner's quota; set an expiry or a password on a link that adds.
 - Removing the link, or the file or folder, ends it at once; so does deactivating the owner or the tenant.
 - Every link is in the audit log of its owner (`account.file_link_added`, `account.file_link_removed`).
 
@@ -140,5 +145,5 @@ adding here, and for moving deleting there.
 - **Content** is encrypted with the tenant's key before it goes to object storage.
 
 {: .note }
-OPEN: links that let people add files, uploads that resume after the page is closed, searching inside PDFs and office
-documents, symbolic links, moving between stores in the web app.
+OPEN: uploads that resume after the page is closed, searching inside PDFs and office documents, symbolic links; a
+limit on what a link may add beyond the quota, and a notice when something comes in.

@@ -430,3 +430,104 @@ async fn links_open_files_to_anyone_who_has_them(pool: PgPool) {
         .await;
     assert_eq!(answer["methodResponses"][0][0], "error", "{answer}");
 }
+
+#[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
+async fn links_let_people_add_files(pool: PgPool) {
+    let (app, _alice_id, bob_id) = setup(&pool).await;
+    let bob = login(&app, "bob@firma.de").await;
+    let anyone = Call { app: &app, token: String::new() };
+    let using =
+        json!(["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:filenode", "https://kernoid.dev/jmap/file-links"]);
+    let jmap = |calls: Value| json!({ "using": using, "methodCalls": calls });
+    let account = bob_id.to_string();
+    let upload = Request::post(format!("/jmap/upload/{bob_id}/"))
+        .header("host", HOST)
+        .header(header::AUTHORIZATION, format!("Bearer {}", bob.token))
+        .body(Body::from("bob's"))
+        .unwrap();
+    let blob = bob.answer(upload).await.1["blobId"].clone();
+    let (_, answer) = bob
+        .send(
+            "POST",
+            "/jmap/api",
+            Some(jmap(json!([["FileNode/set", { "accountId": account, "create": {
+            "d": { "@type": "Directory", "parentId": null, "name": "Submissions" },
+            "f": { "@type": "File", "parentId": "#d", "name": "rules.txt", "blobId": blob },
+        } }, "c"]]))),
+        )
+        .await;
+    let created = &answer["methodResponses"][0][1]["created"];
+    let (directory, file) = (created["d"]["id"].clone(), created["f"]["id"].clone());
+
+    // A drop box (adds, does not read), a link that does both, one that reads; adding is for directories, and a link
+    // does something.
+    let (_, answer) = bob
+        .send(
+            "POST",
+            "/jmap/api",
+            Some(jmap(json!([["FileLink/set", { "accountId": account, "create": {
+            "drop": { "nodeId": directory, "mayRead": false, "mayAdd": true },
+            "both": { "nodeId": directory, "mayAdd": true },
+            "read": { "nodeId": directory },
+            "file": { "nodeId": file, "mayAdd": true },
+            "nothing": { "nodeId": directory, "mayRead": false },
+        } }, "c"]]))),
+        )
+        .await;
+    let set = &answer["methodResponses"][0][1];
+    assert_eq!(set["notCreated"]["file"]["type"], "invalidProperties", "{set}");
+    assert_eq!(set["notCreated"]["nothing"]["type"], "invalidProperties", "{set}");
+    let token = |name: &str| set["created"][name]["token"].as_str().unwrap().to_owned();
+    let (drop, both, read) = (token("drop"), token("both"), token("read"));
+
+    // The drop box shows its directory's name, not what is in it.
+    let (status, link) = anyone.send("GET", &format!("/v1/links/{drop}"), None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        (link["node"]["name"].clone(), link["mayRead"].clone(), link["mayAdd"].clone()),
+        (json!("Submissions"), json!(false), json!(true))
+    );
+    assert_eq!(anyone.status("GET", &format!("/v1/links/{drop}/nodes"), None).await, 404);
+    let download = format!("/v1/links/{drop}/download/{}", file.as_str().unwrap());
+    assert_eq!(anyone.status("GET", &download, None).await, 404);
+
+    // Files go in; a name taken gets a number, nothing is replaced.
+    let add = |token: &str, query: &str, content: &'static str| {
+        Request::post(format!("/v1/links/{token}/files?{query}"))
+            .header("host", HOST)
+            .header("content-type", "text/plain")
+            .body(Body::from(content))
+            .unwrap()
+    };
+    let (status, added) = anyone.answer(add(&drop, "name=report.txt", "first")).await;
+    assert_eq!((status, added["name"].clone()), (StatusCode::CREATED, json!("report.txt")), "{added}");
+    let (status, added) = anyone.answer(add(&drop, "name=report.txt", "second")).await;
+    assert_eq!((status, added["name"].clone()), (StatusCode::CREATED, json!("report (2).txt")), "{added}");
+    let (status, added) = anyone.answer(add(&drop, "name=rules.txt", "not bob's")).await;
+    assert_eq!((status, added["name"].clone()), (StatusCode::CREATED, json!("rules (2).txt")), "{added}");
+    assert_eq!(anyone.answer(add(&drop, "name=a%2Fb", "x")).await.0, StatusCode::BAD_REQUEST);
+    // Not below what it names, not through a link that only reads, not into a file.
+    assert_eq!(anyone.answer(add(&read, "name=x.txt", "x")).await.0, StatusCode::FORBIDDEN);
+    let into_file = format!("name=x.txt&parent={}", file.as_str().unwrap());
+    assert_eq!(anyone.answer(add(&both, &into_file, "x")).await.0, StatusCode::NOT_FOUND);
+    assert_eq!(anyone.answer(add(&drop, &into_file, "x")).await.0, StatusCode::NOT_FOUND);
+
+    // The link that reads too shows what came in; Bob's file is as it was.
+    let (_, listed) = anyone.send("GET", &format!("/v1/links/{both}/nodes"), None).await;
+    let names: Vec<&str> = listed.as_array().unwrap().iter().filter_map(|node| node["name"].as_str()).collect();
+    assert_eq!(names, ["report (2).txt", "report.txt", "rules (2).txt", "rules.txt"]);
+    let rules = Request::get(format!("/v1/links/{both}/download/{}", file.as_str().unwrap()))
+        .header("host", HOST)
+        .body(Body::empty())
+        .unwrap();
+    assert_eq!(text(&app, rules).await.2, "bob's");
+
+    // Bob's links say what they do.
+    let (_, answer) =
+        bob.send("POST", "/jmap/api", Some(jmap(json!([["FileLink/get", { "accountId": account }, "g"]])))).await;
+    let list = answer["methodResponses"][0][1]["list"].as_array().unwrap().clone();
+    let mut rights: Vec<(bool, bool)> =
+        list.iter().map(|link| (link["mayRead"].as_bool().unwrap(), link["mayAdd"].as_bool().unwrap())).collect();
+    rights.sort();
+    assert_eq!(rights, [(false, true), (true, false), (true, true)]);
+}

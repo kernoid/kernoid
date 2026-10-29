@@ -1,0 +1,108 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, node_id, expires_at, password_hash IS NOT NULL AS \"password!\", created_by, created_at,\n                    may_read, may_add\n             FROM file_links WHERE owner_id = $1 AND ($2::uuid IS NULL OR node_id = $2) ORDER BY created_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "file_links",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "node_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "file_links",
+            "name": "node_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "expires_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "file_links",
+            "name": "expires_at"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "password!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "created_by",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "file_links",
+            "name": "created_by"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "file_links",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "may_read",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "file_links",
+            "name": "may_read"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "may_add",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "file_links",
+            "name": "may_add"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      null,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "7ec7963df2cd4705fad568b84604470ebfff9e75fe1c0f713f0358e70243ec12"
+}

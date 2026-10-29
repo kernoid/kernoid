@@ -111,7 +111,17 @@ pub enum AccountEvent {
     /// A link to one of the account's files or directories for people without an account (RFC 0005, 11.3); its token
     /// and password are not in the event.
     #[serde(rename = "account.file_link_added")]
-    FileLinkAdded { id: Uuid, node: Uuid, expires_at: Option<DateTime<Utc>>, password: bool },
+    FileLinkAdded {
+        id: Uuid,
+        node: Uuid,
+        expires_at: Option<DateTime<Utc>>,
+        password: bool,
+        /// What the link lets people do; links made before these fields could read only.
+        #[serde(default = "yes")]
+        read: bool,
+        #[serde(default)]
+        add: bool,
+    },
     #[serde(rename = "account.file_link_removed")]
     FileLinkRemoved { id: Uuid },
     /// An account without a native address (RFC 0003, 1): for logins – and files, if granted – only.
@@ -1153,6 +1163,10 @@ pub(crate) fn address_error(
         }
         CommandError::Store(error) => IdentityError::Store(error),
     }
+}
+
+fn yes() -> bool {
+    true
 }
 
 #[cfg(test)]
