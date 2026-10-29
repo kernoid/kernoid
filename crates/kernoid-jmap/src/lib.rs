@@ -32,6 +32,8 @@ pub const CALENDARS: &str = "urn:ietf:params:jmap:calendars";
 pub const CONTACTS: &str = "urn:ietf:params:jmap:contacts";
 pub const FILENODE: &str = "urn:ietf:params:jmap:filenode";
 pub const PRINCIPALS: &str = "urn:ietf:params:jmap:principals";
+/// JMAP over WebSocket (RFC 8887).
+pub const WEBSOCKET: &str = "urn:ietf:params:jmap:websocket";
 /// kernoid's own: earlier contents of files (`FileVersion/get`, RFC 0005, 6).
 pub const FILE_VERSIONS: &str = "https://kernoid.dev/jmap/file-versions";
 
@@ -203,6 +205,9 @@ impl Jmap {
         if self.identity.is_some() {
             capabilities[PRINCIPALS] = json!({});
         }
+        // RFC 8887: requests and push over one WebSocket.
+        let websocket = base.replacen("https://", "wss://", 1).replacen("http://", "ws://", 1);
+        capabilities[WEBSOCKET] = json!({ "url": format!("{websocket}/jmap/ws"), "supportsPush": true });
         Ok(json!({
             "capabilities": capabilities,
             "accounts": accounts,

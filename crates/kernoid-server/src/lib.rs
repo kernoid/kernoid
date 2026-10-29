@@ -20,6 +20,7 @@ mod graphql;
 mod groupware_admin;
 mod instance;
 mod jmap;
+mod jmap_ws;
 mod login_ui;
 mod mail_admin;
 pub mod metrics;
@@ -380,6 +381,7 @@ pub fn router(state: AppState, modules: Router, http: &Http) -> Router {
         .route("/jmap/api", post(jmap::api))
         .route("/jmap/download/{account}/{blob}/{name}", get(jmap::download))
         .route("/jmap/eventsource", get(jmap::event_source))
+        .route("/jmap/ws", get(jmap_ws::upgrade))
         .layer(axum::extract::DefaultBodyLimit::max(MAIL_BODY_LIMIT))
         .layer(RequestBodyLimitLayer::new(MAIL_BODY_LIMIT))
         .layer(mail_cors.clone())

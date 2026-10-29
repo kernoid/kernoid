@@ -26,6 +26,8 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   `GETQUOTA`).
 - `OAUTHBEARER` and `XOAUTH2` for IMAP and SMTP submission: an access token of kernoid with the new scope `mail`
   (shown at consent as "Read and send your email") logs a mail program in.
+- JMAP over WebSocket (RFC 8887) at `/jmap/ws`: requests and push on one connection.
+- Mailboxes shared with JMAP's `shareWith` (RFC 9670) by their owner; `myRights` says `mayShare`.
 - `http.public_port`: instances reached on a port other than 443 or 80 name it in their issuer and links (JMAP);
   `deploy/compose` sets 8080.
 

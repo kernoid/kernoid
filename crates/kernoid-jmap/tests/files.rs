@@ -331,3 +331,63 @@ async fn a_drive_is_shared_by_its_members(pool: PgPool) {
         .await;
     assert!(set["updated"].get(&file).is_some());
 }
+
+/// Mailboxes are shared the same way (RFC 9670, 4): `shareWith` on Mailbox, by the owner.
+#[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
+async fn mailboxes_are_shared_with_share_with(pool: PgPool) {
+    let setup = setup(pool).await;
+    let alice = setup.caller("alice", true).await;
+    let bob = setup.caller("bob", true).await;
+    let using = json!(["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"]);
+    let call = |caller: &Caller, account: Uuid, name: &str, mut args: Value| {
+        args["accountId"] = json!(account.to_string());
+        let request = json!({ "using": using, "methodCalls": [[name, args, "c"]] });
+        let jmap = setup.jmap.clone();
+        let caller = caller.clone();
+        async move { jmap.api(&caller, request.to_string().as_bytes()).await.unwrap()["methodResponses"][0][1].clone() }
+    };
+    let created =
+        call(&alice, alice.account, "Mailbox/set", json!({ "create": { "p": { "name": "Projects" } } })).await;
+    let projects = created["created"]["p"]["id"].as_str().unwrap().to_owned();
+    let bob_id = bob.account.to_string();
+
+    // Bob may not share Alice's mailbox; Alice may.
+    let refused = call(
+        &bob,
+        alice.account,
+        "Mailbox/set",
+        json!({ "update": { &projects: { format!("shareWith/{bob_id}"): { "mayReadItems": true } } } }),
+    )
+    .await;
+    assert!(refused["notUpdated"][&projects].is_object() || refused["type"].is_string(), "{refused}");
+    let shared = call(&alice, alice.account, "Mailbox/set",
+        json!({ "update": { &projects: { format!("shareWith/{bob_id}"): { "mayReadItems": true, "maySetSeen": true } } } })).await;
+    assert!(
+        shared["updated"][&projects].is_null() && shared["notUpdated"].as_object().is_none_or(|map| map.is_empty()),
+        "{shared}"
+    );
+    let got = call(
+        &alice,
+        alice.account,
+        "Mailbox/get",
+        json!({ "ids": [&projects], "properties": ["shareWith", "myRights"] }),
+    )
+    .await;
+    let rights = &got["list"][0]["shareWith"][&bob_id];
+    assert_eq!(
+        (rights["mayReadItems"].as_bool(), rights["maySetSeen"].as_bool(), rights["mayAddItems"].as_bool()),
+        (Some(true), Some(true), Some(false))
+    );
+    assert_eq!(got["list"][0]["myRights"]["mayShare"], true);
+
+    // Bob sees the mailbox in Alice's store, without whom else it is shared with.
+    let seen = call(&bob, alice.account, "Mailbox/get", json!({ "properties": ["name", "shareWith"] })).await;
+    let list = seen["list"].as_array().unwrap();
+    assert_eq!(list.len(), 1, "{seen}");
+    assert_eq!((list[0]["name"].as_str(), &list[0]["shareWith"]), (Some("Projects"), &Value::Null));
+
+    // shareWith null takes everything back.
+    call(&alice, alice.account, "Mailbox/set", json!({ "update": { &projects: { "shareWith": null } } })).await;
+    let gone = call(&bob, alice.account, "Mailbox/get", json!({})).await;
+    assert!(gone["type"].is_string() || gone["list"].as_array().is_some_and(Vec::is_empty), "{gone}");
+}

@@ -395,9 +395,10 @@ How the protocols show it:
 
 - **JMAP:** the session lists every store the user may use besides its own (`isPersonal: false`, `isReadOnly` when
   no right allows a change), with `urn:ietf:params:jmap:submission` when it may send as the owner. Methods check
-  the rights per mailbox: a user sees only mailboxes with `l` and emails in a mailbox with `r`. **OPEN:**
-  `*/changes` of a store shared only in part name emails the user cannot read (they answer `notFound`); JMAP
-  Sharing ([RFC 9670](https://www.rfc-editor.org/rfc/rfc9670), `shareWith`, principals).
+  the rights per mailbox: a user sees only mailboxes with `l` and emails in a mailbox with `r`. The owner shares single
+  mailboxes with `shareWith` ([RFC 9670](https://www.rfc-editor.org/rfc/rfc9670), 4): principal id → MailboxRights
+  with `mayShare` (`a`), shown only to who may share. **OPEN:** `*/changes` of a store shared only in part name
+  emails the user cannot read (they answer `notFound`); `ShareNotification`; sharing by others than the owner.
 - **IMAP:** stores shared with the user are in the shared namespace `Shared/<address of the owner>/…`; `ACL`
   ([RFC 4314](https://www.rfc-editor.org/rfc/rfc4314)) shows and changes grants per mailbox (`MYRIGHTS`, `GETACL`,
   `LISTRIGHTS`, `SETACL`, `DELETEACL`); identifiers are addresses of accounts and `$<group name>` for groups. The

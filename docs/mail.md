@@ -136,9 +136,13 @@ password of an account without a second factor – or with a kernoid session.
 - Mailboxes, emails (read, written, imported, parsed, queried), threads, identities (the account's addresses) and
   sending (`EmailSubmission`, through the queue with the same checks as submission).
 - Blobs: an email's raw message and each of its parts can be downloaded; uploads are kept a day.
-- **Push:** `/jmap/eventsource` sends a `StateChange` as soon as the account's mail changes.
+- **Push:** `/jmap/eventsource` sends a `StateChange` as soon as the account's mail changes; over a WebSocket
+  ([RFC 8887](https://www.rfc-editor.org/rfc/rfc8887), `/jmap/ws`, subprotocol `jmap`) requests and push share one
+  connection (with the session cookie only from a page of the instance).
+- **Sharing:** the owner shares a mailbox with `shareWith` ([RFC 9670](https://www.rfc-editor.org/rfc/rfc9670)) –
+  people and groups found with `Principal/query`.
 - Searching message text (`body`, `text`) uses the full-text index; search snippets mark the words found.
-- Not yet: the `header` filter, `VacationResponse` (use Sieve), WebSocket and push subscriptions.
+- Not yet: the `header` filter, `VacationResponse` (use Sieve), push subscriptions, `ShareNotification`.
 
 ## IMAP and POP3
 
@@ -183,7 +187,7 @@ kernoid mail access <ACCOUNT>
   `SETACL`), JMAP as further accounts in the session. Submission accepts the owner's addresses with send as.
 - **People share their own mail** with colleagues: IMAP `SETACL` on their own mailboxes, or the API
   (`PUT /v1/account/mail/access`). Only administrators grant send as and access to shared mailboxes.
-- Not yet: per-user subscriptions to shared folders, JMAP Sharing (RFC 9670).
+- Not yet: per-user subscriptions to shared folders.
 
 ## Search
 

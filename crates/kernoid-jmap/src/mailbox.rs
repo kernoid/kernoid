@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! `Mailbox/get`, `/query` and `/set` (RFC 8621, 2).
 
+use std::collections::HashMap;
+
+use kernoid_identity::role::Principal;
 use kernoid_mail::{Access, MailError, MailboxInfo, MailboxUpdate, NewMailbox, Rights, Role};
 use serde_json::{Map, Value, json};
 use uuid::Uuid;
@@ -66,7 +69,7 @@ pub(crate) fn if_in_state(args: &Map<String, Value>, state: u64) -> Result<(), M
     }
 }
 
-const PROPERTIES: [&str; 11] = [
+const PROPERTIES: [&str; 12] = [
     "id",
     "name",
     "parentId",
@@ -78,6 +81,7 @@ const PROPERTIES: [&str; 11] = [
     "unreadThreads",
     "myRights",
     "isSubscribed",
+    "shareWith",
 ];
 
 /// `myRights` (RFC 8621, 2) from the caller's rights (RFC 0002, 12.2).
@@ -94,8 +98,54 @@ fn rights(mailbox: &MailboxInfo, access: &Access) -> Value {
         "mayRename": rights.contains(Rights::DELETE_MAILBOX),
         "mayDelete": !inbox && rights.contains(Rights::DELETE_MAILBOX),
         "maySubmit": access.send_as,
+        "mayShare": rights.contains(Rights::ADMIN),
     })
 }
+
+/// The rights a `shareWith` entry shows (RFC 9670, 4; the mailbox rights of RFC 8621, 2, with `mayShare`).
+fn share_rights(rights: Rights) -> Value {
+    json!({
+        "mayReadItems": rights.contains(Rights::READ),
+        "mayAddItems": rights.contains(Rights::INSERT),
+        "mayRemoveItems": rights.contains(Rights::DELETE | Rights::EXPUNGE),
+        "maySetSeen": rights.contains(Rights::SEEN),
+        "maySetKeywords": rights.contains(Rights::WRITE),
+        "mayCreateChild": rights.contains(Rights::CREATE),
+        "mayRename": rights.contains(Rights::DELETE_MAILBOX),
+        "mayDelete": rights.contains(Rights::DELETE_MAILBOX),
+        "maySubmit": false,
+        "mayShare": rights.contains(Rights::ADMIN),
+    })
+}
+
+/// IMAP rights (RFC 4314) from a `shareWith` entry; seeing the mailbox comes with any right.
+fn rights_from_share(value: &Value) -> Option<Rights> {
+    let object = value.as_object()?;
+    let set = |name: &str| object.get(name).and_then(Value::as_bool).unwrap_or(false);
+    let mut rights = Rights::NONE;
+    for (name, granted) in [
+        ("mayReadItems", Rights::READ),
+        ("mayAddItems", Rights::INSERT),
+        ("mayRemoveItems", Rights::DELETE | Rights::EXPUNGE),
+        ("maySetSeen", Rights::SEEN),
+        ("maySetKeywords", Rights::WRITE),
+        ("mayCreateChild", Rights::CREATE),
+        ("mayRename", Rights::DELETE_MAILBOX),
+        ("mayDelete", Rights::DELETE_MAILBOX),
+        ("mayShare", Rights::ADMIN),
+    ] {
+        if set(name) {
+            rights |= granted;
+        }
+    }
+    if !rights.is_empty() {
+        rights |= Rights::LOOKUP;
+    }
+    Some(rights)
+}
+
+/// The grants on single mailboxes of a store: mailbox → principal id → rights.
+pub(crate) type Shares = HashMap<Uuid, Map<String, Value>>;
 
 /// The mailboxes of the store the caller may see.
 pub(crate) fn visible(mailboxes: Vec<MailboxInfo>, access: &Access) -> Vec<MailboxInfo> {
@@ -106,7 +156,7 @@ fn forbidden(description: &str) -> Value {
     json!({ "type": "forbidden", "description": description })
 }
 
-fn object(mailbox: &MailboxInfo, access: &Access, properties: &[String]) -> Value {
+fn object(mailbox: &MailboxInfo, access: &Access, shares: &Shares, properties: &[String]) -> Value {
     let mut out = Map::new();
     for property in properties {
         let value = match property.as_str() {
@@ -121,6 +171,11 @@ fn object(mailbox: &MailboxInfo, access: &Access, properties: &[String]) -> Valu
             "unreadThreads" => json!(mailbox.unread_threads),
             "myRights" => rights(mailbox, access),
             "isSubscribed" => json!(mailbox.is_subscribed),
+            // Only who may share sees with whom it is shared.
+            "shareWith" if access.mailbox(mailbox.id).contains(Rights::ADMIN) => {
+                shares.get(&mailbox.id).map_or(Value::Null, |map| Value::Object(map.clone()))
+            }
+            "shareWith" => Value::Null,
             _ => continue,
         };
         out.insert(property.clone(), value);
@@ -145,14 +200,21 @@ impl Context<'_> {
         let properties = properties(&args, "properties", &PROPERTIES);
         let mailboxes = visible(self.jmap.mail().mailboxes(account).await?, &access);
         let state = self.jmap.mail().state(account).await?;
+        let shares = if properties.iter().any(|property| property == "shareWith") {
+            self.mail_shares(account).await
+        } else {
+            Shares::new()
+        };
         let (list, not_found): (Vec<Value>, Vec<String>) = match wanted {
-            None => (mailboxes.iter().map(|mailbox| object(mailbox, &access, &properties)).collect(), Vec::new()),
+            None => {
+                (mailboxes.iter().map(|mailbox| object(mailbox, &access, &shares, &properties)).collect(), Vec::new())
+            }
             Some(ids) => {
                 let mut list = Vec::new();
                 let mut not_found = Vec::new();
                 for id in ids {
                     match self.id(&id).and_then(|id| mailboxes.iter().find(|mailbox| mailbox.id == id)) {
-                        Some(mailbox) => list.push(object(mailbox, &access, &properties)),
+                        Some(mailbox) => list.push(object(mailbox, &access, &shares, &properties)),
                         None => not_found.push(id),
                     }
                 }
@@ -163,6 +225,94 @@ impl Context<'_> {
             "Mailbox/get".into(),
             json!({ "accountId": account.to_string(), "state": state.to_string(), "list": list, "notFound": not_found }),
         )])
+    }
+
+    /// The grants on single mailboxes of `owner`'s store, as `shareWith` shows them.
+    async fn mail_shares(&self, owner: Uuid) -> Shares {
+        let mut shares = Shares::new();
+        let Some(identity) = &self.jmap.identity else { return shares };
+        for grant in identity.mail_access(owner).await.unwrap_or_default() {
+            let Some(mailbox) = grant.mailbox else { continue };
+            let principal = match grant.grantee {
+                Principal::Account(id) | Principal::Group(id) => id,
+            };
+            shares
+                .entry(mailbox)
+                .or_default()
+                .insert(principal.to_string(), share_rights(Rights::parse(&grant.rights)));
+        }
+        shares
+    }
+
+    /// A `shareWith` patch on a mailbox: as a whole (replacing every grant on it) or one principal at a time. Only
+    /// the owner shares; sending as the account stays the administrators' (RFC 0002, 12.2).
+    async fn share_mailbox(&self, access: &Access, mailbox: Uuid, patch: &Map<String, Value>) -> Result<(), Value> {
+        let identity = self.jmap.identity.as_ref().ok_or_else(|| forbidden("sharing is not available here"))?;
+        if !access.owned {
+            return Err(forbidden("only the owner shares a mailbox"));
+        }
+        let owner = access.owner;
+        let (wanted, replace) = match patch.get("shareWith") {
+            Some(Value::Null) => (Map::new(), true),
+            Some(Value::Object(whole)) => (whole.clone(), true),
+            Some(_) => return Err(invalid_properties("shareWith is an object or null")),
+            None => (
+                patch
+                    .iter()
+                    .filter_map(|(key, value)| Some((key.strip_prefix("shareWith/")?.to_owned(), value.clone())))
+                    .collect(),
+                false,
+            ),
+        };
+        let existing: Vec<Principal> = identity
+            .mail_access(owner)
+            .await
+            .map_err(|_| forbidden("the grants cannot be read"))?
+            .into_iter()
+            .filter(|grant| grant.mailbox == Some(mailbox))
+            .map(|grant| grant.grantee)
+            .collect();
+        let mut keep = std::collections::HashSet::new();
+        for (principal, value) in &wanted {
+            let id = Uuid::parse_str(principal).map_err(|_| invalid_properties("shareWith names principals"))?;
+            let grantee = identity
+                .principal(self.caller.tenant, id)
+                .await
+                .ok()
+                .flatten()
+                .ok_or_else(|| invalid_properties(format!("{principal} is no person or group of the tenant")))?;
+            if grantee == Principal::Account(owner) {
+                return Err(invalid_properties("the owner is not in shareWith"));
+            }
+            keep.insert(grantee);
+            let rights = if value.is_null() {
+                Rights::NONE
+            } else {
+                rights_from_share(value).ok_or_else(|| invalid_properties("rights are MailboxRights"))?
+            };
+            if rights.is_empty() {
+                if existing.contains(&grantee) {
+                    identity
+                        .unshare_own_mail(owner, grantee, Some(mailbox))
+                        .await
+                        .map_err(|error| forbidden(&error.to_string()))?;
+                }
+            } else {
+                identity
+                    .share_own_mail(owner, grantee, Some(mailbox), &rights.letters())
+                    .await
+                    .map_err(|error| invalid_properties(error.to_string()))?;
+            }
+        }
+        if replace {
+            for grantee in existing.into_iter().filter(|grantee| !keep.contains(grantee)) {
+                identity
+                    .unshare_own_mail(owner, grantee, Some(mailbox))
+                    .await
+                    .map_err(|error| forbidden(&error.to_string()))?;
+            }
+        }
+        Ok(())
     }
 
     pub async fn mailbox_query(&self, args: Map<String, Value>) -> MethodResult {
@@ -305,6 +455,26 @@ impl Context<'_> {
                     not_updated.insert(id.clone(), json!({ "type": "notFound" }));
                     continue;
                 };
+                // Sharing first: `shareWith` and `shareWith/<principal>` (RFC 9670, 4).
+                let Some(patch_object) = patch.as_object() else {
+                    not_updated.insert(id.clone(), json!({ "type": "invalidPatch" }));
+                    continue;
+                };
+                let (sharing, rest): (Map<String, Value>, Map<String, Value>) = patch_object
+                    .clone()
+                    .into_iter()
+                    .partition(|(key, _)| key == "shareWith" || key.starts_with("shareWith/"));
+                if !sharing.is_empty()
+                    && let Err(error) = self.share_mailbox(&access, mailbox, &sharing).await
+                {
+                    not_updated.insert(id.clone(), error);
+                    continue;
+                }
+                if rest.is_empty() {
+                    updated.insert(id.clone(), Value::Null);
+                    continue;
+                }
+                let patch = &Value::Object(rest);
                 let change = match self.mailbox_update(patch) {
                     Ok(change) => change,
                     Err(error) => {

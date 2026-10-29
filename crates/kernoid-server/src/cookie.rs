@@ -91,6 +91,15 @@ fn own_origin(origin: &str, instance: &InstanceInfo, secure: bool) -> bool {
     scheme_fits && instance.domains.iter().any(|domain| domain.eq_ignore_ascii_case(host))
 }
 
+/// Whether a request that authenticates with the cookie comes from a page of the instance: WebSockets carry the
+/// cookie without any header a page could be kept from sending, so their `Origin` decides (RFC 6455, 10.2).
+pub(crate) fn from_own_page(state: &AppState, headers: &HeaderMap, instance: &InstanceInfo) -> bool {
+    headers
+        .get(header::ORIGIN)
+        .and_then(|origin| origin.to_str().ok())
+        .is_some_and(|origin| own_origin(origin, instance, secure(state)))
+}
+
 /// The session token of a request: the bearer token, or the cookie – for a change only with the CSRF header and an
 /// `Origin` of the instance.
 #[allow(clippy::result_large_err, reason = "the error is the finished answer, built once on the error path")]

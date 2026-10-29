@@ -44,7 +44,10 @@ async fn app(pool: &PgPool) -> (Router, String) {
     );
     let mail = kernoid_mail::Mail::new(pool.clone(), blobs.clone(), kernoid_mail::Limits::default());
     let jmap = kernoid_jmap::Jmap::new(mail, 1_000_000, chrono::Duration::days(5));
-    let state = AppState::new(pool.clone(), blobs, identity, oidc).with_jmap(jmap, kernoid_mail::MailEvents::default());
+    // Changes reach the push streams as in the server: through PostgreSQL's notifications.
+    let events = kernoid_mail::MailEvents::default();
+    tokio::spawn(events.clone().listen(pool.clone(), tokio_util::sync::CancellationToken::new()));
+    let state = AppState::new(pool.clone(), blobs, identity, oidc).with_jmap(jmap, events);
     (router(state, Router::new(), &Http::default()), app_password)
 }
 
@@ -153,4 +156,77 @@ async fn mail_programs_log_in_and_talk_jmap(pool: PgPool) {
     assert!(headers.get(header::CONTENT_TYPE).unwrap().to_str().unwrap().starts_with("text/event-stream"));
     assert!(body.contains("event: state") && body.contains("\"@type\":\"StateChange\""), "{body}");
     assert!(body.contains(&account));
+}
+
+/// JMAP over WebSocket (RFC 8887): a request and its response, then push after WebSocketPushEnable.
+#[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
+async fn requests_and_push_over_a_websocket(pool: PgPool) {
+    use futures_util::SinkExt;
+    use tokio_tungstenite::tungstenite::{Message, client::IntoClientRequest};
+
+    let (app, app_password) = app(&pool).await;
+    let (_, _, body) = send(&app, get("/jmap/session", Some(&basic("alice@firma.de", &app_password)))).await;
+    let session: Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(session["capabilities"]["urn:ietf:params:jmap:websocket"]["url"], "wss://login.firma.de/jmap/ws");
+    let account = session["primaryAccounts"]["urn:ietf:params:jmap:mail"].as_str().unwrap().to_owned();
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let service = app.clone().into_make_service_with_connect_info::<std::net::SocketAddr>();
+    tokio::spawn(async move { axum::serve(listener, service).await.unwrap() });
+
+    // With the cookie but from another site: refused.
+    let mut foreign = format!("ws://{address}/jmap/ws").into_client_request().unwrap();
+    foreign.headers_mut().insert("host", HOST.parse().unwrap());
+    foreign.headers_mut().insert("cookie", "__Host-kernoid-session=ks1.nonsense".parse().unwrap());
+    foreign.headers_mut().insert("origin", "https://evil.example".parse().unwrap());
+    foreign.headers_mut().insert("sec-websocket-protocol", "jmap".parse().unwrap());
+    assert!(tokio_tungstenite::connect_async(foreign).await.is_err());
+
+    let mut request = format!("ws://{address}/jmap/ws").into_client_request().unwrap();
+    request.headers_mut().insert("host", HOST.parse().unwrap());
+    request.headers_mut().insert("authorization", basic("alice@firma.de", &app_password).parse().unwrap());
+    request.headers_mut().insert("sec-websocket-protocol", "jmap".parse().unwrap());
+    let (mut socket, response) = tokio_tungstenite::connect_async(request).await.unwrap();
+    assert_eq!(response.headers()["sec-websocket-protocol"], "jmap");
+
+    let call = json!({
+        "@type": "Request", "id": "r1",
+        "using": ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"],
+        "methodCalls": [["Mailbox/get", { "accountId": account, "properties": ["name", "role"] }, "a"]],
+    });
+    socket.send(Message::Text(call.to_string().into())).await.unwrap();
+    let answer = read(&mut socket).await;
+    assert_eq!((answer["@type"].as_str(), answer["requestId"].as_str()), (Some("Response"), Some("r1")));
+    assert_eq!(answer["methodResponses"][0][0], "Mailbox/get");
+
+    socket.send(Message::Text(json!({ "@type": "WebSocketPushEnable" }).to_string().into())).await.unwrap();
+    let first = read(&mut socket).await;
+    assert_eq!(first["@type"], "StateChange");
+    let create = json!({
+        "@type": "Request", "id": "r2",
+        "using": ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"],
+        "methodCalls": [["Mailbox/set", { "accountId": account, "create": { "n": { "name": "Projects" } } }, "b"]],
+    });
+    socket.send(Message::Text(create.to_string().into())).await.unwrap();
+    // The response and the push come in either order.
+    let (a, b) = (read(&mut socket).await, read(&mut socket).await);
+    let types: Vec<&str> = [&a, &b].iter().map(|message| message["@type"].as_str().unwrap()).collect();
+    assert!(types.contains(&"Response") && types.contains(&"StateChange"), "{a} {b}");
+
+    socket.send(Message::Text("not json".into())).await.unwrap();
+    assert_eq!(read(&mut socket).await["@type"], "RequestError");
+}
+
+async fn read<S>(socket: &mut tokio_tungstenite::WebSocketStream<S>) -> Value
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+{
+    use futures_util::StreamExt;
+    loop {
+        let message = tokio::time::timeout(std::time::Duration::from_secs(5), socket.next()).await.unwrap();
+        if let tokio_tungstenite::tungstenite::Message::Text(text) = message.unwrap().unwrap() {
+            return serde_json::from_str(text.as_str()).unwrap();
+        }
+    }
 }
