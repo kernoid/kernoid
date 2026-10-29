@@ -568,7 +568,8 @@ async fn the_vacation_response_answers_while_it_is_on(pool: PgPool) {
 
     // On, with the account's own script beside it: one reply per sender – not to junk, nor to automatic mail.
     mail.put_sieve_script(alice, "files", r#"require "fileinto"; keep;"#, true).await.unwrap();
-    let now = chrono::Utc::now();
+    // Whole seconds: PostgreSQL keeps microseconds, and Linux's clock has nanoseconds.
+    let now = chrono::Utc::now().with_nanosecond(0).unwrap();
     let vacation = kernoid_mail::VacationResponse {
         enabled: true,
         from_date: Some(now - chrono::Duration::hours(1)),
