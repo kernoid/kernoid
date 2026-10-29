@@ -125,6 +125,11 @@ textarea { width: 100%; resize: vertical; }
 .dialog label { display: block; margin-bottom: 10px; }
 .dialog label > span { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 3px; }
 .dialog label input:not([type="checkbox"]), .dialog label select { width: 100%; }
+.dialog .field { margin-bottom: 10px; }
+.dialog .field > span:first-child { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 3px; }
+.dialog .field .row { display: flex; gap: 8px; align-items: center; }
+a.button { display: inline-block; padding: 6px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--raised); color: inherit; text-decoration: none; }
+a.button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
 .dialog label.inline { display: flex; align-items: center; gap: 8px; }
 .dialog label.inline > span { margin: 0; color: var(--text); }
 .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }

@@ -184,9 +184,13 @@ export function Settings(): JSX.Element {
 }
 
 function moduleName(name: string): string {
-  return name === "clamav" ? t("Virus scan (ClamAV)") : name;
+  if (name === "clamav") return t("Virus scan (ClamAV)");
+  if (name === "jitsi") return t("Video meetings (Jitsi)");
+  return name;
 }
 
 function moduleHint(name: string): string {
-  return name === "clamav" ? t("uploads, files and mail are checked for malware before they are kept") : "";
+  if (name === "clamav") return t("uploads, files and mail are checked for malware before they are kept");
+  if (name === "jitsi") return t("meetings with a link in invitations; the organizer is moderator");
+  return "";
 }

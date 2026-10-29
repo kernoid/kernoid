@@ -16,6 +16,7 @@ outside through actions and hooks (planned before 1.0).
 | Module | Connects to | Since |
 |---|---|---|
 | `clamav` | ClamAV's daemon, clamd: content checked for malware | 0.2 |
+| `jitsi` | Jitsi Meet: video meetings in calendar events, joined with kernoid's tokens | 0.2 |
 
 ## clamav – checking content for malware
 
@@ -57,3 +58,56 @@ With Docker Compose (`deploy/compose`): set `KERNOID_CLAMAV=true` in `.env` and 
 current with freshclam, and `max_size` is set to its 100 MiB.
 
 The module needs nothing from clamd but its protocol; ClamAV itself is GPL-2.0 and runs as a service of its own.
+
+## jitsi – video meetings
+
+kernoid hands out video meetings in a [Jitsi Meet](https://jitsi.github.io/handbook/) that trusts its tokens. In the web
+app, a calendar event gets a meeting with **Add video meeting**: the event keeps a link to kernoid –
+`https://<instance>/modules/jitsi/join/<room>` –, in JSCalendar's `virtualLocations` (iCalendar `CONFERENCE`) and in
+its description, so it reaches invited people in any calendar program. The link names only the room, a random name of
+24 hex characters.
+
+Who opens the link is sent on to the room in Jitsi:
+
+| Who | Goes to |
+|---|---|
+| logged in to the instance, the meeting's owner | the room, with a token as moderator |
+| logged in to the instance, anyone else | the room, with a token as participant |
+| not logged in | the login, then back to the link – or, with `guests = true`, the room without a token |
+
+A meeting belongs to the tenant of the account that made it; when the tenant stops using the module, its links lead
+nowhere (404).
+
+```toml
+[modules.jitsi]
+enabled = true
+url = "https://meet.example.org"   # where Jitsi Meet is
+app_id = "kernoid"                 # Jitsi's JWT_APP_ID
+app_secret = "…"                   # Jitsi's JWT_APP_SECRET, at least 32 characters
+audience = "kernoid"               # the token's aud; the app id unless set
+subject = "meet.example.org"       # the token's sub; the host of url unless set
+token_minutes = 180                # how long a token is good for
+guests = false                     # people without a session join without a token (Jitsi's ENABLE_GUESTS)
+```
+
+Keep the secret out of the file: `KERNOID__MODULES__JITSI__APP_SECRET`.
+
+On Jitsi's side ([docker-jitsi-meet](https://jitsi.github.io/handbook/docs/devops-guide/devops-guide-docker/)):
+`ENABLE_AUTH=1`, `AUTH_TYPE=jwt`, `JWT_APP_ID` and `JWT_APP_SECRET` as above; `ENABLE_GUESTS=1` with `guests = true`,
+where guests wait until someone with a token has joined. The token is signed with HS256 and carries `iss` (the app
+id), `aud`, `sub`, `room` (only this room), `iat`, `nbf`, `exp` and `context.user` with `id`, `name`, `email` and
+`moderator` (`"true"` or `"false"`). How Jitsi grants moderation from the token depends on its setup: Jitsi as a
+Service reads `context.user.moderator`; a self-hosted Jitsi makes everyone with a valid token a moderator unless a
+Prosody module for token affiliations is set up (`OPEN`: which module kernoid documents for that). Jitsi checks the
+token when someone joins and when the connection is made again – a meeting longer than `token_minutes` may need the
+link opened again.
+
+The routes, below the instance:
+
+| Route | Does |
+|---|---|
+| `GET /modules/jitsi/status` | `{"enabled": …}`: whether the caller's tenant uses the module |
+| `POST /modules/jitsi/meetings` | a new meeting of the caller: `{"room", "url"}` (201); 403 when the tenant does not use the module |
+| `GET /modules/jitsi/join/{room}` | the redirect above |
+
+They take the session of the web app (with the CSRF header `kernoid-csrf` for `POST`) or a bearer token.

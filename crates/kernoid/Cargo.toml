@@ -20,6 +20,7 @@ kernoid-clamav = { version = "0.1.0", path = "../kernoid-clamav" }
 kernoid-config = { version = "0.1.0", path = "../kernoid-config" }
 kernoid-events = { version = "0.1.0", path = "../kernoid-events" }
 kernoid-identity = { version = "0.1.0", path = "../kernoid-identity" }
+kernoid-jitsi = { version = "0.1.0", path = "../kernoid-jitsi" }
 kernoid-imap = { version = "0.1.0", path = "../kernoid-imap" }
 kernoid-dav = { version = "0.1.0", path = "../kernoid-dav" }
 kernoid-files = { version = "0.1.0", path = "../kernoid-files" }

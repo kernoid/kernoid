@@ -29,6 +29,7 @@ kernoid-files = { version = "0.1.0", path = "../kernoid-files" }
 kernoid-groupware = { version = "0.1.0", path = "../kernoid-groupware" }
 kernoid-jmap = { version = "0.1.0", path = "../kernoid-jmap" }
 kernoid-mail = { version = "0.1.0", path = "../kernoid-mail" }
+kernoid-module = { version = "0.1.0", path = "../kernoid-module" }
 kernoid-oidc = { version = "0.1.0", path = "../kernoid-oidc" }
 kernoid-smtp = { version = "0.1.0", path = "../kernoid-smtp" }
 kernoid-store = { version = "0.1.0", path = "../kernoid-store" }

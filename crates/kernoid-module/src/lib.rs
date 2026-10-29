@@ -9,13 +9,15 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt,
+    sync::Arc,
 };
 
-use axum::Router;
+use axum::{Router, http::request::Parts};
 use futures_util::future::BoxFuture;
 use kernoid_events::EventStore;
 use kernoid_store::{BlobStore, PgPool};
 use tokio_util::sync::CancellationToken;
+use uuid::Uuid;
 
 pub use tokio_util::sync::CancellationToken as Shutdown;
 
@@ -25,8 +27,29 @@ pub struct Context {
     pub db: PgPool,
     pub events: EventStore,
     pub blobs: BlobStore,
+    /// Who is logged in: the core's sessions, for the module's routes.
+    pub sessions: Option<Arc<dyn Sessions>>,
     /// The module's own configuration: its `[modules.<name>]` table without `enabled`.
     pub config: toml::Table,
+}
+
+/// The account a request is logged in as.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Caller {
+    pub account: Uuid,
+    pub tenant: Uuid,
+    pub instance: Uuid,
+    pub display_name: String,
+    /// The login name to show: the primary address, else the username or contact address.
+    pub address: String,
+    /// Where the instance is reached, e.g. `https://login.example.org` – for links.
+    pub base: String,
+}
+
+/// The core's logins as a module's routes see them: a session of the instance the request is for – its cookie (with
+/// the CSRF check for requests that change something) or a bearer token.
+pub trait Sessions: Send + Sync + fmt::Debug {
+    fn caller<'a>(&'a self, request: &'a Parts) -> BoxFuture<'a, Option<Caller>>;
 }
 
 /// A background job: runs until `shutdown` is cancelled, then returns.
@@ -192,7 +215,7 @@ mod tests {
         let db = sqlx::postgres::PgPoolOptions::new().connect_lazy("postgres://nobody@127.0.0.1:1/none").unwrap();
         let keys = Arc::new(TenantKeys::new(db.clone(), Key::random().unwrap()));
         let blobs = BlobStore::from_config(&kernoid_config::Blob::Memory, keys).unwrap();
-        Context { events: EventStore::new(db.clone()), db, blobs, config: table }
+        Context { events: EventStore::new(db.clone()), db, blobs, sessions: None, config: table }
     }
 
     async fn status(router: Router, path: &str) -> u16 {

@@ -5,7 +5,7 @@ import { For, type JSX, Show, createEffect, createResource, createSignal } from 
 
 import { Failure, ok, useJmap } from "../App.js";
 import { locale, t } from "../i18n.js";
-import { type Calendar, type CalendarEvent, type EventForm, address, answer, create, event as load, localInput, me, remove, update } from "./model.js";
+import { type Calendar, type CalendarEvent, type EventForm, address, answer, create, event as load, localInput, me, meetingsOffered, newMeeting, remove, update } from "./model.js";
 
 export interface EventStart {
   day: Date;
@@ -60,6 +60,19 @@ export function EventDialog(props: {
   const [start, setStart] = createSignal(startText);
   const [end, setEnd] = createSignal(endText);
   const [location, setLocation] = createSignal(Object.values(instance?.locations ?? {})[0]?.name ?? "");
+  const [meeting, setMeeting] = createSignal(Object.values(instance?.virtualLocations ?? {})[0]?.uri ?? "");
+  const [offered] = createResource(meetingsOffered);
+  // The link goes into the description too: not every calendar program shows a conference (RFC 7986).
+  const meetingLine = (url: string) => `${t("Video meeting")}: ${url}`;
+  const addMeeting = (url: string) => {
+    setMeeting(url);
+    setDescription((text) => (text.trim() ? `${text.trimEnd()}\n\n${meetingLine(url)}` : meetingLine(url)));
+  };
+  const removeMeeting = () => {
+    const line = meetingLine(meeting());
+    setDescription((text) => text.replace(line, "").trim());
+    setMeeting("");
+  };
   const [description, setDescription] = createSignal(instance?.description ?? "");
   const others = Object.values(instance?.participants ?? {})
     .map(address)
@@ -112,6 +125,7 @@ export function EventDialog(props: {
       start: allDay() ? start().slice(0, 10) : start(),
       end: allDay() ? end().slice(0, 10) : end(),
       location: location(),
+      meeting: meeting(),
       description: description(),
       participants: participants().split(/[,;\s]+/).filter(Boolean),
       repeat: repeat(),
@@ -189,6 +203,30 @@ export function EventDialog(props: {
           <span>{t("Location")}</span>
           <input type="text" value={location()} disabled={!canEdit()} onInput={(event) => setLocation(event.currentTarget.value)} />
         </label>
+        <div class="field">
+          <span>{t("Video meeting")}</span>
+          <Show
+            when={meeting()}
+            fallback={
+              <Show when={canEdit() && ok(offered)}>
+                <button type="button" disabled={busy()} onClick={() => void newMeeting().then(addMeeting, setError)}>
+                  {t("Add video meeting")}
+                </button>
+              </Show>
+            }
+          >
+            <span class="row">
+              <a class="button primary" href={meeting()} target="_blank" rel="noopener noreferrer">
+                {t("Join")}
+              </a>
+              <Show when={canEdit()}>
+                <button type="button" onClick={removeMeeting}>
+                  {t("Remove")}
+                </button>
+              </Show>
+            </span>
+          </Show>
+        </div>
         <label>
           <span>{t("Participants")}</span>
           <input

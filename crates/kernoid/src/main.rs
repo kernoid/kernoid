@@ -803,7 +803,7 @@ async fn main() -> anyhow::Result<()> {
 }
 
 /// The modules compiled into kernoid; each is off unless `[modules.<name>] enabled = true`.
-const MODULES: &[&dyn Module] = &[&kernoid_clamav::ClamAvModule];
+const MODULES: &[&dyn Module] = &[&kernoid_clamav::ClamAvModule, &kernoid_jitsi::JitsiModule];
 
 async fn serve(config: Config) -> anyhow::Result<()> {
     let modules = Registry::new(MODULES, &config.modules).context("modules")?;
@@ -871,7 +871,14 @@ async fn serve(config: Config) -> anyhow::Result<()> {
     if let Some(smtp) = &config.smtp {
         state = state.with_mail_host(smtp.hostname.clone(), config.imap.is_some());
     }
-    let context = |config| ModuleContext { db: db.clone(), events: events.clone(), blobs: blobs.clone(), config };
+    let sessions: Arc<dyn kernoid_module::Sessions> = Arc::new(kernoid_server::ModuleSessions::new(state.clone()));
+    let context = |config| ModuleContext {
+        db: db.clone(),
+        events: events.clone(),
+        blobs: blobs.clone(),
+        sessions: Some(sessions.clone()),
+        config,
+    };
 
     // One shutdown for every task: on SIGINT/SIGTERM, or as soon as one task fails.
     let shutdown = CancellationToken::new();

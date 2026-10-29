@@ -26,6 +26,7 @@ mod login_ui;
 mod mail_admin;
 pub mod metrics;
 mod mfa;
+mod module_sessions;
 mod oidc;
 mod problem;
 mod registration;
@@ -35,6 +36,7 @@ mod webdav;
 
 pub use forwarded::Client;
 pub use instance::CurrentInstance;
+pub use module_sessions::ModuleSessions;
 pub use problem::Problem;
 
 use std::{future::Future, net::SocketAddr, sync::Arc, time::Duration};

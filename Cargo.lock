@@ -2420,6 +2420,7 @@ dependencies = [
  "kernoid-groupware",
  "kernoid-identity",
  "kernoid-imap",
+ "kernoid-jitsi",
  "kernoid-jmap",
  "kernoid-mail",
  "kernoid-module",
@@ -2602,6 +2603,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "kernoid-jitsi"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "base64 0.22.1",
+ "futures-util",
+ "getrandom 0.4.3",
+ "hmac",
+ "kernoid-config",
+ "kernoid-events",
+ "kernoid-identity",
+ "kernoid-module",
+ "kernoid-store",
+ "object_store",
+ "serde_json",
+ "sha2 0.11.1",
+ "sqlx",
+ "tokio",
+ "toml",
+ "tower",
+ "tracing",
+ "url",
+ "uuid",
+]
+
+[[package]]
 name = "kernoid-jmap"
 version = "0.1.0"
 dependencies = [
@@ -2727,6 +2754,7 @@ dependencies = [
  "kernoid-identity",
  "kernoid-jmap",
  "kernoid-mail",
+ "kernoid-module",
  "kernoid-oidc",
  "kernoid-smtp",
  "kernoid-store",

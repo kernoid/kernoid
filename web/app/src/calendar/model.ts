@@ -39,6 +39,7 @@ export interface CalendarEvent {
   recurrenceRule?: { frequency: string } | null;
   recurrenceId?: string;
   locations?: Record<string, { name?: string }>;
+  virtualLocations?: Record<string, { uri?: string; name?: string }>;
   organizerCalendarAddress?: string;
   participants?: Record<string, Participant>;
   isOrigin?: boolean;
@@ -98,6 +99,8 @@ export interface EventForm {
   start: string;
   end: string;
   location: string;
+  /** The link of a video meeting (JSCalendar `virtualLocations`). */
+  meeting: string;
   description: string;
   participants: string[];
   repeat: "" | "daily" | "weekly" | "monthly" | "yearly";
@@ -128,6 +131,7 @@ function object(form: EventForm, own: string): Record<string, unknown> {
     timeZone: form.allDay ? null : zone,
     description: form.description || null,
     locations: form.location ? { l1: { "@type": "Location", name: form.location } } : null,
+    virtualLocations: form.meeting ? { v1: { "@type": "VirtualLocation", name: "Video", uri: form.meeting } } : null,
     recurrenceRule: form.repeat ? { "@type": "RecurrenceRule", frequency: form.repeat } : null,
   };
   const others = form.participants.map((address) => address.trim().toLowerCase()).filter((address) => address && address !== own);
@@ -184,4 +188,18 @@ export function address(participant: Participant): string {
 export function localInput(date: Date): string {
   const pad = (value: number) => String(value).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+/** Whether the account's tenant offers video meetings (the module jitsi). */
+export async function meetingsOffered(): Promise<boolean> {
+  const response = await fetch("/modules/jitsi/status", { headers: { "kernoid-csrf": "1" }, credentials: "same-origin" });
+  if (!response.ok) return false;
+  return ((await response.json()) as { enabled?: boolean }).enabled === true;
+}
+
+/** A new video meeting; its link. */
+export async function newMeeting(): Promise<string> {
+  const response = await fetch("/modules/jitsi/meetings", { method: "POST", headers: { "kernoid-csrf": "1" }, credentials: "same-origin" });
+  if (!response.ok) throw new Error(`${response.status}`);
+  return ((await response.json()) as { url: string }).url;
 }

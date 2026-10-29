@@ -52,6 +52,10 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   `clamav` (profile `clamav`). Tenants see and switch the modules the installation offers with
   `GET /v1/tenant/modules`, GraphQL `tenantModules`, and in the administration's settings; only modules the
   installation has switched on can be switched on.
+- The module `jitsi` (docs: Modules): video meetings in a Jitsi Meet with JWT authentication. A calendar event in the
+  web app gets a meeting with one button; its link goes into the event (`virtualLocations`, iCalendar `CONFERENCE`)
+  and its description, and sends whoever opens it on to Jitsi with a token kernoid signed for that room – the
+  meeting's owner as moderator –, to the login, or (with `guests = true`) in as a guest (migration 0040).
 - `http.public_port`: instances reached on a port other than 443 or 80 name it in their issuer and links (JMAP);
   `deploy/compose` sets 8080.
 
