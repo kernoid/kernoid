@@ -249,3 +249,9 @@ a.button { display: inline-block; text-decoration: none; color: inherit; padding
 .filters { margin: 8px 0 12px; }
 .payload { margin: 0; padding: 8px 12px; background: var(--raised); border-radius: var(--radius); font: 0.82rem/1.45 ui-monospace, "IBM Plex Mono", monospace; white-space: pre-wrap; word-break: break-word; }
 button.link { padding: 0; border: 0; background: none; color: var(--accent); }
+
+/* What a link opens (link.html): one column, no app around it. */
+.link-page { max-width: 960px; margin: 0 auto; padding: 16px; }
+.link-page h1 { font-family: var(--mono, monospace); }
+.link-page form.dialog { margin: 32px auto; max-width: 420px; }
+a.button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }

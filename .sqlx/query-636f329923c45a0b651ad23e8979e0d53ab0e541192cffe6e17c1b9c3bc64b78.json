@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO file_links (id, owner_id, node_id, token_hash, password_hash, expires_at, created_by,\n                                             created_at)\n                     VALUES ($1, $2, $3, $4, $5, $6, $7, now())",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Text",
+        "Timestamptz",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "636f329923c45a0b651ad23e8979e0d53ab0e541192cffe6e17c1b9c3bc64b78"
+}

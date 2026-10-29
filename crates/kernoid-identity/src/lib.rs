@@ -19,6 +19,7 @@ pub mod collection_access;
 pub mod consent;
 mod dns;
 mod domain;
+pub mod file_link;
 pub mod files_quota;
 pub mod group;
 pub mod instance;

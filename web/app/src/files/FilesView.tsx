@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Files: the stores the user reaches on the side – their own, the tenant's drives, what others share –, one directory
 // at a time with the way up; uploading with progress (also by dropping), new folders, renaming, the trash, sharing
-// folders and earlier versions of files, files shown in place (Viewer.tsx), how to connect a file manager (WebDAV).
+// folders, links for people without an account, earlier versions of files, files shown in place (Viewer.tsx), how to connect a file manager (WebDAV).
 // What the user may do follows the rights kernoid reports.
 
 import { For, type JSX, Show, createMemo, createResource, createSignal, onCleanup } from "solid-js";
@@ -10,6 +10,7 @@ import { Failure, changed, ok, touch, useJmap } from "../App.js";
 import { WebDavHelp } from "../account/Connect.js";
 import { locale, t } from "../i18n.js";
 import {
+  type FileLink,
   type FileNode,
   LEVELS,
   NO_RIGHTS,
@@ -18,15 +19,19 @@ import {
   type Store,
   children,
   createDirectory,
+  createLink,
   destroy,
   downloadPath,
   findPrincipals,
   formatSize,
   isDirectory,
   level,
+  links,
+  linksAvailable,
   move,
   path,
   principals,
+  removeLink,
   rename,
   restore,
   share,
@@ -83,6 +88,7 @@ export function FilesView(): JSX.Element {
   const [error, setError] = createSignal<unknown>();
   const [dragging, setDragging] = createSignal(false);
   const [sharing, setSharing] = createSignal<FileNode>();
+  const [linking, setLinking] = createSignal<FileNode>();
   const [history, setHistory] = createSignal<FileNode>();
   const [viewing, setViewing] = createSignal<FileNode>();
   const [connecting, setConnecting] = createSignal(false);
@@ -278,6 +284,11 @@ export function FilesView(): JSX.Element {
                             {t("Share")}
                           </button>
                         </Show>
+                        <Show when={rights().mayShare && linksAvailable(jmap)}>
+                          <button type="button" class="quiet" disabled={busy()} onClick={() => setLinking(node)}>
+                            {t("Link")}
+                          </button>
+                        </Show>
                         <Show when={!isDirectory(node) && rights().mayRead}>
                           <button type="button" class="quiet" disabled={busy()} onClick={() => setHistory(node)}>
                             {t("Versions")}
@@ -314,6 +325,7 @@ export function FilesView(): JSX.Element {
           />
         )}
       </Show>
+      <Show when={linking()}>{(node) => <LinkDialog account={account()} node={node()} onClose={() => setLinking(undefined)} />}</Show>
       <Show when={viewing()}>
         {(node) => (
           <Viewer
@@ -446,6 +458,107 @@ function ShareDialog(props: { account: string; node: FileNode; onClose: (saved: 
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+/** Links to a file or folder for people without an account: made with an expiry and a password if wanted, shown
+ * once when made (kernoid keeps only a hash), removed when no longer wanted. */
+function LinkDialog(props: { account: string; node: FileNode; onClose: () => void }): JSX.Element {
+  const jmap = useJmap();
+  const [list, { refetch }] = createResource(() => links(jmap, props.account, props.node));
+  const [made, setMade] = createSignal<string>();
+  const [error, setError] = createSignal<unknown>();
+  const [busy, setBusy] = createSignal(false);
+  const run = async (work: () => Promise<void>) => {
+    setBusy(true);
+    setError(undefined);
+    try {
+      await work();
+      await refetch();
+    } catch (failure) {
+      setError(failure);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const make = (event: SubmitEvent) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget as HTMLFormElement);
+    const date = String(form.get("expires") ?? "");
+    const password = String(form.get("password") ?? "");
+    // The link works through the whole day chosen.
+    const expires = date ? new Date(`${date}T23:59:59`).toISOString() : null;
+    void run(async () => {
+      setMade(await createLink(jmap, props.account, props.node, expires, password || null));
+      (event.currentTarget as HTMLFormElement | null)?.reset();
+    });
+  };
+  const when = (date: string) => new Date(date).toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" });
+
+  return (
+    <div class="overlay" role="dialog" aria-modal="true" aria-label={t("Links")}>
+      <div class="dialog">
+        <h2>
+          {t("Links")} „{props.node.name}“
+        </h2>
+        <p class="muted small">{t("Anyone with a link can view and download what it leads to – without an account.")}</p>
+        <Show when={made()}>
+          {(url) => (
+            <div class="notice">
+              <p>{t("The new link – copy it now; it is not shown again:")}</p>
+              <div class="row">
+                <input class="grow" readOnly value={url()} onFocus={(event) => event.currentTarget.select()} />
+                <button type="button" onClick={() => void navigator.clipboard?.writeText(url())}>
+                  {t("Copy")}
+                </button>
+              </div>
+            </div>
+          )}
+        </Show>
+        <table class="nodes">
+          <tbody>
+            <For each={ok(list) ?? []} fallback={<tr><td class="muted">{t("No links yet.")}</td></tr>}>
+              {(link: FileLink) => (
+                <tr>
+                  <td class="small">
+                    {t("made {date}", { date: when(link.created) })}
+                    <div class="muted">
+                      {link.expires ? t("valid until {date}", { date: when(link.expires) }) : t("no expiry")}
+                      {link.hasPassword ? ` · ${t("with password")}` : ""}
+                    </div>
+                  </td>
+                  <td class="end">
+                    <button type="button" class="quiet danger" disabled={busy()} onClick={() => void run(() => removeLink(jmap, props.account, link))}>
+                      {t("Remove")}
+                    </button>
+                  </td>
+                </tr>
+              )}
+            </For>
+          </tbody>
+        </table>
+        <form onSubmit={make}>
+          <h3>{t("New link")}</h3>
+          <label>
+            <span>{t("Valid until (optional)")}</span>
+            <input type="date" name="expires" min={new Date().toISOString().slice(0, 10)} />
+          </label>
+          <label>
+            <span>{t("Password (optional)")}</span>
+            <input type="password" name="password" autocomplete="new-password" />
+          </label>
+          <Failure error={error() ?? list.error} />
+          <div class="actions end">
+            <button type="button" class="quiet" onClick={() => props.onClose()}>
+              {t("Close")}
+            </button>
+            <button type="submit" class="primary" disabled={busy()}>
+              {t("Make a link")}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

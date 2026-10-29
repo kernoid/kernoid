@@ -5,6 +5,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use chrono::{DateTime, Utc};
 use kernoid_events::{
     Error, Event, InlineFuture,
     aggregate::{Aggregate, DomainEvent},
@@ -107,6 +108,12 @@ pub enum AccountEvent {
     FileAccessSet { grantee: Principal, node: Option<Uuid>, rights: String },
     #[serde(rename = "account.file_access_removed")]
     FileAccessRemoved { grantee: Principal, node: Option<Uuid> },
+    /// A link to one of the account's files or directories for people without an account (RFC 0005, 11.3); its token
+    /// and password are not in the event.
+    #[serde(rename = "account.file_link_added")]
+    FileLinkAdded { id: Uuid, node: Uuid, expires_at: Option<DateTime<Utc>>, password: bool },
+    #[serde(rename = "account.file_link_removed")]
+    FileLinkRemoved { id: Uuid },
     /// An account without a native address (RFC 0003, 1): for logins – and files, if granted – only.
     #[serde(rename = "account.external_added")]
     ExternalAdded { display_name: String, services: Vec<Service> },
@@ -175,6 +182,8 @@ pub struct Account {
     pub drive: bool,
     /// Grants on the account's files: (grantee, directory or the whole store) → rights.
     pub file_access: BTreeMap<(Principal, Option<Uuid>), String>,
+    /// Links to the account's files.
+    pub file_links: BTreeSet<Uuid>,
     /// Grants on the account's mail: (grantee, mailbox) → (rights, send as).
     pub mail_access: BTreeMap<(Principal, Option<Uuid>), (String, bool)>,
     /// Grants on the account's calendars and address books: (grantee, collection) → level.
@@ -312,6 +321,12 @@ impl Aggregate for Account {
             }
             AccountEvent::FileAccessRemoved { grantee, node } => {
                 self.file_access.remove(&(grantee, node));
+            }
+            AccountEvent::FileLinkAdded { id, .. } => {
+                self.file_links.insert(id);
+            }
+            AccountEvent::FileLinkRemoved { id } => {
+                self.file_links.remove(&id);
             }
         }
     }
@@ -666,6 +681,11 @@ pub(crate) async fn project(connection: &mut PgConnection, events: &[Event]) -> 
                 )
                 .execute(&mut *connection)
                 .await?;
+            }
+            // The row – with the token – is written by the command (`file_link`).
+            AccountEvent::FileLinkAdded { .. } => {}
+            AccountEvent::FileLinkRemoved { id: link } => {
+                sqlx::query!("DELETE FROM file_links WHERE id = $1", link).execute(&mut *connection).await?;
             }
         }
     }

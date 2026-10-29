@@ -12,9 +12,6 @@ first use. An account does not need a mailbox for it. Folders are shared with pe
 the [web app]({{ '/app/' | relative_url }}) has them too. The design is
 [RFC 0005](https://github.com/kernoid/kernoid/blob/main/rfcs/0005-files.md).
 
-{: .note }
-Links for people without an account follow with 0.2.
-
 ## Turning files on
 
 The service `files` is off unless an administrator grants it (`kernoid account grant-service <ACCOUNT> files`, or
@@ -52,6 +49,21 @@ tenant. Rights add up down the tree: what is granted on a folder holds for every
   `GET`/`PUT`/`DELETE /v1/accounts/{id}/files/access`, GraphQL `fileAccess`, `setFileAccess`, `removeFileAccess`.
 - What is shared with someone appears in their session as another account (JMAP), in `/webdav/` as another folder,
   and in the web app on the side.
+
+## Links
+
+A **link** opens a file, or a folder with all below it, to anyone who has it – to view and download, without an
+account. Whoever may share something may make links to it: in the web app (Link), or with kernoid's JMAP extension
+`https://kernoid.dev/jmap/file-links` (`FileLink/get`, `FileLink/set` with `nodeId`, `expires` and `password`).
+
+- A link may expire and may have a **password**. The address is shown once, when the link is made – kernoid keeps
+  only a hash of it –, and goes to `https://<instance domain>/app/link.html#<token>` (the session's
+  `urlTemplate`); the token is in the part of the address browsers do not send.
+- The page asks `GET /v1/links/<token>`, `…/nodes` and `…/download/<node>`; a password is given at
+  `POST /v1/links/<token>/unlock`, whose access token opens the link for twelve hours. Ten wrong passwords in a quarter
+  of an hour close the link for the rest of it.
+- Removing the link, or the file or folder, ends it at once; so does deactivating the owner or the tenant.
+- Every link is in the audit log of its owner (`account.file_link_added`, `account.file_link_removed`).
 
 ## Versions
 
@@ -110,5 +122,5 @@ from writing the same file, and a file written again keeps its earlier content a
 - **Content** is encrypted with the tenant's key before it goes to object storage.
 
 {: .note }
-OPEN: links (0.2), uploads that resume after a broken connection, searching inside files, symbolic links, moving
+OPEN: links that let people add files, uploads that resume after a broken connection, searching inside files, symbolic links, moving
 between stores over WebDAV, emptying the trash after a time.

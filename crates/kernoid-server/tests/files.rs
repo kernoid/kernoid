@@ -288,3 +288,125 @@ async fn drives_are_administered_and_reached_over_webdav(pool: PgPool) {
         StatusCode::NOT_FOUND
     );
 }
+
+#[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
+async fn links_open_files_to_anyone_who_has_them(pool: PgPool) {
+    let (app, _alice_id, bob_id) = setup(&pool).await;
+    let bob = login(&app, "bob@firma.de").await;
+    let anyone = Call { app: &app, token: String::new() };
+    let using =
+        json!(["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:filenode", "https://kernoid.dev/jmap/file-links"]);
+    let jmap = |calls: Value| json!({ "using": using, "methodCalls": calls });
+
+    // Bob has a directory with a file, and a file beside it.
+    let mut blobs = Vec::new();
+    for text in ["shared text", "secret text"] {
+        let upload = Request::post(format!("/jmap/upload/{bob_id}/"))
+            .header("host", HOST)
+            .header(header::AUTHORIZATION, format!("Bearer {}", bob.token))
+            .header("content-type", "text/plain")
+            .body(Body::from(text))
+            .unwrap();
+        blobs.push(bob.answer(upload).await.1["blobId"].clone());
+    }
+    let account = bob_id.to_string();
+    let (_, answer) = bob
+        .send(
+            "POST",
+            "/jmap/api",
+            Some(jmap(json!([["FileNode/set", { "accountId": account, "create": {
+            "d": { "@type": "Directory", "parentId": null, "name": "Shared" },
+            "a": { "@type": "File", "parentId": "#d", "name": "a täxt.txt", "blobId": blobs[0] },
+            "s": { "@type": "File", "parentId": null, "name": "secret.txt", "blobId": blobs[1] },
+        } }, "c"]]))),
+        )
+        .await;
+    let created = &answer["methodResponses"][0][1]["created"];
+    let (directory, file, secret) =
+        (created["d"]["id"].clone(), created["a"]["id"].clone(), created["s"]["id"].clone());
+
+    // Two links to the directory: one open, one with a password.
+    let (_, answer) = bob
+        .send(
+            "POST",
+            "/jmap/api",
+            Some(jmap(json!([["FileLink/set", { "accountId": account, "create": {
+            "open": { "nodeId": directory },
+            "locked": { "nodeId": directory, "password": "a long link password", "expires": "2099-01-01T00:00:00Z" },
+            "past": { "nodeId": directory, "expires": "2001-01-01T00:00:00Z" },
+        } }, "c"]]))),
+        )
+        .await;
+    let set = &answer["methodResponses"][0][1];
+    assert_eq!(set["notCreated"]["past"]["type"], "invalidProperties", "{set}");
+    let open = set["created"]["open"]["token"].as_str().unwrap().to_owned();
+    let locked = set["created"]["locked"]["token"].as_str().unwrap().to_owned();
+    let open_id = set["created"]["open"]["id"].clone();
+
+    // Anyone with the open link sees the directory, lists it, downloads what is in it – nothing else.
+    let (status, link) = anyone.send("GET", &format!("/v1/links/{open}"), None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(link["node"]["name"], "Shared");
+    let (_, listed) = anyone.send("GET", &format!("/v1/links/{open}/nodes"), None).await;
+    assert_eq!(listed.as_array().unwrap().len(), 1, "{listed}");
+    assert_eq!(listed[0]["name"], "a täxt.txt");
+    let download = |token: &str, node: &Value, access: &str| {
+        Request::get(format!("/v1/links/{token}/download/{}?access={access}", node.as_str().unwrap()))
+            .header("host", HOST)
+            .body(Body::empty())
+            .unwrap()
+    };
+    let (status, headers, body) = text(&app, download(&open, &file, "")).await;
+    assert_eq!((status, body.as_str()), (StatusCode::OK, "shared text"));
+    let header = |name: &str| headers.get(name).and_then(|value| value.to_str().ok()).unwrap_or_default().to_owned();
+    assert!(header("content-disposition").contains("filename*=UTF-8''a%20t%C3%A4xt.txt"), "{headers:?}");
+    assert_eq!(header("x-content-type-options"), "nosniff");
+    assert_eq!(text(&app, download(&open, &secret, "")).await.0, StatusCode::NOT_FOUND);
+    let outside = format!("/v1/links/{open}/nodes?parent={}", secret.as_str().unwrap());
+    assert_eq!(anyone.status("GET", &outside, None).await, 404);
+    assert_eq!(anyone.status("GET", "/v1/links/not-a-token", None).await, 404);
+
+    // The other needs its password; a wrong one is refused.
+    let (status, needs) = anyone.send("GET", &format!("/v1/links/{locked}"), None).await;
+    assert_eq!((status, needs["passwordRequired"].clone()), (StatusCode::UNAUTHORIZED, json!(true)));
+    let unlock = |password: &str| json!({ "password": password });
+    assert_eq!(anyone.status("POST", &format!("/v1/links/{locked}/unlock"), Some(unlock("wrong"))).await, 401);
+    let (status, unlocked) =
+        anyone.send("POST", &format!("/v1/links/{locked}/unlock"), Some(unlock("a long link password"))).await;
+    assert_eq!(status, StatusCode::OK);
+    let access = unlocked["access"].as_str().unwrap();
+    assert_eq!(anyone.status("GET", &format!("/v1/links/{locked}?access={access}"), None).await, 200);
+    assert_eq!(text(&app, download(&locked, &file, access)).await.2, "shared text");
+    // The open link has no password to unlock.
+    assert_eq!(anyone.status("POST", &format!("/v1/links/{open}/unlock"), Some(unlock("x"))).await, 404);
+
+    // Bob lists his links – without tokens – and removes one; it stops working.
+    let (_, answer) =
+        bob.send("POST", "/jmap/api", Some(jmap(json!([["FileLink/get", { "accountId": account }, "g"]])))).await;
+    let list = answer["methodResponses"][0][1]["list"].as_array().unwrap().clone();
+    assert_eq!(list.len(), 2);
+    assert!(list.iter().all(|link| link.get("token").is_none()));
+    assert!(list.iter().any(|link| link["hasPassword"] == json!(true) && link["expires"] == "2099-01-01T00:00:00Z"));
+    let (_, answer) = bob
+        .send(
+            "POST",
+            "/jmap/api",
+            Some(jmap(json!([["FileLink/set", { "accountId": account, "destroy": [open_id] }, "d"]]))),
+        )
+        .await;
+    assert_eq!(answer["methodResponses"][0][1]["destroyed"].as_array().unwrap().len(), 1);
+    assert_eq!(anyone.status("GET", &format!("/v1/links/{open}"), None).await, 404);
+
+    // Alice may not make links to Bob's files: she reaches none of them.
+    let alice = login(&app, "alice@firma.de").await;
+    let (_, answer) = alice
+        .send(
+            "POST",
+            "/jmap/api",
+            Some(jmap(json!([["FileLink/set", { "accountId": account, "create": {
+            "x": { "nodeId": directory },
+        } }, "c"]]))),
+        )
+        .await;
+    assert_eq!(answer["methodResponses"][0][0], "error", "{answer}");
+}

@@ -14,6 +14,7 @@ mod cookie;
 mod cors;
 mod dav;
 mod federation;
+mod file_links;
 mod files_admin;
 mod forwarded;
 mod graphql;
@@ -288,6 +289,10 @@ fn rest() -> OpenApiRouter<AppState> {
         .routes(routes!(registration::options))
         .routes(routes!(registration::start))
         .routes(routes!(registration::confirm))
+        .routes(routes!(file_links::link))
+        .routes(routes!(file_links::unlock))
+        .routes(routes!(file_links::nodes))
+        .routes(routes!(file_links::download))
         .routes(routes!(federation::start))
         .routes(routes!(federation::exchange))
         .routes(routes!(admin::applications::list, admin::applications::add))

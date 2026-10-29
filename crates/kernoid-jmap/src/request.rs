@@ -9,8 +9,8 @@ use uuid::Uuid;
 use kernoid_mail::Access;
 
 use crate::{
-    CALENDARS, CONTACTS, CORE, Caller, FILE_VERSIONS, FILENODE, Jmap, MAIL, MAX_CALLS_IN_REQUEST, PRINCIPALS,
-    SUBMISSION,
+    CALENDARS, CONTACTS, CORE, Caller, FILE_LINKS, FILE_VERSIONS, FILENODE, Jmap, MAIL, MAX_CALLS_IN_REQUEST,
+    PRINCIPALS, SUBMISSION,
 };
 
 /// A request that cannot be run at all (RFC 8620, 3.6.1); answered as problem details.
@@ -226,7 +226,8 @@ impl Jmap {
             .ok_or_else(|| RequestError::NotRequest("using is required".into()))?;
         for capability in using {
             let capability = capability.as_str().unwrap_or_default();
-            if ![CORE, MAIL, SUBMISSION, CALENDARS, CONTACTS, FILENODE, FILE_VERSIONS, PRINCIPALS].contains(&capability)
+            if ![CORE, MAIL, SUBMISSION, CALENDARS, CONTACTS, FILENODE, FILE_VERSIONS, FILE_LINKS, PRINCIPALS]
+                .contains(&capability)
             {
                 return Err(RequestError::UnknownCapability(capability.to_owned()));
             }
@@ -345,6 +346,8 @@ impl Jmap {
             "FileNode/query" => context.file_query(args).await,
             "FileNode/queryChanges" => Err(MethodError::new("cannotCalculateChanges", "query again")),
             "FileVersion/get" => context.file_versions(args).await,
+            "FileLink/get" => context.file_link_get(args).await,
+            "FileLink/set" => context.file_link_set(args).await,
             "Principal/get" => context.principal_get(args).await,
             "Principal/query" => context.principal_query(args).await,
             _ => Err(MethodError::new("unknownMethod", format!("{name} is not known"))),

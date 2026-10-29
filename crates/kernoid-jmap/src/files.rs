@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! JMAP for files (draft-ietf-jmap-filenode-19; RFC 0005, 8): `FileNode/get`, `/changes`, `/set`, `/query` on the
 //! caller's own file store, on stores shared with it and on the tenant's drives – with the rights of the draft's
-//! section 5, sharing through `shareWith` (11), and kernoid's `FileVersion/get` for earlier contents (6).
+//! section 5, sharing through `shareWith` (11), kernoid's `FileVersion/get` for earlier contents (6) and
+//! `FileLink/*` for links (11.3).
 
 use std::{
     cmp::Ordering,
@@ -643,6 +644,139 @@ impl Context<'_> {
         Ok(vec![(
             "FileVersion/get".into(),
             json!({ "accountId": owner.to_string(), "nodeId": node.to_string(), "list": list }),
+        )])
+    }
+
+    /// kernoid's `FileLink/get` (RFC 0005, 11.3): the links to nodes the caller may share – all of them, those of
+    /// `nodeId`, or those of `ids`. Tokens are shown only when a link is made.
+    pub async fn file_link_get(&self, args: Map<String, Value>) -> MethodResult {
+        let (owner, files, access) = self.file_store(&args).await?;
+        let identity = self.jmap.identity.as_ref().ok_or_else(|| MethodError::new("unknownMethod", "no links here"))?;
+        let node = match args.get("nodeId") {
+            Some(Value::String(id)) => Some(self.id(id).ok_or_else(|| MethodError::invalid("no such node"))?),
+            _ => None,
+        };
+        let wanted: Option<HashSet<Uuid>> =
+            ids(&args)?.map(|list| list.iter().filter_map(|id| Uuid::parse_str(id).ok()).collect());
+        let view = files.view(access).await?;
+        let list: Vec<Value> = identity
+            .file_links(owner, node)
+            .await
+            .map_err(|_| MethodError::new("serverFail", "the links cannot be read"))?
+            .into_iter()
+            .filter(|link| view.rights(link.node).contains(Rights::SHARE))
+            .filter(|link| wanted.as_ref().is_none_or(|wanted| wanted.contains(&link.id)))
+            .map(|link| {
+                json!({
+                    "id": link.id.to_string(),
+                    "nodeId": link.node.to_string(),
+                    "expires": link.expires_at.map_or(Value::Null, utc),
+                    "hasPassword": link.password,
+                    "created": utc(link.created_at),
+                })
+            })
+            .collect();
+        let found: HashSet<String> = list.iter().filter_map(|link| link["id"].as_str().map(str::to_owned)).collect();
+        let not_found: Vec<Value> = match ids(&args)? {
+            Some(list) => list.into_iter().filter(|id| !found.contains(id)).map(Value::String).collect(),
+            None => Vec::new(),
+        };
+        Ok(vec![(
+            "FileLink/get".into(),
+            json!({ "accountId": owner.to_string(), "list": list, "notFound": not_found }),
+        )])
+    }
+
+    /// kernoid's `FileLink/set`: makes links (`nodeId`, `expires`, `password`) to nodes the caller may share – each
+    /// created link answers its `id` and its `token`, shown this once – and destroys them. Links are not updated.
+    pub async fn file_link_set(&mut self, args: Map<String, Value>) -> MethodResult {
+        let (owner, files, access) = self.file_store(&args).await?;
+        let identity = self.jmap.identity.clone().ok_or_else(|| MethodError::new("unknownMethod", "no links here"))?;
+        let who = format!("account:{}", self.caller.account);
+        let forbidden = |description: &str| json!({ "type": "forbidden", "description": description });
+        let view = files.view(access).await?;
+        let mut created = Map::new();
+        let mut not_created = Map::new();
+        if let Some(Value::Object(create)) = args.get("create") {
+            for (key, value) in create {
+                let result = async {
+                    let object = value.as_object().ok_or_else(|| invalid_properties("a link is an object"))?;
+                    let node = object
+                        .get("nodeId")
+                        .and_then(Value::as_str)
+                        .and_then(|id| self.id(id))
+                        .ok_or_else(|| invalid_properties("nodeId names a node"))?;
+                    if !view.rights(node).contains(Rights::SHARE) {
+                        return Err(forbidden("a link needs mayShare"));
+                    }
+                    let expires = match object.get("expires") {
+                        None | Some(Value::Null) => None,
+                        Some(Value::String(date)) => Some(
+                            DateTime::parse_from_rfc3339(date)
+                                .map_err(|_| invalid_properties("expires is a UTCDate"))?
+                                .with_timezone(&Utc),
+                        ),
+                        Some(_) => return Err(invalid_properties("expires is a UTCDate or null")),
+                    };
+                    let password = match object.get("password") {
+                        None | Some(Value::Null) => None,
+                        Some(Value::String(password)) => Some(password.as_str()),
+                        Some(_) => return Err(invalid_properties("password is a string or null")),
+                    };
+                    identity.add_file_link(owner, node, expires, password, &who).await.map_err(|error| match error {
+                        kernoid_identity::IdentityError::Refused(reason) => invalid_properties(reason),
+                        kernoid_identity::IdentityError::NotFound(_) => invalid_properties("nodeId names a node"),
+                        _ => json!({ "type": "serverFail" }),
+                    })
+                }
+                .await;
+                match result {
+                    Ok((id, token)) => {
+                        self.created.insert(format!("#{key}"), id.to_string());
+                        created.insert(key.clone(), json!({ "id": id.to_string(), "token": token }));
+                    }
+                    Err(error) => {
+                        not_created.insert(key.clone(), error);
+                    }
+                }
+            }
+        }
+        let mut destroyed = Vec::new();
+        let mut not_destroyed = Map::new();
+        if let Some(Value::Array(list)) = args.get("destroy") {
+            let links = identity
+                .file_links(owner, None)
+                .await
+                .map_err(|_| MethodError::new("serverFail", "the links cannot be read"))?;
+            for id in list.iter().filter_map(Value::as_str) {
+                let link = Uuid::parse_str(id).ok().and_then(|id| links.iter().find(|link| link.id == id));
+                let result = match link {
+                    None => Err(json!({ "type": "notFound" })),
+                    Some(link) if !view.rights(link.node).contains(Rights::SHARE) => {
+                        Err(forbidden("removing a link needs mayShare"))
+                    }
+                    Some(link) => {
+                        identity.remove_file_link(owner, link.id, &who).await.map_err(|_| json!({ "type": "notFound" }))
+                    }
+                };
+                match result {
+                    Ok(()) => destroyed.push(json!(id)),
+                    Err(error) => {
+                        not_destroyed.insert(id.to_owned(), error);
+                    }
+                }
+            }
+        }
+        let or_null = |map: Map<String, Value>| if map.is_empty() { Value::Null } else { Value::Object(map) };
+        Ok(vec![(
+            "FileLink/set".into(),
+            json!({
+                "accountId": owner.to_string(),
+                "created": or_null(created),
+                "notCreated": or_null(not_created),
+                "destroyed": if destroyed.is_empty() { Value::Null } else { Value::Array(destroyed) },
+                "notDestroyed": or_null(not_destroyed),
+            }),
         )])
     }
 

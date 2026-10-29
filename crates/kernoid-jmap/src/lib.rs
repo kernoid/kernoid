@@ -36,6 +36,8 @@ pub const PRINCIPALS: &str = "urn:ietf:params:jmap:principals";
 pub const WEBSOCKET: &str = "urn:ietf:params:jmap:websocket";
 /// kernoid's own: earlier contents of files (`FileVersion/get`, RFC 0005, 6).
 pub const FILE_VERSIONS: &str = "https://kernoid.dev/jmap/file-versions";
+/// kernoid's own: links to files for people without an account (`FileLink/get`, `/set`, RFC 0005, 11.3).
+pub const FILE_LINKS: &str = "https://kernoid.dev/jmap/file-links";
 
 /// Limits announced in the session and kept by the API.
 pub const MAX_SIZE_REQUEST: usize = 10 * 1024 * 1024;
@@ -154,6 +156,10 @@ impl Jmap {
                 entry["accountCapabilities"][FILE_VERSIONS] = json!({});
                 primary.insert(FILENODE.into(), json!(own));
                 primary.insert(FILE_VERSIONS.into(), json!(own));
+                if self.identity.is_some() {
+                    entry["accountCapabilities"][FILE_LINKS] = json!({});
+                    primary.insert(FILE_LINKS.into(), json!(own));
+                }
             }
             for store in files.shared_with(caller.account).await? {
                 let access = files.access(caller.account, store.owner).await?;
@@ -162,6 +168,9 @@ impl Jmap {
                 });
                 entry["accountCapabilities"][FILENODE] = files::capability(&access);
                 entry["accountCapabilities"][FILE_VERSIONS] = json!({});
+                if self.identity.is_some() {
+                    entry["accountCapabilities"][FILE_LINKS] = json!({});
+                }
                 let writes = access.store.contains(kernoid_files::Rights::ADD)
                     || access.nodes.values().any(|rights| {
                         rights.contains(kernoid_files::Rights::ADD) || rights.contains(kernoid_files::Rights::WRITE)
@@ -201,6 +210,10 @@ impl Jmap {
         if self.files.is_some() {
             capabilities[FILENODE] = json!({});
             capabilities[FILE_VERSIONS] = json!({});
+            if self.identity.is_some() {
+                // Where a link opens: its token goes into the fragment, which browsers do not send.
+                capabilities[FILE_LINKS] = json!({ "urlTemplate": format!("{base}/app/link.html#{{token}}") });
+            }
         }
         if self.identity.is_some() {
             capabilities[PRINCIPALS] = json!({});

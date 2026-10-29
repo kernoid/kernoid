@@ -1,0 +1,60 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT l.id, l.owner_id, l.node_id, l.password_hash IS NOT NULL AS \"needs_password!\"\n             FROM file_links l\n             JOIN accounts a ON a.id = l.owner_id\n             JOIN tenants t ON t.id = a.tenant_id\n             WHERE l.token_hash = $1 AND t.instance_id = $2 AND a.active AND t.active\n               AND (l.expires_at IS NULL OR l.expires_at > now())",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "file_links",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "owner_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "file_links",
+            "name": "owner_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "node_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "file_links",
+            "name": "node_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "needs_password!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "c3be635d21bc64d002efaa3fb6829d3a4114d7f0cb8f39e4e93c0b65b1161ea5"
+}

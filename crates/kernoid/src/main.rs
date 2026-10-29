@@ -1156,6 +1156,9 @@ async fn clean_up(identity: Identity, oidc: Oidc, shutdown: CancellationToken) -
         if let Err(error) = identity.prune_registrations().await {
             tracing::warn!(%error, "removing expired registrations failed; trying again later");
         }
+        if let Err(error) = identity.clean_up_file_link_access().await {
+            tracing::warn!(%error, "removing expired link access failed; trying again later");
+        }
         match identity.clean_up().await {
             Ok(cleaned) if cleaned.sessions > 0 || cleaned.failure_counts > 0 => {
                 tracing::info!(sessions = cleaned.sessions, failure_counts = cleaned.failure_counts, "cleaned up");

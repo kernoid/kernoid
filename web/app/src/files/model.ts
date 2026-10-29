@@ -2,7 +2,7 @@
 // Files over JMAP (draft-ietf-jmap-filenode): the stores the user reaches – their own, those shared with them, the
 // tenant's drives –, directories and files with the rights on them, uploads, sharing, versions, the trash.
 
-import { FILENODE, FILE_VERSIONS, type Jmap, PRINCIPALS } from "../jmap.js";
+import { FILENODE, FILE_LINKS, FILE_VERSIONS, type Jmap, PRINCIPALS } from "../jmap.js";
 
 export interface Rights {
   mayRead: boolean;
@@ -210,3 +210,44 @@ export async function principals(jmap: Jmap, ids: string[]): Promise<Principal[]
 export async function share(jmap: Jmap, accountId: string, node: FileNode, shareWith: Record<string, Rights>): Promise<void> {
   await set(jmap, accountId, { update: { [node.id]: { shareWith } } });
 }
+
+/** A link for people without an account (kernoid's `FileLink`); its token is known only when it is made. */
+export interface FileLink {
+  id: string;
+  nodeId: string;
+  expires: string | null;
+  hasPassword: boolean;
+  created: string;
+}
+
+const LINKS = [FILENODE, FILE_LINKS];
+
+/** Whether the server makes links at all. */
+export function linksAvailable(jmap: Jmap): boolean {
+  return FILE_LINKS in (jmap.session.capabilities ?? {});
+}
+
+export async function links(jmap: Jmap, accountId: string, node: FileNode): Promise<FileLink[]> {
+  return (await jmap.call<{ list: FileLink[] }>(LINKS, "FileLink/get", { accountId, nodeId: node.id })).list;
+}
+
+/** Makes a link; answers its address – the only time it can be shown. */
+export async function createLink(jmap: Jmap, accountId: string, node: FileNode, expires: string | null, password: string | null): Promise<string> {
+  const result = await jmap.call<{ created?: Record<string, { token: string }>; notCreated?: Record<string, { type: string; description?: string }> }>(
+    LINKS,
+    "FileLink/set",
+    { accountId, create: { l: { nodeId: node.id, expires, password } } },
+  );
+  const made = result.created?.l;
+  if (!made) {
+    const failure = result.notCreated?.l;
+    throw new Error(failure?.description ?? failure?.type ?? "notCreated");
+  }
+  const template = String(jmap.session.capabilities[FILE_LINKS]?.urlTemplate ?? "");
+  return template.replace("{token}", made.token);
+}
+
+export async function removeLink(jmap: Jmap, accountId: string, link: FileLink): Promise<void> {
+  await jmap.call(LINKS, "FileLink/set", { accountId, destroy: [link.id] });
+}
+

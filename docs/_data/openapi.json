@@ -5949,6 +5949,315 @@
         }
       }
     },
+    "/v1/links/{token}": {
+      "get": {
+        "tags": [
+          "links"
+        ],
+        "summary": "What a link opens (RFC 0005, 11.3).",
+        "operationId": "link",
+        "parameters": [
+          {
+            "name": "access",
+            "in": "query",
+            "description": "The access token from `unlock`, for a link with a password.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "parent",
+            "in": "query",
+            "description": "`nodes`: the directory whose contents to list; the link's own if not given.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "inline",
+            "in": "query",
+            "description": "`download`: `1` to show in place (`Content-Disposition: inline`) rather than save.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "the link has a password: unlock it first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasswordRequired"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "no such link, or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/links/{token}/download/{node}": {
+      "get": {
+        "tags": [
+          "links"
+        ],
+        "summary": "A file the link reaches, also in ranges (`Range`), under the same sandbox as every download.",
+        "operationId": "download",
+        "parameters": [
+          {
+            "name": "access",
+            "in": "query",
+            "description": "The access token from `unlock`, for a link with a password.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "parent",
+            "in": "query",
+            "description": "`nodes`: the directory whose contents to list; the link's own if not given.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "inline",
+            "in": "query",
+            "description": "`download`: `1` to show in place (`Content-Disposition: inline`) rather than save.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "node",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "the content"
+          },
+          "206": {
+            "description": "the range asked for"
+          },
+          "401": {
+            "description": "the link has a password: unlock it first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasswordRequired"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "no such link or file",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/links/{token}/nodes": {
+      "get": {
+        "tags": [
+          "links"
+        ],
+        "summary": "The contents of a directory the link reaches – the link's own unless `parent` names one below it.",
+        "operationId": "nodes",
+        "parameters": [
+          {
+            "name": "access",
+            "in": "query",
+            "description": "The access token from `unlock`, for a link with a password.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "parent",
+            "in": "query",
+            "description": "`nodes`: the directory whose contents to list; the link's own if not given.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "inline",
+            "in": "query",
+            "description": "`download`: `1` to show in place (`Content-Disposition: inline`) rather than save.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LinkNodeView"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "the link has a password: unlock it first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasswordRequired"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "no such link or directory",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/links/{token}/unlock": {
+      "post": {
+        "tags": [
+          "links"
+        ],
+        "summary": "Opens a link with its password; the answer's `access` opens it for a while. Wrong passwords are counted: too many\nand the link refuses for a quarter of an hour.",
+        "operationId": "unlock",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Unlock"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Unlocked"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "the password is wrong",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "no such link, or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "too many wrong passwords",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/login-options": {
       "get": {
         "tags": [
@@ -9910,6 +10219,52 @@
           }
         }
       },
+      "LinkNodeView": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "nodeType",
+          "modified"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "mediaType": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "modified": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "name": {
+            "type": "string"
+          },
+          "nodeType": {
+            "type": "string",
+            "description": "`directory` or `file`."
+          },
+          "parentId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The directory it is in; none for what the link names."
+          },
+          "size": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
       "LinkProposalView": {
         "type": "object",
         "required": [
@@ -9934,21 +10289,12 @@
       "LinkView": {
         "type": "object",
         "required": [
-          "identity_provider",
-          "subject",
-          "created_at"
+          "node"
         ],
         "properties": {
-          "created_at": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "identity_provider": {
-            "type": "string"
-          },
-          "subject": {
-            "type": "string",
-            "description": "The account's `sub` at the provider."
+          "node": {
+            "$ref": "#/components/schemas/LinkNodeView",
+            "description": "What the link names."
           }
         }
       },
@@ -10556,6 +10902,17 @@
           },
           "new_password": {
             "type": "string"
+          }
+        }
+      },
+      "PasswordRequired": {
+        "type": "object",
+        "required": [
+          "passwordRequired"
+        ],
+        "properties": {
+          "passwordRequired": {
+            "type": "boolean"
           }
         }
       },
@@ -11741,6 +12098,35 @@
           "uri": {
             "type": "string",
             "description": "`otpauth://` URI for a QR code."
+          }
+        }
+      },
+      "Unlock": {
+        "type": "object",
+        "required": [
+          "password"
+        ],
+        "properties": {
+          "password": {
+            "type": "string"
+          }
+        }
+      },
+      "Unlocked": {
+        "type": "object",
+        "required": [
+          "access",
+          "expires_in"
+        ],
+        "properties": {
+          "access": {
+            "type": "string",
+            "description": "Pass it as `access` with the other requests."
+          },
+          "expires_in": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
           }
         }
       },

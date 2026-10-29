@@ -35,6 +35,8 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 - Changing kernoid's SAML key: a new key is in the metadata beside the old one and signs once activated
   (`kernoid saml-key`, `/v1/instance/saml-keys`, GraphQL `samlKeys`/`addSamlKey`/`activateSamlKey`, the
   administration's signing keys page; migration 0037).
+- Links to files and folders for people without an account, with expiry and password: made in the web app or with
+  kernoid's JMAP extension `FileLink/*`, opened at `/app/link.html#<token>` (`/v1/links/…`; migration 0038).
 - SAML single logout in the HTTP-POST binding, and at OpenID Connect `end_session`: an application's logout of a
   session from a SAML provider logs out at the provider too, then returns to the application.
 - `http.public_port`: instances reached on a port other than 443 or 80 name it in their issuer and links (JMAP);

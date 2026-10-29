@@ -9,6 +9,7 @@ export const CALENDARS = "urn:ietf:params:jmap:calendars";
 export const CONTACTS = "urn:ietf:params:jmap:contacts";
 export const FILENODE = "urn:ietf:params:jmap:filenode";
 export const FILE_VERSIONS = "https://kernoid.dev/jmap/file-versions";
+export const FILE_LINKS = "https://kernoid.dev/jmap/file-links";
 export const PRINCIPALS = "urn:ietf:params:jmap:principals";
 
 export interface JmapSession {
@@ -19,6 +20,7 @@ export interface JmapSession {
   username: string;
   state: string;
   primaryAccounts: Record<string, string>;
+  capabilities: Record<string, Record<string, unknown>>;
   accounts: Record<string, { name: string; isPersonal: boolean; isReadOnly: boolean; accountCapabilities: Record<string, unknown>; "kernoid:drive"?: boolean }>;
 }
 
