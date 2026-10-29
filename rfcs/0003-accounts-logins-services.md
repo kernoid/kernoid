@@ -61,7 +61,8 @@ How one says who one is; each finds exactly one account of the instance.
   checks whether the provider's verified email address is a native address or verified contact address of an
   account of the instance; if so, it **proposes linking** – the user logs in to that account (password, passkey)
   and the link is made – or, if the tenant allows registration, **creating a separate account** instead (without
-  that address as its contact address, which stays the other account's).
+  that address as its contact address, which stays the other account's). Confirming needs a recent login – the one
+  that proved the account.
 - Providers that serve domains of a tenant keep `auto_link` and `auto_create` (RFC 0001 7.7): there the tenant
   vouches for the addresses.
 - **On the account page** a user sees the providers linked to the account (`GET /v1/account/idp-links`) and those

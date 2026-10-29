@@ -1482,10 +1482,10 @@ impl Oidc {
     }
 
     /// Links the provider login of a proposal to the account the person proved to be theirs by logging in to it
-    /// (the session of `token`, which must be that account's).
+    /// (the session of `token`, which must be that account's and recent – the login that proved it).
     pub async fn confirm_link(&self, instance: Uuid, handoff: &str, token: &str) -> Result<()> {
         let (row, info) = self.proposal(instance, handoff).await?;
-        let session = self.identity.session(instance, token).await?;
+        let session = self.identity.recent_session(instance, token).await?;
         if session.account.id != row.existing {
             return Err(refused("Log in to the account with this address to link it."));
         }

@@ -116,7 +116,8 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 ### Fixed
 
 - Linking a provider to one's account needs a recent login, as adding a passkey or an app password does: a session
-  taken over could otherwise add a lasting way in.
+  taken over could otherwise add a lasting way in. So does confirming a proposed link (the login page always logs in
+  for it).
 - An event of a series moved to another time kept its recurrence id only as the new time: JMAP showed it without
   the changes of its override; and an override without a duration of its own lasted to the end of its day in
   iCalendar – it now takes the series' duration.
