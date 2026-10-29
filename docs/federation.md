@@ -86,8 +86,25 @@ A session that came from a SAML provider with an `slo_url` logs out there, too: 
 `POST /v1/sessions/current/logout` (the login UI's "Log out") answers with the provider's address and kernoid's signed
 LogoutRequest; the provider sends the browser back to `/idp/saml/slo`, and from there to the account page. The other
 way round, a provider's LogoutRequest at `/idp/saml/slo` – signed by one of its certificates, or refused – ends the
-sessions of that person at kernoid, and kernoid answers with its signed LogoutResponse. Only the HTTP-Redirect
-binding is supported.
+sessions of that person at kernoid, and kernoid answers with its signed LogoutResponse. kernoid takes messages in
+the HTTP-Redirect binding (signed in the query) and the HTTP-POST binding (signed in the XML); it sends its own in
+the HTTP-Redirect binding.
+
+An application's logout through OpenID Connect (`end_session` with `id_token_hint`) logs out at the provider the
+same way: the browser goes to the provider first and, once it answers, on to the application's
+`post_logout_redirect_uri`. A session an administrator ends has no browser to send there; it ends at kernoid only
+(**OPEN:** the SOAP binding, which needs no browser).
+
+### kernoid's SAML key
+
+kernoid signs requests and decrypts assertions with a key of its own per instance, made at the first SAML login.
+To change it – through the API (`/v1/instance/saml-keys`), GraphQL (`samlKeys`, `addSamlKey`, `activateSamlKey`),
+the administration's "Signing keys" page or the CLI:
+
+1. `kernoid saml-key add <instance>` – the new key is in the metadata beside the old one, and decrypts what
+   providers encrypt for it, but does not sign yet;
+2. once every provider has taken in the new metadata (or certificate), `kernoid saml-key activate <instance> <id>`;
+3. the former key leaves the metadata; it still decrypts what a provider encrypts for it.
 
 ## Provisioning with SCIM 2.0
 

@@ -488,8 +488,19 @@ As in ZITADEL, a project is "the vessel that holds your Applications and Roles"
   change them. A linked account must belong to the provider's instance (and tenant, for a tenant's provider).
 - **Profile sync** (`sync_profile`): at every login of a linked account, its display name becomes the provider's.
   Addresses are not changed by logins – that is what SCIM is for.
-- **OPEN:** rotating kernoid's SAML key (with a second certificate in the metadata for a while); the HTTP-POST binding
-  for single logout; single logout for sessions ended by an administrator or by OpenID Connect end-session.
+- **Changing kernoid's SAML key** (`instance.manage`): an instance may have several keys in `saml_sp_keys` – `next`
+  (in the metadata for signing and encryption, decrypting, not signing), `active` (signing; one) and `retired` (no
+  longer in the metadata, still decrypting what a provider encrypts for it). A new key waits until an administrator
+  activates it – once the providers have the new metadata, which kernoid cannot see; activating retires the key
+  before, in one transaction. Decrypting tries each key, since bergshamra takes the first RSA key it has.
+- **Single logout in the HTTP-POST binding:** `/idp/saml/slo` also takes a posted `SAMLRequest` or `SAMLResponse`;
+  a LogoutRequest must then carry an XML signature by one of the provider's certificates over its root element
+  (verified by bergshamra, as for Responses). kernoid answers in the HTTP-Redirect binding.
+- **Single logout at OpenID Connect end-session:** when an application logs out a session that came from a SAML
+  provider with single logout, the browser goes to the provider with kernoid's LogoutRequest first; the provider's
+  answer sends it on to the application's `post_logout_redirect_uri` (kept with the request in `saml_logouts`).
+- **OPEN:** single logout for sessions an administrator ends – there is no browser, so it needs the SOAP binding;
+  sending kernoid's own messages in the HTTP-POST binding.
 
 ### 7.8 Provisioning with SCIM 2.0 (implemented)
 

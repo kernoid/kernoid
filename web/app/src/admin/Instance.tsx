@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // For instance administrators: the instance (name, domains, login UI, passkeys, where people register), its tenants,
-// the keys that sign tokens, and the queue of outgoing mail. Creating instances and the main key stay with the
+// the keys that sign tokens and SAML requests, and the queue of outgoing mail. Creating instances and the main key stay with the
 // operator's CLI.
 
 import { For, type JSX, Show, createResource, createSignal } from "solid-js";
@@ -8,7 +8,7 @@ import { For, type JSX, Show, createResource, createSignal } from "solid-js";
 import { ok } from "../App.js";
 import { t } from "../i18n.js";
 import { setTenant } from "./api.js";
-import { type InstanceDetails, type QueuedView, type SigningKeyView, type TenantSummary, api, seg } from "./api.js";
+import { type InstanceDetails, type QueuedView, type SamlKeyView, type SigningKeyView, type TenantSummary, api, seg } from "./api.js";
 import { go } from "./AdminView.js";
 import { Buttons, Dialog, Field, Form, Head, Outcome, Select, useAction, when } from "./ui.js";
 
@@ -231,6 +231,52 @@ export function SigningKeys(): JSX.Element {
         </tbody>
       </table>
     </>
+  );
+}
+
+export function SamlKeys(): JSX.Element {
+  const action = useAction();
+  const [keys, { refetch }] = createResource(() => api<SamlKeyView[]>("GET", "/v1/instance/saml-keys"));
+  const change = async (work: () => Promise<unknown>, done?: string) => {
+    const succeeded = await action.run(work, done);
+    if (succeeded) await refetch();
+    return succeeded;
+  };
+  return (
+    <section>
+      <div class="toolbar">
+        <h2 class="grow">{t("SAML keys")}</h2>
+        <button type="button" disabled={action.busy()} onClick={() => void change(() => api("POST", "/v1/instance/saml-keys"), t("A new SAML key is in the metadata now. Once the providers have taken it in, sign with it."))}>
+          {t("New key")}
+        </button>
+      </div>
+      <p class="muted small">{t("kernoid's key for SAML providers: it signs requests and decrypts assertions. A new key is in the metadata beside the old one until it signs.")}</p>
+      <Outcome action={action} />
+      <table class="nodes">
+        <tbody>
+          <For each={ok(keys) ?? []} fallback={<tr><td class="muted">{t("No SAML key yet; one is made at the first SAML login.")}</td></tr>}>
+            {(key) => (
+              <tr>
+                <td class="name">
+                  <code class="small">{key.fingerprint.match(/.{2}/g)?.join(":")}</code>
+                  <div class="small muted">{t("made {date}", { date: when(key.created_at) })}</div>
+                </td>
+                <td class="small">
+                  {t(key.state)} <span class="muted">{t("since {date}", { date: when(key.state_since) })}</span>
+                </td>
+                <td class="end">
+                  <Show when={key.state === "next"}>
+                    <button type="button" class="quiet" disabled={action.busy()} onClick={() => void change(() => api("POST", `/v1/instance/saml-keys/${seg(key.id)}/activate`))}>
+                      {t("Sign with it now")}
+                    </button>
+                  </Show>
+                </td>
+              </tr>
+            )}
+          </For>
+        </tbody>
+      </table>
+    </section>
   );
 }
 

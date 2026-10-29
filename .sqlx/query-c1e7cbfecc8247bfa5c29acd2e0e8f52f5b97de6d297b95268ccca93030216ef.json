@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE saml_sp_keys SET state = 'retired', state_since = now() WHERE instance_id = $1 AND state = 'active'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c1e7cbfecc8247bfa5c29acd2e0e8f52f5b97de6d297b95268ccca93030216ef"
+}

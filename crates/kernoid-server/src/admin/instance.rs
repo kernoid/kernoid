@@ -9,7 +9,7 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use kernoid_identity::{DomainName, IdentityError, TenantInfo, role::Role};
-use kernoid_oidc::keys::KeyInfo;
+use kernoid_oidc::{federation::SamlKeyInfo, keys::KeyInfo};
 use serde::{Deserialize, Serialize};
 
 use super::{AdminSession, AssignmentView, created, id, no_content, principal, respond, respond_oidc};
@@ -370,4 +370,64 @@ pub(crate) async fn remove_signing_key(
     Path(kid): Path<String>,
 ) -> Response {
     respond_oidc(state.oidc.admin_remove_signing_key(&admin, &kid).await, no_content)
+}
+
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub(crate) struct SamlKeyView {
+    id: String,
+    /// `next` (in the metadata, not signing yet), `active` (signing) or `retired` (only decrypting).
+    state: String,
+    created_at: DateTime<Utc>,
+    state_since: DateTime<Utc>,
+    /// SHA-256 of the certificate, in hex.
+    fingerprint: String,
+}
+
+impl From<SamlKeyInfo> for SamlKeyView {
+    fn from(key: SamlKeyInfo) -> Self {
+        Self {
+            id: key.id.to_string(),
+            state: key.state,
+            created_at: key.created_at,
+            state_since: key.state_since,
+            fingerprint: key.fingerprint,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub(crate) struct NewSamlKey {
+    id: String,
+}
+
+/// kernoid's SAML keys of the instance (needs `instance.read`).
+#[utoipa::path(get, path = "/v1/instance/saml-keys", tag = "instance", responses((status = 200, body = [SamlKeyView])))]
+pub(crate) async fn saml_keys(State(state): State<AppState>, AdminSession(admin): AdminSession) -> Response {
+    respond_oidc(state.oidc.admin_saml_keys(&admin).await, |keys| {
+        Json(keys.into_iter().map(SamlKeyView::from).collect::<Vec<_>>()).into_response()
+    })
+}
+
+/// Starts a change of kernoid's SAML key (needs `instance.manage`): a new key, in the metadata at once – for the
+/// providers to take in – and signing once activated. If a key waits already, that one.
+#[utoipa::path(post, path = "/v1/instance/saml-keys", tag = "instance", responses((status = 201, body = NewSamlKey)))]
+pub(crate) async fn add_saml_key(State(state): State<AppState>, AdminSession(admin): AdminSession) -> Response {
+    respond_oidc(state.oidc.admin_add_saml_key(&admin).await, |id| {
+        (StatusCode::CREATED, Json(NewSamlKey { id: id.to_string() })).into_response()
+    })
+}
+
+/// Signs with the waiting SAML key from now on; the key active so far leaves the metadata (needs `instance.manage`).
+#[utoipa::path(post, path = "/v1/instance/saml-keys/{id}/activate", tag = "instance",
+    responses((status = 204), (status = 400, body = Problem)))]
+pub(crate) async fn activate_saml_key(
+    State(state): State<AppState>,
+    AdminSession(admin): AdminSession,
+    Path(key): Path<String>,
+) -> Response {
+    let key = match id(&key, "the key") {
+        Ok(key) => key,
+        Err(error) => return crate::sessions::problem(error),
+    };
+    respond_oidc(state.oidc.admin_activate_saml_key(&admin, key).await, no_content)
 }

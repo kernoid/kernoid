@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM saml_logouts WHERE request_id = $1 AND instance_id = $2 AND expires_at > now()\n                 RETURNING idp_id, return_to",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "idp_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "saml_logouts",
+            "name": "idp_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "return_to",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "saml_logouts",
+            "name": "return_to"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "2913d4ea2305dd649b4bfef1258cb2e6e946a21f1c734316569a8b60824edf37"
+}

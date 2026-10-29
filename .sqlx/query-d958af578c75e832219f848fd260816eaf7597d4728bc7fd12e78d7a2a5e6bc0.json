@@ -1,0 +1,88 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, state, created_at, state_since, private_sealed, certificate FROM saml_sp_keys\n             WHERE instance_id = $1\n             ORDER BY CASE state WHEN 'active' THEN 0 WHEN 'next' THEN 1 ELSE 2 END, created_at DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "saml_sp_keys",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "state",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "saml_sp_keys",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "saml_sp_keys",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "state_since",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "saml_sp_keys",
+            "name": "state_since"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "private_sealed",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "saml_sp_keys",
+            "name": "private_sealed"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "certificate",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "saml_sp_keys",
+            "name": "certificate"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "d958af578c75e832219f848fd260816eaf7597d4728bc7fd12e78d7a2a5e6bc0"
+}

@@ -192,14 +192,48 @@ pub(crate) async fn saml_metadata(
     response
 }
 
-/// kernoid's SAML single logout service (HTTP-Redirect binding): a provider's LogoutRequest – kernoid ends the
-/// sessions and answers – or its LogoutResponse to kernoid's request.
+/// kernoid's SAML single logout service (HTTP-Redirect binding; `saml_slo_post` for HTTP-POST): a provider's
+/// LogoutRequest – kernoid ends the sessions and answers – or its LogoutResponse to kernoid's request.
 pub(crate) async fn saml_slo(
     State(state): State<AppState>,
     CurrentInstance(instance): CurrentInstance,
     axum::extract::RawQuery(query): axum::extract::RawQuery,
 ) -> Response {
     match state.oidc.saml_slo(&instance, query.as_deref().unwrap_or("")).await {
+        Ok(Some(target)) => Redirect::to(&target).into_response(),
+        Ok(None) => (StatusCode::OK, "Logged out.").into_response(),
+        Err(error) => oidc::problem(error),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct SloForm {
+    #[serde(rename = "SAMLRequest")]
+    saml_request: Option<String>,
+    #[serde(rename = "SAMLResponse")]
+    saml_response: Option<String>,
+    #[serde(rename = "RelayState")]
+    relay_state: Option<String>,
+}
+
+/// kernoid's SAML single logout service in the HTTP-POST binding: the same as `saml_slo`, the message signed in
+/// its XML.
+pub(crate) async fn saml_slo_post(
+    State(state): State<AppState>,
+    CurrentInstance(instance): CurrentInstance,
+    axum::Form(form): axum::Form<SloForm>,
+) -> Response {
+    let message = match kernoid_oidc::saml::read_post(
+        form.saml_request.as_deref(),
+        form.saml_response.as_deref(),
+        form.relay_state.as_deref(),
+    ) {
+        Ok(message) => message,
+        Err(error) => {
+            return Problem::new(StatusCode::BAD_REQUEST).detail(error.to_string()).into_response();
+        }
+    };
+    match state.oidc.saml_slo_message(&instance, message).await {
         Ok(Some(target)) => Redirect::to(&target).into_response(),
         Ok(None) => (StatusCode::OK, "Logged out.").into_response(),
         Err(error) => oidc::problem(error),

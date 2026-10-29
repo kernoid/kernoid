@@ -5682,6 +5682,78 @@
         }
       }
     },
+    "/v1/instance/saml-keys": {
+      "get": {
+        "tags": [
+          "instance"
+        ],
+        "summary": "kernoid's SAML keys of the instance (needs `instance.read`).",
+        "operationId": "saml_keys",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SamlKeyView"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "instance"
+        ],
+        "summary": "Starts a change of kernoid's SAML key (needs `instance.manage`): a new key, in the metadata at once – for the\nproviders to take in – and signing once activated. If a key waits already, that one.",
+        "operationId": "add_saml_key",
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NewSamlKey"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/instance/saml-keys/{id}/activate": {
+      "post": {
+        "tags": [
+          "instance"
+        ],
+        "summary": "Signs with the waiting SAML key from now on; the key active so far leaves the metadata (needs `instance.manage`).",
+        "operationId": "activate_saml_key",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {},
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/instance/signing-keys": {
       "get": {
         "tags": [
@@ -10306,6 +10378,17 @@
           }
         }
       },
+      "NewSamlKey": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        }
+      },
       "NewScimToken": {
         "type": "object",
         "required": [
@@ -11135,6 +11218,37 @@
               "$ref": "#/components/schemas/RoleView"
             },
             "description": "The roles there are: built in and the tenant's own."
+          }
+        }
+      },
+      "SamlKeyView": {
+        "type": "object",
+        "required": [
+          "id",
+          "state",
+          "created_at",
+          "state_since",
+          "fingerprint"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "fingerprint": {
+            "type": "string",
+            "description": "SHA-256 of the certificate, in hex."
+          },
+          "id": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "description": "`next` (in the metadata, not signing yet), `active` (signing) or `retired` (only decrypting)."
+          },
+          "state_since": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },

@@ -14,7 +14,7 @@ import { Audit } from "./Audit.js";
 import { Domains } from "./Domains.js";
 import { Drives } from "./Drives.js";
 import { Groups } from "./Groups.js";
-import { Instance, MailQueue, SigningKeys, Tenants } from "./Instance.js";
+import { Instance, MailQueue, SamlKeys, SigningKeys, Tenants } from "./Instance.js";
 import { Applications, Projects } from "./Projects.js";
 import { Providers, Scim } from "./Providers.js";
 import { Roles } from "./Roles.js";
@@ -232,6 +232,7 @@ export function AdminView(): JSX.Element {
                 </Match>
                 <Match when={page() === "signing-keys"}>
                   <SigningKeys />
+                  <SamlKeys />
                 </Match>
                 <Match when={page() === "mail-queue"}>
                   <MailQueue />

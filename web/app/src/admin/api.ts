@@ -243,6 +243,13 @@ export interface SigningKeyView {
   state_since: string;
   created_at: string;
 }
+export interface SamlKeyView {
+  id: string;
+  state: string;
+  state_since: string;
+  created_at: string;
+  fingerprint: string;
+}
 export interface QueuedView {
   message: string;
   address: string;

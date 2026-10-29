@@ -270,20 +270,28 @@ pub fn logout_response_url(
     redirect_url(slo_url, "SAMLResponse", &xml, relay_state, Some(key))
 }
 
-/// A message received in the HTTP-Redirect binding.
+/// A single logout message received in the HTTP-Redirect or the HTTP-POST binding.
 #[derive(Debug, Clone)]
-pub struct Redirected {
+pub struct SloMessage {
     /// `SAMLRequest` or `SAMLResponse`.
     pub request: bool,
-    /// The inflated XML.
+    /// The XML (inflated, for the redirect binding).
     pub xml: String,
     pub relay_state: Option<String>,
-    /// What the signature covers, its algorithm and value – if signed.
-    signed: Option<(String, String, Vec<u8>)>,
+    signed: Signed,
+}
+
+#[derive(Debug, Clone)]
+enum Signed {
+    /// HTTP-Redirect: what the signature covers, its algorithm and value.
+    Query(String, String, Vec<u8>),
+    /// HTTP-POST: the signature, if any, is in the XML.
+    Xml,
+    None,
 }
 
 /// Reads a redirect-binding message from the raw (still URL-encoded) query.
-pub fn read_redirect(raw_query: &str) -> Result<Redirected, SamlError> {
+pub fn read_redirect(raw_query: &str) -> Result<SloMessage, SamlError> {
     let raw: Vec<(&str, &str)> = raw_query.split('&').filter_map(|pair| pair.split_once('=')).collect();
     let find = |name: &str| raw.iter().find(|(key, _)| *key == name).map(|(_, value)| *value);
     let decode = |value: &str| {
@@ -312,17 +320,42 @@ pub fn read_redirect(raw_query: &str) -> Result<Redirected, SamlError> {
             let signature = decode(signature)
                 .and_then(|signature| STANDARD.decode(signature).ok())
                 .ok_or_else(|| SamlError("the signature is not base64".into()))?;
-            Some((octets, algorithm, signature))
+            Signed::Query(octets, algorithm, signature)
         }
-        _ => None,
+        _ => Signed::None,
     };
-    Ok(Redirected { request, xml, relay_state, signed })
+    Ok(SloMessage { request, xml, relay_state, signed })
 }
 
-impl Redirected {
-    /// Whether one of the provider's certificates verifies the redirect signature; unsigned messages fail.
+/// Reads a POST-binding message: the form's `SAMLRequest` or `SAMLResponse` (base64, not deflated) and `RelayState`.
+pub fn read_post(
+    saml_request: Option<&str>,
+    saml_response: Option<&str>,
+    relay_state: Option<&str>,
+) -> Result<SloMessage, SamlError> {
+    let (request, encoded) = match (saml_request, saml_response) {
+        (Some(message), None) => (true, message),
+        (None, Some(message)) => (false, message),
+        _ => return fail("expected a SAMLRequest or a SAMLResponse"),
+    };
+    let compact: String = encoded.chars().filter(|c| !c.is_whitespace()).collect();
+    if compact.len() > MAX_RESPONSE * 4 / 3 + 4 {
+        return fail("the message is too large");
+    }
+    let bytes = STANDARD.decode(compact).map_err(|_| SamlError("the message is not base64".into()))?;
+    let xml = String::from_utf8(bytes).map_err(|_| SamlError("the message is not UTF-8".into()))?;
+    Ok(SloMessage { request, xml, relay_state: relay_state.map(str::to_owned), signed: Signed::Xml })
+}
+
+impl SloMessage {
+    /// Whether one of the provider's certificates verifies the message's signature – over the query (redirect
+    /// binding) or, enveloped, over the message's root element (POST binding); unsigned messages fail.
     pub fn verify(&self, certificates: &[Vec<u8>]) -> Result<(), SamlError> {
-        let Some((octets, algorithm, signature)) = &self.signed else { return fail("the message is not signed") };
+        let (octets, algorithm, signature) = match &self.signed {
+            Signed::Query(octets, algorithm, signature) => (octets, algorithm, signature),
+            Signed::Xml => return verify_root(&self.xml, certificates),
+            Signed::None => return fail("the message is not signed"),
+        };
         if !ACCEPTED_SIGNATURES.contains(&algorithm.as_str()) {
             return fail(format!("the signature algorithm {algorithm} is not accepted"));
         }
@@ -336,6 +369,31 @@ impl Redirected {
         }
         fail("the signature does not verify with the provider's certificates")
     }
+}
+
+/// Whether a valid XML signature by one of `certificates` covers the root element of `xml`.
+fn verify_root(xml: &str, certificates: &[Vec<u8>]) -> Result<(), SamlError> {
+    let doc = parse_message(xml)?;
+    let root = doc.document_element().ok_or_else(|| SamlError("the message is empty".into()))?;
+    let mut keys = KeysManager::new();
+    for certificate in certificates {
+        if let Ok(key) = bergshamra::keys::loader::load_x509_cert_der(certificate) {
+            keys.add_key(key);
+        }
+    }
+    let results = match verify_all_document(&DsigContext::new(keys), &doc) {
+        Ok(results) => results,
+        Err(bergshamra::Error::MissingElement(element)) if element.contains("Signature") => {
+            return fail("the message is not signed");
+        }
+        Err(e) => return Err(SamlError(format!("the signature cannot be verified: {e}"))),
+    };
+    let covered = results.iter().any(|result| {
+        result.all_reference_digests_verified()
+            && matches!(result, VerifyResult::Valid { references, .. }
+                if references.iter().any(|reference| reference.resolved_node == Some(root)))
+    });
+    if covered { Ok(()) } else { fail("the signature does not verify with the provider's certificates") }
 }
 
 /// What kernoid takes from a provider's LogoutRequest.
@@ -355,7 +413,7 @@ fn parse_message(xml: &str) -> Result<Document<'_>, SamlError> {
     uppsala::parse(xml).map_err(|_| SamlError("the message is not well-formed XML".into()))
 }
 
-/// Reads a LogoutRequest (after its redirect signature was verified); checks destination and validity.
+/// Reads a LogoutRequest (after its signature was verified); checks destination and validity.
 pub fn read_logout_request(xml: &str, slo_url: &str, now: DateTime<Utc>) -> Result<LogoutRequestIn, SamlError> {
     let doc = parse_message(xml)?;
     let root = doc.document_element().ok_or_else(|| SamlError("the message is empty".into()))?;
@@ -391,10 +449,11 @@ pub fn read_logout_response(xml: &str) -> Result<(String, String, bool), SamlErr
     Ok((in_response_to.to_owned(), issuer, doc.get_attribute(code, "Value") == Some(SUCCESS)))
 }
 
-/// kernoid's service provider metadata for an instance – to give a provider's administrator: its key (for signed
-/// requests and encrypted assertions), the ACS and the single logout service.
-pub fn metadata(sp_entity_id: &str, acs_url: &str, slo_url: &str, certificate: &[u8]) -> String {
-    let key = |usage: &str| {
+/// kernoid's service provider metadata for an instance – to give a provider's administrator: its keys (for signed
+/// requests and encrypted assertions; while a key changes, the new one beside the old), the ACS and the single
+/// logout service (HTTP-Redirect and HTTP-POST).
+pub fn metadata(sp_entity_id: &str, acs_url: &str, slo_url: &str, certificates: &[Vec<u8>]) -> String {
+    let key = |usage: &str, certificate: &[u8]| {
         format!(
             concat!(
                 r#"<md:KeyDescriptor use="{usage}"><ds:KeyInfo xmlns:ds="http://www.w3.org/2000/09/xmldsig#">"#,
@@ -414,14 +473,16 @@ pub fn metadata(sp_entity_id: &str, acs_url: &str, slo_url: &str, certificate: &
             r#"{signing}{encryption}"#,
             r#"<md:SingleLogoutService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect" "#,
             r#"Location="{slo}"/>"#,
+            r#"<md:SingleLogoutService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" "#,
+            r#"Location="{slo}"/>"#,
             r#"<md:NameIDFormat>urn:oasis:names:tc:SAML:2.0:nameid-format:persistent</md:NameIDFormat>"#,
             r#"<md:AssertionConsumerService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" "#,
             r#"Location="{acs}" index="0" isDefault="true"/>"#,
             r#"</md:SPSSODescriptor></md:EntityDescriptor>"#
         ),
         entity = escape(sp_entity_id),
-        signing = key("signing"),
-        encryption = key("encryption"),
+        signing = certificates.iter().map(|certificate| key("signing", certificate)).collect::<String>(),
+        encryption = certificates.iter().map(|certificate| key("encryption", certificate)).collect::<String>(),
         slo = escape(slo_url),
         acs = escape(acs_url),
     )
@@ -439,8 +500,8 @@ pub struct Expected<'a> {
     /// The ID of kernoid's AuthnRequest.
     pub request_id: &'a str,
     pub now: DateTime<Utc>,
-    /// kernoid's SAML key, to decrypt an encrypted Assertion.
-    pub decryption_key: Option<&'a SpKey>,
+    /// kernoid's SAML keys, to decrypt an encrypted Assertion with the one it was encrypted for.
+    pub decryption_keys: &'a [SpKey],
 }
 
 /// What kernoid takes from a verified Assertion.
@@ -557,14 +618,22 @@ pub fn verify_response(encoded: &str, expected: Expected<'_>) -> Result<SamlLogi
             read_assertion(&doc, *assertion, &expected)
         }
         ([], [_]) => {
-            let Some(key) = expected.decryption_key else {
+            if expected.decryption_keys.is_empty() {
                 return fail("the assertion is encrypted, but kernoid has no SAML key");
-            };
+            }
             let response_signed = covers(&doc, &[response])?;
-            let mut keys = KeysManager::new();
-            keys.add_key(key.key()?);
-            let decrypted = bergshamra::decrypt(&EncContext::new(keys), &xml)
-                .map_err(|e| SamlError(format!("the assertion cannot be decrypted: {e}")))?;
+            // bergshamra takes the first RSA key it has: each key is tried on its own.
+            let mut decrypted = Err(SamlError("the assertion cannot be decrypted".into()));
+            for key in expected.decryption_keys {
+                let mut keys = KeysManager::new();
+                keys.add_key(key.key()?);
+                decrypted = bergshamra::decrypt(&EncContext::new(keys), &xml)
+                    .map_err(|e| SamlError(format!("the assertion cannot be decrypted: {e}")));
+                if decrypted.is_ok() {
+                    break;
+                }
+            }
+            let decrypted = decrypted?;
             let doc = parse_message(&decrypted)?;
             let response = doc.document_element().ok_or_else(|| SamlError("the response is empty".into()))?;
             let wrapper = only_child(&doc, response, ASSERTION, "EncryptedAssertion")?;

@@ -61,7 +61,7 @@ fn expected<'a>(certificates: &'a [Vec<u8>]) -> Expected<'a> {
         acs_url: ACS,
         request_id: REQUEST,
         now: Utc::now(),
-        decryption_key: None,
+        decryption_keys: &[],
     }
 }
 
@@ -261,6 +261,7 @@ struct SamlSetup {
     oidc: Oidc,
     identity: Identity,
     instance: kernoid_identity::InstanceInfo,
+    tenant: uuid::Uuid,
     signer: Signer,
     idp: uuid::Uuid,
 }
@@ -296,7 +297,7 @@ async fn saml_setup(pool: &PgPool, sign_requests: bool) -> SamlSetup {
         }),
     };
     let idp = oidc.add_identity_provider(tenant, &settings, None, "test").await.unwrap();
-    SamlSetup { oidc, identity, instance, signer, idp }
+    SamlSetup { oidc, identity, instance, tenant, signer, idp }
 }
 
 /// A login at the provider with `make` turning the signed Response into what the provider posts; returns the session.
@@ -334,7 +335,8 @@ async fn encrypted_assertions_and_signed_requests(pool: PgPool) {
     let signed = valid(&s.signer);
     let foreign = kernoid_oidc::saml::SpKey::generate("https://other.example/idp/saml").unwrap();
     let for_others = encrypt_assertion(&signed, &foreign.certificate);
-    let with_key = Expected { decryption_key: Some(&key), ..expected(&certificates) };
+    let keys = [key.clone()];
+    let with_key = Expected { decryption_keys: &keys, ..expected(&certificates) };
     assert!(verify_response(&encode(&for_others), with_key).is_err());
     let mine = encrypt_assertion(&signed, &key.certificate);
     verify_response(&encode(&mine), with_key).unwrap();
@@ -387,4 +389,151 @@ async fn single_logout_both_ways(pool: PgPool) {
     message.verify(std::slice::from_ref(&key.certificate)).unwrap();
     assert!(!message.request && message.xml.contains(r#"InResponseTo="_idp-lo""#));
     assert_eq!(message.relay_state.as_deref(), Some("r"));
+}
+
+/// A LogoutRequest of the provider with an enveloped signature template, for the HTTP-POST binding.
+fn logout_request_template(id: &str) -> String {
+    format!(
+        r##"<samlp:LogoutRequest xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="{id}" Version="2.0" IssueInstant="2026-01-01T00:00:00Z" Destination="https://login.firma.de/idp/saml/slo"><saml:Issuer>{IDP}</saml:Issuer><ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#"><ds:SignedInfo><ds:CanonicalizationMethod Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/><ds:SignatureMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha256"/><ds:Reference URI="#{id}"><ds:Transforms><ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/><ds:Transform Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/></ds:Transforms><ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/><ds:DigestValue></ds:DigestValue></ds:Reference></ds:SignedInfo><ds:SignatureValue></ds:SignatureValue></ds:Signature><saml:NameID>ext-bob</saml:NameID><samlp:SessionIndex>_s1</samlp:SessionIndex></samlp:LogoutRequest>"##
+    )
+}
+
+#[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
+async fn single_logout_in_the_post_binding(pool: PgPool) {
+    let s = saml_setup(&pool, false).await;
+    let post = |xml: &str| kernoid_oidc::saml::read_post(Some(&encode(xml)), None, Some("p")).unwrap();
+    let session = saml_login(&s, |response| response).await;
+    // Unsigned, signed by someone else, or changed after signing: refused, and the session lives on.
+    let unsigned = logout_request_template("_post-lo");
+    assert!(s.oidc.saml_slo_message(&s.instance, post(&unsigned)).await.is_err());
+    let other = new_signer();
+    assert!(s.oidc.saml_slo_message(&s.instance, post(&sign(&other, &unsigned))).await.is_err());
+    let signed = sign(&s.signer, &unsigned);
+    let tampered = signed.replace(">ext-bob<", ">ext-alice<");
+    assert!(s.oidc.saml_slo_message(&s.instance, post(&tampered)).await.is_err());
+    s.identity.session(s.instance.id, &session.token).await.unwrap();
+    // Signed by the provider: the session ends, and kernoid answers in the redirect binding.
+    let answer = s.oidc.saml_slo_message(&s.instance, post(&signed)).await.unwrap().expect("a LogoutResponse");
+    assert!(s.identity.session(s.instance.id, &session.token).await.is_err(), "the session has ended");
+    let message = kernoid_oidc::saml::read_redirect(url::Url::parse(&answer).unwrap().query().unwrap()).unwrap();
+    assert!(!message.request && message.xml.contains(r#"InResponseTo="_post-lo""#));
+    assert_eq!(message.relay_state.as_deref(), Some("p"));
+    // A message in neither field, or in both, is not one.
+    assert!(kernoid_oidc::saml::read_post(None, None, None).is_err());
+    assert!(kernoid_oidc::saml::read_post(Some("x"), Some("y"), None).is_err());
+}
+
+#[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
+async fn the_saml_key_changes_with_an_overlap(pool: PgPool) {
+    let s = saml_setup(&pool, true).await;
+    let old = s.oidc.saml_sp_key(&s.instance).await.unwrap();
+    let id = s.oidc.add_saml_key(&s.instance).await.unwrap();
+    // Asking again names the waiting key again.
+    assert_eq!(s.oidc.add_saml_key(&s.instance).await.unwrap(), id);
+    let keys = s.oidc.saml_keys(s.instance.id).await.unwrap();
+    let states: Vec<&str> = keys.iter().map(|key| key.state.as_str()).collect();
+    assert_eq!(states, ["active", "next"]);
+    assert_eq!(keys[0].fingerprint.len(), 64);
+    // Both certificates are in the metadata; requests are still signed with the old key.
+    let metadata = s.oidc.saml_metadata(&s.instance).await.unwrap();
+    assert_eq!(metadata.matches("<md:KeyDescriptor use=\"signing\">").count(), 2);
+    assert!(metadata.contains(&STANDARD.encode(&old.certificate)));
+    let start = s.oidc.start_idp_login(&s.instance, s.idp, None, None).await.unwrap();
+    let message = kernoid_oidc::saml::read_redirect(url::Url::parse(&start).unwrap().query().unwrap()).unwrap();
+    message.verify(std::slice::from_ref(&old.certificate)).unwrap();
+    // A provider that took in the new certificate already encrypts for it: decrypted.
+    let new_certificate = metadata
+        .split("<ds:X509Certificate>")
+        .skip(1)
+        .map(|rest| STANDARD.decode(rest.split('<').next().unwrap()).unwrap())
+        .find(|certificate| *certificate != old.certificate)
+        .unwrap();
+    let session = saml_login(&s, |response| encrypt_assertion(&response, &new_certificate)).await;
+    assert_eq!(session.account.address, "bob@firma.de");
+
+    // Only the waiting key can be activated.
+    assert!(s.oidc.activate_saml_key(s.instance.id, keys[0].id).await.is_err());
+    s.oidc.activate_saml_key(s.instance.id, id).await.unwrap();
+    let new = s.oidc.saml_sp_key(&s.instance).await.unwrap();
+    assert_eq!(new.certificate, new_certificate);
+    let metadata = s.oidc.saml_metadata(&s.instance).await.unwrap();
+    assert_eq!(metadata.matches("<md:KeyDescriptor use=\"signing\">").count(), 1);
+    assert!(!metadata.contains(&STANDARD.encode(&old.certificate)));
+    let start = s.oidc.start_idp_login(&s.instance, s.idp, None, None).await.unwrap();
+    let message = kernoid_oidc::saml::read_redirect(url::Url::parse(&start).unwrap().query().unwrap()).unwrap();
+    message.verify(std::slice::from_ref(&new.certificate)).unwrap();
+    // What a provider still encrypts for the retired key is read all the same.
+    let old_certificate = old.certificate.clone();
+    let session = saml_login(&s, |response| encrypt_assertion(&response, &old_certificate)).await;
+    assert_eq!(session.account.address, "bob@firma.de");
+    let states: Vec<String> = s.oidc.saml_keys(s.instance.id).await.unwrap().into_iter().map(|key| key.state).collect();
+    assert_eq!(states, ["active", "retired"]);
+}
+
+#[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
+async fn an_application_logout_logs_out_at_the_provider_too(pool: PgPool) {
+    use kernoid_oidc::{AuthorizeRequest, Authorized, EndSessionRequest, TokenRequest, application::Kind};
+    const CALLBACK: &str = "https://app.firma.de/callback";
+    const LOGGED_OUT: &str = "https://app.firma.de/logged-out";
+    let s = saml_setup(&pool, false).await;
+    let session = saml_login(&s, |response| response).await;
+    let project = s.identity.add_project(s.tenant, "Project", "test").await.unwrap();
+    let (app, secret) = s
+        .oidc
+        .add_application(s.tenant, project, "App", Kind::Confidential, &[CALLBACK.into()], &[LOGGED_OUT.into()], "test")
+        .await
+        .unwrap();
+    let request = AuthorizeRequest {
+        response_type: Some("code".into()),
+        client_id: Some(app.to_string()),
+        redirect_uri: Some(CALLBACK.into()),
+        scope: Some("openid".into()),
+        state: Some("xyz".into()),
+        nonce: Some("n".into()),
+        // PKCE: the challenge of the verifier from RFC 7636, appendix B.
+        code_challenge: Some("E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM".into()),
+        code_challenge_method: Some("S256".into()),
+        prompt: None,
+        max_age: None,
+    };
+    let authorized = s.oidc.authorize(&s.instance, &request).await;
+    let Ok(Authorized::Login { auth_request, .. }) = authorized else { panic!("expected a login: {authorized:?}") };
+    let callback = s.oidc.finish(&s.instance, &auth_request, &session.token, false).await.unwrap();
+    let code = url::Url::parse(&callback).unwrap().query_pairs().find(|(k, _)| k == "code").unwrap().1.into_owned();
+    let tokens = s
+        .oidc
+        .token(
+            &s.instance,
+            &TokenRequest {
+                grant_type: Some("authorization_code".into()),
+                code: Some(code),
+                redirect_uri: Some(CALLBACK.into()),
+                code_verifier: Some("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk".into()),
+                client_id: Some(app.to_string()),
+                client_secret: secret,
+                ..TokenRequest::default()
+            },
+        )
+        .await
+        .unwrap();
+
+    // The application logs out: the browser goes to the provider first …
+    let logout = EndSessionRequest {
+        id_token_hint: Some(tokens.id_token.clone()),
+        post_logout_redirect_uri: Some(LOGGED_OUT.into()),
+        state: Some("bye".into()),
+        ..EndSessionRequest::default()
+    };
+    let ended = s.oidc.end_session(&s.instance, &logout).await.unwrap();
+    let next = ended.redirect.expect("to the provider");
+    assert!(next.starts_with("https://idp.example/saml/slo?"), "{next}");
+    assert!(s.identity.session(s.instance.id, &session.token).await.is_err(), "the session has ended");
+    let message = kernoid_oidc::saml::read_redirect(url::Url::parse(&next).unwrap().query().unwrap()).unwrap();
+    let request_id = message.xml.split("ID=\"").nth(1).unwrap().split('"').next().unwrap().to_owned();
+    // … and, once it answers, back to the application.
+    let response = format!(
+        r#"<samlp:LogoutResponse xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_lr2" Version="2.0" IssueInstant="2026-01-01T00:00:00Z" InResponseTo="{request_id}"><saml:Issuer>{IDP}</saml:Issuer><samlp:Status><samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/></samlp:Status></samlp:LogoutResponse>"#
+    );
+    let back = s.oidc.saml_slo(&s.instance, &redirect_query("SAMLResponse", &response, "logout", None)).await.unwrap();
+    assert_eq!(back.as_deref(), Some("https://app.firma.de/logged-out?state=bye"));
 }

@@ -32,6 +32,11 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   `POST /v1/tenant/domains/{domain}/dkim-rotate`, GraphQL `rotateDkimKey`, the administration's domains page) signs
   once DNS shows its record, and the old one stops (migration 0036). Existing domains get an Ed25519 key that signs
   once its record (`kernoid-ed1._domainkey`, shown by the DNS check) is published.
+- Changing kernoid's SAML key: a new key is in the metadata beside the old one and signs once activated
+  (`kernoid saml-key`, `/v1/instance/saml-keys`, GraphQL `samlKeys`/`addSamlKey`/`activateSamlKey`, the
+  administration's signing keys page; migration 0037).
+- SAML single logout in the HTTP-POST binding, and at OpenID Connect `end_session`: an application's logout of a
+  session from a SAML provider logs out at the provider too, then returns to the application.
 - `http.public_port`: instances reached on a port other than 443 or 80 name it in their issuer and links (JMAP);
   `deploy/compose` sets 8080.
 

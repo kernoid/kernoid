@@ -30,6 +30,7 @@ use kernoid_identity::{
     session::{ClientMeta, NewSession},
 };
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use sqlx::PgConnection;
 use url::Url;
 use uuid::Uuid;
@@ -269,6 +270,27 @@ pub struct IdpInfo {
     pub active: bool,
 }
 
+/// The SAML login a session came from (`idp_sessions`).
+#[derive(Debug, Clone)]
+pub(crate) struct SamlSession {
+    idp_id: Uuid,
+    name_id: String,
+    name_id_format: Option<String>,
+    session_index: Option<String>,
+}
+
+/// One of kernoid's SAML keys of an instance (RFC 0001, 7.7).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SamlKeyInfo {
+    pub id: Uuid,
+    /// `next` (in the metadata, not signing), `active` (signing) or `retired` (only decrypting).
+    pub state: String,
+    pub created_at: chrono::DateTime<Utc>,
+    pub state_since: chrono::DateTime<Utc>,
+    /// SHA-256 of the certificate, in hex – what providers show.
+    pub fingerprint: String,
+}
+
 /// What the login UI learns about an address: whether its logins go to a provider.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IdpSummary {
@@ -375,55 +397,141 @@ impl Oidc {
         format!("{}/idp/saml/slo", self.issuer(primary_domain))
     }
 
-    /// kernoid's SAML service provider metadata for an instance, with its SAML key.
+    /// kernoid's SAML service provider metadata for an instance, with its SAML keys – the active one and, while a
+    /// key changes, the next one.
     pub async fn saml_metadata(&self, instance: &InstanceInfo) -> Result<String> {
-        let key = self.saml_sp_key(instance).await?;
+        self.saml_sp_key(instance).await?;
+        let certificates: Vec<Vec<u8>> = self
+            .saml_sp_keys(instance.id)
+            .await?
+            .into_iter()
+            .filter(|(info, _)| info.state != "retired")
+            .map(|(_, key)| key.certificate)
+            .collect();
         let domain = &instance.primary_domain;
         Ok(crate::saml::metadata(
             &self.saml_entity_id(domain),
             &self.saml_acs_url(domain),
             &self.saml_slo_url(domain),
-            &key.certificate,
+            &certificates,
         ))
     }
 
-    /// kernoid's SAML key of the instance – made at first use, sealed with the main key.
-    pub async fn saml_sp_key(&self, instance: &InstanceInfo) -> Result<crate::saml::SpKey> {
+    /// kernoid's SAML keys of an instance, the active one first, then the next, then retired ones (newest first).
+    async fn saml_sp_keys(&self, instance: Uuid) -> Result<Vec<(SamlKeyInfo, crate::saml::SpKey)>> {
+        let context = format!("kernoid/saml-sp-key/v1/{instance}").into_bytes();
+        let rows = sqlx::query!(
+            "SELECT id, state, created_at, state_since, private_sealed, certificate FROM saml_sp_keys
+             WHERE instance_id = $1
+             ORDER BY CASE state WHEN 'active' THEN 0 WHEN 'next' THEN 1 ELSE 2 END, created_at DESC",
+            instance,
+        )
+        .fetch_all(self.pool())
+        .await
+        .map_err(internal)?;
+        let mut keys = Vec::new();
+        for row in rows {
+            let (private, _) = self.main.open_secret(&context, &row.private_sealed).map_err(internal)?;
+            let fingerprint = Sha256::digest(&row.certificate).iter().map(|byte| format!("{byte:02X}")).collect();
+            let info = SamlKeyInfo {
+                id: row.id,
+                state: row.state,
+                created_at: row.created_at,
+                state_since: row.state_since,
+                fingerprint,
+            };
+            let key =
+                crate::saml::SpKey { private: zeroize::Zeroizing::new(private.to_vec()), certificate: row.certificate };
+            keys.push((info, key));
+        }
+        Ok(keys)
+    }
+
+    /// Makes a SAML key for the instance and stores it in `state`; false if another one in that state was quicker.
+    async fn make_saml_key(&self, instance: &InstanceInfo, state: &str) -> Result<bool> {
         let context = format!("kernoid/saml-sp-key/v1/{}", instance.id).into_bytes();
+        let entity = self.saml_entity_id(&instance.primary_domain);
+        let key = tokio::task::spawn_blocking(move || crate::saml::SpKey::generate(&entity))
+            .await
+            .map_err(internal)?
+            .map_err(internal)?;
+        let sealed = self.main.seal_secret(&context, &key.private).map_err(internal)?;
+        let inserted = sqlx::query!(
+            "INSERT INTO saml_sp_keys (id, instance_id, state, private_sealed, certificate) VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT DO NOTHING",
+            Uuid::now_v7(),
+            instance.id,
+            state,
+            sealed,
+            key.certificate,
+        )
+        .execute(self.pool())
+        .await
+        .map_err(internal)?;
+        Ok(inserted.rows_affected() == 1)
+    }
+
+    /// kernoid's active SAML key of the instance – made at first use, sealed with the main key.
+    pub async fn saml_sp_key(&self, instance: &InstanceInfo) -> Result<crate::saml::SpKey> {
         for _ in 0..2 {
-            let row = sqlx::query!(
-                "SELECT private_sealed, certificate FROM saml_sp_keys WHERE instance_id = $1",
-                instance.id,
-            )
-            .fetch_optional(self.pool())
-            .await
-            .map_err(internal)?;
-            if let Some(row) = row {
-                let (private, _) = self.main.open_secret(&context, &row.private_sealed).map_err(internal)?;
-                return Ok(crate::saml::SpKey {
-                    private: zeroize::Zeroizing::new(private.to_vec()),
-                    certificate: row.certificate,
-                });
+            if let Some((info, key)) = self.saml_sp_keys(instance.id).await?.into_iter().next()
+                && info.state == "active"
+            {
+                return Ok(key);
             }
-            let entity = self.saml_entity_id(&instance.primary_domain);
-            let key = tokio::task::spawn_blocking(move || crate::saml::SpKey::generate(&entity))
-                .await
-                .map_err(internal)?
-                .map_err(internal)?;
-            let sealed = self.main.seal_secret(&context, &key.private).map_err(internal)?;
             // Another process may make one at the same time; the first one stays, and both read it.
-            sqlx::query!(
-                "INSERT INTO saml_sp_keys (instance_id, private_sealed, certificate) VALUES ($1, $2, $3)
-                 ON CONFLICT (instance_id) DO NOTHING",
-                instance.id,
-                sealed,
-                key.certificate,
-            )
-            .execute(self.pool())
-            .await
-            .map_err(internal)?;
+            self.make_saml_key(instance, "active").await?;
         }
         Err(internal("kernoid's SAML key could not be stored"))
+    }
+
+    /// kernoid's SAML keys of the instance, as administrators see them.
+    pub async fn saml_keys(&self, instance: Uuid) -> Result<Vec<SamlKeyInfo>> {
+        Ok(self.saml_sp_keys(instance).await?.into_iter().map(|(info, _)| info).collect())
+    }
+
+    /// Starts a change of kernoid's SAML key: a new key, `next` – in the metadata and decrypting, not signing yet –
+    /// until it is activated, once the providers have taken in the new metadata. Returns its id; if a key waits
+    /// already, that one's.
+    pub async fn add_saml_key(&self, instance: &InstanceInfo) -> Result<Uuid> {
+        self.saml_sp_key(instance).await?;
+        for _ in 0..2 {
+            let keys = self.saml_sp_keys(instance.id).await?;
+            if let Some((info, _)) = keys.into_iter().find(|(info, _)| info.state == "next") {
+                return Ok(info.id);
+            }
+            self.make_saml_key(instance, "next").await?;
+        }
+        Err(internal("kernoid's SAML key could not be stored"))
+    }
+
+    /// Signs with the waiting key `key` from now on; the key active so far is retired: it leaves the metadata and only
+    /// decrypts what providers still encrypt for it.
+    pub async fn activate_saml_key(&self, instance: Uuid, key: Uuid) -> Result<()> {
+        let mut transaction = self.pool().begin().await.map_err(internal)?;
+        let waiting = sqlx::query_scalar!(
+            "SELECT id FROM saml_sp_keys WHERE id = $1 AND instance_id = $2 AND state = 'next' FOR UPDATE",
+            key,
+            instance,
+        )
+        .fetch_optional(&mut *transaction)
+        .await
+        .map_err(internal)?;
+        if waiting.is_none() {
+            return Err(refused("only the waiting key can be activated"));
+        }
+        sqlx::query!(
+            "UPDATE saml_sp_keys SET state = 'retired', state_since = now() WHERE instance_id = $1 AND state = 'active'",
+            instance,
+        )
+        .execute(&mut *transaction)
+        .await
+        .map_err(internal)?;
+        sqlx::query!("UPDATE saml_sp_keys SET state = 'active', state_since = now() WHERE id = $1", key)
+            .execute(&mut *transaction)
+            .await
+            .map_err(internal)?;
+        transaction.commit().await.map_err(internal)
     }
 
     /// What to register at a provider: the redirect URI (OpenID Connect) or the ACS URL (SAML).
@@ -1169,7 +1277,9 @@ impl Oidc {
         let certificates: Vec<Vec<u8>> =
             saml.certificates.iter().filter_map(|certificate| crate::saml::certificate(certificate).ok()).collect();
         let (sp, acs) = (self.saml_entity_id(&instance.primary_domain), self.saml_acs_url(&instance.primary_domain));
-        let key = self.saml_sp_key(instance).await?;
+        self.saml_sp_key(instance).await?;
+        let keys: Vec<crate::saml::SpKey> =
+            self.saml_sp_keys(instance.id).await?.into_iter().map(|(_, key)| key).collect();
         let expected = crate::saml::Expected {
             idp_entity_id: &info.settings.issuer,
             certificates: &certificates,
@@ -1177,7 +1287,7 @@ impl Oidc {
             acs_url: &acs,
             request_id: request,
             now: Utc::now(),
-            decryption_key: Some(&key),
+            decryption_keys: &keys,
         };
         let verified = crate::saml::verify_response(response, expected).map_err(|error| {
             tracing::warn!(idp = %login.idp, %error, "SAML response refused");
@@ -1527,15 +1637,33 @@ impl Oidc {
     /// too.
     pub async fn logout(&self, instance: &InstanceInfo, token: &str) -> Result<Option<String>> {
         let session = self.identity.session(instance.id, token).await?;
-        let saml = sqlx::query!(
+        let saml = self.saml_session(session.id).await?;
+        self.identity.terminate_session(instance.id, token).await?;
+        let Some(saml) = saml else { return Ok(None) };
+        self.saml_logout_url(instance, saml, None).await
+    }
+
+    /// The SAML login a session came from, if any – read before the session ends.
+    pub(crate) async fn saml_session(&self, session: Uuid) -> Result<Option<SamlSession>> {
+        sqlx::query_as!(
+            SamlSession,
             "SELECT idp_id, name_id, name_id_format, session_index FROM idp_sessions WHERE session_id = $1",
-            session.id,
+            session,
         )
         .fetch_optional(self.pool())
         .await
-        .map_err(internal)?;
-        self.identity.terminate_session(instance.id, token).await?;
-        let Some(saml) = saml else { return Ok(None) };
+        .map_err(internal)
+    }
+
+    /// Where to send the browser so that the person logs out at the SAML provider of an ended session, too: the
+    /// provider's single logout service with kernoid's signed LogoutRequest – if the provider has one and is on.
+    /// Once it answers, the browser goes on to `return_to`, else to the login UI.
+    pub(crate) async fn saml_logout_url(
+        &self,
+        instance: &InstanceInfo,
+        saml: SamlSession,
+        return_to: Option<&str>,
+    ) -> Result<Option<String>> {
         let info = self.identity_provider(saml.idp_id).await?;
         let Some(slo_url) = info.settings.saml.as_ref().and_then(|settings| settings.slo_url.clone()) else {
             return Ok(None);
@@ -1546,12 +1674,13 @@ impl Oidc {
         let key = self.saml_sp_key(instance).await?;
         let request_id = random_secret("_")?;
         sqlx::query!(
-            "INSERT INTO saml_logouts (request_id, instance_id, idp_id, expires_at)
-             VALUES ($1, $2, $3, now() + make_interval(secs => $4))",
+            "INSERT INTO saml_logouts (request_id, instance_id, idp_id, expires_at, return_to)
+             VALUES ($1, $2, $3, now() + make_interval(secs => $4), $5)",
             request_id,
             instance.id,
             info.id,
             LOGIN_LIFETIME.as_secs() as f64,
+            return_to,
         )
         .execute(self.pool())
         .await
@@ -1570,21 +1699,32 @@ impl Oidc {
         crate::saml::logout_request_url(&request, &key).map(Some).map_err(|e| refused(e.to_string()))
     }
 
-    /// kernoid's single logout service at `/idp/saml/slo` (HTTP-Redirect binding), given the raw query:
-    /// - a provider's **LogoutRequest** – signed, or refused – ends the sessions of that NameID (and SessionIndex),
-    ///   and kernoid answers with its signed LogoutResponse;
-    /// - a provider's **LogoutResponse** to kernoid's request sends the browser back to the login UI.
-    ///
-    /// Returns where to send the browser, or – with no address to answer – `None`.
+    /// kernoid's single logout service at `/idp/saml/slo` in the HTTP-Redirect binding, given the raw query; see
+    /// [`Oidc::saml_slo_message`].
     pub async fn saml_slo(&self, instance: &InstanceInfo, raw_query: &str) -> Result<Option<String>> {
         let message = crate::saml::read_redirect(raw_query).map_err(|e| refused(e.to_string()))?;
+        self.saml_slo_message(instance, message).await
+    }
+
+    /// kernoid's single logout service, for a message in either binding:
+    /// - a provider's **LogoutRequest** – signed, or refused – ends the sessions of that NameID (and SessionIndex),
+    ///   and kernoid answers with its signed LogoutResponse (HTTP-Redirect binding);
+    /// - a provider's **LogoutResponse** to kernoid's request sends the browser on: to the application that asked to
+    ///   log out (OpenID Connect), else to the login UI.
+    ///
+    /// Returns where to send the browser, or – with no address to answer – `None`.
+    pub async fn saml_slo_message(
+        &self,
+        instance: &InstanceInfo,
+        message: crate::saml::SloMessage,
+    ) -> Result<Option<String>> {
         let slo_here = self.saml_slo_url(&instance.primary_domain);
         if !message.request {
             let (in_response_to, issuer, _) =
                 crate::saml::read_logout_response(&message.xml).map_err(|e| refused(e.to_string()))?;
-            let idp = sqlx::query_scalar!(
+            let logout = sqlx::query!(
                 "DELETE FROM saml_logouts WHERE request_id = $1 AND instance_id = $2 AND expires_at > now()
-                 RETURNING idp_id",
+                 RETURNING idp_id, return_to",
                 in_response_to,
                 instance.id,
             )
@@ -1592,11 +1732,11 @@ impl Oidc {
             .await
             .map_err(internal)?
             .ok_or_else(|| refused("this logout is unknown or has expired"))?;
-            let info = self.identity_provider(idp).await?;
+            let info = self.identity_provider(logout.idp_id).await?;
             if info.settings.issuer != issuer {
                 return Err(refused("the logout response comes from another provider"));
             }
-            return Ok(Some(format!("{}/account", self.login_url(instance))));
+            return Ok(Some(logout.return_to.unwrap_or_else(|| format!("{}/account", self.login_url(instance)))));
         }
         let request = crate::saml::read_logout_request(&message.xml, &slo_here, Utc::now())
             .map_err(|e| refused(e.to_string()))?;
@@ -1681,6 +1821,30 @@ impl Oidc {
             IdpOwner::Instance(_) => Permission::InstanceManage,
         })?;
         Ok(owner)
+    }
+
+    /// The instance an administrator administers.
+    async fn admin_instance(&self, admin: &Admin) -> Result<InstanceInfo> {
+        let instances = self.identity.instances().await?;
+        instances
+            .into_iter()
+            .find(|instance| instance.id == admin.instance())
+            .ok_or_else(|| IdentityError::NotFound("the instance").into())
+    }
+
+    pub async fn admin_saml_keys(&self, admin: &Admin) -> Result<Vec<SamlKeyInfo>> {
+        admin.require(Permission::InstanceRead)?;
+        self.saml_keys(admin.instance()).await
+    }
+
+    pub async fn admin_add_saml_key(&self, admin: &Admin) -> Result<Uuid> {
+        admin.require(Permission::InstanceManage)?;
+        self.add_saml_key(&self.admin_instance(admin).await?).await
+    }
+
+    pub async fn admin_activate_saml_key(&self, admin: &Admin, key: Uuid) -> Result<()> {
+        admin.require(Permission::InstanceManage)?;
+        self.activate_saml_key(admin.instance(), key).await
     }
 
     pub async fn admin_identity_providers(&self, admin: &Admin) -> Result<Vec<IdpInfo>> {

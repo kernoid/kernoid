@@ -477,6 +477,29 @@ impl From<KeyInfo> for SigningKey {
 }
 
 #[derive(Debug, SimpleObject)]
+pub struct SamlKey {
+    id: String,
+    /// `next` (in the metadata, not signing yet), `active` (signing) or `retired` (only decrypting).
+    state: String,
+    created_at: DateTime<Utc>,
+    state_since: DateTime<Utc>,
+    /// SHA-256 of the certificate, in hex.
+    fingerprint: String,
+}
+
+impl From<kernoid_oidc::federation::SamlKeyInfo> for SamlKey {
+    fn from(key: kernoid_oidc::federation::SamlKeyInfo) -> Self {
+        Self {
+            id: key.id.to_string(),
+            state: key.state,
+            created_at: key.created_at,
+            state_since: key.state_since,
+            fingerprint: key.fingerprint,
+        }
+    }
+}
+
+#[derive(Debug, SimpleObject)]
 pub struct IdentityProviderObject {
     id: String,
     name: String,
@@ -879,6 +902,13 @@ impl AdminQuery {
     async fn signing_keys(&self, context: &Context<'_>) -> async_graphql::Result<Vec<SigningKey>> {
         let (_, admin) = admin(context).await?;
         let keys = context.data::<Oidc>()?.admin_signing_keys(&admin).await.map_err(oidc_error)?;
+        Ok(keys.into_iter().map(Into::into).collect())
+    }
+
+    /// kernoid's SAML keys of the instance (needs `instance.read`).
+    async fn saml_keys(&self, context: &Context<'_>) -> async_graphql::Result<Vec<SamlKey>> {
+        let (_, admin) = admin(context).await?;
+        let keys = context.data::<Oidc>()?.admin_saml_keys(&admin).await.map_err(oidc_error)?;
         Ok(keys.into_iter().map(Into::into).collect())
     }
 }
@@ -1713,6 +1743,21 @@ impl AdminMutation {
     async fn remove_signing_key(&self, context: &Context<'_>, kid: String) -> async_graphql::Result<bool> {
         let (_, admin) = admin(context).await?;
         context.data::<Oidc>()?.admin_remove_signing_key(&admin, &kid).await.map_err(oidc_error)?;
+        Ok(true)
+    }
+
+    /// Starts a change of kernoid's SAML key (needs `instance.manage`): a new key, in the metadata at once and
+    /// signing once activated. Returns its id; if a key waits already, that one's.
+    async fn add_saml_key(&self, context: &Context<'_>) -> async_graphql::Result<String> {
+        let (_, admin) = admin(context).await?;
+        Ok(context.data::<Oidc>()?.admin_add_saml_key(&admin).await.map_err(oidc_error)?.to_string())
+    }
+
+    /// Signs with the waiting SAML key from now on; the active one leaves the metadata (needs `instance.manage`).
+    async fn activate_saml_key(&self, context: &Context<'_>, id: String) -> async_graphql::Result<bool> {
+        let (_, admin) = admin(context).await?;
+        let key = uuid(&id, "the key")?;
+        context.data::<Oidc>()?.admin_activate_saml_key(&admin, key).await.map_err(oidc_error)?;
         Ok(true)
     }
 }

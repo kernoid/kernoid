@@ -119,7 +119,10 @@ content is encrypted with it, older content stays readable.
 2. wait until clients have fetched the JWKS again, then `kernoid signing-key activate <instance> <kid>`;
 3. the former key stays published, inactive; remove it once its ID tokens have expired (an hour).
 
-The worker also rotates them on its own (`[oidc]` in the [configuration]({{ '/configuration/' | relative_url }})): a
+**kernoid's SAML key** of an instance changes the same way, by hand: `kernoid saml-key add`, then – once the SAML
+providers have the new metadata – `kernoid saml-key activate` (see [Federation]({{ '/federation/' | relative_url }})).
+
+The worker also rotates signing keys on its own (`[oidc]` in the [configuration]({{ '/configuration/' | relative_url }})): a
 key that has signed for `key_rotation_days` (90) gets a successor, published for `key_publish_hours` (24) before it
 signs; a key that no longer signs is removed after `retired_key_days` (30). Its changes appear in the audit log as
 `system:key-rotation`.

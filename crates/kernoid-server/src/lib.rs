@@ -308,6 +308,8 @@ fn rest() -> OpenApiRouter<AppState> {
         .routes(routes!(admin::instance::signing_keys, admin::instance::add_signing_key))
         .routes(routes!(admin::instance::activate_signing_key))
         .routes(routes!(admin::instance::remove_signing_key))
+        .routes(routes!(admin::instance::saml_keys, admin::instance::add_saml_key))
+        .routes(routes!(admin::instance::activate_saml_key))
 }
 
 /// The OpenAPI description of the REST API, as `/openapi.json` serves it.
@@ -361,7 +363,7 @@ pub fn router(state: AppState, modules: Router, http: &Http) -> Router {
         .route("/idp/callback", get(federation::callback))
         .route("/idp/saml/acs", post(federation::saml_acs))
         .route("/idp/saml/metadata", get(federation::saml_metadata))
-        .route("/idp/saml/slo", get(federation::saml_slo))
+        .route("/idp/saml/slo", get(federation::saml_slo).post(federation::saml_slo_post))
         .route("/oidc/v1/end_session", get(oidc::end_session_get).post(oidc::end_session_post))
         .route("/oauth/v2/introspect", post(oidc::introspect))
         .merge(browser_called)

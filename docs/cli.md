@@ -165,3 +165,6 @@ Project roles, authorizations and everything else a tenant does for itself go th
 | `kernoid signing-key add <INSTANCE>` | creates a key: published at once, signing only once activated |
 | `kernoid signing-key activate <INSTANCE> <KID>` | signs with this key from now on; the one before stays published, inactive |
 | `kernoid signing-key remove <INSTANCE> <KID>` | removes an inactive key whose tokens have expired |
+| `kernoid saml-key list <INSTANCE>` | kernoid's SAML keys: id, state, SHA-256 fingerprint of the certificate |
+| `kernoid saml-key add <INSTANCE>` | a new SAML key: in the metadata at once, signing only once activated |
+| `kernoid saml-key activate <INSTANCE> <ID>` | signs with the waiting key from now on; the one before leaves the metadata |

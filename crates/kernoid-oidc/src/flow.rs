@@ -935,8 +935,10 @@ impl Oidc {
                 Some(with_query(uri, &pairs)?)
             }
         };
+        let mut redirect = redirect;
         let mut frontchannel = Vec::new();
         if let Some(session) = session {
+            let saml = self.saml_session(session).await?;
             let issuer = self.issuer(&instance.primary_domain);
             let uris = sqlx::query_scalar!(
                 r#"SELECT a.frontchannel_logout_uri AS "uri!" FROM session_applications sa
@@ -959,6 +961,14 @@ impl Oidc {
                 .execute(self.pool())
                 .await
                 .map_err(store)?;
+            // A session from a SAML login: the browser logs out at the provider first, then goes on.
+            if let Some(saml) = saml {
+                match self.saml_logout_url(instance, saml, redirect.as_deref()).await {
+                    Ok(Some(url)) => redirect = Some(url),
+                    Ok(None) => {}
+                    Err(error) => tracing::warn!(%error, "SAML single logout at end_session failed"),
+                }
+            }
         }
         Ok(EndSession { redirect, frontchannel })
     }

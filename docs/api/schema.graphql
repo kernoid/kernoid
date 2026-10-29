@@ -725,6 +725,15 @@ type MutationRoot {
 	activateSigningKey(kid: String!): Boolean!
 	removeSigningKey(kid: String!): Boolean!
 	"""
+	Starts a change of kernoid's SAML key (needs `instance.manage`): a new key, in the metadata at once and
+	signing once activated. Returns its id; if a key waits already, that one's.
+	"""
+	addSamlKey: String!
+	"""
+	Signs with the waiting SAML key from now on; the active one leaves the metadata (needs `instance.manage`).
+	"""
+	activateSamlKey(id: String!): Boolean!
+	"""
 	Creates a shared mailbox (needs `accounts.manage`); returns its id.
 	"""
 	addSharedMailbox(address: String!, displayName: String!): String!
@@ -1066,6 +1075,10 @@ type QueryRoot {
 	"""
 	signingKeys: [SigningKey!]!
 	"""
+	kernoid's SAML keys of the instance (needs `instance.read`).
+	"""
+	samlKeys: [SamlKey!]!
+	"""
 	An account's mail: usage, quota and mailboxes (needs `accounts.manage`).
 	"""
 	accountMail(account: String!): MailOverview!
@@ -1256,6 +1269,20 @@ input SamlInput {
 	The provider's single logout service (HTTP-Redirect binding).
 	"""
 	sloUrl: String
+}
+
+type SamlKey {
+	id: String!
+	"""
+	`next` (in the metadata, not signing yet), `active` (signing) or `retired` (only decrypting).
+	"""
+	state: String!
+	createdAt: DateTime!
+	stateSince: DateTime!
+	"""
+	SHA-256 of the certificate, in hex.
+	"""
+	fingerprint: String!
 }
 
 type ScimToken {

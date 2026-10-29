@@ -63,6 +63,9 @@ enum Command {
     /// The keys an instance signs ID tokens with.
     #[command(subcommand)]
     SigningKey(SigningKeyCommand),
+    /// kernoid's SAML keys of an instance (for SAML identity providers).
+    #[command(subcommand)]
+    SamlKey(SamlKeyCommand),
     /// Projects: a tenant's applications and the roles they know.
     #[command(subcommand)]
     Project(ProjectCommand),
@@ -304,6 +307,22 @@ enum AppCommand {
         backchannel_logout_uri: Option<String>,
         #[arg(long)]
         frontchannel_logout_uri: Option<String>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum SamlKeyCommand {
+    List {
+        instance: Uuid,
+    },
+    /// Start a change: a new key, in the metadata at once, signing only once activated.
+    Add {
+        instance: Uuid,
+    },
+    /// Sign with the waiting key from now on; the key active so far leaves the metadata.
+    Activate {
+        instance: Uuid,
+        id: Uuid,
     },
 }
 
@@ -763,6 +782,7 @@ async fn main() -> anyhow::Result<()> {
         Command::Account(command) => account(&config, command).await,
         Command::App(command) => app(&config, command).await,
         Command::SigningKey(command) => signing_key(&config, command).await,
+        Command::SamlKey(command) => saml_key(&config, command).await,
         Command::Project(command) => project(&config, command).await,
         Command::Acme(AcmeCommand::Status) => acme_status(&config).await,
         Command::Mail(command) => mail(&config, command).await,
@@ -2083,6 +2103,28 @@ async fn signing_key(config: &Config, command: SigningKeyCommand) -> anyhow::Res
         SigningKeyCommand::Add { instance } => println!("{}", oidc.add_signing_key(instance, OPERATOR).await?),
         SigningKeyCommand::Activate { instance, kid } => oidc.activate_signing_key(instance, &kid, OPERATOR).await?,
         SigningKeyCommand::Remove { instance, kid } => oidc.remove_signing_key(instance, &kid, OPERATOR).await?,
+    }
+    Ok(())
+}
+
+async fn saml_key(config: &Config, command: SamlKeyCommand) -> anyhow::Result<()> {
+    let oidc = oidc(config).await?;
+    match command {
+        SamlKeyCommand::List { instance } => {
+            for key in oidc.saml_keys(instance).await? {
+                println!("{}  {:<7}  since {}  {}", key.id, key.state, key.state_since, key.fingerprint);
+            }
+        }
+        SamlKeyCommand::Add { instance } => {
+            let info = Identity::new(EventStore::new(kernoid_store::connect(&config.database).await?))
+                .instances()
+                .await?
+                .into_iter()
+                .find(|info| info.id == instance)
+                .context("no such instance")?;
+            println!("{}", oidc.add_saml_key(&info).await?);
+        }
+        SamlKeyCommand::Activate { instance, id } => oidc.activate_saml_key(instance, id).await?,
     }
     Ok(())
 }

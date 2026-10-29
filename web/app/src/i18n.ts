@@ -339,6 +339,12 @@ const de: Record<string, string> = {
   "made {date}": "erzeugt {date}",
   "since {date}": "seit {date}",
   "Sign with it now": "Jetzt damit signieren",
+  "SAML keys": "SAML-Schlüssel",
+  "A new SAML key is in the metadata now. Once the providers have taken it in, sign with it.":
+    "Ein neuer SAML-Schlüssel steht jetzt in den Metadaten. Sobald die Anbieter ihn übernommen haben, damit signieren.",
+  "kernoid's key for SAML providers: it signs requests and decrypts assertions. A new key is in the metadata beside the old one until it signs.":
+    "kernoids Schlüssel für SAML-Anbieter: Er signiert Anfragen und entschlüsselt Assertions. Ein neuer Schlüssel steht neben dem alten in den Metadaten, bis er signiert.",
+  "No SAML key yet; one is made at the first SAML login.": "Noch kein SAML-Schlüssel; er entsteht bei der ersten SAML-Anmeldung.",
   "Delete this key? Tokens it signed are no longer valid.": "Diesen Schlüssel löschen? Von ihm signierte Tokens sind dann ungültig.",
   "Mail queue": "Mail-Warteschlange",
   "Outgoing mail not yet delivered, newest first; kernoid tries again by itself.": "Ausgehende, noch nicht zugestellte E-Mails, neueste zuerst; kernoid versucht es selbst erneut.",
@@ -476,6 +482,8 @@ const de: Record<string, string> = {
   requested: "angefragt",
   initial: "neu",
   active: "aktiv",
+  next: "wartend",
+  retired: "ausgemustert",
   queued: "wartet",
   deferred: "aufgeschoben",
   failed: "fehlgeschlagen",
