@@ -221,7 +221,7 @@ label.button.disabled { opacity: 0.5; cursor: default; }
 .progress progress { width: 100%; }
 .shares li.row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
 
-/* The account (account/AccountView.tsx) and how programs connect (account/Connect.tsx). */
+/* The account (account/AccountView.svelte) and how programs connect (account/Connect.svelte). */
 .page { overflow: auto; min-height: 0; padding: 20px 24px 48px; }
 .page > * { max-width: 760px; }
 .page h1 { font-size: 1.5rem; margin: 0; }

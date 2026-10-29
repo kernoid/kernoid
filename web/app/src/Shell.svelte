@@ -12,6 +12,7 @@
   import CalendarView from "./calendar/CalendarView.svelte";
   import ContactsView from "./contacts/ContactsView.svelte";
   import FilesView from "./files/FilesView.svelte";
+  import AccountView from "./account/AccountView.svelte";
   import Pending from "./pending/Pending.svelte";
   import { THEMES, setTheme, theme } from "./theme.svelte.js";
 
@@ -104,6 +105,8 @@
         <ContactsView />
       {:else if current === "files"}
         <FilesView />
+      {:else if current === "account"}
+        <AccountView />
       {:else}
         <Pending name={current} />
       {/if}
