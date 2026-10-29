@@ -16,7 +16,7 @@
           "health"
         ],
         "summary": "Liveness: the process runs. Says nothing about its dependencies, so an orchestrator does not restart every\nprocess when the database is away.",
-        "operationId": "live",
+        "operationId": "get_healthz",
         "responses": {
           "200": {
             "description": "the process runs",
@@ -37,7 +37,7 @@
           "health"
         ],
         "summary": "Readiness: PostgreSQL and object storage answer. Details of failures go to the log, not to the caller.",
-        "operationId": "ready",
+        "operationId": "get_readyz",
         "responses": {
           "200": {
             "description": "ready",
@@ -68,7 +68,7 @@
           "account"
         ],
         "summary": "Changes the display name of one's own account.",
-        "operationId": "change_profile",
+        "operationId": "patch_v1_account",
         "requestBody": {
           "content": {
             "application/json": {
@@ -100,7 +100,7 @@
           "account"
         ],
         "summary": "The app passwords of one's own account (never the passwords themselves).",
-        "operationId": "list",
+        "operationId": "get_v1_account_app_passwords",
         "responses": {
           "200": {
             "content": {
@@ -121,7 +121,7 @@
           "account"
         ],
         "summary": "Makes an app password for one's own account (needs a recent login); the answer holds it, this once.",
-        "operationId": "add",
+        "operationId": "post_v1_account_app_passwords",
         "requestBody": {
           "content": {
             "application/json": {
@@ -161,7 +161,7 @@
           "account"
         ],
         "summary": "Removes an app password of one's own account: the program using it can no longer log in.",
-        "operationId": "remove",
+        "operationId": "delete_v1_account_app_passwords_id",
         "parameters": [
           {
             "name": "id",
@@ -195,7 +195,7 @@
           "account"
         ],
         "summary": "One's own calendars and address books, and those shared with one, with one's level on each.",
-        "operationId": "own_list",
+        "operationId": "get_v1_account_collections",
         "responses": {
           "200": {
             "content": {
@@ -228,7 +228,7 @@
           "account"
         ],
         "summary": "Who may use a calendar or address book one owns or administers (`admin`).",
-        "operationId": "own_access",
+        "operationId": "get_v1_account_collections_owner_collection_access",
         "parameters": [
           {
             "name": "owner",
@@ -286,7 +286,7 @@
           "account"
         ],
         "summary": "Shares a calendar or address book one owns or administers with an account or a group of one's tenant.",
-        "operationId": "share",
+        "operationId": "put_v1_account_collections_owner_collection_access",
         "parameters": [
           {
             "name": "owner",
@@ -352,7 +352,7 @@
           "account"
         ],
         "summary": "Stops sharing a calendar or address book with someone.",
-        "operationId": "unshare",
+        "operationId": "delete_v1_account_collections_owner_collection_access",
         "parameters": [
           {
             "name": "grantee",
@@ -410,7 +410,7 @@
           "account"
         ],
         "summary": "The applications one's own account agreed to, with the scopes.",
-        "operationId": "own",
+        "operationId": "get_v1_account_consents",
         "responses": {
           "200": {
             "content": {
@@ -443,7 +443,7 @@
           "account"
         ],
         "summary": "Withdraws one's own consent to an application, and the application's tokens – offline access included.",
-        "operationId": "revoke_own",
+        "operationId": "delete_v1_account_consents_application",
         "parameters": [
           {
             "name": "application",
@@ -484,7 +484,7 @@
           "account"
         ],
         "summary": "The second factors of one's own account – for the login UI to ask for one, or to have one set up.",
-        "operationId": "factors",
+        "operationId": "get_v1_account_factors",
         "responses": {
           "200": {
             "content": {
@@ -504,7 +504,7 @@
           "account"
         ],
         "summary": "The providers one's own account is linked to.",
-        "operationId": "own_links",
+        "operationId": "get_v1_account_idp_links",
         "responses": {
           "200": {
             "content": {
@@ -535,7 +535,7 @@
           "account"
         ],
         "summary": "Starts linking another provider to one's own account (RFC 0003, 3); answers with where to send the browser.",
-        "operationId": "start_link",
+        "operationId": "post_v1_account_idp_links",
         "requestBody": {
           "content": {
             "application/json": {
@@ -585,7 +585,7 @@
           "account"
         ],
         "summary": "Unlinks a provider from one's own account – after a recent login, and never the last way to log in.",
-        "operationId": "unlink_own",
+        "operationId": "delete_v1_account_idp_links_idp_subject",
         "parameters": [
           {
             "name": "idp",
@@ -645,7 +645,7 @@
           "account"
         ],
         "summary": "The providers one's own account may be linked to: its tenant's and the whole instance's.",
-        "operationId": "linkable_providers",
+        "operationId": "get_v1_account_idp_providers",
         "responses": {
           "200": {
             "content": {
@@ -678,7 +678,7 @@
           "account"
         ],
         "summary": "The language of the emails kernoid writes to one's own account – invitations sent for it, notices.",
-        "operationId": "language",
+        "operationId": "get_v1_account_language",
         "responses": {
           "200": {
             "content": {
@@ -706,7 +706,7 @@
           "account"
         ],
         "summary": "Chooses that language; null follows the tenant's.",
-        "operationId": "set_language",
+        "operationId": "put_v1_account_language",
         "requestBody": {
           "content": {
             "application/json": {
@@ -748,7 +748,7 @@
           "account"
         ],
         "summary": "Who may use one's own mail.",
-        "operationId": "own_access",
+        "operationId": "get_v1_account_mail_access",
         "responses": {
           "200": {
             "content": {
@@ -779,7 +779,7 @@
           "account"
         ],
         "summary": "Shares one's own mail – the whole store or one mailbox – with an account or a group of one's tenant.",
-        "operationId": "share_own",
+        "operationId": "put_v1_account_mail_access",
         "requestBody": {
           "content": {
             "application/json": {
@@ -818,7 +818,7 @@
           "account"
         ],
         "summary": "Stops sharing one's own mail with someone.",
-        "operationId": "unshare_own",
+        "operationId": "delete_v1_account_mail_access",
         "parameters": [
           {
             "name": "grantee",
@@ -872,7 +872,7 @@
           "account"
         ],
         "summary": "The mail shared with one's own account: other accounts' stores one may use.",
-        "operationId": "own_shared",
+        "operationId": "get_v1_account_mail_shared",
         "responses": {
           "200": {
             "content": {
@@ -905,7 +905,7 @@
           "account"
         ],
         "summary": "The passkeys of one's own account.",
-        "operationId": "passkeys",
+        "operationId": "get_v1_account_passkeys",
         "responses": {
           "200": {
             "content": {
@@ -928,7 +928,7 @@
           "account"
         ],
         "summary": "Finishes registering a passkey.",
-        "operationId": "finish_registration",
+        "operationId": "post_v1_account_passkeys_finish",
         "requestBody": {
           "content": {
             "application/json": {
@@ -968,7 +968,7 @@
           "account"
         ],
         "summary": "Starts registering a passkey for one's own account (needs a recent session).",
-        "operationId": "start_registration",
+        "operationId": "post_v1_account_passkeys_start",
         "responses": {
           "200": {
             "content": {
@@ -988,7 +988,7 @@
           "account"
         ],
         "summary": "Removes a passkey of one's own account.",
-        "operationId": "remove_passkey",
+        "operationId": "delete_v1_account_passkeys_id",
         "parameters": [
           {
             "name": "id",
@@ -1022,7 +1022,7 @@
           "account"
         ],
         "summary": "Changes the password of one's own account: needs a recent session and the current password. Every other session\nof the account ends.",
-        "operationId": "change_password",
+        "operationId": "put_v1_account_password",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1054,7 +1054,7 @@
           "account"
         ],
         "summary": "Generates new recovery codes for one's own account (needs a recent session); earlier ones stop working.",
-        "operationId": "generate_recovery_codes",
+        "operationId": "post_v1_account_recovery_codes",
         "responses": {
           "200": {
             "content": {
@@ -1084,7 +1084,7 @@
           "account"
         ],
         "summary": "Proposes a TOTP secret for one's own account (needs a recent session).",
-        "operationId": "start_totp",
+        "operationId": "post_v1_account_totp",
         "responses": {
           "200": {
             "content": {
@@ -1122,7 +1122,7 @@
           "account"
         ],
         "summary": "Removes TOTP from one's own account.",
-        "operationId": "remove_totp",
+        "operationId": "delete_v1_account_totp",
         "responses": {
           "204": {
             "description": "removed"
@@ -1136,7 +1136,7 @@
           "account"
         ],
         "summary": "Confirms the proposed TOTP secret with a first code.",
-        "operationId": "confirm_totp",
+        "operationId": "post_v1_account_totp_confirm",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1170,7 +1170,7 @@
           "accounts"
         ],
         "summary": "The tenant's accounts (needs `directory.read`).",
-        "operationId": "list",
+        "operationId": "get_v1_accounts",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -1205,7 +1205,7 @@
           "accounts"
         ],
         "summary": "Creates an account (needs `accounts.manage`).",
-        "operationId": "add",
+        "operationId": "post_v1_accounts",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -1259,7 +1259,7 @@
           "accounts"
         ],
         "summary": "One account (needs `directory.read`).",
-        "operationId": "get",
+        "operationId": "get_v1_accounts_id",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -1308,7 +1308,7 @@
           "accounts"
         ],
         "summary": "Changes an account's display name, login name or active state (needs `accounts.manage`).",
-        "operationId": "change",
+        "operationId": "patch_v1_accounts_id",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -1361,7 +1361,7 @@
           "accounts"
         ],
         "summary": "An account's addresses: the primary one first, then its aliases (needs `directory.read`).",
-        "operationId": "addresses",
+        "operationId": "get_v1_accounts_id_addresses",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -1415,7 +1415,7 @@
           "accounts"
         ],
         "summary": "Adds an alias on a verified domain of the tenant (needs `accounts.manage`).",
-        "operationId": "add_alias",
+        "operationId": "put_v1_accounts_id_aliases_address",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -1465,7 +1465,7 @@
           "accounts"
         ],
         "summary": "Removes an alias; the login name cannot be removed (needs `accounts.manage`).",
-        "operationId": "remove_alias",
+        "operationId": "delete_v1_accounts_id_aliases_address",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -1516,7 +1516,7 @@
           "calendars"
         ],
         "summary": "An account's calendars and address books (needs `accounts.manage`).",
-        "operationId": "list",
+        "operationId": "get_v1_accounts_id_collections",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -1570,7 +1570,7 @@
           "calendars"
         ],
         "summary": "Who may use an account's calendars and address books (needs `accounts.manage`).",
-        "operationId": "access",
+        "operationId": "get_v1_accounts_id_collections_access",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -1624,7 +1624,7 @@
           "calendars"
         ],
         "summary": "Grants an account or a group of the tenant a level on a calendar or address book of an account, replacing an\nearlier grant (needs `accounts.manage`).",
-        "operationId": "set_access",
+        "operationId": "put_v1_accounts_id_collections_collection_access",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -1692,7 +1692,7 @@
           "calendars"
         ],
         "summary": "Removes a grant on a calendar or address book (needs `accounts.manage`).",
-        "operationId": "remove_access",
+        "operationId": "delete_v1_accounts_id_collections_collection_access",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -1760,7 +1760,7 @@
           "calendars"
         ],
         "summary": "A calendar as iCalendar or an address book as vCard, everything in one file (needs `accounts.manage`).",
-        "operationId": "export",
+        "operationId": "get_v1_accounts_id_collections_collection_export",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -1819,7 +1819,7 @@
           "calendars"
         ],
         "summary": "Stores the events of an iCalendar file in a calendar, or the contacts of a vCard file in an address book (the\nrequest body, up to 2 MiB); one with a UID that is there already is replaced (needs `accounts.manage`).",
-        "operationId": "import",
+        "operationId": "post_v1_accounts_id_collections_collection_import",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -1897,7 +1897,7 @@
           "accounts"
         ],
         "summary": "The applications an account agreed to (needs `accounts.manage`).",
-        "operationId": "list",
+        "operationId": "get_v1_accounts_id_consents",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -1951,7 +1951,7 @@
           "accounts"
         ],
         "summary": "Withdraws an account's consent to an application and the application's tokens for it (needs `accounts.manage`\nand every permission the account holds).",
-        "operationId": "revoke",
+        "operationId": "delete_v1_accounts_id_consents_application",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -2002,7 +2002,7 @@
           "accounts"
         ],
         "summary": "Sets an account's contact address (needs `accounts.manage`).",
-        "operationId": "set_contact",
+        "operationId": "put_v1_accounts_id_contact",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -2055,7 +2055,7 @@
           "files"
         ],
         "summary": "An account's files: usage and quota (needs `accounts.manage`).",
-        "operationId": "overview",
+        "operationId": "get_v1_accounts_id_files",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -2106,7 +2106,7 @@
           "files"
         ],
         "summary": "Who may use an account's files or a drive (needs `accounts.manage`).",
-        "operationId": "access",
+        "operationId": "get_v1_accounts_id_files_access",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -2158,7 +2158,7 @@
           "files"
         ],
         "summary": "Grants an account or a group of the tenant rights on an account's files or a drive – a directory and what lies\nbelow it, or the whole store – replacing an earlier grant there (needs `accounts.manage`).",
-        "operationId": "set_access",
+        "operationId": "put_v1_accounts_id_files_access",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -2218,7 +2218,7 @@
           "files"
         ],
         "summary": "Removes a grant on an account's files or a drive (needs `accounts.manage`).",
-        "operationId": "remove_access",
+        "operationId": "delete_v1_accounts_id_files_access",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -2290,7 +2290,7 @@
           "files"
         ],
         "summary": "Sets an account's files quota; null for the tenant's default (needs `accounts.manage`).",
-        "operationId": "set_quota",
+        "operationId": "put_v1_accounts_id_files_quota",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -2343,7 +2343,7 @@
           "accounts"
         ],
         "summary": "The external identities linked to an account (needs `directory.read`).",
-        "operationId": "links",
+        "operationId": "get_v1_accounts_id_links",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -2388,7 +2388,7 @@
           "accounts"
         ],
         "summary": "Unlinks an external identity from an account (needs `accounts.manage`).",
-        "operationId": "unlink",
+        "operationId": "delete_v1_accounts_id_links_idp_subject",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -2447,7 +2447,7 @@
           "mail"
         ],
         "summary": "An account's mail: usage, quota and mailboxes (needs `accounts.manage`).",
-        "operationId": "overview",
+        "operationId": "get_v1_accounts_id_mail",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -2498,7 +2498,7 @@
           "mail"
         ],
         "summary": "Who may use an account's mail (needs `accounts.manage`).",
-        "operationId": "access",
+        "operationId": "get_v1_accounts_id_mail_access",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -2550,7 +2550,7 @@
           "mail"
         ],
         "summary": "Grants an account or a group of the tenant access to an account's mail, replacing an earlier grant there (needs\n`accounts.manage`).",
-        "operationId": "set_access",
+        "operationId": "put_v1_accounts_id_mail_access",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -2610,7 +2610,7 @@
           "mail"
         ],
         "summary": "Removes a grant on an account's mail (needs `accounts.manage`).",
-        "operationId": "remove_access",
+        "operationId": "delete_v1_accounts_id_mail_access",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -2682,7 +2682,7 @@
           "mail"
         ],
         "summary": "Stores a message (RFC 5322, the request body) in a mailbox of an account (needs `accounts.manage`).",
-        "operationId": "import",
+        "operationId": "post_v1_accounts_id_mail_import",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -2755,7 +2755,7 @@
           "mail"
         ],
         "summary": "A mailbox of an account (by id or role) as mbox, with its keywords (needs `accounts.manage`).",
-        "operationId": "export",
+        "operationId": "get_v1_accounts_id_mail_mailboxes_mailbox_mbox",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -2812,7 +2812,7 @@
           "mail"
         ],
         "summary": "Stores the messages of an mbox (the request body, up to 2 MiB; larger ones with the CLI) in a mailbox of an account\n(by id or role), with their keywords (needs `accounts.manage`).",
-        "operationId": "import_mbox",
+        "operationId": "post_v1_accounts_id_mail_mailboxes_mailbox_mbox",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -2881,7 +2881,7 @@
           "mail"
         ],
         "summary": "Sets an account's mail quota; null for the tenant's default (needs `accounts.manage`).",
-        "operationId": "set_quota",
+        "operationId": "put_v1_accounts_id_mail_quota",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -2934,7 +2934,7 @@
           "mail"
         ],
         "summary": "An account's Sieve scripts (needs `accounts.manage`).",
-        "operationId": "sieve_scripts",
+        "operationId": "get_v1_accounts_id_mail_sieve",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -2988,7 +2988,7 @@
           "mail"
         ],
         "summary": "Chooses the Sieve script that runs; null for none (needs `accounts.manage`).",
-        "operationId": "activate_sieve_script",
+        "operationId": "put_v1_accounts_id_mail_sieve_active",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -3041,7 +3041,7 @@
           "mail"
         ],
         "summary": "Saves a Sieve script, checked first (needs `accounts.manage`).",
-        "operationId": "put_sieve_script",
+        "operationId": "put_v1_accounts_id_mail_sieve_name",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -3100,7 +3100,7 @@
           "mail"
         ],
         "summary": "Removes a Sieve script (needs `accounts.manage`).",
-        "operationId": "remove_sieve_script",
+        "operationId": "delete_v1_accounts_id_mail_sieve_name",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -3151,7 +3151,7 @@
           "accounts"
         ],
         "summary": "Sets an account's password and ends its sessions (needs `accounts.manage` and every permission the account\nholds).",
-        "operationId": "set_password",
+        "operationId": "put_v1_accounts_id_password",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -3204,7 +3204,7 @@
           "accounts"
         ],
         "summary": "Removes all TOTP, passkeys and recovery codes of an account (needs `accounts.manage` and every permission the\naccount holds).",
-        "operationId": "reset_second_factors",
+        "operationId": "delete_v1_accounts_id_second_factors",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -3247,7 +3247,7 @@
           "accounts"
         ],
         "summary": "The services of an account (needs `directory.read`).",
-        "operationId": "list_services",
+        "operationId": "get_v1_accounts_id_services",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -3301,7 +3301,7 @@
           "accounts"
         ],
         "summary": "Grants a service – also one an account requested (needs `accounts.manage`); `mail` only to an account with an\naddress of the tenant.",
-        "operationId": "grant_service",
+        "operationId": "put_v1_accounts_id_services_service",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -3359,7 +3359,7 @@
           "accounts"
         ],
         "summary": "Takes a service away (needs `accounts.manage`); a mail store stays until the account is removed.",
-        "operationId": "revoke_service",
+        "operationId": "delete_v1_accounts_id_services_service",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -3410,7 +3410,7 @@
           "accounts"
         ],
         "summary": "The account's valid sessions (needs `accounts.manage`).",
-        "operationId": "sessions",
+        "operationId": "get_v1_accounts_id_sessions",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -3455,7 +3455,7 @@
           "accounts"
         ],
         "summary": "Ends one session of the account (needs `accounts.manage` and every permission the account holds).",
-        "operationId": "terminate_session",
+        "operationId": "delete_v1_accounts_id_sessions_session",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -3506,7 +3506,7 @@
           "accounts"
         ],
         "summary": "Gives an account a username, or takes it away (needs `accounts.manage`; the tenant must use usernames).",
-        "operationId": "set_username",
+        "operationId": "put_v1_accounts_id_username",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -3568,7 +3568,7 @@
           "applications"
         ],
         "summary": "The tenant's applications (needs `directory.read`).",
-        "operationId": "list",
+        "operationId": "get_v1_applications",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -3603,7 +3603,7 @@
           "applications"
         ],
         "summary": "Registers an application in a project of the tenant (needs `applications.manage`).",
-        "operationId": "add",
+        "operationId": "post_v1_applications",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -3656,7 +3656,7 @@
           "applications"
         ],
         "summary": "One application (needs `directory.read`).",
-        "operationId": "get",
+        "operationId": "get_v1_applications_id",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -3705,7 +3705,7 @@
           "applications"
         ],
         "summary": "Changes an application (needs `applications.manage`).",
-        "operationId": "change",
+        "operationId": "patch_v1_applications_id",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -3758,7 +3758,7 @@
           "applications"
         ],
         "summary": "Sets the application's options: token format, offline access, consent, logout notifications (needs\n`applications.manage`).",
-        "operationId": "set_options",
+        "operationId": "put_v1_applications_id_options",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -3819,7 +3819,7 @@
           "applications"
         ],
         "summary": "Sets whether logins to the application need a second factor, on top of the tenant's policy (needs\n`applications.manage`).",
-        "operationId": "set_policy",
+        "operationId": "put_v1_applications_id_policy",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -3880,7 +3880,7 @@
           "applications"
         ],
         "summary": "Replaces the secret of a confidential application (needs `applications.manage`).",
-        "operationId": "new_secret",
+        "operationId": "post_v1_applications_id_secret",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -3932,7 +3932,7 @@
           "audit"
         ],
         "summary": "What happened in the tenant or the instance, and who did it: the events, newest first (needs `directory.read`\nfor the tenant, `instance.read` for the instance).",
-        "operationId": "log",
+        "operationId": "get_v1_audit",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -4040,7 +4040,7 @@
           "login"
         ],
         "summary": "A pending auth request – for the login UI to show who is asking.",
-        "operationId": "auth_request",
+        "operationId": "get_v1_auth_requests_id",
         "parameters": [
           {
             "name": "id",
@@ -4078,7 +4078,7 @@
           "login"
         ],
         "summary": "Finishes an auth request with the session of the bearer token; answers with the URL to send the browser to. If\nthe application needs consent, the answer is `403` with type `urn:kernoid:problem:consent-required`: show what it\nasks for, and finish again with `{\"consent\": true}`.",
-        "operationId": "finish",
+        "operationId": "post_v1_auth_requests_id",
         "parameters": [
           {
             "name": "id",
@@ -4154,7 +4154,7 @@
           "login"
         ],
         "summary": "Ends an auth request without a login – no session for `prompt=none`, or the person declined; answers with the\nURL that tells the application.",
-        "operationId": "decline",
+        "operationId": "post_v1_auth_requests_id_decline",
         "parameters": [
           {
             "name": "id",
@@ -4214,7 +4214,7 @@
           "files"
         ],
         "summary": "The tenant's drives: file stores that belong to the tenant, not to a person (needs `directory.read`).",
-        "operationId": "drives",
+        "operationId": "get_v1_drives",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -4249,7 +4249,7 @@
           "files"
         ],
         "summary": "Creates a drive of the tenant; people reach it through grants (needs `accounts.manage`).",
-        "operationId": "add_drive",
+        "operationId": "post_v1_drives",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -4302,7 +4302,7 @@
           "accounts"
         ],
         "summary": "Creates an account without an address of the tenant: for logins only – and files, if granted (needs\n`accounts.manage`).",
-        "operationId": "add_external",
+        "operationId": "post_v1_external_accounts",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -4355,7 +4355,7 @@
           "projects"
         ],
         "summary": "The projects other tenants have granted to this one, with the roles it may give (needs `directory.read`).",
-        "operationId": "granted",
+        "operationId": "get_v1_granted_projects",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -4392,7 +4392,7 @@
           "groups"
         ],
         "summary": "The tenant's groups with their members (needs `directory.read`).",
-        "operationId": "groups",
+        "operationId": "get_v1_groups",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -4427,7 +4427,7 @@
           "groups"
         ],
         "summary": "Creates a group (needs `groups.manage`).",
-        "operationId": "add_group",
+        "operationId": "post_v1_groups",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -4480,7 +4480,7 @@
           "groups"
         ],
         "summary": "Removes a group; refused while it holds roles (needs `groups.manage`).",
-        "operationId": "remove_group",
+        "operationId": "delete_v1_groups_id",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -4522,7 +4522,7 @@
           "groups"
         ],
         "summary": "Renames a group (needs `groups.manage`).",
-        "operationId": "rename_group",
+        "operationId": "patch_v1_groups_id",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -4575,7 +4575,7 @@
           "groups"
         ],
         "summary": "Gives a group an address on a verified domain of the tenant; mail to it goes to every member (needs\n`groups.manage`).",
-        "operationId": "add_address",
+        "operationId": "put_v1_groups_id_addresses_address",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -4625,7 +4625,7 @@
           "groups"
         ],
         "summary": "Removes an address of a group (needs `groups.manage`).",
-        "operationId": "remove_address",
+        "operationId": "delete_v1_groups_id_addresses_address",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -4676,7 +4676,7 @@
           "groups"
         ],
         "summary": "Adds an account to a group (needs `groups.manage`, and for a group holding roles the permission to assign them).",
-        "operationId": "add_member",
+        "operationId": "put_v1_groups_id_members_account",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -4726,7 +4726,7 @@
           "groups"
         ],
         "summary": "Removes an account from a group (needs the same as adding one).",
-        "operationId": "remove_member",
+        "operationId": "delete_v1_groups_id_members_account",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -4768,7 +4768,7 @@
           "groups"
         ],
         "summary": "Lets the group's members send from its addresses, or stops it (needs `groups.manage`).",
-        "operationId": "set_send_as",
+        "operationId": "put_v1_groups_id_send_as",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -4821,7 +4821,7 @@
           "identity providers"
         ],
         "summary": "The tenant's identity providers, and those of the instance that serve every tenant (needs `directory.read`).",
-        "operationId": "list",
+        "operationId": "get_v1_identity_providers",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -4856,7 +4856,7 @@
           "identity providers"
         ],
         "summary": "Connects an identity provider (needs `identity_providers.manage`; for the whole instance, `instance.manage`).\nRegister the `redirect_uri` from the answer of `GET /v1/identity-providers/{id}` at the provider.",
-        "operationId": "add",
+        "operationId": "post_v1_identity_providers",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -4909,7 +4909,7 @@
           "identity providers"
         ],
         "summary": "One identity provider (needs `directory.read`).",
-        "operationId": "get",
+        "operationId": "get_v1_identity_providers_id",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -4958,7 +4958,7 @@
           "identity providers"
         ],
         "summary": "Removes an identity provider, once no account is linked to it (needs `identity_providers.manage`).",
-        "operationId": "remove",
+        "operationId": "delete_v1_identity_providers_id",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -5000,7 +5000,7 @@
           "identity providers"
         ],
         "summary": "Changes an identity provider's settings, or switches it off and on (needs `identity_providers.manage`).",
-        "operationId": "change",
+        "operationId": "patch_v1_identity_providers_id",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -5053,7 +5053,7 @@
           "identity providers"
         ],
         "summary": "Fetches the provider's discovery document and keys: whether kernoid reaches it as configured (needs\n`identity_providers.manage`).",
-        "operationId": "check",
+        "operationId": "post_v1_identity_providers_id_check",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -5097,7 +5097,7 @@
           "identity providers"
         ],
         "summary": "Sets the client secret (needs `identity_providers.manage`).",
-        "operationId": "set_secret",
+        "operationId": "put_v1_identity_providers_id_secret",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -5139,7 +5139,7 @@
           "identity providers"
         ],
         "summary": "Removes the client secret – for providers that take PKCE alone (needs `identity_providers.manage`).",
-        "operationId": "remove_secret",
+        "operationId": "delete_v1_identity_providers_id_secret",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -5173,7 +5173,7 @@
           "login"
         ],
         "summary": "Starts a login at an identity provider; answers with where to send the browser.",
-        "operationId": "start",
+        "operationId": "post_v1_idp_logins",
         "requestBody": {
           "content": {
             "application/json": {
@@ -5223,7 +5223,7 @@
           "login"
         ],
         "summary": "Links the provider login of a proposal to the account of the session – the person logged in to it to prove it is\ntheirs; from then on the provider logs in as that account.",
-        "operationId": "confirm_link",
+        "operationId": "post_v1_idp_logins_link",
         "requestBody": {
           "content": {
             "application/json": {
@@ -5265,7 +5265,7 @@
           "login"
         ],
         "summary": "What a provider login that found an account with its verified address proposes (RFC 0003, 3): log in to that\naccount to link it – or, where registration is open, create a separate one. Does not use the code up.",
-        "operationId": "proposal",
+        "operationId": "post_v1_idp_logins_proposal",
         "requestBody": {
           "content": {
             "application/json": {
@@ -5305,7 +5305,7 @@
           "login"
         ],
         "summary": "Creates a separate account for the provider login of a proposal instead of linking it, where registration is\nopen, and logs it in.",
-        "operationId": "register_instead",
+        "operationId": "post_v1_idp_logins_register",
         "requestBody": {
           "content": {
             "application/json": {
@@ -5355,7 +5355,7 @@
           "login"
         ],
         "summary": "Exchanges the result of a login at an identity provider for a session – once.",
-        "operationId": "exchange",
+        "operationId": "post_v1_idp_logins_session",
         "requestBody": {
           "content": {
             "application/json": {
@@ -5395,7 +5395,7 @@
           "instance"
         ],
         "summary": "The instance reached under the host of this request.",
-        "operationId": "current",
+        "operationId": "get_v1_instance",
         "responses": {
           "200": {
             "content": {
@@ -5423,7 +5423,7 @@
           "instance"
         ],
         "summary": "Renames the instance (needs `instance.manage`).",
-        "operationId": "rename",
+        "operationId": "patch_v1_instance",
         "requestBody": {
           "content": {
             "application/json": {
@@ -5445,7 +5445,7 @@
           "instance"
         ],
         "summary": "The instance with all its domains (needs `instance.read`).",
-        "operationId": "details",
+        "operationId": "get_v1_instance_details",
         "responses": {
           "200": {
             "content": {
@@ -5474,7 +5474,7 @@
           "instance"
         ],
         "summary": "Reaches the instance under another domain as well (needs `instance.manage`).",
-        "operationId": "add_domain",
+        "operationId": "put_v1_instance_domains_domain",
         "parameters": [
           {
             "name": "domain",
@@ -5504,7 +5504,7 @@
           "instance"
         ],
         "summary": "Removes a domain; not the primary one (needs `instance.manage`).",
-        "operationId": "remove_domain",
+        "operationId": "delete_v1_instance_domains_domain",
         "parameters": [
           {
             "name": "domain",
@@ -5536,7 +5536,7 @@
           "instance"
         ],
         "summary": "Sends logins to a login UI of the instance's own, which may then call the API from its origin (needs\n`instance.manage`).",
-        "operationId": "set_login_ui",
+        "operationId": "put_v1_instance_login_ui",
         "requestBody": {
           "content": {
             "application/json": {
@@ -5567,7 +5567,7 @@
           "mail"
         ],
         "summary": "The queue of outgoing mail of the instance's tenants, newest first (needs `instance.read`).",
-        "operationId": "queue",
+        "operationId": "get_v1_instance_mail_queue",
         "parameters": [
           {
             "name": "limit",
@@ -5605,7 +5605,7 @@
           "instance"
         ],
         "summary": "Binds passkeys to another RP ID – one of the instance's domains or a parent domain of one (needs\n`instance.manage`). Passkeys registered under the former RP ID stop working.",
-        "operationId": "set_passkey_rp_id",
+        "operationId": "put_v1_instance_passkey_rp_id",
         "requestBody": {
           "content": {
             "application/json": {
@@ -5636,7 +5636,7 @@
           "instance"
         ],
         "summary": "Sets the domain the issuer and links use (needs `instance.manage`). Passkeys are bound to it.",
-        "operationId": "set_primary_domain",
+        "operationId": "put_v1_instance_primary_domain",
         "requestBody": {
           "content": {
             "application/json": {
@@ -5667,7 +5667,7 @@
           "instance"
         ],
         "summary": "Names the tenant where people without an address of a tenant register (needs `instance.manage`).",
-        "operationId": "set_registration_tenant",
+        "operationId": "put_v1_instance_registration_tenant",
         "requestBody": {
           "content": {
             "application/json": {
@@ -5698,7 +5698,7 @@
           "instance"
         ],
         "summary": "The instance roles and who holds them (needs `instance.read`).",
-        "operationId": "roles",
+        "operationId": "get_v1_instance_roles",
         "responses": {
           "200": {
             "content": {
@@ -5718,7 +5718,7 @@
           "instance"
         ],
         "summary": "Defines an instance role of the instance's own, or changes its permissions (needs `instance_roles.manage`).",
-        "operationId": "define_role",
+        "operationId": "put_v1_instance_roles_role",
         "parameters": [
           {
             "name": "role",
@@ -5758,7 +5758,7 @@
           "instance"
         ],
         "summary": "Deletes an instance role of the instance's own, once nobody holds it (needs `instance_roles.manage`).",
-        "operationId": "delete_role",
+        "operationId": "delete_v1_instance_roles_role",
         "parameters": [
           {
             "name": "role",
@@ -5790,7 +5790,7 @@
           "instance"
         ],
         "summary": "Assigns an instance role to an account or group of any tenant of the instance (needs `instance_roles.manage`).",
-        "operationId": "grant_role",
+        "operationId": "put_v1_instance_roles_role_kind_id",
         "parameters": [
           {
             "name": "role",
@@ -5835,7 +5835,7 @@
           "instance"
         ],
         "summary": "Takes an instance role back; the last `instance_admin` stays (needs `instance_roles.manage`).",
-        "operationId": "revoke_role",
+        "operationId": "delete_v1_instance_roles_role_kind_id",
         "parameters": [
           {
             "name": "role",
@@ -5882,7 +5882,7 @@
           "instance"
         ],
         "summary": "kernoid's SAML keys of the instance (needs `instance.read`).",
-        "operationId": "saml_keys",
+        "operationId": "get_v1_instance_saml_keys",
         "responses": {
           "200": {
             "content": {
@@ -5903,7 +5903,7 @@
           "instance"
         ],
         "summary": "Starts a change of kernoid's SAML key (needs `instance.manage`): a new key, in the metadata at once – for the\nproviders to take in – and signing once activated. If a key waits already, that one.",
-        "operationId": "add_saml_key",
+        "operationId": "post_v1_instance_saml_keys",
         "responses": {
           "201": {
             "content": {
@@ -5923,7 +5923,7 @@
           "instance"
         ],
         "summary": "Signs with the waiting SAML key from now on; the key active so far leaves the metadata (needs `instance.manage`).",
-        "operationId": "activate_saml_key",
+        "operationId": "post_v1_instance_saml_keys_id_activate",
         "parameters": [
           {
             "name": "id",
@@ -5954,7 +5954,7 @@
           "instance"
         ],
         "summary": "The instance's signing keys (needs `instance.read`).",
-        "operationId": "signing_keys",
+        "operationId": "get_v1_instance_signing_keys",
         "responses": {
           "200": {
             "content": {
@@ -5975,7 +5975,7 @@
           "instance"
         ],
         "summary": "Creates a signing key: published at once, signing once activated (needs `instance.manage`).",
-        "operationId": "add_signing_key",
+        "operationId": "post_v1_instance_signing_keys",
         "responses": {
           "201": {
             "content": {
@@ -5995,7 +5995,7 @@
           "instance"
         ],
         "summary": "Removes an inactive key whose tokens have expired (needs `instance.manage`).",
-        "operationId": "remove_signing_key",
+        "operationId": "delete_v1_instance_signing_keys_kid",
         "parameters": [
           {
             "name": "kid",
@@ -6026,7 +6026,7 @@
           "instance"
         ],
         "summary": "Signs with this key from now on (needs `instance.manage`).",
-        "operationId": "activate_signing_key",
+        "operationId": "post_v1_instance_signing_keys_kid_activate",
         "parameters": [
           {
             "name": "kid",
@@ -6057,7 +6057,7 @@
           "instance"
         ],
         "summary": "The instance's tenants (needs `instance.read`).",
-        "operationId": "tenants",
+        "operationId": "get_v1_instance_tenants",
         "responses": {
           "200": {
             "content": {
@@ -6078,7 +6078,7 @@
           "instance"
         ],
         "summary": "Creates a tenant (needs `tenants.manage`).",
-        "operationId": "add_tenant",
+        "operationId": "post_v1_instance_tenants",
         "requestBody": {
           "content": {
             "application/json": {
@@ -6108,7 +6108,7 @@
           "instance"
         ],
         "summary": "Renames, deactivates or reactivates a tenant (needs `tenants.manage`); not one's own by deactivation.",
-        "operationId": "change_tenant",
+        "operationId": "patch_v1_instance_tenants_id",
         "parameters": [
           {
             "name": "id",
@@ -6149,7 +6149,7 @@
           "links"
         ],
         "summary": "What a link opens (RFC 0005, 11.3).",
-        "operationId": "link",
+        "operationId": "get_v1_links_token",
         "parameters": [
           {
             "name": "access",
@@ -6226,7 +6226,7 @@
           "links"
         ],
         "summary": "A file the link reaches, also in ranges (`Range`), under the same sandbox as every download.",
-        "operationId": "download",
+        "operationId": "get_v1_links_token_download_node",
         "parameters": [
           {
             "name": "access",
@@ -6308,7 +6308,7 @@
           "links"
         ],
         "summary": "Adds a file – the request's body, streamed – to the directory a link names (or one below it, for a link that reads\ntoo), where the link lets people add. It counts against the owner's quota and is scanned like every upload.",
-        "operationId": "add",
+        "operationId": "post_v1_links_token_files",
         "parameters": [
           {
             "name": "access",
@@ -6441,7 +6441,7 @@
           "links"
         ],
         "summary": "The contents of a directory the link reaches – the link's own unless `parent` names one below it.",
-        "operationId": "nodes",
+        "operationId": "get_v1_links_token_nodes",
         "parameters": [
           {
             "name": "access",
@@ -6521,7 +6521,7 @@
           "links"
         ],
         "summary": "Opens a link with its password; the answer's `access` opens it for a while. Wrong passwords are counted: too many\nand the link refuses for a quarter of an hour.",
-        "operationId": "unlock",
+        "operationId": "post_v1_links_token_unlock",
         "parameters": [
           {
             "name": "token",
@@ -6591,7 +6591,7 @@
           "login"
         ],
         "summary": "Where an address logs in: at an identity provider its domain is routed to, or with kernoid's own login. Says\nnothing about whether the account exists.",
-        "operationId": "login_options",
+        "operationId": "get_v1_login_options",
         "parameters": [
           {
             "name": "address",
@@ -6622,7 +6622,7 @@
           "login"
         ],
         "summary": "The providers offered to everyone on the login page (\"Sign in with …\").",
-        "operationId": "open_providers",
+        "operationId": "get_v1_login_providers",
         "responses": {
           "200": {
             "content": {
@@ -6645,7 +6645,7 @@
           "projects"
         ],
         "summary": "The tenant's projects with their roles (needs `directory.read`).",
-        "operationId": "list",
+        "operationId": "get_v1_projects",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -6680,7 +6680,7 @@
           "projects"
         ],
         "summary": "Creates a project (needs `projects.manage`).",
-        "operationId": "add",
+        "operationId": "post_v1_projects",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -6724,7 +6724,7 @@
           "projects"
         ],
         "summary": "One project (needs `directory.read`).",
-        "operationId": "get",
+        "operationId": "get_v1_projects_id",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -6773,7 +6773,7 @@
           "projects"
         ],
         "summary": "Removes a project – once it has no applications and nobody holds its roles (needs `projects.manage`).",
-        "operationId": "remove",
+        "operationId": "delete_v1_projects_id",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -6815,7 +6815,7 @@
           "projects"
         ],
         "summary": "Renames a project or changes its settings (needs `projects.manage`).",
-        "operationId": "change",
+        "operationId": "patch_v1_projects_id",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -6868,7 +6868,7 @@
           "projects"
         ],
         "summary": "Who holds which role of the project – for a granted project only the tenant's own (needs `directory.read`).",
-        "operationId": "authorizations",
+        "operationId": "get_v1_projects_id_authorizations",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -6913,7 +6913,7 @@
           "projects"
         ],
         "summary": "Gives an account or group of the tenant a role of the project – of its own, or one granted to it (needs\n`authorizations.manage`).",
-        "operationId": "grant",
+        "operationId": "put_v1_projects_id_authorizations_role_kind_principal",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -6978,7 +6978,7 @@
           "projects"
         ],
         "summary": "Takes a project role back (needs `authorizations.manage`).",
-        "operationId": "revoke",
+        "operationId": "delete_v1_projects_id_authorizations_role_kind_principal",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -7045,7 +7045,7 @@
           "projects"
         ],
         "summary": "The tenants the project is granted to (needs `directory.read`).",
-        "operationId": "grants",
+        "operationId": "get_v1_projects_id_grants",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -7090,7 +7090,7 @@
           "projects"
         ],
         "summary": "Grants the project to another tenant of the instance – named by its id or a verified mail domain – with some of\nits roles, or changes them (needs `projects.manage`).",
-        "operationId": "grant_project",
+        "operationId": "put_v1_projects_id_grants_tenant",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -7158,7 +7158,7 @@
           "projects"
         ],
         "summary": "Takes a grant back, once that tenant holds none of the project's roles (needs `projects.manage`).",
-        "operationId": "revoke_project_grant",
+        "operationId": "delete_v1_projects_id_grants_tenant",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -7210,7 +7210,7 @@
           "projects"
         ],
         "summary": "Adds a role to the project, or changes its display name and group (needs `projects.manage`).",
-        "operationId": "set_role",
+        "operationId": "put_v1_projects_id_roles_key",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -7269,7 +7269,7 @@
           "projects"
         ],
         "summary": "Removes a role from the project, once nobody holds it (needs `projects.manage`).",
-        "operationId": "remove_role",
+        "operationId": "delete_v1_projects_id_roles_key",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -7321,7 +7321,7 @@
           "login"
         ],
         "summary": "What registering offers at this instance; the providers to register with are at `/v1/login-providers`.",
-        "operationId": "options",
+        "operationId": "get_v1_registration",
         "responses": {
           "200": {
             "content": {
@@ -7341,7 +7341,7 @@
           "login"
         ],
         "summary": "Starts a registration: checks it, refuses what is taken (`409`: log in instead), and sends a code to the email\naddress. Nothing is stored as an account before the code is confirmed.",
-        "operationId": "start",
+        "operationId": "post_v1_registrations",
         "requestBody": {
           "content": {
             "application/json": {
@@ -7401,7 +7401,7 @@
           "login"
         ],
         "summary": "Finishes a registration with the code from the message: the account is created.",
-        "operationId": "confirm",
+        "operationId": "post_v1_registrations_id_confirm",
         "parameters": [
           {
             "name": "id",
@@ -7451,7 +7451,7 @@
           "roles"
         ],
         "summary": "The roles there are, and who holds which in the tenant (needs `directory.read`).",
-        "operationId": "roles",
+        "operationId": "get_v1_roles",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -7485,7 +7485,7 @@
           "roles"
         ],
         "summary": "Defines a role of the tenant's own, or changes its permissions (needs `roles.manage`).",
-        "operationId": "define_role",
+        "operationId": "put_v1_roles_role",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -7537,7 +7537,7 @@
           "roles"
         ],
         "summary": "Deletes a role of the tenant's own, once nobody holds it (needs `roles.manage`).",
-        "operationId": "delete_role",
+        "operationId": "delete_v1_roles_role",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -7581,7 +7581,7 @@
           "roles"
         ],
         "summary": "Assigns a role to an account or a group of the tenant (needs `roles.manage`).",
-        "operationId": "grant_role",
+        "operationId": "put_v1_roles_role_kind_id",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -7641,7 +7641,7 @@
           "roles"
         ],
         "summary": "Takes a role back; the tenant's last `tenant_admin` assignment cannot be revoked (needs `roles.manage`).",
-        "operationId": "revoke_role",
+        "operationId": "delete_v1_roles_role_kind_id",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -7701,7 +7701,7 @@
           "provisioning"
         ],
         "summary": "The tenant's SCIM tokens (needs `directory.read`).",
-        "operationId": "list",
+        "operationId": "get_v1_scim_tokens",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -7736,7 +7736,7 @@
           "provisioning"
         ],
         "summary": "A new SCIM token for the tenant's directory (needs `provisioning.manage`).",
-        "operationId": "add",
+        "operationId": "post_v1_scim_tokens",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -7780,7 +7780,7 @@
           "provisioning"
         ],
         "summary": "Revokes a SCIM token (needs `provisioning.manage`).",
-        "operationId": "remove",
+        "operationId": "delete_v1_scim_tokens_id",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -7814,7 +7814,7 @@
           "sessions"
         ],
         "summary": "The valid sessions of the bearer token's account, newest first.",
-        "operationId": "list",
+        "operationId": "get_v1_sessions",
         "responses": {
           "200": {
             "content": {
@@ -7845,7 +7845,7 @@
           "sessions"
         ],
         "summary": "Logs in: checks address and password at the instance of this host and creates a session.",
-        "operationId": "create",
+        "operationId": "post_v1_sessions",
         "requestBody": {
           "content": {
             "application/json": {
@@ -7905,7 +7905,7 @@
           "sessions"
         ],
         "summary": "The session of the bearer token.",
-        "operationId": "current",
+        "operationId": "get_v1_sessions_current",
         "responses": {
           "200": {
             "content": {
@@ -7933,7 +7933,7 @@
           "sessions"
         ],
         "summary": "Logs out: ends the session of the bearer token.",
-        "operationId": "terminate",
+        "operationId": "delete_v1_sessions_current",
         "responses": {
           "204": {
             "description": "ended"
@@ -7957,7 +7957,7 @@
           "sessions"
         ],
         "summary": "Logs out: ends the session of the bearer token. If it came from a SAML provider with single logout, the answer\nsays where to send the browser next.",
-        "operationId": "logout",
+        "operationId": "post_v1_sessions_current_logout",
         "responses": {
           "200": {
             "content": {
@@ -7987,7 +7987,7 @@
           "sessions"
         ],
         "summary": "Finishes a passkey check of the current session.",
-        "operationId": "finish_check",
+        "operationId": "post_v1_sessions_current_passkey_finish",
         "requestBody": {
           "content": {
             "application/json": {
@@ -8027,7 +8027,7 @@
           "sessions"
         ],
         "summary": "Starts a passkey check of the current session.",
-        "operationId": "start_check",
+        "operationId": "post_v1_sessions_current_passkey_start",
         "responses": {
           "200": {
             "content": {
@@ -8047,7 +8047,7 @@
           "sessions"
         ],
         "summary": "Uses a recovery code as a further check of the current session.",
-        "operationId": "check_recovery_code",
+        "operationId": "post_v1_sessions_current_recovery",
         "requestBody": {
           "content": {
             "application/json": {
@@ -8087,7 +8087,7 @@
           "sessions"
         ],
         "summary": "Checks a TOTP code as a further check of the current session.",
-        "operationId": "check_totp",
+        "operationId": "post_v1_sessions_current_totp",
         "requestBody": {
           "content": {
             "application/json": {
@@ -8127,7 +8127,7 @@
           "sessions"
         ],
         "summary": "Finishes a passkey login and creates a session.",
-        "operationId": "finish_login",
+        "operationId": "post_v1_sessions_passkey_finish",
         "requestBody": {
           "content": {
             "application/json": {
@@ -8167,7 +8167,7 @@
           "sessions"
         ],
         "summary": "Starts a login with a passkey – no address, no password.",
-        "operationId": "start_login",
+        "operationId": "post_v1_sessions_passkey_start",
         "responses": {
           "200": {
             "content": {
@@ -8197,7 +8197,7 @@
           "sessions"
         ],
         "summary": "Ends a session of the bearer token's own account – e.g. one left open on another device.",
-        "operationId": "terminate_other",
+        "operationId": "delete_v1_sessions_id",
         "parameters": [
           {
             "name": "id",
@@ -8231,7 +8231,7 @@
           "mail"
         ],
         "summary": "Creates a shared mailbox: an account nobody logs in as, used through granted access (needs `accounts.manage`).",
-        "operationId": "add_shared_mailbox",
+        "operationId": "post_v1_shared_mailboxes",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -8285,7 +8285,7 @@
           "tenant"
         ],
         "summary": "The tenant administered (needs `directory.read`).",
-        "operationId": "get",
+        "operationId": "get_v1_tenant",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -8327,7 +8327,7 @@
           "tenant"
         ],
         "summary": "Renames the tenant (needs `tenant.manage`).",
-        "operationId": "rename",
+        "operationId": "patch_v1_tenant",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -8372,7 +8372,7 @@
           "tenant"
         ],
         "summary": "Claims a mail domain (needs `domains.manage`); answers with the TXT record that proves it.",
-        "operationId": "add_domain",
+        "operationId": "post_v1_tenant_domains",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -8426,7 +8426,7 @@
           "tenant"
         ],
         "summary": "Removes a mail domain – unless addresses use it (needs `domains.manage`).",
-        "operationId": "remove_domain",
+        "operationId": "delete_v1_tenant_domains_domain",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -8470,7 +8470,7 @@
           "tenant"
         ],
         "summary": "Starts a change of a verified mail domain's DKIM key (needs `domains.manage`): a new key, signing once DNS shows\nits record; the key it replaces then stops signing. If a new key is waiting already, its selector.",
-        "operationId": "rotate_dkim",
+        "operationId": "post_v1_tenant_domains_domain_dkim_rotate",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -8532,7 +8532,7 @@
           "tenant"
         ],
         "summary": "Verifies a claimed domain by its TXT record (needs `domains.manage`), or marks it verified without DNS\n(`trust`, needs `tenants.manage`).",
-        "operationId": "verify_domain",
+        "operationId": "post_v1_tenant_domains_domain_verify",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -8586,7 +8586,7 @@
           "files"
         ],
         "summary": "The tenant's default files quota (needs `directory.read`).",
-        "operationId": "default_quota",
+        "operationId": "get_v1_tenant_files_quota",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -8618,7 +8618,7 @@
           "files"
         ],
         "summary": "Sets the tenant's default files quota, for every account without its own; null for no limit (needs\n`tenant.manage`).",
-        "operationId": "set_default_quota",
+        "operationId": "put_v1_tenant_files_quota",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -8654,7 +8654,7 @@
           "files"
         ],
         "summary": "How long what is in the accounts' file trash stays (needs `directory.read`).",
-        "operationId": "retention",
+        "operationId": "get_v1_tenant_files_retention",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -8686,7 +8686,7 @@
           "files"
         ],
         "summary": "Sets how long what is in the accounts' file trash stays, 1 to 3650 days; null keeps it (needs `tenant.manage`).",
-        "operationId": "set_retention",
+        "operationId": "put_v1_tenant_files_retention",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -8731,7 +8731,7 @@
           "tenant"
         ],
         "summary": "The language of the emails kernoid writes – invitations, notices – to the tenant's accounts that chose none (needs\n`directory.read`).",
-        "operationId": "language",
+        "operationId": "get_v1_tenant_language",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -8763,7 +8763,7 @@
           "tenant"
         ],
         "summary": "Sets that language: `en`, `de`, or null for English (needs `tenant.manage`).",
-        "operationId": "set_language",
+        "operationId": "put_v1_tenant_language",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -8809,7 +8809,7 @@
           "tenant"
         ],
         "summary": "How the tenant's accounts log in (needs `directory.read`).",
-        "operationId": "login_policy",
+        "operationId": "get_v1_tenant_login_policy",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -8841,7 +8841,7 @@
           "tenant"
         ],
         "summary": "Sets how the tenant's accounts log in (needs `policies.manage`).",
-        "operationId": "set_login_policy",
+        "operationId": "put_v1_tenant_login_policy",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -8877,7 +8877,7 @@
           "tenant"
         ],
         "summary": "The tenant's verified domains as mail domains of kernoid: the DNS records to publish (MX, SPF, DKIM, DMARC) and\nwhether they are published (needs `directory.read`; reads DNS, changes nothing).",
-        "operationId": "mail_dns",
+        "operationId": "get_v1_tenant_mail_dns",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -8924,7 +8924,7 @@
           "mail"
         ],
         "summary": "The tenant's default mail quota (needs `directory.read`).",
-        "operationId": "default_quota",
+        "operationId": "get_v1_tenant_mail_quota",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -8956,7 +8956,7 @@
           "mail"
         ],
         "summary": "Sets the tenant's default mail quota, for every account without its own; null for no limit (needs\n`tenant.manage`).",
-        "operationId": "set_default_quota",
+        "operationId": "put_v1_tenant_mail_quota",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -8992,7 +8992,7 @@
           "mail"
         ],
         "summary": "The tenant's mail retention (needs `directory.read`).",
-        "operationId": "retention",
+        "operationId": "get_v1_tenant_mail_retention",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -9024,7 +9024,7 @@
           "mail"
         ],
         "summary": "Sets how many days emails stay in the accounts' Trash and Junk; null keeps them (needs `tenant.manage`).",
-        "operationId": "set_retention",
+        "operationId": "put_v1_tenant_mail_retention",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -9069,7 +9069,7 @@
           "tenant"
         ],
         "summary": "The modules the installation has switched on, which the tenant may use, and whether it does (needs\n`directory.read`).",
-        "operationId": "modules",
+        "operationId": "get_v1_tenant_modules",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -9116,7 +9116,7 @@
           "tenant"
         ],
         "summary": "Switches a module on or off for the tenant (needs `tenant.manage`); only a module the installation has switched\non can be switched on.",
-        "operationId": "set_module",
+        "operationId": "put_v1_tenant_modules_module",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -9170,7 +9170,7 @@
           "tenant"
         ],
         "summary": "The permissions of the caller for the tenant administered – for a UI to show what it may do.",
-        "operationId": "permissions",
+        "operationId": "get_v1_tenant_permissions",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -9204,7 +9204,7 @@
           "tenant"
         ],
         "summary": "Sets whether every login to an application of the tenant needs a second factor, and how long accounts without one\nmay still log in (needs `policies.manage`).",
-        "operationId": "set_policy",
+        "operationId": "put_v1_tenant_policy",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -9257,7 +9257,7 @@
           "tenant"
         ],
         "summary": "Whether people may register with the tenant, and on which domains (needs `directory.read`).",
-        "operationId": "registration",
+        "operationId": "get_v1_tenant_registration",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -9289,7 +9289,7 @@
           "tenant"
         ],
         "summary": "Opens or closes registration, and names the domains new accounts may take an address on (needs\n`policies.manage`).",
-        "operationId": "set_registration",
+        "operationId": "put_v1_tenant_registration",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -9334,7 +9334,7 @@
           "tenant"
         ],
         "summary": "The tenant's rules for each service (needs `directory.read`).",
-        "operationId": "service_policies",
+        "operationId": "get_v1_tenant_service_policies",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -9371,7 +9371,7 @@
           "tenant"
         ],
         "summary": "Sets who gets a service when an account is created, and whether it needs approval (needs `policies.manage`).",
-        "operationId": "set_service_policy",
+        "operationId": "put_v1_tenant_service_policies_service",
         "parameters": [
           {
             "name": "kernoid-tenant",
@@ -9424,7 +9424,7 @@
           "meta"
         ],
         "summary": "The name and version of this kernoid.",
-        "operationId": "version",
+        "operationId": "get_version",
         "responses": {
           "200": {
             "content": {

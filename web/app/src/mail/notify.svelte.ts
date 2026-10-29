@@ -2,9 +2,7 @@
 // Notifications for new mail: while the app is open but not in front, each new unread email in the inbox is shown by
 // the browser – if the user switched them on (account page) and the browser allows it. Kept per browser.
 
-import { createEffect, createSignal, on, onCleanup } from "solid-js";
-
-import { changed, useJmap } from "../App.js";
+import type { Jmap } from "../jmap.js";
 import { MAIL } from "../jmap.js";
 import { t } from "../i18n.js";
 
@@ -22,8 +20,11 @@ function stored(): boolean {
   }
 }
 
-const [wanted, setWanted] = createSignal(stored());
-export { wanted as notificationsWanted };
+const setting = $state({ wanted: stored() });
+
+export function notificationsWanted(): boolean {
+  return setting.wanted;
+}
 
 /** Switches notifications on – asking the browser – or off; whether they are on. */
 export async function setNotifications(on: boolean): Promise<boolean> {
@@ -35,7 +36,7 @@ export async function setNotifications(on: boolean): Promise<boolean> {
   } catch {
     // Not kept: off after the next reload.
   }
-  setWanted(on);
+  setting.wanted = on;
   return on;
 }
 
@@ -46,14 +47,14 @@ interface Arrived {
   from: { name: string | null; email: string }[] | null;
 }
 
-/** Watches the inbox while mounted; shows what arrives after it began. */
-export function MailNotifications(): null {
-  const jmap = useJmap();
+/** Watches the inbox: `check` shows what arrived since the watcher began (MailNotifications.svelte calls it on push). */
+export function inboxWatcher(jmap: Jmap): { check: () => Promise<void>; stop: () => void } {
   let since = new Date().toISOString();
   let inbox: string | undefined;
   const shown = new Set<string>();
   const check = async () => {
-    const quiet = !wanted() || !notificationsSupported() || Notification.permission !== "granted" || document.hasFocus();
+    const quiet =
+      !setting.wanted || !notificationsSupported() || Notification.permission !== "granted" || document.hasFocus();
     if (quiet) {
       since = new Date().toISOString();
       return;
@@ -87,7 +88,5 @@ export function MailNotifications(): null {
       if (email.receivedAt > since) since = email.receivedAt;
     }
   };
-  createEffect(on(() => changed("Email"), () => void check().catch(() => undefined), { defer: true }));
-  onCleanup(() => shown.clear());
-  return null;
+  return { check, stop: () => shown.clear() };
 }

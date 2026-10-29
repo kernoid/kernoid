@@ -332,7 +332,37 @@ fn rest() -> OpenApiRouter<AppState> {
 
 /// The OpenAPI description of the REST API, as `/openapi.json` serves it.
 pub fn openapi() -> utoipa::openapi::OpenApi {
-    rest().merge(rest_transfers()).split_for_parts().1
+    let mut openapi = rest().merge(rest_transfers()).split_for_parts().1;
+    unique_operation_ids(&mut openapi);
+    openapi
+}
+
+/// Names every operation by its method and path – `get_v1_tenant_language` – instead of the handler's name, which
+/// repeats across modules: OpenAPI wants each `operationId` once, and generated clients key on it.
+fn unique_operation_ids(openapi: &mut utoipa::openapi::OpenApi) {
+    for (path, item) in openapi.paths.paths.iter_mut() {
+        let slug: String = path
+            .split('/')
+            .filter(|part| !part.is_empty())
+            .map(|part| part.trim_start_matches('{').trim_end_matches('}').replace(['-', '.'], "_"))
+            .collect::<Vec<_>>()
+            .join("_");
+        let operations = [
+            ("get", &mut item.get),
+            ("put", &mut item.put),
+            ("post", &mut item.post),
+            ("delete", &mut item.delete),
+            ("options", &mut item.options),
+            ("head", &mut item.head),
+            ("patch", &mut item.patch),
+            ("trace", &mut item.trace),
+        ];
+        for (method, operation) in operations {
+            if let Some(operation) = operation {
+                operation.operation_id = Some(format!("{method}_{slug}"));
+            }
+        }
+    }
 }
 
 /// REST routes that take files of any size: their own limits, with the other transfers.
@@ -349,6 +379,7 @@ pub fn router(state: AppState, modules: Router, http: &Http) -> Router {
     let (rest, mut openapi) = rest().with_state(state.clone()).split_for_parts();
     let (rest_transfers, transfers_openapi) = rest_transfers().split_for_parts();
     openapi.merge(transfers_openapi);
+    unique_operation_ids(&mut openapi);
     // A login UI of the instance's own, on another origin, calls the API from the browser (cors.rs).
     let rest = rest.layer(axum::middleware::from_fn_with_state(state.clone(), cors::login_ui));
     let openapi = Arc::new(openapi);

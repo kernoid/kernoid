@@ -3,18 +3,23 @@
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
-  "description": "kernoid's web app – mail, calendar, contacts and files: served by kernoid at /app",
+  "description": "kernoid's web app \u2013 mail, calendar, contacts and files: served by kernoid at /app",
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.json --noEmit && vite build",
-    "check": "tsc -p tsconfig.json --noEmit",
+    "api": "openapi-typescript ../../docs/_data/openapi.json -o src/admin/api-types.ts",
+    "build": "vite build",
+    "check": "svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
     "test": "vitest run"
   },
   "dependencies": {
     "@kernoid/sdk": "workspace:*",
-    "solid-js": "1.9.17"
+    "openapi-fetch": "0.17.0",
+    "svelte": "5.57.2"
   },
   "devDependencies": {
-    "vite-plugin-solid": "2.11.14"
+    "@sveltejs/vite-plugin-svelte": "7.3.1",
+    "@tsconfig/svelte": "5.0.8",
+    "openapi-typescript": "7.13.0",
+    "svelte-check": "4.7.6"
   }
 }

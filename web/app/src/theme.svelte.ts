@@ -2,8 +2,6 @@
 // Light, dark or as the system is: kept in the browser for the instance's origin, so the login UI follows it too
 // (web/login/src/theme.ts reads the same key). `data-theme` on <html> overrides the system's choice in style.css.
 
-import { createSignal } from "solid-js";
-
 export type Theme = "system" | "light" | "dark";
 
 const KEY = "kernoid-theme";
@@ -23,10 +21,12 @@ function apply(theme: Theme): void {
   else document.documentElement.setAttribute("data-theme", theme);
 }
 
-const [current, setCurrent] = createSignal<Theme>(stored());
-apply(current());
+const current = $state({ theme: stored() });
+apply(current.theme);
 
-export const theme = current;
+export function theme(): Theme {
+  return current.theme;
+}
 
 export function setTheme(theme: Theme): void {
   try {
@@ -36,5 +36,5 @@ export function setTheme(theme: Theme): void {
     // Without storage the choice lasts until the page is left.
   }
   apply(theme);
-  setCurrent(theme);
+  current.theme = theme;
 }

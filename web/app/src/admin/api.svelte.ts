@@ -3,11 +3,16 @@
 // instance administrator working on another tenant – the tenant in `kernoid-tenant`. Errors are kernoid's problem
 // details (RFC 9457).
 
-import { createSignal } from "solid-js";
-
 /** The tenant an instance administrator works on; none for one's own. */
-const [tenant, setTenant] = createSignal<string | undefined>();
-export { setTenant, tenant };
+const chosen = $state<{ tenant: string | undefined }>({ tenant: undefined });
+
+export function tenant(): string | undefined {
+  return chosen.tenant;
+}
+
+export function setTenant(id: string | undefined): void {
+  chosen.tenant = id;
+}
 
 export class AdminError extends Error {
   constructor(

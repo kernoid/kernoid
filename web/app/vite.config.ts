@@ -1,16 +1,18 @@
 // SPDX-License-Identifier: MIT
-// kernoid serves the build at /app (http.web_app): the app (index.html) and what a link opens (link.html).
+// The build goes to dist/, which the kernoid binary embeds and serves at /app: the app (index.html) and what a link
+// opens (link.html). In development, http.web_app may name dist/ instead.
 /// <reference types="vitest/config" />
+import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { defineConfig } from "vite";
-import solid from "vite-plugin-solid";
 
 export default defineConfig({
   base: "/app/",
-  plugins: [solid()],
+  plugins: [svelte()],
   build: {
     outDir: "dist",
     emptyOutDir: true,
     sourcemap: true,
+    assetsInlineLimit: 0,
     rollupOptions: { input: { app: "index.html", link: "link.html" } },
   },
   resolve: { alias: { "@kernoid/sdk": new URL("../sdk/src/index.ts", import.meta.url).pathname } },
