@@ -216,9 +216,21 @@ const DOWNLOAD_POLICY: &str = "sandbox; default-src 'none'; img-src 'self' data:
 /// The PDF viewers of browsers are plugins: `default-src 'none'` (and so `object-src`) would block them.
 const PDF_POLICY: &str = "frame-ancestors 'self'";
 
-pub(crate) fn download_response(download: kernoid_jmap::Download, ranged: bool) -> Response {
+/// The response for a download – once its first part could be read: content that cannot be read (an object missing in
+/// storage, a key that does not open it) is a problem with a status, not a connection that breaks off empty.
+pub(crate) async fn download_response(download: kernoid_jmap::Download, ranged: bool) -> Response {
     let length = download.end - download.start;
-    let mut response = axum::body::Body::from_stream(download.content).into_response();
+    let mut content = download.content;
+    let first = match content.next().await {
+        Some(Err(error)) => {
+            tracing::error!(%error, "a download could not be read");
+            return Problem::new(StatusCode::INTERNAL_SERVER_ERROR)
+                .detail("the content could not be read")
+                .into_response();
+        }
+        first => first,
+    };
+    let mut response = axum::body::Body::from_stream(stream::iter(first).chain(content)).into_response();
     if ranged {
         *response.status_mut() = StatusCode::PARTIAL_CONTENT;
         let range = format!("bytes {}-{}/{}", download.start, download.end.saturating_sub(1), download.size);
@@ -263,6 +275,8 @@ pub(crate) async fn upload(
 #[derive(Debug, Deserialize)]
 pub(crate) struct DownloadQuery {
     accept: Option<String>,
+    /// `1`: shown in place (`Content-Disposition: inline`) rather than saved.
+    inline: Option<String>,
 }
 
 pub(crate) async fn download(
@@ -287,10 +301,15 @@ pub(crate) async fn download(
                 return response;
             }
             download.kind = Some(query.accept.or(download.kind).unwrap_or_else(|| "application/octet-stream".into()));
-            let mut response = download_response(download, range.is_some());
-            // The name as the client gave it, quoted; only printable ASCII, so that it cannot break the header.
+            let mut response = download_response(download, range.is_some()).await;
+            if !response.status().is_success() {
+                return response;
+            }
+            // The name as the client gave it, quoted; only printable ASCII, so that it cannot break the header. With
+            // `inline=1` the browser shows it in place (the web app's viewer) – under the download's sandbox policy.
             let name: String = name.chars().filter(|c| c.is_ascii_graphic() && *c != '"' && *c != '\\').collect();
-            if let Ok(disposition) = HeaderValue::from_str(&format!("attachment; filename=\"{name}\"")) {
+            let disposition = if query.inline.as_deref() == Some("1") { "inline" } else { "attachment" };
+            if let Ok(disposition) = HeaderValue::from_str(&format!("{disposition}; filename=\"{name}\"")) {
                 response.headers_mut().insert(header::CONTENT_DISPOSITION, disposition);
             }
             response

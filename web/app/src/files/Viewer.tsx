@@ -41,9 +41,10 @@ async function text(url: string, size: number | null): Promise<string> {
   return response.text();
 }
 
-export function Viewer(props: { name: string; type: string | null | undefined; size: number | null; url: string; onClose: () => void }): JSX.Element {
+/** `url` saves the file; `inline` shows it in place (the server's `inline=1`). */
+export function Viewer(props: { name: string; type: string | null | undefined; size: number | null; url: string; inline: string; onClose: () => void }): JSX.Element {
   const kind = kindOf(props.name, props.type);
-  const [content] = createResource(() => (kind === "text" ? text(props.url, props.size) : Promise.resolve("")));
+  const [content] = createResource(() => (kind === "text" ? text(props.inline, props.size) : Promise.resolve("")));
   const onKey = (event: KeyboardEvent) => {
     if (event.key === "Escape") props.onClose();
   };
@@ -57,7 +58,7 @@ export function Viewer(props: { name: string; type: string | null | undefined; s
           <h2 class="grow">{props.name}</h2>
           <Show when={kind === "pdf"}>
             {/* Some browsers – on phones especially – show no PDF in a frame. */}
-            <a class="button" href={props.url} target="_blank" rel="noopener">
+            <a class="button" href={props.inline} target="_blank" rel="noopener">
               {t("Open in a new tab")}
             </a>
           </Show>
@@ -71,16 +72,16 @@ export function Viewer(props: { name: string; type: string | null | undefined; s
         <div class="stage">
           <Switch>
             <Match when={kind === "image"}>
-              <img src={props.url} alt={props.name} />
+              <img src={props.inline} alt={props.name} />
             </Match>
             <Match when={kind === "audio"}>
-              <audio controls autoplay src={props.url} />
+              <audio controls autoplay src={props.inline} />
             </Match>
             <Match when={kind === "video"}>
-              <video controls autoplay src={props.url} />
+              <video controls autoplay src={props.inline} />
             </Match>
             <Match when={kind === "pdf"}>
-              <iframe src={props.url} title={props.name} />
+              <iframe src={props.inline} title={props.name} />
             </Match>
             <Match when={kind === "text"}>
               <Failure error={content.error} />

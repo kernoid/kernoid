@@ -360,7 +360,10 @@ async fn dispatch(
                 kind: Some(download.media_type),
                 content: download.content,
             };
-            let mut response = crate::jmap::download_response(download, range.is_some());
+            let mut response = crate::jmap::download_response(download, range.is_some()).await;
+            if !response.status().is_success() {
+                return Ok(response);
+            }
             if let Ok(value) = HeaderValue::from_str(&etag(node)) {
                 response.headers_mut().insert(header::ETAG, value);
             }

@@ -325,6 +325,9 @@ pub struct Http {
     /// and links are built from it and the instance's primary domain – never from a request.
     #[serde(default = "default_public_scheme")]
     pub public_scheme: PublicScheme,
+    /// The port instances are reached on from outside, if not the scheme's own (443, 80) – for trying kernoid out on
+    /// a port such as 8080. Issuer and links name it.
+    pub public_port: Option<u16>,
     /// The built login UI (`web/login`), served at `/login`; the container image has it at the default path.
     #[serde(default = "default_login_ui")]
     pub login_ui: std::path::PathBuf,
@@ -372,6 +375,7 @@ impl Default for Http {
             trusted_proxies: Vec::new(),
             metrics_listen: None,
             public_scheme: PublicScheme::Https,
+            public_port: None,
             login_ui: default_login_ui(),
             web_app: default_web_app(),
         }

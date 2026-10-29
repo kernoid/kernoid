@@ -481,6 +481,13 @@ const de: Record<string, string> = {
   view: "ansehen",
   edit: "bearbeiten",
   "edit and share": "bearbeiten und teilen",
+  "Audit log": "Audit-Log",
+  "What happened and who did it – from kernoid's events, newest first. Passwords and other secrets never appear here.": "Was geschah und wer es tat – aus den Events von kernoid, neueste zuerst. Passwörter und andere Geheimnisse erscheinen hier nie.",
+  Scope: "Bereich",
+  "Load older": "Ältere laden",
+  History: "Verlauf",
+  "primary, the login name": "Hauptadresse, der Anmeldename",
+  "Add alias": "Alias hinzufügen",
 };
 
 const lang = (navigator.languages?.[0] ?? navigator.language ?? "en").toLowerCase().startsWith("de") ? "de" : "en";

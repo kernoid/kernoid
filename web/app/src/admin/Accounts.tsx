@@ -150,6 +150,7 @@ function Account(props: { id: string }): JSX.Element {
   const [sessions, { refetch: refetchSessions }] = createResource(() => api<SessionSummaryView[]>("GET", `${base}/sessions`).catch(() => []));
   const [consents, { refetch: refetchConsents }] = createResource(() => api<ConsentView[]>("GET", `${base}/consents`).catch(() => []));
   const [links, { refetch: refetchLinks }] = createResource(() => api<LinkView[]>("GET", `${base}/links`).catch(() => []));
+  const [addresses, { refetch: refetchAddresses }] = createResource(() => api<{ address: string; primary: boolean }[]>("GET", `${base}/addresses`).catch(() => []));
   const [dialog, setDialog] = createSignal<"mail-grant" | "file-grant" | "password">();
   const change = async (work: () => Promise<unknown>, done: string, after: () => unknown) => {
     if (await action.run(work, done)) await after();
@@ -165,6 +166,9 @@ function Account(props: { id: string }): JSX.Element {
             </button>
           </p>
           <Head title={me().display_name} description={`${me().address} · ${kindOf(me())} · ${me().id}`}>
+            <button type="button" onClick={() => go("audit", `account:${me().id}`)}>
+              {t("History")}
+            </button>
             <button
               type="button"
               classList={{ danger: me().active }}
@@ -189,28 +193,48 @@ function Account(props: { id: string }): JSX.Element {
                 {t("Rename")}
               </button>
             </Form>
+            <Show when={(ok(addresses) ?? []).length > 0}>
+              <ul class="rows">
+                <For each={ok(addresses) ?? []}>
+                  {(entry) => (
+                    <li>
+                      <span class="grow">
+                        {entry.address}
+                        <Show when={entry.primary}>
+                          <span class="muted small"> · {t("primary, the login name")}</span>
+                        </Show>
+                      </span>
+                      <Show when={!entry.primary}>
+                        <button
+                          type="button"
+                          class="quiet"
+                          disabled={action.busy()}
+                          onClick={() => void change(() => api("PATCH", base, { primary_address: entry.address }), t("Saved."), () => (void refetch(), void refetchAddresses(), directory.reload()))}
+                        >
+                          {t("Make primary")}
+                        </button>
+                        <button
+                          type="button"
+                          class="quiet danger"
+                          disabled={action.busy()}
+                          onClick={() => void change(() => api("DELETE", `${base}/aliases/${seg(entry.address)}`), t("The alias is removed."), refetchAddresses)}
+                        >
+                          {t("Remove")}
+                        </button>
+                      </Show>
+                    </li>
+                  )}
+                </For>
+              </ul>
+            </Show>
             <Show when={me().native}>
               <Form
                 class="row"
-                submit={(field, all) => {
-                  const address = field("alias");
-                  const remove = all("remove").length > 0;
-                  void change(() => api(remove ? "DELETE" : "PUT", `${base}/aliases/${seg(address)}`), remove ? t("The alias is removed.") : t("The alias is added."), () => undefined);
-                }}
+                submit={(field) => void change(() => api("PUT", `${base}/aliases/${seg(field("alias"))}`), t("The alias is added."), refetchAddresses)}
               >
                 <input name="alias" type="email" required placeholder={t("Alias, e.g. office@example.org")} aria-label={t("Alias")} />
-                <label class="inline">
-                  <input type="checkbox" name="remove" />
-                  <span>{t("remove")}</span>
-                </label>
                 <button type="submit" disabled={action.busy()}>
-                  {t("Add or remove alias")}
-                </button>
-              </Form>
-              <Form class="row" submit={(field) => void change(() => api("PATCH", base, { primary_address: field("primary") }), t("Saved."), () => (void refetch(), directory.reload()))}>
-                <input name="primary" type="email" required placeholder={t("An alias that becomes the login name")} aria-label={t("Primary address")} />
-                <button type="submit" disabled={action.busy()}>
-                  {t("Make primary")}
+                  {t("Add alias")}
                 </button>
               </Form>
             </Show>

@@ -14,6 +14,7 @@ pub mod account;
 mod address;
 pub mod admin;
 pub mod app_password;
+pub mod audit;
 pub mod collection_access;
 pub mod consent;
 mod dns;

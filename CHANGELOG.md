@@ -7,6 +7,21 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 ## [Unreleased]
 
+### Added
+
+- The audit log: the events of the tenant or the instance, newest first and for one object – `GET /v1/audit`,
+  GraphQL `auditLog`, and a page in the web app's administration (with an account's history).
+- An account's addresses – the primary one and its aliases: `GET /v1/accounts/{id}/addresses`, GraphQL
+  `accountAddresses`, listed in the administration with "make primary" and "remove".
+- `http.public_port`: instances reached on a port other than 443 or 80 name it in their issuer and links (JMAP);
+  `deploy/compose` sets 8080.
+
+### Fixed
+
+- The web app shows PDFs and other files in place: its viewer asks for downloads with `inline=1` – they were sent as
+  attachments, which browsers saved instead of showing.
+- A download whose content cannot be read answers with a problem (500) instead of an empty, broken response.
+
 ## [0.1.0] – 2026-10-28
 
 The first release, a pre-release. kernoid runs an organisation's email, logins and files as one system on PostgreSQL and

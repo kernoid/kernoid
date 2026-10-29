@@ -1161,6 +1161,60 @@
         }
       }
     },
+    "/v1/accounts/{id}/addresses": {
+      "get": {
+        "tags": [
+          "accounts"
+        ],
+        "summary": "An account's addresses: the primary one first, then its aliases (needs `directory.read`).",
+        "operationId": "addresses",
+        "parameters": [
+          {
+            "name": "kernoid-tenant",
+            "in": "header",
+            "description": "The tenant to act on – for instance administrators; the caller's own tenant if left out.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AddressView"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/accounts/{id}/aliases/{address}": {
       "put": {
         "tags": [
@@ -3667,6 +3721,114 @@
           },
           "400": {
             "description": "a public application",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/audit": {
+      "get": {
+        "tags": [
+          "audit"
+        ],
+        "summary": "What happened in the tenant or the instance, and who did it: the events, newest first (needs `directory.read`\nfor the tenant, `instance.read` for the instance).",
+        "operationId": "log",
+        "parameters": [
+          {
+            "name": "kernoid-tenant",
+            "in": "header",
+            "description": "The tenant to act on – for instance administrators; the caller's own tenant if left out.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "description": "`tenant` (default: the tenant administered, needs `directory.read`) or `instance` (its own aggregates, needs\n`instance.read`).",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "description": "Only events before this position – the `position` of the last entry of the previous page.",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "At most this many events (1–200, default 50).",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          },
+          {
+            "name": "aggregate_type",
+            "in": "query",
+            "description": "Only one kind of object, e.g. `account`, `group`, `tenant`.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "aggregate_id",
+            "in": "query",
+            "description": "Only one object (with `aggregate_type`).",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AuditEntryView"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
             "content": {
               "application/json": {
                 "schema": {
@@ -8357,6 +8519,22 @@
           }
         }
       },
+      "AddressView": {
+        "type": "object",
+        "required": [
+          "address",
+          "primary"
+        ],
+        "properties": {
+          "address": {
+            "type": "string"
+          },
+          "primary": {
+            "type": "boolean",
+            "description": "The primary address – the login name; the others are aliases."
+          }
+        }
+      },
       "Answer": {
         "type": "object",
         "required": [
@@ -8580,6 +8758,48 @@
           },
           "role": {
             "type": "string"
+          }
+        }
+      },
+      "AuditEntryView": {
+        "type": "object",
+        "required": [
+          "position",
+          "aggregate_type",
+          "aggregate_id",
+          "sequence",
+          "event_type",
+          "payload",
+          "creator",
+          "created_at"
+        ],
+        "properties": {
+          "aggregate_id": {
+            "type": "string"
+          },
+          "aggregate_type": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "creator": {
+            "type": "string",
+            "description": "An account id, `system`, `operator` or a service."
+          },
+          "event_type": {
+            "type": "string",
+            "description": "E.g. `account.added`, `group.member_added`."
+          },
+          "payload": {},
+          "position": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "sequence": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },

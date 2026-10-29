@@ -53,6 +53,10 @@ async fn an_address_belongs_to_one_account(pool: PgPool) {
         Err(IdentityError::AddressTaken(a)) if a.as_str() == "alice@firma.de"
     ));
     identity.add_alias(alice, &address("info@firma.de"), WHO).await.unwrap();
+    assert_eq!(
+        identity.account_addresses(alice).await.unwrap(),
+        [("alice@firma.de".to_owned(), true), ("info@firma.de".to_owned(), false)]
+    );
     assert!(matches!(
         identity.add_alias(bob, &address("info@firma.de"), WHO).await,
         Err(IdentityError::AddressTaken(_))

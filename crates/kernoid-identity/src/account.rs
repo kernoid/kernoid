@@ -1017,6 +1017,18 @@ impl Identity {
         }))
     }
 
+    /// The addresses of an account, each with whether it is the primary one: the primary first, then the aliases.
+    pub async fn account_addresses(&self, account: Uuid) -> Result<Vec<(String, bool)>> {
+        let rows = sqlx::query!(
+            "SELECT address, is_primary FROM addresses WHERE account_id = $1 ORDER BY is_primary DESC, address",
+            account
+        )
+        .fetch_all(self.pool())
+        .await
+        .map_err(store_error)?;
+        Ok(rows.into_iter().map(|row| (row.address, row.is_primary)).collect())
+    }
+
     pub async fn accounts(&self, tenant: Uuid) -> Result<Vec<AccountInfo>> {
         let rows = sqlx::query!(
             r#"SELECT t.instance_id, a.tenant_id, a.id, a.display_name, coalesce(a.primary_address, a.username, a.email, '') AS "primary_address!", a.primary_address IS NOT NULL AS "native!", a.active, a.kind

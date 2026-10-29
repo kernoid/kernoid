@@ -131,6 +131,12 @@ impl Identity {
         Ok(info)
     }
 
+    /// An account's addresses, the primary one first, then its aliases (needs `directory.read`).
+    pub async fn admin_account_addresses(&self, admin: &Admin, account: Uuid) -> Result<Vec<(String, bool)>> {
+        self.admin_account(admin, account).await?;
+        self.account_addresses(account).await
+    }
+
     pub async fn admin_accounts(&self, admin: &Admin) -> Result<Vec<AccountInfo>> {
         admin.require(Permission::DirectoryRead)?;
         self.accounts(admin.tenant()).await

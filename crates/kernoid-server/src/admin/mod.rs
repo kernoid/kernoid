@@ -6,6 +6,7 @@
 
 pub(crate) mod accounts;
 pub(crate) mod applications;
+pub(crate) mod audit;
 pub(crate) mod collections;
 pub(crate) mod directory;
 pub(crate) mod files;

@@ -135,6 +135,28 @@ pub(crate) async fn get(
     respond(result, |account| Json(AccountDetails::from(account)).into_response())
 }
 
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub(crate) struct AddressView {
+    address: String,
+    /// The primary address – the login name; the others are aliases.
+    primary: bool,
+}
+
+/// An account's addresses: the primary one first, then its aliases (needs `directory.read`).
+#[utoipa::path(get, path = "/v1/accounts/{id}/addresses", tag = "accounts", params(TenantHeader),
+    responses((status = 200, body = [AddressView]), (status = 404, body = Problem)))]
+pub(crate) async fn addresses(
+    State(state): State<AppState>,
+    AdminSession(admin): AdminSession,
+    Path(account): Path<String>,
+) -> Response {
+    let result = async { state.identity.admin_account_addresses(&admin, id(&account, "the account")?).await }.await;
+    respond(result, |list| {
+        Json(list.into_iter().map(|(address, primary)| AddressView { address, primary }).collect::<Vec<_>>())
+            .into_response()
+    })
+}
+
 /// Changes an account's display name, login name or active state (needs `accounts.manage`).
 #[utoipa::path(patch, path = "/v1/accounts/{id}", tag = "accounts", params(TenantHeader), request_body = AccountChange,
     responses((status = 204), (status = 403, body = Problem)))]

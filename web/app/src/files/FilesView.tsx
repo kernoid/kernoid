@@ -321,6 +321,7 @@ export function FilesView(): JSX.Element {
             type={node().mediaType}
             size={node().size ?? null}
             url={downloadPath(jmap, account(), node().blobId ?? "", node().name, node().mediaType)}
+            inline={`${downloadPath(jmap, account(), node().blobId ?? "", node().name, node().mediaType)}&inline=1`}
             onClose={() => setViewing(undefined)}
           />
         )}

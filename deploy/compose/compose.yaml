@@ -25,6 +25,8 @@ services:
       KERNOID__ENCRYPTION__MAIN_KEY: ${KERNOID_MAIN_KEY:?set in .env}
       # Reached over plain HTTP here; put kernoid behind TLS (or set [http.tls]) and remove this for real use.
       KERNOID__HTTP__PUBLIC_SCHEME: http
+      # Reached on port 8080 of this machine: issuer and links name it. Remove it behind a proxy on 443.
+      KERNOID__HTTP__PUBLIC_PORT: "8080"
       # Receiving mail: the name the tenants' MX records point to. Inside the container kernoid listens on 2525 (it
       # runs without root); publish it as port 25 of the host for real use.
       KERNOID__SMTP__HOSTNAME: ${KERNOID_MAIL_HOSTNAME:-mail.localhost}

@@ -16,7 +16,7 @@ A permission allows one kind of administration. **Tenant permissions** act withi
 
 | Permission | Allows |
 |---|---|
-| `directory.read` | seeing the tenant, its accounts, groups, roles, projects and applications |
+| `directory.read` | seeing the tenant, its accounts, groups, roles, projects and applications, and the audit log |
 | `tenant.manage` | the tenant's name; switching modules on and off; the tenant's default mail quota |
 | `domains.manage` | claiming, verifying and removing mail domains |
 | `policies.manage` | the tenant's policies, e.g. requiring a second factor |
@@ -118,6 +118,14 @@ domains (needs `projects.manage`).
 - Its accounts may then log in to the project's applications; the roles claim names their tenant.
 - The project's tenant sees every tenant's authorizations, the other tenant only its own.
 - A grant, or one of its roles, can be taken back once the other tenant no longer gives it to anyone.
+
+## Audit log
+
+Identity and administration are events, so the audit log is read from them: who did what, when, newest first –
+`GET /v1/audit` (GraphQL `auditLog`), in the web app under Administration → Audit log, also for one object (an
+account's history). The tenant's events need `directory.read` – the built-in `auditor` role has it –, the instance's
+own (`scope=instance`) `instance.read`. Logins are events too (`session.created`). Events hold no passwords, tokens or
+other secrets: those never enter them.
 
 ## Bootstrapping
 

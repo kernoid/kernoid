@@ -116,6 +116,8 @@ pub struct Oidc {
     main: MainKeys,
     /// `https` in production; `http` only for trying kernoid out without TLS.
     scheme: String,
+    /// `:port` where instances are reached on a port other than the scheme's own (`http.public_port`), else empty.
+    port: String,
     keys: keys::KeyCache,
     /// For requests to external identity providers (`outbound`).
     outbound: reqwest::Client,
@@ -129,10 +131,17 @@ impl Oidc {
             events,
             main,
             scheme: scheme.to_owned(),
+            port: String::new(),
             keys: keys::KeyCache::default(),
             outbound: outbound::client(false),
             allow_private: false,
         }
+    }
+
+    /// Instances are reached on this port, not the scheme's own (`http.public_port`): issuer and links name it.
+    pub fn public_port(mut self, port: Option<u16>) -> Self {
+        self.port = port.map(|port| format!(":{port}")).unwrap_or_default();
+        self
     }
 
     /// Allows requests to identity providers at private addresses and over plain HTTP
@@ -149,7 +158,7 @@ impl Oidc {
 
     /// The issuer of an instance: its primary domain – never taken from a request.
     pub fn issuer(&self, primary_domain: &str) -> String {
-        format!("{}://{primary_domain}", self.scheme)
+        format!("{}://{primary_domain}{}", self.scheme, self.port)
     }
 
     /// Where logins happen: the instance's own login UI, or kernoid's at `/login`; without a trailing slash.

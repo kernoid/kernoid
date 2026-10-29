@@ -10,6 +10,7 @@ import { ok } from "../App.js";
 import { t } from "../i18n.js";
 import { Accounts } from "./Accounts.js";
 import { type AccountDetails, type GroupView, type TenantSummary, api, setTenant, tenant } from "./api.js";
+import { Audit } from "./Audit.js";
 import { Domains } from "./Domains.js";
 import { Drives } from "./Drives.js";
 import { Groups } from "./Groups.js";
@@ -62,6 +63,7 @@ type Page =
   | "applications"
   | "providers"
   | "scim"
+  | "audit"
   | "instance"
   | "tenants"
   | "instance-roles"
@@ -79,6 +81,7 @@ const TENANT_PAGES: [Page, string, string][] = [
   ["applications", "Applications", "applications.manage"],
   ["providers", "Identity providers", "identity_providers.manage"],
   ["scim", "Provisioning (SCIM)", "provisioning.manage"],
+  ["audit", "Audit log", "directory.read"],
 ];
 const INSTANCE_PAGES: [Page, string][] = [
   ["instance", "Instance"],
@@ -117,10 +120,12 @@ export function AdminView(): JSX.Element {
       void refetchAccounts();
       void refetchGroups();
     },
-    name: (kind, id) =>
-      kind === "group"
-        ? (directory.groups().find((group) => group.id === id)?.name ?? id)
-        : (directory.accounts().find((account) => account.id === id)?.address ?? id),
+    name: (kind, id) => {
+      if (kind === "group") return directory.groups().find((group) => group.id === id)?.name ?? id;
+      // Drives too, which the account lists leave out: they have a name but no address.
+      const account = (ok(accounts) ?? []).find((entry) => entry.id === id);
+      return account?.address || account?.display_name || id;
+    },
   };
 
   const may = (permission: string) => ok(access)?.permissions.includes(permission) ?? false;
@@ -212,6 +217,9 @@ export function AdminView(): JSX.Element {
                 </Match>
                 <Match when={page() === "scim"}>
                   <Scim />
+                </Match>
+                <Match when={page() === "audit"}>
+                  <Audit object={hash().id} instance={ok(access)?.instance ?? false} />
                 </Match>
                 <Match when={page() === "instance"}>
                   <Instance />

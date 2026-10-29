@@ -789,6 +789,7 @@ async fn serve(config: Config) -> anyhow::Result<()> {
     let blobs = BlobStore::from_config(&config.blob, keys.clone()).context("setting up object storage")?;
     let events = EventStore::new(db.clone());
     let oidc = Oidc::new(events.clone(), main_keys.clone(), config.http.public_scheme.as_str())
+        .public_port(config.http.public_port)
         .allow_private_networks(config.outbound.allow_private_networks);
     let known: Vec<&'static str> = MODULES.iter().map(|module| module.name()).collect();
     let mut state = AppState::new(
@@ -1104,7 +1105,8 @@ async fn keys(config: &Config, command: KeysCommand) -> anyhow::Result<()> {
             let owner = kernoid_store::connect_owner(&config.database).await.context("connecting as the owner")?;
             let count = kernoid_store::rewrap(&owner, &main_keys).await?;
             println!("rewrapped {count} tenant keys with the current main key");
-            let oidc = Oidc::new(EventStore::new(owner), main_keys, config.http.public_scheme.as_str());
+            let oidc = Oidc::new(EventStore::new(owner), main_keys, config.http.public_scheme.as_str())
+                .public_port(config.http.public_port);
             println!("sealed {} signing keys again with the current main key", oidc.rewrap_signing_keys().await?);
         }
     }
@@ -1952,6 +1954,7 @@ async fn account(config: &Config, command: AccountCommand) -> anyhow::Result<()>
 async fn oidc(config: &Config) -> anyhow::Result<Oidc> {
     let db = kernoid_store::connect(&config.database).await.context("connecting to PostgreSQL")?;
     Ok(Oidc::new(EventStore::new(db), main_keys(config)?, config.http.public_scheme.as_str())
+        .public_port(config.http.public_port)
         .allow_private_networks(config.outbound.allow_private_networks))
 }
 

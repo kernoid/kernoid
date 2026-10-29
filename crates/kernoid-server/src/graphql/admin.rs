@@ -2,12 +2,13 @@
 //! The administration API in GraphQL – the same operations and permission checks as the REST routes in
 //! `crate::admin`. The `kernoid-tenant` header names the tenant an instance administrator acts on.
 
-use async_graphql::{Context, Object, SimpleObject};
+use async_graphql::{Context, Json, Object, SimpleObject};
 use chrono::{DateTime, Utc};
 use kernoid_identity::{
     Address, CHALLENGE_LABEL, DomainName, Identity, IdentityError,
     account::AccountInfo,
     admin::TenantPolicy,
+    audit::{AuditEntry, AuditQuery},
     consent::ConsentInfo,
     group::GroupInfo,
     project::ProjectInfo,
@@ -133,6 +134,43 @@ pub struct Permissions {
     account: String,
     tenant: String,
     permissions: Vec<String>,
+}
+
+/// An address of an account.
+#[derive(Debug, SimpleObject)]
+pub struct AccountAddress {
+    address: String,
+    /// The primary address – the login name; the others are aliases.
+    primary: bool,
+}
+
+/// An event of the audit log.
+#[derive(Debug, SimpleObject)]
+pub struct AuditEntryObject {
+    position: i64,
+    aggregate_type: String,
+    aggregate_id: String,
+    sequence: i64,
+    event_type: String,
+    payload: Json<serde_json::Value>,
+    /// An account id, `system`, `operator` or a service.
+    creator: String,
+    created_at: DateTime<Utc>,
+}
+
+impl From<AuditEntry> for AuditEntryObject {
+    fn from(entry: AuditEntry) -> Self {
+        Self {
+            position: entry.position,
+            aggregate_type: entry.aggregate_type,
+            aggregate_id: entry.aggregate_id,
+            sequence: entry.sequence,
+            event_type: entry.event_type,
+            payload: Json(entry.payload),
+            creator: entry.creator,
+            created_at: entry.created_at,
+        }
+    }
 }
 
 #[derive(Debug, SimpleObject)]
@@ -603,6 +641,13 @@ impl AdminQuery {
         Ok(identity.admin_account(&admin, uuid(&id, "the account")?).await.map_err(error)?.into())
     }
 
+    /// An account's addresses, the primary one first, then its aliases (needs `directory.read`).
+    async fn account_addresses(&self, context: &Context<'_>, id: String) -> async_graphql::Result<Vec<AccountAddress>> {
+        let (identity, admin) = admin(context).await?;
+        let list = identity.admin_account_addresses(&admin, uuid(&id, "the account")?).await.map_err(error)?;
+        Ok(list.into_iter().map(|(address, primary)| AccountAddress { address, primary }).collect())
+    }
+
     /// An account's valid sessions (needs `accounts.manage`).
     async fn account_sessions(
         &self,
@@ -619,6 +664,24 @@ impl AdminQuery {
         let (_, admin) = admin(context).await?;
         let oidc = context.data::<Oidc>()?;
         let list = oidc.admin_account_consents(&admin, uuid(&account, "the account")?).await.map_err(oidc_error)?;
+        Ok(list.into_iter().map(Into::into).collect())
+    }
+
+    /// What happened in the tenant (`scope` "tenant", needs `directory.read`) or the instance ("instance", needs
+    /// `instance.read`): the events, newest first; `before` is the `position` of the last entry of the page before.
+    async fn audit_log(
+        &self,
+        context: &Context<'_>,
+        scope: Option<String>,
+        before: Option<i64>,
+        limit: Option<i64>,
+        aggregate_type: Option<String>,
+        aggregate_id: Option<String>,
+    ) -> async_graphql::Result<Vec<AuditEntryObject>> {
+        let (identity, admin) = admin(context).await?;
+        let scope = crate::admin::audit::scope(scope.as_deref()).map_err(error)?;
+        let query = AuditQuery { before, limit, aggregate_type, aggregate_id };
+        let list = identity.admin_audit_log(&admin, scope, &query).await.map_err(error)?;
         Ok(list.into_iter().map(Into::into).collect())
     }
 

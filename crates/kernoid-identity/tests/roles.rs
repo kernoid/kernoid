@@ -370,3 +370,51 @@ async fn instances_define_roles_of_their_own(pool: PgPool) {
     identity.delete_instance_role(instance, &role("helpdesk"), WHO).await.unwrap();
     assert!(identity.permissions(other, carol).await.unwrap().is_empty());
 }
+
+#[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
+async fn the_audit_log_shows_the_tenants_events_to_auditors(pool: PgPool) {
+    use kernoid_identity::audit::{AuditQuery, AuditScope};
+
+    let identity = identity(pool);
+    let (instance, tenant) = tenant_with(&identity, "login.firma.de", &["firma.de"]).await;
+    let alice = account(&identity, tenant, "alice@firma.de").await;
+    account(&identity, tenant, "carol@firma.de").await;
+    identity.grant_role(tenant, Principal::Account(alice), &role("auditor"), WHO).await.unwrap();
+    // Logging in is an event too (session.created); it comes before the changes here.
+    let auditor = identity.admin(instance, &login(&identity, instance, "alice@firma.de").await, None).await.unwrap();
+    let group = identity.add_group(tenant, "Vertrieb", WHO).await.unwrap();
+    identity.add_group_member(tenant, group, alice, WHO).await.unwrap();
+
+    let all = AuditQuery::default();
+    let log = identity.admin_audit_log(&auditor, AuditScope::Tenant, &all).await.unwrap();
+    assert_eq!(log[0].event_type, "group.member_added", "newest first");
+    assert!(log.iter().any(|entry| entry.event_type == "account.added"));
+    assert!(log.windows(2).all(|pair| pair[0].position > pair[1].position));
+
+    // One object, and the next page.
+    let group_only = AuditQuery {
+        aggregate_type: Some("group".into()),
+        aggregate_id: Some(group.to_string()),
+        ..AuditQuery::default()
+    };
+    let events = identity.admin_audit_log(&auditor, AuditScope::Tenant, &group_only).await.unwrap();
+    assert_eq!(
+        events.iter().map(|entry| entry.event_type.as_str()).collect::<Vec<_>>(),
+        ["group.member_added", "group.added"]
+    );
+    let page = AuditQuery { before: Some(log[0].position), limit: Some(1), ..AuditQuery::default() };
+    let next = identity.admin_audit_log(&auditor, AuditScope::Tenant, &page).await.unwrap();
+    assert_eq!(next.len(), 1);
+    assert_eq!(next[0].position, log[1].position);
+
+    // No permission, no log; the instance's own events need instance.read.
+    let carol = identity.admin(instance, &login(&identity, instance, "carol@firma.de").await, None).await.unwrap();
+    assert!(matches!(
+        identity.admin_audit_log(&carol, AuditScope::Tenant, &all).await,
+        Err(IdentityError::Forbidden(Permission::DirectoryRead))
+    ));
+    assert!(matches!(
+        identity.admin_audit_log(&auditor, AuditScope::Instance, &all).await,
+        Err(IdentityError::Forbidden(Permission::InstanceRead))
+    ));
+}

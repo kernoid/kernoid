@@ -47,6 +47,7 @@ main_key = "…"   # 64 hex characters: openssl rand -hex 32
 | `http.login_ui` | `/usr/share/kernoid/login` | the built login UI, served at `/login`; the container image has it there |
 | `http.web_app` | `/usr/share/kernoid/app` | the built web app (mail, calendar, contacts), served at `/app`; the container image has it there |
 | `http.public_scheme` | `https` | how instances are reached from outside; `http` only for trying kernoid out. Issuer and links are built from it and the instance's primary domain |
+| `http.public_port` | – | the port instances are reached on from outside, if not the scheme's own – e.g. `8080` when trying kernoid out; issuer and links (OpenID Connect, JMAP) name it |
 | `database.url` | required | connection URL of the runtime role |
 | `database.migrate_url` | – | connection URL of the role that owns the schema and runs `kernoid migrate`; leave out only if the runtime role owns the schema – then it could change events |
 | `database.max_connections` | `10` | |

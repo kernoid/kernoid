@@ -5,6 +5,17 @@ type Account {
 	displayName: String!
 }
 
+"""
+An address of an account.
+"""
+type AccountAddress {
+	address: String!
+	"""
+	The primary address – the login name; the others are aliases.
+	"""
+	primary: Boolean!
+}
+
 type AccountDetails {
 	id: String!
 	tenant: String!
@@ -76,6 +87,23 @@ type ApplicationOptions {
 	consentRequired: Boolean!
 	backchannelLogoutUri: String
 	frontchannelLogoutUri: String
+}
+
+"""
+An event of the audit log.
+"""
+type AuditEntryObject {
+	position: Int!
+	aggregateType: String!
+	aggregateId: String!
+	sequence: Int!
+	eventType: String!
+	payload: JSON!
+	"""
+	An account id, `system`, `operator` or a service.
+	"""
+	creator: String!
+	createdAt: DateTime!
 }
 
 type AuthRequest {
@@ -949,6 +977,10 @@ type QueryRoot {
 	accounts: [AccountDetails!]!
 	account(id: String!): AccountDetails!
 	"""
+	An account's addresses, the primary one first, then its aliases (needs `directory.read`).
+	"""
+	accountAddresses(id: String!): [AccountAddress!]!
+	"""
 	An account's valid sessions (needs `accounts.manage`).
 	"""
 	accountSessions(account: String!): [SessionSummaryObject!]!
@@ -956,6 +988,11 @@ type QueryRoot {
 	The applications an account agreed to (needs `accounts.manage`).
 	"""
 	accountConsents(account: String!): [Consent!]!
+	"""
+	What happened in the tenant (`scope` "tenant", needs `directory.read`) or the instance ("instance", needs
+	`instance.read`): the events, newest first; `before` is the `position` of the last entry of the page before.
+	"""
+	auditLog(scope: String, before: Int, limit: Int, aggregateType: String, aggregateId: String): [AuditEntryObject!]!
 	"""
 	The tenant's groups (needs `directory.read`).
 	"""
