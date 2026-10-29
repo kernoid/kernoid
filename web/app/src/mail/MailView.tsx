@@ -161,6 +161,29 @@ export function MailView(): JSX.Element {
         </ul>
       </aside>
       <section class="list">
+        {/* On a phone the side is hidden: the mailbox and writing are here. */}
+        <div class="narrow-only phone-bar">
+          <select
+            aria-label={t("Mailboxes")}
+            value={selected() ?? ""}
+            onChange={(event) => {
+              setSelected(event.currentTarget.value);
+              setOpen(undefined);
+            }}
+          >
+            <For each={ok(boxes) ?? []}>
+              {(box) => (
+                <option value={box.id}>
+                  {boxName(box)}
+                  {box.unreadEmails > 0 ? ` (${box.unreadEmails})` : ""}
+                </option>
+              )}
+            </For>
+          </select>
+          <button type="button" class="primary" onClick={() => setComposing({ to: "", cc: "", subject: "", body: "" })}>
+            {t("Write")}
+          </button>
+        </div>
         <form
           class="search"
           onSubmit={(event) => {

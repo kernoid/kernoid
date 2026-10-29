@@ -81,6 +81,7 @@ button.wide { width: 100%; margin-bottom: 12px; }
 input:focus, textarea:focus, select:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 textarea { width: 100%; resize: vertical; }
 
+.narrow-only { display: none; }
 /* One column no wider than the window: what is wider scrolls inside it, the page never sideways. */
 .shell { display: grid; grid-template-rows: auto 1fr; grid-template-columns: minmax(0, 1fr); height: 100%; }
 .bar { display: flex; align-items: center; gap: 24px; padding: 8px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
@@ -176,6 +177,9 @@ a.button.primary { background: var(--accent); color: var(--accent-text); border-
   .three, .two { grid-template-columns: 1fr; }
   .side { display: none; }
   .bar { gap: 8px; flex-wrap: wrap; }
+  .narrow-only { display: revert; }
+  .phone-bar { display: flex; gap: 8px; padding: 8px 12px 0; }
+  .phone-bar select { flex: 1; min-width: 0; }
   /* The sections in a row of their own that scrolls; the address shortened. */
   .bar nav { order: 3; flex: 1 1 100%; min-width: 0; overflow-x: auto; }
   .bar nav a { white-space: nowrap; padding: 6px 10px; }

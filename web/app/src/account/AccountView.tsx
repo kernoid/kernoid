@@ -7,6 +7,7 @@ import { For, type JSX, Show, createResource, createSignal } from "solid-js";
 
 import { Failure, ok } from "../App.js";
 import { t } from "../i18n.js";
+import { notificationsSupported, notificationsWanted, setNotifications } from "../mail/notify.js";
 import { THEMES, type Theme, setTheme, theme } from "../theme.js";
 import { Connect } from "./Connect.js";
 
@@ -111,6 +112,26 @@ export function AccountView(): JSX.Element {
                 </For>
               </div>
             </section>
+
+            <Show when={notificationsSupported()}>
+              <section>
+                <h2>{t("Notifications")}</h2>
+                <label class="inline">
+                  <input
+                    type="checkbox"
+                    checked={notificationsWanted()}
+                    onChange={(event) => {
+                      const box = event.currentTarget;
+                      void setNotifications(box.checked).then((on) => (box.checked = on));
+                    }}
+                  />
+                  <span>{t("Show new emails while the app is open in the background")}</span>
+                </label>
+                <Show when={notificationsWanted() && Notification.permission === "denied"}>
+                  <p class="muted small">{t("The browser does not allow notifications for this page.")}</p>
+                </Show>
+              </section>
+            </Show>
 
             <section>
               <h2>{t("Password")}</h2>

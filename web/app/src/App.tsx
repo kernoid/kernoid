@@ -12,6 +12,7 @@ import { ContactsView } from "./contacts/ContactsView.js";
 import { FilesView } from "./files/FilesView.js";
 import { t } from "./i18n.js";
 import { FILENODE, Jmap, MAIL, fetchSession } from "./jmap.js";
+import { MailNotifications } from "./mail/notify.js";
 import { MailView } from "./mail/MailView.js";
 import { THEMES, setTheme, theme } from "./theme.js";
 
@@ -133,6 +134,9 @@ export function App(): JSX.Element {
                   </button>
                 </span>
               </header>
+              <Show when={available().includes("mail")}>
+                <MailNotifications />
+              </Show>
               <ErrorBoundary fallback={(error, reset) => <Failed error={error} reset={reset} />}>
                 <Switch>
                   <Match when={current() === "mail"}>

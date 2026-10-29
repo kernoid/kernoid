@@ -58,8 +58,10 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 - JMAP `FileNode/copy` (RFC 8620, 5.4): nodes – a directory with what it holds – copied from another store the
   caller reads, a file's copy sharing its content; `onSuccessDestroyOriginal` moves them. The web app copies and
   moves files and folders between one's own files, team folders and what others share.
+- The web app shows new mail as a notification of the browser while it is open in the background (switched on in
+  the account page, kept per browser).
 - The web app on a phone: the page no longer runs wider than the screen – the sections scroll in a row of their own,
-  the files view shows its stores above the folder.
+  the files view shows its stores above the folder, the mail view its mailboxes and "Write" above the list.
 - Kubernetes: the operator `kernoid-operator` (in the image; `deploy/kubernetes`, docs: Operations) runs kernoid as a
   resource `Kernoid` describes – the schema migrated with a new image before the processes are replaced, one
   Deployment and Service per role, non-root pods with a read-only root filesystem.
