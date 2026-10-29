@@ -28,6 +28,12 @@ const PASSWORD: &str = "correct horse battery staple";
 
 /// Alice administers the tenant Firma, Bob is an ordinary account of it.
 async fn setup(pool: &PgPool) -> (Router, Uuid, Uuid) {
+    let (app, alice, bob, _) = setup_with_store(pool).await;
+    (app, alice, bob)
+}
+
+/// The same, with the mail store and its tenant – for tests that reach past the API.
+async fn setup_with_store(pool: &PgPool) -> (Router, Uuid, Uuid, (kernoid_mail::Mail, BlobStore, Uuid)) {
     let events = EventStore::new(pool.clone());
     let main = MainKeys::new(Key::random().unwrap(), Vec::new());
     let identity = Identity::with_secrets(events.clone(), main.clone());
@@ -50,9 +56,10 @@ async fn setup(pool: &PgPool) -> (Router, Uuid, Uuid) {
     let blobs = BlobStore::from_config(&Blob::Memory, keys).unwrap();
     let oidc = kernoid_oidc::Oidc::new(events, main, "https");
     let mail = kernoid_mail::Mail::new(pool.clone(), blobs.clone(), kernoid_mail::Limits::default());
-    let jmap = kernoid_jmap::Jmap::new(mail, 1_000_000, chrono::Duration::days(5));
-    let state = AppState::new(pool.clone(), blobs, identity, oidc).with_jmap(jmap, kernoid_mail::MailEvents::default());
-    (router(state, Router::new(), &Http::default()), accounts[0], accounts[1])
+    let jmap = kernoid_jmap::Jmap::new(mail.clone(), 1_000_000, chrono::Duration::days(5));
+    let state =
+        AppState::new(pool.clone(), blobs.clone(), identity, oidc).with_jmap(jmap, kernoid_mail::MailEvents::default());
+    (router(state, Router::new(), &Http::default()), accounts[0], accounts[1], (mail, blobs, tenant))
 }
 
 struct Call<'a> {
@@ -240,4 +247,27 @@ async fn retention_and_mbox(pool: PgPool) {
         .await;
     assert_eq!(body["data"]["mailRetention"], json!({ "trashDays": 30, "junkDays": 7 }), "{body}");
     assert!(body["data"]["exportMailbox"].as_str().unwrap().contains("Subject: Two"));
+}
+
+#[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
+async fn an_export_whose_first_email_is_lost_is_a_problem(pool: PgPool) {
+    let (app, alice_id, _, (mail, blobs, tenant)) = setup_with_store(&pool).await;
+    let alice = login(&app, "alice@firma.de").await;
+    let import = Request::post(format!("/v1/accounts/{alice_id}/mail/mailboxes/archive/mbox"))
+        .header("host", HOST)
+        .header(header::AUTHORIZATION, format!("Bearer {}", alice.token))
+        .header("content-type", "application/mbox")
+        .body(Body::from("From x@remote.example Sat Oct 24 10:00:00 2026\nSubject: One\n\nLost\n\n"))
+        .unwrap();
+    assert_eq!(alice.answer(import).await.0, StatusCode::OK);
+    let archive =
+        mail.mailboxes(alice_id).await.unwrap().into_iter().find(|mailbox| mailbox.name == "Archive").unwrap();
+    let entries = mail.mailbox_entries(alice_id, archive.id).await.unwrap();
+    blobs.delete(tenant, &format!("mail/{alice_id}/{}", entries[0].email)).await.unwrap();
+
+    // Not a 200 that breaks off empty, but an answer that says so.
+    let (status, problem) =
+        alice.send("GET", &format!("/v1/accounts/{alice_id}/mail/mailboxes/archive/mbox"), None).await;
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{problem}");
+    assert_eq!(problem["detail"], "stored content could not be read");
 }

@@ -110,6 +110,8 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 - The web app shows PDFs and other files in place: its viewer asks for downloads with `inline=1` – they were sent as
   attachments, which browsers saved instead of showing.
 - A download whose content cannot be read answers with a problem (500) instead of an empty, broken response.
+- So does an mbox export whose first email cannot be read (503, "stored content could not be read"); an email that
+  cannot be read later on ends the export and is logged.
 
 ## [0.1.0] – 2026-10-28
 

@@ -298,6 +298,12 @@ pub(crate) fn problem(error: MailAdminError) -> axum::response::Response {
                 | MailError::MailboxHasEmail
                 | MailError::Unparsable
                 | MailError::CannotCalculateChanges => StatusCode::BAD_REQUEST,
+                MailError::Blob(_) => {
+                    tracing::error!(%error, "mail store");
+                    return crate::Problem::new(StatusCode::SERVICE_UNAVAILABLE)
+                        .detail("stored content could not be read")
+                        .into_response();
+                }
                 _ => {
                     tracing::error!(%error, "mail store");
                     return crate::Problem::new(StatusCode::SERVICE_UNAVAILABLE).into_response();

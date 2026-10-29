@@ -10,6 +10,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use chrono::{DateTime, Utc};
+use futures_util::StreamExt;
 use kernoid_identity::mail_access::MailGrant;
 use kernoid_mail::{Access, MailboxInfo, QueuedRecipient, SharedStore, SieveScript};
 use serde::{Deserialize, Serialize};
@@ -575,19 +576,31 @@ pub(crate) async fn export(
     AdminSession(admin): AdminSession,
     Path((account, mailbox)): Path<(String, String)>,
 ) -> Response {
+    // The first email is read before the response starts: if it cannot be read (its object missing in storage), the
+    // answer is a problem with a status, not a connection that breaks off empty.
     let result = async {
         let account = id(&account, "the account")?;
-        Ok::<_, MailAdminError>((account, mail_admin::export(&state, &admin, account, &mailbox).await?))
+        let (mail, entries) = mail_admin::export(&state, &admin, account, &mailbox).await?;
+        let mut entries = entries.into_iter();
+        let first = match entries.next() {
+            Some(entry) => Some(mail.mbox_entry(account, &entry).await?),
+            None => None,
+        };
+        Ok::<_, MailAdminError>((account, mail, first, entries))
     }
     .await;
-    respond(result, |(account, (mail, entries))| {
+    respond(result, |(account, mail, first, entries)| {
         // One email after the other, so that a large mailbox is not held in memory.
-        let stream = futures_util::stream::unfold((mail, entries.into_iter()), move |(mail, mut entries)| async move {
+        let rest = futures_util::stream::unfold((mail, entries), move |(mail, mut entries)| async move {
             let entry = entries.next()?;
-            let chunk = mail.mbox_entry(account, &entry).await.map(Bytes::from).map_err(std::io::Error::other);
+            let chunk = mail.mbox_entry(account, &entry).await.map(Bytes::from).map_err(|error| {
+                tracing::error!(%error, email = %entry.email, "an export broke off at an email that could not be read");
+                std::io::Error::other(error)
+            });
             Some((chunk, (mail, entries)))
         });
-        ([(axum::http::header::CONTENT_TYPE, "application/mbox")], axum::body::Body::from_stream(stream))
+        let first = futures_util::stream::iter(first.map(|first| Ok(Bytes::from(first))));
+        ([(axum::http::header::CONTENT_TYPE, "application/mbox")], axum::body::Body::from_stream(first.chain(rest)))
             .into_response()
     })
 }
