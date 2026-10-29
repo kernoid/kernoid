@@ -8,6 +8,7 @@
   import { t } from "./i18n.js";
   import { FILENODE, type Jmap, MAIL } from "./jmap.js";
   import MailNotifications from "./mail/MailNotifications.svelte";
+  import MailView from "./mail/MailView.svelte";
   import Pending from "./pending/Pending.svelte";
   import { THEMES, setTheme, theme } from "./theme.svelte.js";
 
@@ -92,7 +93,11 @@
   {/if}
   <svelte:boundary>
     {#key current}
-      <Pending name={current} />
+      {#if current === "mail"}
+        <MailView />
+      {:else}
+        <Pending name={current} />
+      {/if}
     {/key}
     {#snippet failed(error, reset)}
       <main class="center">
