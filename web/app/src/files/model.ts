@@ -2,7 +2,7 @@
 // Files over JMAP (draft-ietf-jmap-filenode): the stores the user reaches – their own, those shared with them, the
 // tenant's drives –, directories and files with the rights on them, uploads, sharing, versions, the trash.
 
-import { FILENODE, FILE_LINKS, FILE_VERSIONS, type Jmap, PRINCIPALS } from "../jmap.js";
+import { FILENODE, FILE_LINKS, FILE_VERSIONS, type Jmap, JmapError, PRINCIPALS } from "../jmap.js";
 
 export interface Rights {
   mayRead: boolean;
@@ -179,6 +179,17 @@ export async function rename(jmap: Jmap, accountId: string, node: FileNode, name
 /** Moves a node into another directory; a name that is taken there gets a number. */
 export async function move(jmap: Jmap, accountId: string, node: FileNode, parent: string | null): Promise<void> {
   await set(jmap, accountId, { update: { [node.id]: { parentId: parent } } }, { onExists: "rename" });
+}
+
+/** Copies a node – a directory with what it holds – into another store (`FileNode/copy`); with `moveIt` the original
+ * goes. A name that is taken there gets a number. */
+export async function copyTo(jmap: Jmap, from: string, to: string, node: FileNode, parent: string | null, moveIt: boolean): Promise<void> {
+  const responses = await jmap.request([FILENODE], [
+    ["FileNode/copy", { fromAccountId: from, accountId: to, create: { c: { id: node.id, parentId: parent } }, onSuccessDestroyOriginal: moveIt, onExists: "rename" }, "0"],
+  ]);
+  const result = responses.get("0")?.[0] as { notCreated?: Record<string, { type: string; description?: string }> } | undefined;
+  const failed = result?.notCreated?.c;
+  if (failed) throw new JmapError(failed.type, failed.description);
 }
 
 /** Destroys a node and all it holds, for good. */

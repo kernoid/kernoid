@@ -11,6 +11,7 @@
 mod access;
 mod changes;
 mod content;
+pub mod copy;
 pub mod housekeeping;
 mod locks;
 mod node;

@@ -190,9 +190,7 @@ fn resolve<'a>(view: &'a View, names: &[String]) -> std::result::Result<Option<&
 }
 
 fn children(view: &View, parent: Option<Uuid>) -> Vec<&NodeInfo> {
-    let mut out: Vec<&NodeInfo> = view.nodes().filter(|node| node.parent == parent).collect();
-    out.sort_by(|a, b| a.name.cmp(&b.name));
-    out
+    kernoid_files::copy::children(view, parent)
 }
 
 /// The names from the top of the store down to a node.
@@ -475,7 +473,7 @@ async fn dispatch(
                 if method.as_str() == "MOVE" && !view.rights(node.id).contains(kernoid_files::Rights::DELETE) {
                     return Err(StatusCode::FORBIDDEN.into());
                 }
-                copy(&files, &other.access, &view, node, parent_id, name.clone(), &options, 0).await?;
+                files.copy_tree(&other.access, &view, node, parent_id, name.clone(), &options).await?;
                 if method.as_str() == "MOVE" {
                     files.destroy(&store.access, node.id, true).await?;
                 }
@@ -569,43 +567,6 @@ fn lock_response(
         response.headers_mut().insert("lock-token", value);
     }
     response
-}
-
-/// Copies a node of `view` – a directory with what it holds – below `parent` of the store `access` names, as `name`:
-/// the same store or another of the tenant. A file's copy shares its content. Only what the user may read is copied.
-#[allow(clippy::too_many_arguments, reason = "one step of a recursive copy")]
-fn copy<'a>(
-    files: &'a Files,
-    access: &'a FileAccess,
-    view: &'a View,
-    node: &'a NodeInfo,
-    parent: Option<Uuid>,
-    name: String,
-    options: &'a SetOptions,
-    depth: usize,
-) -> std::pin::Pin<Box<dyn Future<Output = std::result::Result<(), FilesError>> + Send + 'a>> {
-    Box::pin(async move {
-        if depth > kernoid_files::MAX_DEPTH {
-            return Err(FilesError::Invalid("too deep".into()));
-        }
-        if !view.readable(node.id) {
-            return Err(FilesError::Forbidden("reading what is copied".into()));
-        }
-        let new = match (node.node_type, node.content) {
-            (NodeType::File, Some(content)) => {
-                NewNode::file(parent, name, files.existing(content).await?, node.media_type.clone())
-            }
-            _ => NewNode::directory(parent, name),
-        };
-        let created = files.create(access, new, options).await?.node;
-        if node.node_type == NodeType::Directory {
-            for child in children(view, Some(node.id)) {
-                let fresh = SetOptions::default();
-                copy(files, access, view, child, Some(created.id), child.name.clone(), &fresh, depth + 1).await?;
-            }
-        }
-        Ok(())
-    })
 }
 
 fn parse_propfind(body: Vec<u8>) -> Result<PropFind> {

@@ -90,8 +90,9 @@ revision 19 – a draft, which may still change – and JMAP Sharing's principal
 ([RFC 9670](https://www.rfc-editor.org/rfc/rfc9670)) to find people and groups.
 
 - `FileNode/get` (with `fetchParents`), `FileNode/changes`, `FileNode/set` (with `onExists` `replace` or `rename`,
-  `onDestroyRemoveChildren`, `compareCaseInsensitively`, `shareWith`) and `FileNode/query`; `Principal/get` and
-  `Principal/query`.
+  `onDestroyRemoveChildren`, `compareCaseInsensitively`, `shareWith`), `FileNode/query` and `FileNode/copy` – from
+  another store the caller reads, a directory with what it holds; with `onSuccessDestroyOriginal` a move, which needs
+  `mayDelete` there; `Principal/get` and `Principal/query`.
 - Content is uploaded as a blob (`/jmap/upload/<account>/`, streamed) and given to a file with its `blobId`; any blob
   the account may read will do – an attachment of an email, too. Downloads take ranges.
 - **Large files in pieces:** JMAP Blob Management ([RFC 9404](https://www.rfc-editor.org/rfc/rfc9404),

@@ -55,6 +55,11 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 - The web app's calendar shows a week or a day besides a month, and changes or deletes one event of a series on its
   own (JMAP `recurrenceOverrides`) – or, as before, the whole series. The terminal app does the same (`E`, and `o`
   when deleting).
+- JMAP `FileNode/copy` (RFC 8620, 5.4): nodes – a directory with what it holds – copied from another store the
+  caller reads, a file's copy sharing its content; `onSuccessDestroyOriginal` moves them. The web app copies and
+  moves files and folders between one's own files, team folders and what others share.
+- The web app on a phone: the page no longer runs wider than the screen – the sections scroll in a row of their own,
+  the files view shows its stores above the folder.
 - Kubernetes: the operator `kernoid-operator` (in the image; `deploy/kubernetes`, docs: Operations) runs kernoid as a
   resource `Kernoid` describes – the schema migrated with a new image before the processes are replaced, one
   Deployment and Service per role, non-root pods with a read-only root filesystem.

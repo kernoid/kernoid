@@ -162,7 +162,8 @@ allows them (RFC 0003, 2) – accounts without a native address log in too. **OP
 - **Sets** are done in the order destroy, create, update, each node in its own transaction, so that a client can
   destroy a node and create one of the same name in one call, as the draft requires. **OPEN:** two nodes swapping
   their names in one `FileNode/set` is refused (`alreadyExists`).
-- **OPEN:** `FileNode/copy` between accounts; `isSubscribed` of others than the owner (it is accepted, not kept);
+- `FileNode/copy` copies nodes – a directory with what it holds – from another store the caller reads, a file's copy sharing its content; with `onSuccessDestroyOriginal` it moves them, which needs `mayDelete` there.
+- **OPEN:** `isSubscribed` of others than the owner (it is accepted, not kept);
   `accessed` is set only by clients; locks (section 9) are WebDAV's only.
 
 ## 9. Access: WebDAV

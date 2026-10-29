@@ -81,7 +81,8 @@ button.wide { width: 100%; margin-bottom: 12px; }
 input:focus, textarea:focus, select:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 textarea { width: 100%; resize: vertical; }
 
-.shell { display: grid; grid-template-rows: auto 1fr; height: 100%; }
+/* One column no wider than the window: what is wider scrolls inside it, the page never sideways. */
+.shell { display: grid; grid-template-rows: auto 1fr; grid-template-columns: minmax(0, 1fr); height: 100%; }
 .bar { display: flex; align-items: center; gap: 24px; padding: 8px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
 .brand { font: 700 1.15rem ui-monospace, "IBM Plex Mono", monospace; letter-spacing: 0.02em; }
 .brand b { color: var(--violet); }
@@ -126,6 +127,9 @@ textarea { width: 100%; resize: vertical; }
 .dialog label > span { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 3px; }
 .dialog label input:not([type="checkbox"]), .dialog label select { width: 100%; }
 .dialog .field { margin-bottom: 10px; }
+.dialog .crumbs { margin-bottom: 6px; }
+.dialog ul.folders { list-style: none; padding: 0; margin: 0 0 10px; max-height: 240px; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+.dialog ul.folders li button { width: 100%; text-align: left; padding: 6px 10px; }
 .dialog fieldset.choice { border: 0; padding: 0; margin: 0 0 10px; display: flex; gap: 16px; flex-wrap: wrap; }
 .dialog fieldset.choice legend { padding: 0; margin-bottom: 4px; font-size: 0.85rem; }
 .dialog fieldset.choice label.inline { margin: 0; white-space: nowrap; }
@@ -172,6 +176,13 @@ a.button.primary { background: var(--accent); color: var(--accent-text); border-
   .three, .two { grid-template-columns: 1fr; }
   .side { display: none; }
   .bar { gap: 8px; flex-wrap: wrap; }
+  /* The sections in a row of their own that scrolls; the address shortened. */
+  .bar nav { order: 3; flex: 1 1 100%; min-width: 0; overflow-x: auto; }
+  .bar nav a { white-space: nowrap; padding: 6px 10px; }
+  .bar .who { gap: 2px; font-size: 0.85rem; min-width: 0; }
+  .bar .who a { max-width: 38vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar .who button { padding: 4px 6px; }
+  .toolbar { flex-wrap: wrap; }
   .month { grid-template-rows: auto repeat(6, minmax(64px, 1fr)); }
   .event .time { display: none; }
 }
@@ -190,9 +201,11 @@ label.button.primary { background: var(--accent); color: var(--accent-text); bor
 label.button.disabled { opacity: 0.5; cursor: default; }
 .nodes { width: 100%; border-collapse: collapse; }
 .nodes td { padding: 6px 8px; border-bottom: 1px solid var(--line); }
-.nodes td.name { width: 100%; word-break: break-word; }
-.nodes td.end { white-space: nowrap; text-align: right; }
-.nodes td:not(.name) { white-space: nowrap; }
+.nodes td.name { min-width: 10rem; word-break: break-word; }
+/* The actions wrap before the name gets narrow: their column takes at most half the row. */
+.nodes td.end { white-space: normal; text-align: right; width: 50%; min-width: 9rem; }
+.nodes td.end button { white-space: nowrap; }
+.nodes td:not(.name):not(.end) { white-space: nowrap; }
 .nodes .folder { padding: 0; font-weight: 600; text-align: left; }
 .nodes .folder::before { content: "▸ "; color: var(--muted); }
 .files-shell { grid-template-columns: 220px 1fr; }
@@ -264,6 +277,11 @@ a.button { display: inline-block; text-decoration: none; color: inherit; padding
 .permissions legend { color: var(--muted); font-size: 0.85rem; padding: 0 4px; }
 .records code.small { font-size: 0.8rem; }
 @media (max-width: 760px) {
+  /* Files on a phone: the stores above, then the folder. */
+  .files-shell { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+  .files-shell .side { display: block; border-right: 0; border-bottom: 1px solid var(--line); padding: 8px 12px; }
+  .files-shell .side .boxes { display: flex; gap: 6px; overflow-x: auto; }
+  .nodes td.muted.small { display: none; }
   .admin-shell .side { display: block; }
   .admin-shell { grid-template-columns: 1fr; }
   .pair { grid-template-columns: 1fr; }

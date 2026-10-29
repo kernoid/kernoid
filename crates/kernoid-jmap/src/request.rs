@@ -343,6 +343,7 @@ impl Jmap {
             "FileNode/get" => context.file_get(args).await,
             "FileNode/changes" => context.file_changes(args).await,
             "FileNode/set" => context.file_set(args).await,
+            "FileNode/copy" => context.file_copy(args).await,
             "FileNode/query" => context.file_query(args).await,
             "FileNode/queryChanges" => Err(MethodError::new("cannotCalculateChanges", "query again")),
             "FileVersion/get" => context.file_versions(args).await,

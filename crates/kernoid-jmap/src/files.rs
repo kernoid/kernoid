@@ -972,6 +972,124 @@ impl Context<'_> {
         )])
     }
 
+    /// `FileNode/copy` (RFC 8620, 5.4): nodes of another store – a directory with what it holds – copied into this
+    /// one, a file's copy sharing its content; with `onSuccessDestroyOriginal` they are moved, which needs the right
+    /// to delete them, and the destroying is answered as a `FileNode/set` of the store they came from.
+    pub async fn file_copy(&mut self, args: Map<String, Value>) -> MethodResult {
+        let (owner, files, access) = self.file_store(&args).await?;
+        let from_id = args
+            .get("fromAccountId")
+            .and_then(Value::as_str)
+            .ok_or_else(|| MethodError::invalid("fromAccountId is required"))?;
+        if Uuid::parse_str(from_id).ok() == Some(owner) {
+            return Err(MethodError::invalid("fromAccountId and accountId differ: FileNode/set moves within a store"));
+        }
+        let mut from_args = Map::new();
+        from_args.insert("accountId".into(), json!(from_id));
+        let (from, _, from_access) = self.file_store(&from_args).await?;
+        let from_state = files.state(from).await?;
+        if let Some(Value::String(expected)) = args.get("ifFromInState")
+            && *expected != from_state.to_string()
+        {
+            return Err(MethodError::new("stateMismatch", "the store copied from has changed"));
+        }
+        let old_state = files.state(owner).await?;
+        crate::mailbox::if_in_state(&args, old_state as u64)?;
+        let create = match args.get("create") {
+            Some(Value::Object(create)) => create.clone(),
+            _ => return Err(MethodError::invalid("create is required")),
+        };
+        if create.len() > MAX_OBJECTS_IN_SET {
+            return Err(MethodError::new("requestTooLarge", "too many copies"));
+        }
+        let move_them = args.get("onSuccessDestroyOriginal").and_then(Value::as_bool).unwrap_or(false);
+        let on_exists = match args.get("onExists") {
+            None | Some(Value::Null) => OnExists::Refuse,
+            Some(Value::String(value)) if value == "replace" => OnExists::Replace,
+            Some(Value::String(value)) if value == "rename" => OnExists::Rename,
+            Some(_) => return Err(MethodError::invalid("onExists is replace, rename or null")),
+        };
+        let options = SetOptions { on_exists, ..SetOptions::default() };
+        let view = files.view(from_access.clone()).await?;
+        let mut created = Map::new();
+        let mut not_created = Map::new();
+        let mut originals = Vec::new();
+        for (creation, value) in create {
+            let result = async {
+                let object = value.as_object().ok_or_else(|| set(invalid_properties("an object")))?;
+                let id = object.get("id").and_then(Value::as_str).ok_or_else(|| set(invalid_properties("id")))?;
+                let node = Uuid::parse_str(id)
+                    .ok()
+                    .and_then(|id| view.node(id))
+                    .ok_or_else(|| set(json!({ "type": "notFound", "description": "no such node to copy" })))?;
+                if move_them && !view.rights(node.id).contains(Rights::DELETE) {
+                    return Err(set(json!({ "type": "forbidden", "description": "moving needs the right to delete" })));
+                }
+                let parent = self.parent(object.get("parentId").unwrap_or(&Value::Null))?;
+                let name = match object.get("name") {
+                    Some(Value::String(name)) => name.clone(),
+                    None | Some(Value::Null) => node.name.clone(),
+                    Some(_) => return Err(set(invalid_properties("name"))),
+                };
+                let copy = files
+                    .copy_tree(&access, &view, node, parent, name, &options)
+                    .await
+                    .map_err(|error| set(set_error(&error)))?;
+                Ok((node.id, copy))
+            }
+            .await;
+            match result {
+                Ok((original, copy)) => {
+                    self.created.insert(creation.clone(), copy.id.to_string());
+                    let target = files.view(access.clone()).await?;
+                    let shares = self.jmap.shares(owner).await;
+                    created.insert(creation, node_object(&copy, &target, &shares, None));
+                    originals.push(original);
+                }
+                Err(CreateError::Method(error)) => return Err(error),
+                Err(CreateError::Set(error)) => {
+                    not_created.insert(creation, error);
+                }
+            }
+        }
+        let new_state = files.state(owner).await?;
+        let or_null = |map: Map<String, Value>| if map.is_empty() { Value::Null } else { Value::Object(map) };
+        let mut responses = vec![(
+            "FileNode/copy".into(),
+            json!({
+                "fromAccountId": from.to_string(),
+                "accountId": owner.to_string(),
+                "oldState": old_state.to_string(),
+                "newState": new_state.to_string(),
+                "created": or_null(created),
+                "notCreated": or_null(not_created),
+            }),
+        )];
+        if move_them {
+            let mut destroyed = Vec::new();
+            let mut not_destroyed = Map::new();
+            for original in originals {
+                match files.destroy(&from_access, original, true).await {
+                    Ok(gone) => destroyed.extend(gone.iter().map(Uuid::to_string)),
+                    Err(error) => {
+                        not_destroyed.insert(original.to_string(), set_error(&error));
+                    }
+                }
+            }
+            responses.push((
+                "FileNode/set".into(),
+                json!({
+                    "accountId": from.to_string(),
+                    "oldState": from_state.to_string(),
+                    "newState": files.state(from).await?.to_string(),
+                    "destroyed": if destroyed.is_empty() { Value::Null } else { json!(destroyed) },
+                    "notDestroyed": or_null(not_destroyed),
+                }),
+            ));
+        }
+        Ok(responses)
+    }
+
     /// Sets the grants on a directory to `share_with` (a map of principal ids to `FilesRights`), replacing all
     /// earlier ones if `replace`; needs `mayShare` (RFC 0005, 11).
     async fn share(&self, access: &FileAccess, node: Uuid, share_with: &Value, replace: bool) -> Result<(), Value> {

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Files: the stores the user reaches on the side – their own, the tenant's drives, what others share –, one directory
 // at a time with the way up; uploading with progress (also by dropping), new folders, renaming, the trash, sharing
-// folders, links for people without an account, earlier versions of files, files shown in place (Viewer.tsx), how to connect a file manager (WebDAV).
+// folders, links for people without an account, copying and moving to another store, earlier versions of files, files
+// shown in place (Viewer.tsx), how to connect a file manager (WebDAV).
 // What the user may do follows the rights kernoid reports.
 
 import { For, type JSX, Show, createMemo, createResource, createSignal, onCleanup } from "solid-js";
@@ -18,6 +19,7 @@ import {
   type Rights,
   type Store,
   children,
+  copyTo,
   createDirectory,
   createLink,
   destroy,
@@ -93,6 +95,7 @@ export function FilesView(): JSX.Element {
   const [sharing, setSharing] = createSignal<FileNode>();
   const [linking, setLinking] = createSignal<FileNode>();
   const [history, setHistory] = createSignal<FileNode>();
+  const [copying, setCopying] = createSignal<FileNode>();
   const [viewing, setViewing] = createSignal<FileNode>();
   const [connecting, setConnecting] = createSignal(false);
 
@@ -313,6 +316,11 @@ export function FilesView(): JSX.Element {
                             {t("Versions")}
                           </button>
                         </Show>
+                        <Show when={rights().mayRead}>
+                          <button type="button" class="quiet" disabled={busy()} onClick={() => setCopying(node)}>
+                            {t("Copy or move")}
+                          </button>
+                        </Show>
                         <Show when={rights().mayRename}>
                           <button type="button" class="quiet" disabled={busy()} onClick={() => renameNode(node)}>
                             {t("Rename")}
@@ -340,6 +348,19 @@ export function FilesView(): JSX.Element {
             onClose={(saved) => {
               setSharing(undefined);
               if (saved) touch("FileNode");
+            }}
+          />
+        )}
+      </Show>
+      <Show when={copying()}>
+        {(node) => (
+          <CopyDialog
+            account={account()}
+            node={node()}
+            mayMove={rightsOf(node()).mayDelete}
+            onClose={(done) => {
+              setCopying(undefined);
+              if (done) touch("FileNode");
             }}
           />
         )}
@@ -636,6 +657,113 @@ function VersionsDialog(props: { account: string; node: FileNode; mayRestore: bo
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Copies or moves a node to a folder of another store the user may add to – or moves it within its own. */
+function CopyDialog(props: { account: string; node: FileNode; mayMove: boolean; onClose: (done: boolean) => void }): JSX.Element {
+  const jmap = useJmap();
+  const targets = stores(jmap);
+  const [target, setTarget] = createSignal(props.account);
+  // The folders from the top of the target down to where the copy goes.
+  const [trail, setTrail] = createSignal<FileNode[]>([]);
+  const [moveIt, setMoveIt] = createSignal(false);
+  const [error, setError] = createSignal<unknown>();
+  const [busy, setBusy] = createSignal(false);
+  const parent = () => trail()[trail().length - 1]?.id ?? null;
+  const sameStore = () => target() === props.account;
+  const [folders] = createResource(
+    () => ({ account: target(), parent: parent() }),
+    ({ account, parent }) =>
+      children(jmap, account, parent).then((nodes) => sortNodes(nodes.filter((node) => isDirectory(node) && !node.role && node.id !== props.node.id), locale)),
+  );
+  const storeOf = (id: string) => targets.find((entry) => entry.id === id);
+  const mayAddHere = () => {
+    const folder = trail()[trail().length - 1];
+    return folder ? (folder.myRights?.mayAddChildren ?? false) : (storeOf(target())?.mayCreateTopLevel ?? false);
+  };
+  const submit = async () => {
+    setBusy(true);
+    setError(undefined);
+    try {
+      if (sameStore()) await move(jmap, props.account, props.node, parent());
+      else await copyTo(jmap, props.account, target(), props.node, parent(), moveIt());
+      props.onClose(true);
+    } catch (failure) {
+      setError(failure);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div class="overlay" role="dialog" aria-modal="true" aria-label={t("Copy or move")}>
+      <form
+        class="dialog"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void submit();
+        }}
+      >
+        <h2>„{props.node.name}“</h2>
+        <label>
+          <span>{t("Copy to")}</span>
+          <select
+            value={target()}
+            onChange={(event) => {
+              setTarget(event.currentTarget.value);
+              setTrail([]);
+            }}
+          >
+            <For each={targets}>{(entry) => <option value={entry.id}>{entry.kind === "own" ? t("My files") : entry.name}</option>}</For>
+          </select>
+        </label>
+        <div class="crumbs">
+          <button type="button" class="quiet" onClick={() => setTrail([])}>
+            {storeOf(target())?.kind === "own" ? t("My files") : storeOf(target())?.name}
+          </button>
+          <For each={trail()}>
+            {(folder, index) => (
+              <>
+                {" / "}
+                <button type="button" class="quiet" onClick={() => setTrail(trail().slice(0, index() + 1))}>
+                  {folder.name}
+                </button>
+              </>
+            )}
+          </For>
+        </div>
+        <ul class="folders">
+          <For each={ok(folders) ?? []} fallback={<li class="muted small">{t("No folders here")}</li>}>
+            {(folder) => (
+              <li>
+                <button type="button" class="quiet" onClick={() => setTrail([...trail(), folder])}>
+                  📁 {folder.name}
+                </button>
+              </li>
+            )}
+          </For>
+        </ul>
+        <Show
+          when={!sameStore()}
+          fallback={<p class="muted small">{t("Within the same store it is moved.")}</p>}
+        >
+          <label class="inline">
+            <input type="checkbox" checked={moveIt()} disabled={!props.mayMove} onChange={(event) => setMoveIt(event.currentTarget.checked)} />
+            <span>{t("Move instead of copy (removed here)")}</span>
+          </label>
+        </Show>
+        <Failure error={error() ?? folders.error} />
+        <div class="actions end">
+          <button type="button" onClick={() => props.onClose(false)}>
+            {t("Cancel")}
+          </button>
+          <button type="submit" class="primary" disabled={busy() || !mayAddHere() || (sameStore() && !props.mayMove)}>
+            {sameStore() || moveIt() ? t("Move here") : t("Copy here")}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

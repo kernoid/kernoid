@@ -664,3 +664,83 @@ async fn malware_is_refused_where_the_tenant_scans(pool: PgPool) {
     .unwrap();
     assert_eq!(due, Some(3), "the two refused uploads and the joined one");
 }
+
+#[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
+async fn nodes_are_copied_and_moved_between_stores(pool: PgPool) {
+    let setup = setup(pool).await;
+    let one = setup.caller("one", false).await;
+    let two = setup.caller("two", false).await;
+    let drive = setup.identity.add_drive(setup.tenant, "falkOSS", WHO).await.unwrap();
+    setup.identity.set_file_access(drive, None, Principal::Account(one.account), "randws", WHO).await.unwrap();
+    let blob = setup.upload(&one, b"minutes").await;
+    let other = setup.upload(&one, b"draft").await;
+    let (_, set) = setup
+        .one(
+            &one,
+            "FileNode/set",
+            json!({ "create": {
+                "d": { "@type": "Directory", "parentId": null, "name": "Board" },
+                "f": { "@type": "File", "parentId": "#d", "name": "minutes.txt", "blobId": blob },
+                "g": { "@type": "File", "parentId": null, "name": "draft.txt", "blobId": other },
+            } }),
+        )
+        .await;
+    let board = set["created"]["d"]["id"].as_str().unwrap().to_owned();
+    let draft = set["created"]["g"]["id"].as_str().unwrap().to_owned();
+
+    // A directory with what it holds copied into the drive; a file moved there under another name.
+    let copy = json!({
+        "fromAccountId": one.account.to_string(),
+        "create": { "b": { "id": board, "parentId": null } },
+    });
+    let (name, copied) = setup.in_account(&one, drive, "FileNode/copy", copy).await;
+    assert_eq!(name, "FileNode/copy", "{copied}");
+    assert_eq!(copied["created"]["b"]["name"], "Board");
+    let request = json!({
+        "using": USING,
+        "methodCalls": [["FileNode/copy", {
+            "fromAccountId": one.account.to_string(), "accountId": drive.to_string(),
+            "create": { "m": { "id": draft, "parentId": "#b", "name": "draft-final.txt" } },
+            "onSuccessDestroyOriginal": true,
+        }, "c"]],
+    });
+    let response = setup.jmap.api(&one, request.to_string().as_bytes()).await.unwrap();
+    // `#b` is not known in this request: the copy goes nowhere, and nothing is destroyed.
+    assert_eq!(response["methodResponses"][0][1]["notCreated"]["m"]["type"], "invalidProperties");
+    assert!(response["methodResponses"].as_array().unwrap()[1][1]["destroyed"].is_null());
+    let into = copied["created"]["b"]["id"].as_str().unwrap().to_owned();
+    let request = json!({
+        "using": USING,
+        "methodCalls": [["FileNode/copy", {
+            "fromAccountId": one.account.to_string(), "accountId": drive.to_string(),
+            "create": { "m": { "id": draft, "parentId": into, "name": "draft-final.txt" } },
+            "onSuccessDestroyOriginal": true,
+        }, "c"]],
+    });
+    let response = setup.jmap.api(&one, request.to_string().as_bytes()).await.unwrap();
+    let calls = response["methodResponses"].as_array().unwrap();
+    assert_eq!(calls[0][0], "FileNode/copy");
+    assert_eq!(calls[1][0], "FileNode/set");
+    assert_eq!(calls[1][1]["accountId"], one.account.to_string());
+    assert_eq!(calls[1][1]["destroyed"], json!([draft]));
+    let (_, get) = setup.in_account(&one, drive, "FileNode/get", json!({ "ids": null })).await;
+    let mut names: Vec<&str> =
+        get["list"].as_array().unwrap().iter().map(|node| node["name"].as_str().unwrap()).collect();
+    names.sort_unstable();
+    assert_eq!(names, ["Board", "draft-final.txt", "minutes.txt"]);
+    let (_, mine) = setup.one(&one, "FileNode/get", json!({ "ids": [draft] })).await;
+    assert_eq!(mine["notFound"], json!([draft]));
+
+    // Two may read a folder of One's, not delete in it: copying out works, moving out does not.
+    let share = json!({ "update": { board.clone(): { format!("shareWith/{}", two.account): { "mayRead": true } } } });
+    setup.one(&one, "FileNode/set", share).await;
+    let from =
+        json!({ "fromAccountId": one.account.to_string(), "create": { "x": { "id": board, "parentId": null } } });
+    let (_, copied) = setup.one(&two, "FileNode/copy", from.clone()).await;
+    assert!(copied["created"]["x"]["id"].is_string(), "{copied}");
+    let mut moving = from;
+    moving["onSuccessDestroyOriginal"] = json!(true);
+    moving["onExists"] = json!("rename");
+    let (_, moved) = setup.one(&two, "FileNode/copy", moving).await;
+    assert_eq!(moved["notCreated"]["x"]["type"], "forbidden", "{moved}");
+}
