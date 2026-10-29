@@ -203,6 +203,7 @@ offline grants – withdraw those on the account page, too.
 | `email` | `email`, `email_verified` – the contact address if the account has one, else its primary address (verified) |
 | `offline_access` | none; refresh tokens that outlive the session, for applications allowed to ask, with consent |
 | `urn:kernoid:project:roles` | `urn:kernoid:project:roles` – also without the scope if the project asserts roles |
+| `mail` | none; the access token logs a mail program in over IMAP and SMTP (`OAUTHBEARER`, `XOAUTH2`) – for an account with mail |
 | `urn:kernoid:tenant:id:<tenant id>` | none; restricts the login to accounts of that tenant |
 
 `amr` follows RFC 8176: `pwd`, `otp` (TOTP or a recovery code), `pop` (passkey), and `mfa` for more than one factor.

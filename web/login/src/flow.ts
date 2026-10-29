@@ -108,6 +108,8 @@ function describeScope(scope: string): string | null {
       return t("See your email address");
     case "offline_access":
       return t("Stay connected while you are not logged in");
+    case "mail":
+      return t("Read and send your email (IMAP, SMTP)");
     case "urn:kernoid:project:roles":
       return t("See your roles in this application");
     default:

@@ -24,6 +24,8 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   forwarding account was the sender and bounces ended with it.
 - IMAP `SORT` (with `SORT=DISPLAY`), `THREAD` (`REFERENCES`, `ORDEREDSUBJECT`) and `QUOTA` (`GETQUOTAROOT`,
   `GETQUOTA`).
+- `OAUTHBEARER` and `XOAUTH2` for IMAP and SMTP submission: an access token of kernoid with the new scope `mail`
+  (shown at consent as "Read and send your email") logs a mail program in.
 - `http.public_port`: instances reached on a port other than 443 or 80 name it in their issuer and links (JMAP);
   `deploy/compose` sets 8080.
 

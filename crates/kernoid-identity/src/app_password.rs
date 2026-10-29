@@ -39,6 +39,37 @@ fn hash(secret: &str) -> Vec<u8> {
     Sha256::digest(normalized.as_bytes()).to_vec()
 }
 
+/// The scope an OpenID Connect access token needs to log a mail program in over IMAP or SMTP (`OAUTHBEARER`,
+/// `XOAUTH2`).
+pub const MAIL_SCOPE: &str = "mail";
+
+/// The bearer token of an `OAUTHBEARER` (RFC 7628, 3.1: `n,a=<user>,` then `auth=Bearer <token>` between ^A) or an
+/// `XOAUTH2` response (`user=<user>` ^A `auth=Bearer <token>` ^A ^A), decoded from base64 already: the user it names,
+/// if any, and the token.
+pub fn sasl_bearer(response: &[u8]) -> Option<(Option<String>, String)> {
+    let text = std::str::from_utf8(response).ok()?;
+    let mut user = None;
+    let mut token = None;
+    let mut fields = text.split('\x01');
+    if let Some(header) = text.strip_prefix("n,").or_else(|| text.strip_prefix("y,")) {
+        // GS2 header: `n,a=user,` – the authorization identity, then ^A and the key-value pairs.
+        let (gs2, rest) = header.split_once(',')?;
+        user = gs2.strip_prefix("a=").map(|name| name.replace("=2C", ",").replace("=3D", "="));
+        fields = rest.split('\x01');
+    }
+    for field in fields {
+        if let Some(name) = field.strip_prefix("user=") {
+            user = Some(name.to_owned());
+        } else if let Some(value) = field.strip_prefix("auth=") {
+            let (scheme, credential) = value.split_once(' ')?;
+            if scheme.eq_ignore_ascii_case("bearer") && !credential.trim().is_empty() {
+                token = Some(credential.trim().to_owned());
+            }
+        }
+    }
+    Some((user.filter(|user| !user.is_empty()), token?))
+}
+
 /// A new app password, in groups of four: `abcd-efgh-…`.
 fn generate() -> Result<String> {
     let mut random = [0u8; LENGTH];
@@ -244,6 +275,45 @@ impl Identity {
         }
     }
 
+    /// A mail program's login with an OpenID Connect access token of kernoid (`OAUTHBEARER`, `XOAUTH2`): valid, of
+    /// an active account with mail, with the scope [`MAIL_SCOPE`] – and, if the program names a user, that user's
+    /// address. The token is too long to guess: there is no counting of failures.
+    pub async fn token_login(&self, token: &str, user: Option<&str>) -> Result<AccountInfo> {
+        let account = sqlx::query_scalar!(
+            r#"SELECT k.account_id
+               FROM access_tokens k
+               JOIN accounts a ON a.id = k.account_id
+               JOIN tenants t ON t.id = a.tenant_id
+               LEFT JOIN sessions s ON s.id = k.session_id
+               WHERE k.token_hash = $1 AND k.expires_at > now() AND $2 = ANY(k.scopes) AND a.active AND t.active
+                 AND (k.session_id IS NULL OR (s.terminated_at IS NULL AND s.expires_at > now()))
+                 AND EXISTS (SELECT 1 FROM account_services v
+                             WHERE v.account_id = a.id AND v.service = 'mail' AND v.state = 'on')"#,
+            &Sha256::digest(token.as_bytes())[..],
+            MAIL_SCOPE,
+        )
+        .fetch_optional(self.pool())
+        .await
+        .map_err(store_error)?
+        .ok_or(IdentityError::InvalidCredentials)?;
+        if let Some(user) = user {
+            let named = match Address::parse(user) {
+                Ok(address) => sqlx::query_scalar!(
+                    r#"SELECT account_id AS "account_id!" FROM addresses WHERE address = $1"#,
+                    address.as_str()
+                )
+                .fetch_optional(self.pool())
+                .await
+                .map_err(store_error)?,
+                Err(_) => None,
+            };
+            if named != Some(account) {
+                return Err(IdentityError::InvalidCredentials);
+            }
+        }
+        self.account_info(account).await
+    }
+
     /// Whether the account's own password may log a mail program in: it has no second factor and needs none.
     async fn password_suffices(&self, account: Uuid) -> Result<bool> {
         let row = sqlx::query!(
@@ -299,5 +369,17 @@ mod tests {
         assert_eq!(secret.len(), LENGTH + LENGTH / 4 - 1);
         assert_ne!(secret, generate().unwrap());
         assert_eq!(hash(&secret), hash(&secret.to_uppercase().replace('-', " ")));
+    }
+
+    #[test]
+    fn bearer_tokens_from_oauthbearer_and_xoauth2() {
+        let oauthbearer =
+            b"n,a=alice@firma.example,\x01host=mail.firma.example\x01port=993\x01auth=Bearer kt1.abc\x01\x01";
+        assert_eq!(sasl_bearer(oauthbearer), Some((Some("alice@firma.example".into()), "kt1.abc".into())));
+        assert_eq!(sasl_bearer(b"n,,\x01auth=Bearer kt1.abc\x01\x01"), Some((None, "kt1.abc".into())));
+        let xoauth2 = b"user=alice@firma.example\x01auth=Bearer kt1.abc\x01\x01";
+        assert_eq!(sasl_bearer(xoauth2), Some((Some("alice@firma.example".into()), "kt1.abc".into())));
+        assert_eq!(sasl_bearer(b"n,,\x01auth=Basic abc\x01\x01"), None);
+        assert_eq!(sasl_bearer(b"\x00alice\x00password"), None);
     }
 }

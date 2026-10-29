@@ -216,8 +216,9 @@ With [mail-auth](https://crates.io/crates/mail-auth) (Apache-2.0 OR MIT, by Stal
   as for tokens (`account.app_password_added`, `account.app_password_removed`; the hash in `account_app_passwords`).
   Resetting an account's second factors removes its app passwords too: the devices are lost. The account's
   own password works only for accounts that need no second factor: a password alone must not get around the second
-  factor a login in the browser asks for. Failed attempts count like failed logins (RFC 0001, 7). **OPEN:**
-  `OAUTHBEARER` with kernoid's access tokens – with the protocols.
+  factor a login in the browser asks for. Failed attempts count like failed logins (RFC 0001, 7). `OAUTHBEARER`
+  (RFC 7628) and `XOAUTH2` take an access token of kernoid with the scope `mail`, of an account with mail – and, if
+  the program names a user, that user's.
 - **Senders:** `MAIL FROM` and every address in `From` must be addresses of the account, or of an account it may
   send as (12.2), or of a group whose members may send as it (`group.send_as_set`, 9.2). **OPEN:** limits on how much
   an account sends.
@@ -292,8 +293,8 @@ as seen before.
 ## 11. Access protocols
 
 Every protocol logs in the same way as submission (10.1): an app password, or the account's password if it needs
-no second factor; JMAP also takes a kernoid session. **OPEN:** OAuth access tokens (`OAUTHBEARER`, JMAP with
-kernoid's OpenID Connect tokens), with a scope that says "mail". Each protocol sees the account's own mail store and
+no second factor; IMAP and submission also take an access token with the scope `mail` (`OAUTHBEARER`, `XOAUTH2`),
+JMAP also takes a kernoid session. **OPEN:** JMAP with kernoid's OpenID Connect tokens. Each protocol sees the account's own mail store and
 the stores shared with it (section 12).
 
 ### 11.1 JMAP

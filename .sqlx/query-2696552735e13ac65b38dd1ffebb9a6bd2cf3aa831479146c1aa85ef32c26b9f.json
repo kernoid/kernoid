@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT k.account_id\n               FROM access_tokens k\n               JOIN accounts a ON a.id = k.account_id\n               JOIN tenants t ON t.id = a.tenant_id\n               LEFT JOIN sessions s ON s.id = k.session_id\n               WHERE k.token_hash = $1 AND k.expires_at > now() AND $2 = ANY(k.scopes) AND a.active AND t.active\n                 AND (k.session_id IS NULL OR (s.terminated_at IS NULL AND s.expires_at > now()))\n                 AND EXISTS (SELECT 1 FROM account_services v\n                             WHERE v.account_id = a.id AND v.service = 'mail' AND v.state = 'on')",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "account_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access_tokens",
+            "name": "account_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "2696552735e13ac65b38dd1ffebb9a6bd2cf3aa831479146c1aa85ef32c26b9f"
+}

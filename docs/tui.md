@@ -25,7 +25,7 @@ the first; saving keeps only those), `.ics` and `.vcf` files, finding the server
 **Logging in with OpenID Connect** stays `OPEN` on purpose. A terminal app would use the device authorization grant
 (RFC 8628) – the app shows a code, the user confirms it in a browser – and then send the access token to JMAP. Both
 halves are missing on the server: kernoid's provider has no device authorization endpoint, and JMAP, IMAP and
-CalDAV accept a kernoid session or HTTP Basic, not an OAuth bearer token (`OAUTHBEARER` is `OPEN` there too). An app
+CalDAV accept a kernoid session or HTTP Basic, not an OAuth bearer token (IMAP and SMTP do, with the scope `mail`). An app
 password, revocable on its own and limited to programs, is the way until then.
 
 ## Building

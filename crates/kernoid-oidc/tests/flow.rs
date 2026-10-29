@@ -1130,3 +1130,34 @@ async fn an_instance_may_have_its_own_login_ui(pool: PgPool) {
     let instance = setup.identity.instance_by_host("login.firma.de").await.unwrap().unwrap();
     assert_eq!(instance.login_ui, None);
 }
+
+/// Mail programs log in over IMAP and SMTP with an access token that has the scope `mail` (OAUTHBEARER, XOAUTH2).
+#[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
+async fn access_tokens_with_the_mail_scope_log_mail_programs_in(pool: PgPool) {
+    use kernoid_identity::services::Service;
+
+    let setup = setup(&pool, Key::random().unwrap()).await;
+    let alice = setup.identity.session(setup.instance.id, &setup.session).await.unwrap().account.id;
+    let without =
+        setup.oidc.token(&setup.instance, &token_request(&setup, &code(&setup, "openid").await)).await.unwrap();
+    let with =
+        setup.oidc.token(&setup.instance, &token_request(&setup, &code(&setup, "openid mail").await)).await.unwrap();
+
+    // Without the service mail, no mail login; then with the scope only, and for the token's own account only.
+    setup.identity.revoke_service(alice, Service::Mail, "test").await.unwrap();
+    assert!(setup.identity.token_login(&with.access_token, None).await.is_err());
+    setup.identity.grant_service(alice, Service::Mail, "test").await.unwrap();
+    assert_eq!(setup.identity.token_login(&with.access_token, Some("alice@firma.de")).await.unwrap().id, alice);
+    assert_eq!(setup.identity.token_login(&with.access_token, None).await.unwrap().id, alice);
+    assert!(matches!(
+        setup.identity.token_login(&without.access_token, None).await,
+        Err(kernoid_identity::IdentityError::InvalidCredentials)
+    ));
+    assert!(matches!(
+        setup.identity.token_login(&with.access_token, Some("bob@firma.de")).await,
+        Err(kernoid_identity::IdentityError::InvalidCredentials)
+    ));
+    // A revoked token no longer does.
+    setup.oidc.revoke(&setup.instance, &setup.app.to_string(), Some(&setup.secret), &with.access_token).await.unwrap();
+    assert!(setup.identity.token_login(&with.access_token, None).await.is_err());
+}

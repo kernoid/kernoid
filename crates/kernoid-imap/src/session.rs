@@ -32,7 +32,7 @@ use crate::{
 /// What the session reads next.
 enum State {
     Command(Receiver<Command>),
-    /// The client's response to `AUTHENTICATE PLAIN`'s `+`.
+    /// The client's response to `AUTHENTICATE`'s `+`.
     Sasl {
         tag: String,
         line: Vec<u8>,
@@ -67,6 +67,8 @@ pub(crate) struct Session {
     pub selected: Option<Selected>,
     events: broadcast::Receiver<Uuid>,
     pub out: Vec<u8>,
+    /// The mechanism of an `AUTHENTICATE` waiting for the client's response.
+    sasl_mechanism: Mechanism,
 }
 
 /// A failure of the store as the client sees it.
@@ -110,6 +112,7 @@ impl Session {
             qresync: false,
             selected: None,
             events,
+            sasl_mechanism: Mechanism::Plain,
             out: Vec::new(),
         }
     }
@@ -172,7 +175,11 @@ impl Session {
                 Capability::QuotaResource(QuotaResourceName::Storage),
             ]);
         } else if self.tls {
-            capabilities.push(Capability::Auth(Mechanism::Plain));
+            capabilities.extend([
+                Capability::Auth(Mechanism::Plain),
+                Capability::Auth(Mechanism::OAuthBearer),
+                Capability::Auth(Mechanism::XOauth2),
+            ]);
         } else {
             capabilities.extend([Capability::StartTLS, Capability::LoginDisabled]);
         }
@@ -358,20 +365,28 @@ impl Session {
                 Err(error) => return self.parse_error(error),
             },
             Command::Authenticate => match request.parse_authenticate() {
-                Ok(arguments) if arguments.mechanism != Mechanism::Plain => {
-                    StatusResponse::no("Use AUTHENTICATE PLAIN").with_code(ResponseCode::Cannot)
+                Ok(arguments)
+                    if !matches!(
+                        arguments.mechanism,
+                        Mechanism::Plain | Mechanism::OAuthBearer | Mechanism::XOauth2
+                    ) =>
+                {
+                    StatusResponse::no("Use AUTHENTICATE PLAIN, OAUTHBEARER or XOAUTH2").with_code(ResponseCode::Cannot)
                 }
-                Ok(arguments) => match arguments.params.first() {
-                    // SASL-IR: the response came with the command; `=` is an empty one.
-                    Some(initial) => {
-                        let initial = if initial == "=" { "" } else { initial.as_str() };
-                        self.sasl_response(initial.as_bytes()).await
+                Ok(arguments) => {
+                    self.sasl_mechanism = arguments.mechanism;
+                    match arguments.params.first() {
+                        // SASL-IR: the response came with the command; `=` is an empty one.
+                        Some(initial) => {
+                            let initial = if initial == "=" { "" } else { initial.as_str() };
+                            self.sasl_response(initial.as_bytes()).await
+                        }
+                        None => {
+                            self.write(b"+ \r\n");
+                            return Flow::Sasl(tag);
+                        }
                     }
-                    None => {
-                        self.write(b"+ \r\n");
-                        return Flow::Sasl(tag);
-                    }
-                },
+                }
                 Err(error) => return self.parse_error(error),
             },
             _ if self.account.is_none() => StatusResponse::bad("Log in first"),
@@ -538,7 +553,15 @@ impl Session {
     }
 
     async fn login(&mut self, user: &str, password: &str) -> StatusResponse {
-        match self.inner.identity.mail_login(user, password, Some(self.remote)).await {
+        let result = self.inner.identity.mail_login(user, password, Some(self.remote)).await;
+        self.logged_in(result).await
+    }
+
+    async fn logged_in(
+        &mut self,
+        result: Result<kernoid_identity::account::AccountInfo, IdentityError>,
+    ) -> StatusResponse {
+        match result {
             Ok(account) => {
                 if let Err(error) = self.inner.mail.ensure_account(account.id).await {
                     return mail_error(error);
@@ -563,9 +586,20 @@ impl Session {
 
     async fn sasl_response(&mut self, encoded: &[u8]) -> StatusResponse {
         let decoded = base64::engine::general_purpose::STANDARD.decode(encoded.trim_ascii()).ok();
-        match decoded.as_deref().and_then(crate::sasl_plain) {
-            Some((user, password)) => self.login(&user, &password).await,
-            None => StatusResponse::bad("Invalid AUTHENTICATE PLAIN response"),
+        match self.sasl_mechanism {
+            Mechanism::OAuthBearer | Mechanism::XOauth2 => {
+                match decoded.as_deref().and_then(kernoid_identity::app_password::sasl_bearer) {
+                    Some((user, token)) => {
+                        let result = self.inner.identity.token_login(&token, user.as_deref()).await;
+                        self.logged_in(result).await
+                    }
+                    None => StatusResponse::bad("Invalid AUTHENTICATE response"),
+                }
+            }
+            _ => match decoded.as_deref().and_then(crate::sasl_plain) {
+                Some((user, password)) => self.login(&user, &password).await,
+                None => StatusResponse::bad("Invalid AUTHENTICATE PLAIN response"),
+            },
         }
     }
 

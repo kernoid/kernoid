@@ -390,7 +390,10 @@ impl Session {
         // Logging in only over TLS (RFC 8314).
         if self.inner.submission.is_some() && self.tls.is_some() && self.account.is_none() {
             ehlo.capabilities |= smtp_proto::EXT_AUTH;
-            ehlo.auth_mechanisms = smtp_proto::AUTH_PLAIN | smtp_proto::AUTH_LOGIN;
+            ehlo.auth_mechanisms = smtp_proto::AUTH_PLAIN
+                | smtp_proto::AUTH_LOGIN
+                | smtp_proto::AUTH_OAUTHBEARER
+                | smtp_proto::AUTH_XOAUTH2;
         }
         ehlo.size = self.inner.settings.max_message_size;
         let mut written = Vec::new();

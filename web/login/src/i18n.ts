@@ -103,6 +103,7 @@ const de = {
   "See your name": "Ihren Namen sehen",
   "See your email address": "Ihre E-Mail-Adresse sehen",
   "Stay connected while you are not logged in": "Verbunden bleiben, während Sie nicht angemeldet sind",
+  "Read and send your email (IMAP, SMTP)": "Ihre E-Mails lesen und senden (IMAP, SMTP)",
   "See your roles in this application": "Ihre Rollen in dieser Anwendung sehen",
   "Allow {application}?": "{application} erlauben?",
   "{application} asks to:": "{application} möchte:",

@@ -11,7 +11,10 @@ use bytes::Bytes;
 use kernoid_identity::{Identity, IdentityError};
 use kernoid_mail::{Delivered, Delivery, MailError, Outgoing, Recipient};
 use mail_parser::MessageParser;
-use smtp_proto::{AUTH_LOGIN, AUTH_PLAIN, MailFrom as ProtoMailFrom, RcptTo, request::receiver::RequestReceiver};
+use smtp_proto::{
+    AUTH_LOGIN, AUTH_OAUTHBEARER, AUTH_PLAIN, AUTH_XOAUTH2, MailFrom as ProtoMailFrom, RcptTo,
+    request::receiver::RequestReceiver,
+};
 
 use crate::session::{MailFrom, Rcpt, Session, State, normalize};
 
@@ -37,6 +40,8 @@ pub(crate) enum Sasl {
     Plain,
     LoginUser,
     LoginPassword(String),
+    /// `OAUTHBEARER` or `XOAUTH2`: an access token of kernoid with the scope `mail`.
+    Bearer,
 }
 
 fn decode(line: &[u8]) -> Option<String> {
@@ -105,10 +110,31 @@ impl Session {
                     None
                 }
             },
-            _ => {
-                self.reply("504 5.5.4 Mechanism not supported; use PLAIN or LOGIN");
+            AUTH_OAUTHBEARER | AUTH_XOAUTH2 if initial.is_empty() => {
+                self.reply("334 ");
+                Some(State::Sasl(Sasl::Bearer, Vec::new()))
+            }
+            AUTH_OAUTHBEARER | AUTH_XOAUTH2 => {
+                let decoded = base64::engine::general_purpose::STANDARD.decode(initial.trim()).ok();
+                self.bearer(decoded.as_deref()).await;
                 None
             }
+            _ => {
+                self.reply("504 5.5.4 Mechanism not supported; use PLAIN, LOGIN, OAUTHBEARER or XOAUTH2");
+                None
+            }
+        }
+    }
+
+    /// An `OAUTHBEARER` or `XOAUTH2` response, decoded.
+    async fn bearer(&mut self, response: Option<&[u8]>) {
+        let Some(submission) = self.inner.submission.clone() else { return };
+        match response.and_then(kernoid_identity::app_password::sasl_bearer) {
+            Some((user, token)) => {
+                let result = submission.identity.token_login(&token, user.as_deref()).await;
+                self.logged_in(result);
+            }
+            None => self.reply("501 5.5.2 Invalid AUTH response"),
         }
     }
 
@@ -117,6 +143,11 @@ impl Session {
         let line = line.strip_suffix(b"\r").unwrap_or(line);
         if line == b"*" {
             self.reply("501 5.7.0 Authentication cancelled");
+            return State::Request(RequestReceiver::default());
+        }
+        if matches!(step, Sasl::Bearer) {
+            let decoded = base64::engine::general_purpose::STANDARD.decode(line.trim_ascii()).ok();
+            self.bearer(decoded.as_deref()).await;
             return State::Request(RequestReceiver::default());
         }
         match (step, decode(line)) {
@@ -129,14 +160,19 @@ impl Session {
                 return State::Sasl(Sasl::LoginPassword(user), Vec::new());
             }
             (Sasl::LoginPassword(user), Some(password)) => self.login(&user, &password).await,
-            (_, None) => self.reply("501 5.5.2 Invalid base64"),
+            (Sasl::Bearer, _) | (_, None) => self.reply("501 5.5.2 Invalid base64"),
         }
         State::Request(RequestReceiver::default())
     }
 
     async fn login(&mut self, user: &str, password: &str) {
         let Some(submission) = self.inner.submission.clone() else { return };
-        match submission.identity.mail_login(user, password, Some(self.remote)).await {
+        let result = submission.identity.mail_login(user, password, Some(self.remote)).await;
+        self.logged_in(result);
+    }
+
+    fn logged_in(&mut self, result: Result<kernoid_identity::account::AccountInfo, IdentityError>) {
+        match result {
             Ok(account) => {
                 self.account = Some(account);
                 self.reply("235 2.7.0 Authentication successful");

@@ -145,7 +145,8 @@ password of an account without a second factor – or with a kernoid session.
 Configure `[imap]` and give kernoid certificates (`mail.tls`, `http.tls` or `http.acme`); a process with the role `imap` (part of
 `all`) then listens for IMAP on port 143 (`STARTTLS`) and 993 (TLS). POP3 is off unless `imap.pop3_listen` (110) or
 `imap.pop3_tls_listen` (995) is set. Clients log in with the address and an app password – or the password of an
-account without a second factor – and only over TLS.
+account without a second factor –, or with an access token of kernoid that has the scope `mail` (`OAUTHBEARER`,
+`XOAUTH2`; IMAP and submission alike), and only over TLS.
 
 - **IMAP4rev2 and IMAP4rev1** with `IDLE`, `MOVE`, `UIDPLUS`, `CONDSTORE`/`QRESYNC`, `SPECIAL-USE`, `LIST-STATUS`,
   `ESEARCH` and more; the folders are the account's mailboxes, separated by `/`, and the inbox is `INBOX`.

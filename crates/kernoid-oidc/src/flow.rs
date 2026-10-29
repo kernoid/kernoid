@@ -19,7 +19,8 @@ use crate::{
 };
 
 /// Scopes kernoid knows; others are ignored, as OpenID Connect allows.
-pub const SCOPES: &[&str] = &["openid", "profile", "email", OFFLINE_SCOPE, ROLES_SCOPE];
+pub const SCOPES: &[&str] =
+    &["openid", "profile", "email", OFFLINE_SCOPE, ROLES_SCOPE, kernoid_identity::app_password::MAIL_SCOPE];
 /// Refresh tokens that outlive the session (OpenID Connect Core, 11) – for applications that may ask for it, with the
 /// person's consent.
 pub const OFFLINE_SCOPE: &str = "offline_access";
