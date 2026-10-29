@@ -81,8 +81,9 @@ password if it needs no second factor.
 
 ## WebDAV
 
-File managers connect to `https://<instance host>/webdav/` with the account's address and an app password (or its
-password without a second factor):
+File managers connect to `https://<instance host>/webdav/` with the account's login name – its address, or its
+username or contact address where the tenant allows them – and an app password (or its password without a second
+factor):
 
 | Program | What to do |
 |---|---|

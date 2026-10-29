@@ -13,6 +13,9 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   GraphQL `auditLog`, and a page in the web app's administration (with an account's history).
 - An account's addresses – the primary one and its aliases: `GET /v1/accounts/{id}/addresses`, GraphQL
   `accountAddresses`, listed in the administration with "make primary" and "remove".
+- Programs over HTTP – JMAP, WebDAV, CalDAV and CardDAV – log in with a username or verified contact address too,
+  where the tenant allows them, as at the login page; IMAP, POP3 and SMTP still take addresses only (usernames are
+  unique per instance, and those protocols do not name one).
 - `http.public_port`: instances reached on a port other than 443 or 80 name it in their issuer and links (JMAP);
   `deploy/compose` sets 8080.
 

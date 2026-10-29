@@ -150,33 +150,50 @@ impl Identity {
     /// service `mail` (RFC 0003, 4) and an app password – or the account's own password, if it needs no second
     /// factor. Failed attempts count like failed logins; every failure is the same `InvalidCredentials`.
     pub async fn mail_login(&self, login: &str, secret: &str, client: Option<IpAddr>) -> Result<AccountInfo> {
-        self.program_login(login, secret, client, &[Service::Mail]).await
+        self.program_login(login, secret, client, &[Service::Mail], None).await
     }
 
     /// A login of a program like [`Identity::mail_login`], for an account with any of `services` – JMAP takes
-    /// accounts with mail or files (RFC 0005, 8).
+    /// accounts with mail or files (RFC 0005, 8). With the `instance` a request reached (HTTP: JMAP, WebDAV, DAV),
+    /// the login name is found as at the login page – an address, or a username or contact address where the tenant
+    /// allows them (RFC 0003, 2); without one (IMAP, POP3, SMTP), only an address finds the account: usernames and
+    /// contact addresses are unique per instance only.
     pub async fn program_login(
         &self,
         login: &str,
         secret: &str,
         client: Option<IpAddr>,
         services: &[Service],
+        instance: Option<Uuid>,
     ) -> Result<AccountInfo> {
         let services: Vec<String> = services.iter().map(|service| service.as_str().to_owned()).collect();
-        let row = match Address::parse(login) {
-            Ok(address) => sqlx::query!(
+        let account = match instance {
+            Some(instance) => self.find_login(instance, login).await?,
+            None => match Address::parse(login) {
+                Ok(address) => sqlx::query_scalar!(
+                    r#"SELECT account_id AS "account_id!" FROM addresses WHERE address = $1"#,
+                    address.as_str()
+                )
+                .fetch_optional(self.pool())
+                .await
+                .map_err(store_error)?,
+                Err(_) => None,
+            },
+        };
+        let row = match account {
+            Some(account) => sqlx::query!(
                 r#"SELECT t.instance_id, a.id, a.tenant_id
-                   FROM addresses ad JOIN accounts a ON a.id = ad.account_id JOIN tenants t ON t.id = a.tenant_id
-                   WHERE ad.address = $1
+                   FROM accounts a JOIN tenants t ON t.id = a.tenant_id
+                   WHERE a.id = $1
                      AND EXISTS (SELECT 1 FROM account_services s
                                  WHERE s.account_id = a.id AND s.service = ANY($2) AND s.state = 'on')"#,
-                address.as_str(),
+                account,
                 &services,
             )
             .fetch_optional(self.pool())
             .await
             .map_err(store_error)?,
-            Err(_) => None,
+            None => None,
         };
         let Some(row) = row else {
             // As long as a check of a real account: an unknown address must not show.

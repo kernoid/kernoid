@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT t.instance_id, a.id, a.tenant_id\n                   FROM addresses ad JOIN accounts a ON a.id = ad.account_id JOIN tenants t ON t.id = a.tenant_id\n                   WHERE ad.address = $1\n                     AND EXISTS (SELECT 1 FROM account_services s\n                                 WHERE s.account_id = a.id AND s.service = ANY($2) AND s.state = 'on')",
+  "query": "SELECT t.instance_id, a.id, a.tenant_id\n                   FROM accounts a JOIN tenants t ON t.id = a.tenant_id\n                   WHERE a.id = $1\n                     AND EXISTS (SELECT 1 FROM account_services s\n                                 WHERE s.account_id = a.id AND s.service = ANY($2) AND s.state = 'on')",
   "describe": {
     "columns": [
       {
@@ -39,7 +39,7 @@
     ],
     "parameters": {
       "Left": [
-        "Text",
+        "Uuid",
         "TextArray"
       ]
     },
@@ -49,5 +49,5 @@
       false
     ]
   },
-  "hash": "fb2e070d9422268edb9421e4a838893b912486db279b46a50af3933b86860ad0"
+  "hash": "360bd76c66ffdd847c8b3bc757368bc9f87c7abe5ef752ee948cdb63e0e9191c"
 }

@@ -73,6 +73,19 @@ async fn logins_by_address_username_and_contact_address(pool: PgPool) {
     assert!(matches!(identity.set_username(elsewhere, Some("maxm"), WHO).await, Err(IdentityError::Exists(_))));
     assert_eq!(identity.authenticate(instance, "maxm", PASSWORD).await.unwrap().id, max);
     assert_eq!(identity.authenticate(instance, "max.mustermann@firma.de", PASSWORD).await.unwrap().id, max);
+    // Programs over HTTP know the instance, and so the username; IMAP and SMTP do not – there, only an address.
+    identity.grant_service(max, Service::Files, WHO).await.unwrap();
+    let (_, secret) = identity.add_app_password(max, "Finder", WHO).await.unwrap();
+    let found = identity.program_login("MaxM", &secret, None, &[Service::Files], Some(instance)).await.unwrap();
+    assert_eq!(found.id, max);
+    assert!(matches!(
+        identity.program_login("maxm", &secret, None, &[Service::Files], None).await,
+        Err(IdentityError::InvalidCredentials)
+    ));
+    assert_eq!(
+        identity.program_login("max.mustermann@firma.de", &secret, None, &[Service::Files], None).await.unwrap().id,
+        max
+    );
 
     // A separate account of the same person, external, logging in with a verified contact address.
     let external = identity

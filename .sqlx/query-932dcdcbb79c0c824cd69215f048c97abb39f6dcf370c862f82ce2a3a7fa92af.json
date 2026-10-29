@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT account_id AS \"account_id!\" FROM addresses WHERE address = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "account_id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "addresses",
+            "name": "account_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "932dcdcbb79c0c824cd69215f048c97abb39f6dcf370c862f82ce2a3a7fa92af"
+}

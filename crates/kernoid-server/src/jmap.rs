@@ -66,7 +66,7 @@ async fn log_in(
     let account = if let Some(basic) = basic {
         let (user, password) = basic.split_once(':').ok_or_else(unauthorized)?;
         let address = client.as_ref().map(|client| client.address);
-        match state.identity.program_login(user, password, address, services).await {
+        match state.identity.program_login(user, password, address, services, Some(instance.id)).await {
             Ok(account) => account,
             Err(IdentityError::InvalidCredentials) => return Err(unauthorized()),
             Err(error) => return Err(crate::sessions::problem(error)),

@@ -114,9 +114,10 @@ no web URLs yet.
 
 JMAP itself is no longer only for mail: an account with `files` and without `mail` logs in to JMAP and sees only
 files; mail, calendar and contact methods answer `accountNotSupportedByMethod`, and no mail store is made for it.
-Logging in is as for mail programs (RFC 0002, 11): a kernoid session, or HTTP Basic with a native address and an app
-password – or the password, if the account needs no second factor. **OPEN:** HTTP Basic with a username or a contact
-address, for accounts without a native address (they use a session for now); OAuth for programs. Uploads (RFC 8620,
+Logging in is as for mail programs (RFC 0002, 11): a kernoid session, or HTTP Basic with a login name and an app
+password – or the password, if the account needs no second factor. Over HTTP the request names the instance, so the
+login name is found as at the login page: an address, or a username or verified contact address where the tenant
+allows them (RFC 0003, 2) – accounts without a native address log in too. **OPEN:** OAuth for programs. Uploads (RFC 8620,
 6.1) go to an account whose files the caller may add to or write, and may be as large as the larger of
 `mail.max_message_size` and `files.max_file_size`.
 
