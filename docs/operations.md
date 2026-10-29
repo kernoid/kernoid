@@ -53,8 +53,9 @@ needs PostgreSQL and S3-compatible object storage from elsewhere, like every ins
 
 ```sh
 kubectl apply -f deploy/kubernetes/crd.json -f deploy/kubernetes/operator.yaml
-# or, with Helm, from a checkout:
-#   helm install kernoid-operator deploy/helm/kernoid-operator -n kernoid-system --create-namespace
+# or, with Helm (from a release on, the chart is published next to the image):
+#   helm install kernoid-operator oci://ghcr.io/kernoid/charts/kernoid-operator --version 0.2.0 \
+#     -n kernoid-system --create-namespace
 kubectl create namespace kernoid
 kubectl -n kernoid create secret generic kernoid --from-literal=database-url=… --from-literal=migrate-url=… \
   --from-literal=main-key=$(openssl rand -hex 32) --from-literal=s3-access-key-id=… --from-literal=s3-secret-access-key=…
@@ -90,8 +91,11 @@ the release's namespace. Its values: `image.repository` and `image.tag` (the cha
 `imagePullSecrets`. Helm installs a CustomResourceDefinition once and never upgrades it: after upgrading the chart,
 apply `deploy/kubernetes/crd.json` of the new release.
 
-**OPEN:** the chart in a chart repository (it is installed from a checkout for now), an ingress or Gateway route made
-by the operator, scaling by load.
+Each release pushes the chart as `oci://ghcr.io/kernoid/charts/kernoid-operator` with the release's version (CI's job
+`chart`, which also checks that the chart's version is the tag's); between releases it is installed from a checkout
+(`deploy/helm/kernoid-operator`).
+
+**OPEN:** an ingress or Gateway route made by the operator, scaling by load.
 
 ## TLS and reverse proxies
 

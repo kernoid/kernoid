@@ -2,7 +2,8 @@
 # Format, lints, the sqlx query cache, tests against PostgreSQL and the API files of the documentation; the web
 # SDK, login UI and web app (types, tests, build); the terminal app (its own Cargo workspace: format, lints, tests);
 # the licence checks (REUSE, no Stalwart Enterprise License material); known vulnerabilities and licences of the
-# dependencies; the container image builds, and is pushed to ghcr.io from main and version tags. Actions are pinned
+# dependencies; the container image builds, and is pushed to ghcr.io from main and version tags – with the operator's
+# Helm chart on version tags. Actions are pinned
 # by commit, with the version as a comment.
 name: CI
 
@@ -232,6 +233,31 @@ jobs:
           for digest in *; do images+=("ghcr.io/kernoid/kernoid@sha256:$digest"); done
           docker buildx imagetools create "${tags[@]}" "${images[@]}"
           docker buildx imagetools inspect "ghcr.io/kernoid/kernoid:${{ steps.meta.outputs.version }}"
+
+  # The operator's Helm chart, on a release: its version must be the tag's; pushed next to the image as an OCI chart,
+  # oci://ghcr.io/kernoid/charts/kernoid-operator (with the runner's Helm).
+  chart:
+    needs: manifest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: The chart's version is the release's
+        run: |
+          chart="$(helm show chart deploy/helm/kernoid-operator | sed -n 's/^version: //p')"
+          app="$(helm show chart deploy/helm/kernoid-operator | sed -n 's/^appVersion: //p' | tr -d '"')"
+          test "v$chart" = "$GITHUB_REF_NAME" && test "v$app" = "$GITHUB_REF_NAME"
+      - name: Push it
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          helm package deploy/helm/kernoid-operator --destination /tmp/chart
+          echo "$TOKEN" | helm registry login ghcr.io --username "$ACTOR" --password-stdin
+          helm push /tmp/chart/kernoid-operator-*.tgz oci://ghcr.io/kernoid/charts
 
   # An installation of the last release, with mail and a file in it, upgraded to the image just pushed: the schema
   # migrated to the newest migration, the data still there (scripts/upgrade-check.sh).
