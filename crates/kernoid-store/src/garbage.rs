@@ -39,6 +39,20 @@ pub async fn mark(
     Ok(())
 }
 
+/// Marks `key` as garbage now – by the database's clock, which collecting compares with: the clocks of the database
+/// and of kernoid may differ a little.
+pub async fn mark_now(connection: &mut PgConnection, tenant: Uuid, key: &str) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        "INSERT INTO blob_garbage (tenant_id, key, due_at) VALUES ($1, $2, now())
+         ON CONFLICT (tenant_id, key) DO UPDATE SET due_at = least(blob_garbage.due_at, now())",
+        tenant,
+        key,
+    )
+    .execute(connection)
+    .await?;
+    Ok(())
+}
+
 /// Marks `key` before the object is written: garbage in [`PENDING`] unless the transaction that needs it commits.
 pub async fn pending(pool: &PgPool, tenant: Uuid, key: &str) -> Result<(), sqlx::Error> {
     let mut connection = pool.acquire().await?;

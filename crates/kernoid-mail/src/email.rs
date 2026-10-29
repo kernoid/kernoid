@@ -190,7 +190,7 @@ pub(crate) async fn destroy_in(
     )
     .fetch_one(&mut **tx)
     .await?;
-    garbage::mark(tx, locked.tenant, &blob_key(account, email), Utc::now()).await?;
+    garbage::mark_now(tx, locked.tenant, &blob_key(account, email)).await?;
     record(tx, account, modseq, ObjectType::Email, email, Change::Destroyed).await?;
     Ok(())
 }

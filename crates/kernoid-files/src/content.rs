@@ -189,7 +189,7 @@ pub(crate) async fn released(tx: &mut PgConnection, locked: &mut Locked, gone: V
         .fetch_one(&mut *tx)
         .await?;
         if !named {
-            parts::mark(tx, locked.tenant, &content.prefix, content.parts as u32, Utc::now()).await?;
+            parts::mark_now(tx, locked.tenant, &content.prefix, content.parts as u32).await?;
         }
     }
     Ok(())

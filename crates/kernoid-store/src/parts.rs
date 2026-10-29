@@ -101,7 +101,7 @@ where
         && let Err(refused) = scan.finish().await
     {
         let mut connection = pool.acquire().await?;
-        mark(&mut connection, tenant, prefix, parts, Utc::now()).await?;
+        mark_now(&mut connection, tenant, prefix, parts).await?;
         return Err(refused.into());
     }
     Ok(Stored { parts, size, sha256: hash.finalize().into() })
@@ -128,6 +128,19 @@ pub async fn keep(connection: &mut PgConnection, tenant: Uuid, prefix: &str, par
         }
     }
     Ok(true)
+}
+
+/// Marks the parts as garbage now, by the database's clock (`garbage::mark_now`).
+pub async fn mark_now(
+    connection: &mut PgConnection,
+    tenant: Uuid,
+    prefix: &str,
+    parts: u32,
+) -> Result<(), sqlx::Error> {
+    for n in 0..parts {
+        garbage::mark_now(connection, tenant, &part_key(prefix, n)).await?;
+    }
+    Ok(())
 }
 
 /// Marks the parts as garbage at `due`, in the transaction that removes what needed them.

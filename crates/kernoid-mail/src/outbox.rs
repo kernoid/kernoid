@@ -213,7 +213,7 @@ impl Mail {
             return Ok(false);
         }
         sqlx::query!("DELETE FROM outbound_messages WHERE id = $1", message).execute(&mut *tx).await?;
-        garbage::mark(&mut tx, row.tenant_id, &blob_key(message), Utc::now()).await?;
+        garbage::mark_now(&mut tx, row.tenant_id, &blob_key(message)).await?;
         tx.commit().await?;
         Ok(true)
     }
