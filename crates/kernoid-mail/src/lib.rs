@@ -22,6 +22,7 @@ pub mod srs;
 mod store;
 mod thread;
 mod uploads;
+mod vacation;
 
 pub use access::{Access, Rights, SharedStore};
 pub use changes::{Changes, ObjectType};
@@ -36,6 +37,7 @@ pub use parse::{Mailbox as AddressInfo, search_query};
 pub use scripts::{SieveScript, check_script};
 pub use store::{StoreChange, StoreRead};
 pub use uploads::{UPLOAD_LIFETIME, Upload};
+pub use vacation::VacationResponse;
 
 use kernoid_store::{BlobError, BlobStore, PgPool};
 use sqlx::{PgConnection, Postgres, Transaction};

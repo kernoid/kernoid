@@ -459,3 +459,50 @@ async fn submissions_move_the_email_to_sent(pool: PgPool) {
     assert_eq!(got["list"][0]["mailboxIds"], json!({ &sent: true }), "{got}");
     assert_eq!(got["list"][0]["keywords"], json!({ "$seen": true }), "{got}");
 }
+
+#[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
+async fn the_vacation_response_is_a_singleton_of_the_own_account(pool: PgPool) {
+    let setup = setup(pool).await;
+    let alice = setup.caller("alice").await;
+    let session = setup.jmap.session(&alice, "https://login.firma.example").await.unwrap();
+    assert_eq!(session["primaryAccounts"][kernoid_jmap::VACATION], json!(alice.account.to_string()));
+    let request =
+        |calls: Value| json!({ "using": ["urn:ietf:params:jmap:core", kernoid_jmap::VACATION], "methodCalls": calls });
+    let account = alice.account.to_string();
+    let (jmap, caller) = (&setup.jmap, &alice);
+    let run = |calls: Value| {
+        let body = request(calls).to_string();
+        async move { jmap.api(caller, body.as_bytes()).await }
+    };
+
+    let got = run(json!([["VacationResponse/get", { "accountId": account, "ids": null }, "g"]])).await.unwrap();
+    let off = &got["methodResponses"][0][1];
+    assert_eq!(
+        off["list"][0],
+        json!({ "id": "singleton", "isEnabled": false, "fromDate": null, "toDate": null,
+        "subject": null, "textBody": null, "htmlBody": null })
+    );
+    let set = run(json!([["VacationResponse/set", { "accountId": account, "update": { "singleton": {
+        "isEnabled": true, "toDate": "2026-11-09T00:00:00Z", "subject": "Away", "textBody": "Back on Monday." } },
+        "create": { "x": {} }, "destroy": ["singleton"] }, "s"]]))
+    .await
+    .unwrap();
+    let set = &set["methodResponses"][0][1];
+    assert!(set["updated"].get("singleton").is_some(), "{set}");
+    assert_eq!(
+        (set["notCreated"]["x"]["type"].as_str(), set["notDestroyed"]["singleton"]["type"].as_str()),
+        (Some("singleton"), Some("singleton"))
+    );
+    assert_ne!(set["oldState"], set["newState"]);
+    let got = run(json!([["VacationResponse/get", { "accountId": account, "ids": ["singleton", "other"] }, "g"]]))
+        .await
+        .unwrap();
+    let on = &got["methodResponses"][0][1];
+    assert_eq!(
+        (on["list"][0]["isEnabled"].as_bool(), on["list"][0]["toDate"].as_str()),
+        (Some(true), Some("2026-11-09T00:00:00Z"))
+    );
+    assert_eq!(on["notFound"], json!(["other"]));
+    let wrong = run(json!([["VacationResponse/set", { "accountId": account, "update": { "singleton": { "toDate": "monday" } } }, "s"]])).await.unwrap();
+    assert_eq!(wrong["methodResponses"][0][1]["notUpdated"]["singleton"]["type"], "invalidProperties");
+}

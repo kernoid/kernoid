@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO vacation_responses (account_id, is_enabled, from_date, to_date, subject, text_body, html_body)\n             VALUES ($1, $2, $3, $4, $5, $6, $7)\n             ON CONFLICT (account_id) DO UPDATE SET is_enabled = $2, from_date = $3, to_date = $4, subject = $5,\n                 text_body = $6, html_body = $7, updated_at = now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bool",
+        "Timestamptz",
+        "Timestamptz",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d5c22c07953d77f9c4e61877f47234a1c9043fee8c5800c74aa1f16db1c9d98c"
+}

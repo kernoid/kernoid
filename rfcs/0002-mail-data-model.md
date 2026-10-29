@@ -157,6 +157,10 @@ accepts mail for their addresses and stores it at once. It relays nothing: mail 
   against loops.
 - **OPEN:** the PROXY protocol, for a server behind a TCP load balancer – without it, kernoid must see the client's
   address itself, which every check below depends on.
+- **Vacation response:** JMAP's `VacationResponse` (RFC 8621, 8) of each account, kept in `vacation_responses`
+  (data, changed by the owner): while it is on, delivery runs it after the account's script as a generated Sieve
+  `vacation` (RFC 5230) – sieve-rs decides whom to answer, `sieve_vacation_sent` that it is once per sender –, but
+  not for junk or what the script discarded.
 - **Malware:** when a tenant of a recipient (or the tenant of an SRS bounce) switched on a scanning module
   (`clamav`), the message is checked after `DATA` and before it is accepted: malware is refused with `554 5.7.1`
   (the sending server bounces it, nothing is stored), a scanner that does not answer gives `451` unless it is set to

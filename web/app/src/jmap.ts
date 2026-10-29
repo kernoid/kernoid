@@ -12,6 +12,7 @@ export const FILE_VERSIONS = "https://kernoid.dev/jmap/file-versions";
 export const FILE_LINKS = "https://kernoid.dev/jmap/file-links";
 export const PRINCIPALS = "urn:ietf:params:jmap:principals";
 export const BLOB = "urn:ietf:params:jmap:blob";
+export const VACATION = "urn:ietf:params:jmap:vacationresponse";
 
 /** Files larger than this go up in pieces of this size (RFC 9404), each sent again if its connection breaks. */
 export const PIECE_SIZE = 16 * 1024 * 1024;

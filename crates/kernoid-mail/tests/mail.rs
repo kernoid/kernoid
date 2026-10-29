@@ -539,3 +539,57 @@ async fn only_accounts_with_mail_receive_it(pool: PgPool) {
     setup.identity.grant_service(alice, Service::Mail, WHO).await.unwrap();
     assert!(matches!(setup.mail.resolve_recipient("alice@firma.example").await.unwrap(), Recipient::Account { .. }));
 }
+
+#[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
+async fn the_vacation_response_answers_while_it_is_on(pool: PgPool) {
+    let setup = setup(pool.clone(), Limits::default()).await;
+    let alice = setup.account("alice").await;
+    let mail = &setup.mail;
+    let incoming = |from: &str, id: &str, extra: &str| {
+        Bytes::from(format!(
+            "From: {from}\r\nTo: alice@firma.example\r\nSubject: Hello\r\nMessage-ID: <{id}@other.example>\r\n{extra}\r\nHi\r\n"
+        ))
+    };
+    let replies = || async {
+        sqlx::query_scalar!("SELECT r.address FROM outbound_recipients r ORDER BY r.address")
+            .fetch_all(&pool)
+            .await
+            .unwrap()
+    };
+    let deliver = |from: &'static str, id: &'static str, extra: &'static str, junk: bool| {
+        let delivery = kernoid_mail::Delivery { from, to: "alice@firma.example", junk };
+        mail.deliver(alice, incoming(from, id, extra), delivery)
+    };
+    assert_eq!(mail.vacation_response(alice).await.unwrap(), kernoid_mail::VacationResponse::default());
+
+    // Off: no reply.
+    deliver("carol@other.example", "a1", "", false).await.unwrap();
+    assert!(replies().await.is_empty());
+
+    // On, with the account's own script beside it: one reply per sender – not to junk, nor to automatic mail.
+    mail.put_sieve_script(alice, "files", r#"require "fileinto"; keep;"#, true).await.unwrap();
+    let now = chrono::Utc::now();
+    let vacation = kernoid_mail::VacationResponse {
+        enabled: true,
+        from_date: Some(now - chrono::Duration::hours(1)),
+        to_date: Some(now + chrono::Duration::days(3)),
+        subject: Some("Away".into()),
+        text_body: Some("Back on Monday.".into()),
+        html_body: None,
+    };
+    mail.set_vacation_response(alice, &vacation).await.unwrap();
+    assert_eq!(mail.vacation_response(alice).await.unwrap(), vacation);
+    deliver("carol@other.example", "a2", "", false).await.unwrap();
+    deliver("carol@other.example", "a3", "", false).await.unwrap();
+    deliver("spam@other.example", "a4", "", true).await.unwrap();
+    deliver("list@other.example", "a5", "Auto-Submitted: auto-generated\r\n", false).await.unwrap();
+    assert_eq!(replies().await, ["carol@other.example"]);
+
+    // Its dates hold, and they must make sense.
+    let later = kernoid_mail::VacationResponse { from_date: Some(now + chrono::Duration::days(1)), ..vacation.clone() };
+    mail.set_vacation_response(alice, &later).await.unwrap();
+    deliver("dave@other.example", "a6", "", false).await.unwrap();
+    assert_eq!(replies().await, ["carol@other.example"]);
+    let backwards = kernoid_mail::VacationResponse { to_date: Some(now - chrono::Duration::days(1)), ..vacation };
+    assert!(matches!(mail.set_vacation_response(alice, &backwards).await, Err(MailError::Invalid(_))));
+}

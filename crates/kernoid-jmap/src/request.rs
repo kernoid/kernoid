@@ -10,7 +10,7 @@ use kernoid_mail::Access;
 
 use crate::{
     CALENDARS, CONTACTS, CORE, Caller, FILE_LINKS, FILE_VERSIONS, FILENODE, Jmap, MAIL, MAX_CALLS_IN_REQUEST,
-    PRINCIPALS, SUBMISSION, blob_methods::BLOB,
+    PRINCIPALS, SUBMISSION, VACATION, blob_methods::BLOB,
 };
 
 /// A request that cannot be run at all (RFC 8620, 3.6.1); answered as problem details.
@@ -226,8 +226,20 @@ impl Jmap {
             .ok_or_else(|| RequestError::NotRequest("using is required".into()))?;
         for capability in using {
             let capability = capability.as_str().unwrap_or_default();
-            if ![CORE, MAIL, SUBMISSION, CALENDARS, CONTACTS, FILENODE, FILE_VERSIONS, FILE_LINKS, PRINCIPALS, BLOB]
-                .contains(&capability)
+            if ![
+                CORE,
+                MAIL,
+                SUBMISSION,
+                VACATION,
+                CALENDARS,
+                CONTACTS,
+                FILENODE,
+                FILE_VERSIONS,
+                FILE_LINKS,
+                PRINCIPALS,
+                BLOB,
+            ]
+            .contains(&capability)
             {
                 return Err(RequestError::UnknownCapability(capability.to_owned()));
             }
@@ -298,6 +310,8 @@ impl Jmap {
             "Thread/get" => context.thread_get(args).await,
             "Thread/changes" => context.changes(args, kernoid_mail::ObjectType::Thread, "Thread/changes").await,
             "Identity/get" => context.identity_get(args).await,
+            "VacationResponse/get" => context.vacation_get(args).await,
+            "VacationResponse/set" => context.vacation_set(args).await,
             "Identity/changes" => Err(MethodError::new("cannotCalculateChanges", "get the identities again")),
             "EmailSubmission/set" => context.submission_set(args).await,
             "EmailSubmission/get" => context.submission_get(args).await,

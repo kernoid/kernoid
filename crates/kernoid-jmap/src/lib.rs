@@ -17,6 +17,7 @@ mod other;
 mod principals;
 mod query;
 mod request;
+mod vacation;
 
 use kernoid_mail::Mail;
 use serde_json::{Value, json};
@@ -39,6 +40,7 @@ pub const WEBSOCKET: &str = "urn:ietf:params:jmap:websocket";
 pub const FILE_VERSIONS: &str = "https://kernoid.dev/jmap/file-versions";
 /// kernoid's own: links to files for people without an account (`FileLink/get`, `/set`, RFC 0005, 11.3).
 pub const FILE_LINKS: &str = "https://kernoid.dev/jmap/file-links";
+pub use vacation::VACATION;
 
 /// Limits announced in the session and kept by the API.
 pub const MAX_SIZE_REQUEST: usize = 10 * 1024 * 1024;
@@ -120,6 +122,11 @@ impl Jmap {
             }
             primary.insert(MAIL.into(), json!(own));
             primary.insert(SUBMISSION.into(), json!(own));
+            // Only the own account has a vacation response (RFC 8621, 8).
+            if let Some(entry) = accounts.get_mut(&own) {
+                entry["accountCapabilities"][VACATION] = json!({});
+            }
+            primary.insert(VACATION.into(), json!(own));
         }
         // Calendars and address books: the own account has both; one that shares some has those (RFC 0004, 9).
         if caller.mail
@@ -211,7 +218,7 @@ impl Jmap {
             },
         });
         if caller.mail {
-            for capability in [MAIL, SUBMISSION, CALENDARS, CONTACTS] {
+            for capability in [MAIL, SUBMISSION, VACATION, CALENDARS, CONTACTS] {
                 capabilities[capability] = json!({});
             }
         }

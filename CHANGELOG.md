@@ -58,6 +58,8 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 - JMAP `FileNode/copy` (RFC 8620, 5.4): nodes – a directory with what it holds – copied from another store the
   caller reads, a file's copy sharing its content; `onSuccessDestroyOriginal` moves them. The web app copies and
   moves files and folders between one's own files, team folders and what others share.
+- A vacation response for every account: JMAP `VacationResponse` (RFC 8621, 8) and a section in the web app's account
+  page; delivery answers as a Sieve `vacation` does, after the account's own script (migration 0041).
 - The terminal app saves an event as an `.ics` file and the contacts listed as a `.vcf` file, and imports both (`X`,
   `I`; through calcard, as kernoid stores them; imported events invite nobody).
 - The terminal app keeps every address, phone number and organisation of a contact, with their labels (`(work)`,

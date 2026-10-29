@@ -10,6 +10,7 @@ import { t } from "../i18n.js";
 import { notificationsSupported, notificationsWanted, setNotifications } from "../mail/notify.js";
 import { THEMES, type Theme, setTheme, theme } from "../theme.js";
 import { Connect } from "./Connect.js";
+import { Vacation } from "./Vacation.js";
 
 export const client = new LoginClient({ cookies: true });
 
@@ -112,6 +113,8 @@ export function AccountView(): JSX.Element {
                 </For>
               </div>
             </section>
+
+            <Vacation />
 
             <Show when={notificationsSupported()}>
               <section>

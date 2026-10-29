@@ -264,6 +264,19 @@ impl Mail {
         if !outcome.skipped.is_empty() {
             tracing::info!(%account, skipped = ?outcome.skipped, "Sieve actions kernoid does not carry out were skipped");
         }
+        // The vacation response answers after the account's script – not junk, nor what the script threw away.
+        let mut outcome = outcome;
+        if !delivery.junk
+            && !outcome.targets.is_empty()
+            && let Some(script) = self.vacation_response(account).await?.script(chrono::Utc::now())
+        {
+            let (raw, from, to) = (raw.clone(), delivery.from.to_owned(), delivery.to.to_owned());
+            let names: Vec<String> = paths.keys().cloned().collect();
+            let answer = tokio::task::spawn_blocking(move || scripts::run(&script, &raw, &from, &to, &names))
+                .await
+                .unwrap_or_default();
+            outcome.sends.extend(answer.sends.into_iter().filter(|send| send.vacation));
+        }
         // What the script sends goes out whatever happens to the message here; a failure is logged, not the delivery's.
         for send in &outcome.sends {
             if let Err(error) = self.script_send(account, &raw, delivery, send).await {

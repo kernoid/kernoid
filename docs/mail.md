@@ -78,6 +78,11 @@ sender – are taken at such an address); a vacation reply at most once per send
 kernoid mail sieve put <ACCOUNT> lists lists.sieve --activate
 ```
 
+**Vacation response.** Each account sets its own – on or off, from and to a time, a subject and a text – in the web
+app's account page or with JMAP's `VacationResponse` (RFC 8621, 8). While it is on, delivery answers after the
+account's script as a Sieve `vacation` does: once per sender within seven days, not to mailing lists, bounces or
+other automatic mail, not to what the spam filter flagged or the script discarded.
+
 ```sieve
 require ["fileinto", "mailbox"];
 if header :contains "List-ID" "dev.lists.example" {
@@ -138,8 +143,9 @@ Mail programs and web apps reach an account's mail over [JMAP](https://jmap.io) 
 `https://<instance host>/.well-known/jmap`. They log in with HTTP Basic – the address and an app password, or the
 password of an account without a second factor – or with a kernoid session.
 
-- Mailboxes, emails (read, written, imported, parsed, queried), threads, identities (the account's addresses) and
-  sending (`EmailSubmission`, through the queue with the same checks as submission).
+- Mailboxes, emails (read, written, imported, parsed, queried), threads, identities (the account's addresses),
+  sending (`EmailSubmission`, through the queue with the same checks as submission) and the vacation response
+  (`VacationResponse`, of the own account).
 - Blobs: an email's raw message and each of its parts can be downloaded; uploads are kept a day. JMAP Blob
   Management (RFC 9404) joins uploads (`Blob/upload`) and reads and looks up blobs (`Blob/get`, `Blob/lookup`).
 - **Push:** `/jmap/eventsource` sends a `StateChange` as soon as the account's mail changes; over a WebSocket
