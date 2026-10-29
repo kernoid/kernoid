@@ -19,12 +19,20 @@ export class AdminError extends Error {
 }
 
 export async function api<T = unknown>(method: string, path: string, body?: unknown): Promise<T> {
+  const response = await send(method, path, body === undefined ? undefined : { type: "application/json", content: JSON.stringify(body) });
+  if (response.status === 204) return undefined as T;
+  const text = await response.text();
+  return (text ? JSON.parse(text) : undefined) as T;
+}
+
+/** A request with a body of another type than JSON, or for an answer that is not JSON (mbox); the response. */
+export async function send(method: string, path: string, body?: { type: string; content: BodyInit }): Promise<Response> {
   const headers: Record<string, string> = { accept: "application/json", "kernoid-csrf": "1" };
-  if (body !== undefined) headers["content-type"] = "application/json";
+  if (body) headers["content-type"] = body.type;
   const target = tenant();
   if (target) headers["kernoid-tenant"] = target;
   const init: RequestInit = { method, headers, credentials: "same-origin" };
-  if (body !== undefined) init.body = JSON.stringify(body);
+  if (body) init.body = body.content;
   const response = await fetch(path, init);
   if (response.status === 401) {
     window.location.assign(`/login/account?next=${encodeURIComponent(window.location.pathname + window.location.hash)}`);
@@ -39,9 +47,7 @@ export async function api<T = unknown>(method: string, path: string, body?: unkn
     }
     throw new AdminError(response.status, message);
   }
-  if (response.status === 204) return undefined as T;
-  const text = await response.text();
-  return (text ? JSON.parse(text) : undefined) as T;
+  return response;
 }
 
 /** A path segment. */

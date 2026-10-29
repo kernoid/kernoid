@@ -26,7 +26,7 @@ export function useAction() {
       setBusy(false);
     }
   };
-  return { busy, error, notice, run, setError };
+  return { busy, error, notice, run, setError, say: setNotice };
 }
 
 export type Action = ReturnType<typeof useAction>;

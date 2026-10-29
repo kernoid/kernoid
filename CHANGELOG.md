@@ -60,6 +60,8 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   moves files and folders between one's own files, team folders and what others share.
 - The web app's administration keeps an account's Sieve scripts: written, checked by kernoid (its compile errors
   shown), switched on or off, removed.
+- The web app's administration saves an account's mailbox as an mbox file and imports one into it (up to 2 MiB in
+  the browser; larger ones with `kernoid mail import-mbox`).
 - The web app shows an HTML email in its original layout too ("Original" beside "Readable"): served as a page of its
   own (`/jmap/view`) in a sandbox – its styles and embedded images, no scripts, no forms, nothing loaded from
   elsewhere, so no tracking pixels.

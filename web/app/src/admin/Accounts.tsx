@@ -21,6 +21,7 @@ import {
   seg,
 } from "./api.js";
 import { Buttons, Check, Dialog, Field, Form, Head, Outcome, Select, bytes, parseBytes, useAction, when } from "./ui.js";
+import { MailTransfer } from "./MailTransfer.js";
 import { SieveScripts } from "./Sieve.js";
 
 export function Accounts(props: { id: string | undefined }): JSX.Element {
@@ -410,7 +411,12 @@ function Account(props: { id: string }): JSX.Element {
           </Show>
 
           <Show when={ok(mail)}>
-            <SieveScripts base={base} />
+            {(overview) => (
+              <>
+                <MailTransfer base={base} mail={overview()} onImported={() => void refetchMail()} />
+                <SieveScripts base={base} />
+              </>
+            )}
           </Show>
 
           <Show when={!me().shared}>
