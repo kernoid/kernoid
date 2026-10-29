@@ -21,6 +21,7 @@ import {
   seg,
 } from "./api.js";
 import { Buttons, Check, Dialog, Field, Form, Head, Outcome, Select, bytes, parseBytes, useAction, when } from "./ui.js";
+import { SieveScripts } from "./Sieve.js";
 
 export function Accounts(props: { id: string | undefined }): JSX.Element {
   return (
@@ -406,6 +407,10 @@ function Account(props: { id: string }): JSX.Element {
                 }
               />
             </section>
+          </Show>
+
+          <Show when={ok(mail)}>
+            <SieveScripts base={base} />
           </Show>
 
           <Show when={!me().shared}>
