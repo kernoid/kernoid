@@ -414,6 +414,12 @@ const de: Record<string, string> = {
   "The password is not right.": "Das Passwort stimmt nicht.",
   "This link has a password": "Dieser Link hat ein Passwort",
   "Language of emails from kernoid": "Sprache der E-Mails von kernoid",
+  "Logging in with other services": "Anmelden mit anderen Diensten",
+  "No services linked yet.": "Noch keine Dienste verknüpft.",
+  "linked {date}": "verknüpft {date}",
+  "The service was unlinked.": "Die Verknüpfung wurde entfernt.",
+  Unlink: "Trennen",
+  "Link {name}": "Mit {name} verknüpfen",
   "Invitations sent for you and notices to you are written in it; the app follows your browser.":
     "Darin sind Einladungen, die für Sie verschickt werden, und Hinweise an Sie geschrieben; die App folgt Ihrem Browser.",
   "As the tenant ({language})": "Wie der Mandant ({language})",

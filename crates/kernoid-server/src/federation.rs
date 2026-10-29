@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use axum::{
     Json,
-    extract::{Extension, Query, State},
+    extract::{Extension, Path, Query, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Redirect, Response},
 };
@@ -379,6 +379,85 @@ pub(crate) async fn start_link(
     };
     match state.oidc.start_idp_link(&instance, &token, idp).await {
         Ok(url) => Json(StartedLogin { url }).into_response(),
+        Err(error) => oidc::problem(error),
+    }
+}
+
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub(crate) struct OwnLinkView {
+    identity_provider: String,
+    /// The provider's name.
+    name: String,
+    /// Who the account is at the provider.
+    subject: String,
+    created_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// The providers one's own account is linked to.
+#[utoipa::path(get, path = "/v1/account/idp-links", tag = "account", responses(
+    (status = 200, body = [OwnLinkView]),
+    (status = 401, description = "no valid session", body = Problem),
+))]
+pub(crate) async fn own_links(
+    State(state): State<AppState>,
+    CurrentInstance(instance): CurrentInstance,
+    crate::sessions::SessionToken(token): crate::sessions::SessionToken,
+) -> Response {
+    match state.oidc.own_links(instance.id, &token).await {
+        Ok(list) => Json(
+            list.into_iter()
+                .map(|(link, name)| OwnLinkView {
+                    identity_provider: link.idp.to_string(),
+                    name,
+                    subject: link.subject,
+                    created_at: link.created_at,
+                })
+                .collect::<Vec<_>>(),
+        )
+        .into_response(),
+        Err(error) => oidc::problem(error),
+    }
+}
+
+/// Unlinks a provider from one's own account – after a recent login, and never the last way to log in.
+#[utoipa::path(delete, path = "/v1/account/idp-links/{idp}/{subject}", tag = "account", responses(
+    (status = 204),
+    (status = 400, description = "the last way to log in", body = Problem),
+    (status = 401, description = "no valid session, or not recent enough", body = Problem),
+    (status = 404, description = "no such link", body = Problem),
+))]
+pub(crate) async fn unlink_own(
+    State(state): State<AppState>,
+    CurrentInstance(instance): CurrentInstance,
+    crate::sessions::SessionToken(token): crate::sessions::SessionToken,
+    Path((idp, subject)): Path<(String, String)>,
+) -> Response {
+    let Ok(idp) = Uuid::parse_str(&idp) else {
+        return Problem::new(StatusCode::NOT_FOUND).detail("the link does not exist").into_response();
+    };
+    match state.identity.unlink_own(instance.id, &token, idp, &subject).await {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(error) => crate::sessions::problem(error),
+    }
+}
+
+/// The providers one's own account may be linked to: its tenant's and the whole instance's.
+#[utoipa::path(get, path = "/v1/account/idp-providers", tag = "account", responses(
+    (status = 200, body = [ProviderSummary]),
+    (status = 401, description = "no valid session", body = Problem),
+))]
+pub(crate) async fn linkable_providers(
+    State(state): State<AppState>,
+    CurrentInstance(instance): CurrentInstance,
+    crate::sessions::SessionToken(token): crate::sessions::SessionToken,
+) -> Response {
+    match state.oidc.linkable_providers(instance.id, &token).await {
+        Ok(list) => Json(
+            list.into_iter()
+                .map(|provider| ProviderSummary { id: provider.id.to_string(), name: provider.name })
+                .collect::<Vec<_>>(),
+        )
+        .into_response(),
         Err(error) => oidc::problem(error),
     }
 }

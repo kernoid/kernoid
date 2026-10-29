@@ -26,6 +26,7 @@ use kernoid_events::{
 };
 use kernoid_identity::{
     Address, DomainName, IdentityError, InstanceInfo,
+    link::LinkInfo,
     role::{Admin, Permission},
     session::{ClientMeta, NewSession},
 };
@@ -975,7 +976,8 @@ impl Oidc {
 
     /// Starts a login at a provider that links it to the account of `token` (from the account page, RFC 0003, 3).
     pub async fn start_idp_link(&self, instance: &InstanceInfo, token: &str, idp: Uuid) -> Result<String> {
-        let session = self.identity.session(instance.id, token).await?;
+        // A link is another way into the account, as a passkey is: only after a recent login.
+        let session = self.identity.recent_session(instance.id, token).await?;
         let info = self.identity_provider(idp).await?;
         if info.tenant.is_some_and(|tenant| tenant != session.account.tenant) {
             return Err(IdentityError::NotFound("the identity provider").into());
@@ -1553,6 +1555,41 @@ impl Oidc {
             .await
             .map_err(internal)?;
         if used.rows_affected() == 1 { Ok(()) } else { Err(OidcError::Identity(IdentityError::InvalidSession)) }
+    }
+
+    /// The providers the token's account may link (RFC 0003, 3): the active ones of its tenant and of the whole
+    /// instance.
+    pub async fn linkable_providers(&self, instance: Uuid, token: &str) -> Result<Vec<IdpSummary>> {
+        let session = self.identity.session(instance, token).await?;
+        Ok(sqlx::query!(
+            "SELECT id, name FROM identity_providers
+             WHERE instance_id = $1 AND active AND (tenant_id IS NULL OR tenant_id = $2) ORDER BY name",
+            instance,
+            session.account.tenant,
+        )
+        .fetch_all(self.pool())
+        .await
+        .map_err(internal)?
+        .into_iter()
+        .map(|row| IdpSummary { id: row.id, name: row.name })
+        .collect())
+    }
+
+    /// The external identities linked to the token's account, with their providers' names.
+    pub async fn own_links(&self, instance: Uuid, token: &str) -> Result<Vec<(LinkInfo, String)>> {
+        let session = self.identity.session(instance, token).await?;
+        Ok(sqlx::query!(
+            "SELECT l.idp_id, l.subject, l.created_at, p.name FROM account_links l
+             JOIN identity_providers p ON p.id = l.idp_id
+             WHERE l.account_id = $1 ORDER BY l.created_at",
+            session.account.id,
+        )
+        .fetch_all(self.pool())
+        .await
+        .map_err(internal)?
+        .into_iter()
+        .map(|row| (LinkInfo { idp: row.idp_id, subject: row.subject, created_at: row.created_at }, row.name))
+        .collect())
     }
 
     /// The providers offered to everyone on the instance's login page.

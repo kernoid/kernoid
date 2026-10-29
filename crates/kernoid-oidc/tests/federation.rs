@@ -420,4 +420,17 @@ async fn sign_in_with_a_provider_registers_proposes_linking_and_links(pool: PgPo
     let url = s.oidc.start_idp_link(&s.instance, &erika.session.token, idp).await.unwrap();
     let taken = answer(&s, &url, json!({ "sub": "g-max", "email": "x@gmail.com", "email_verified": true })).await;
     assert!(taken.contains_key("error"), "{taken:?}");
+
+    // She sees her links and the providers she may link, and unlinks one – never the last way in: she has no
+    // password and no passkey.
+    let token = &erika.session.token;
+    let providers = s.oidc.linkable_providers(s.instance.id, token).await.unwrap();
+    assert!(providers.iter().any(|provider| provider.id == idp));
+    let links = s.oidc.own_links(s.instance.id, token).await.unwrap();
+    assert_eq!(links.len(), 2, "{links:?}");
+    assert!(links.iter().all(|(link, name)| link.idp == idp && !name.is_empty()));
+    s.identity.unlink_own(s.instance.id, token, idp, "g-erika-work").await.unwrap();
+    let (last, _) = s.oidc.own_links(s.instance.id, token).await.unwrap().remove(0);
+    let refused = s.identity.unlink_own(s.instance.id, token, idp, &last.subject).await;
+    assert!(matches!(refused, Err(kernoid_identity::IdentityError::Refused(_))), "{refused:?}");
 }

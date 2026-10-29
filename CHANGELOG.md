@@ -64,6 +64,9 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   `mayAdd` on `FileLink`; `POST /v1/links/{token}/files`; migration 0042). A name already taken gets a number;
   nothing is replaced. The web app makes them (Link → "People can") and its link page uploads with progress. Whoever
   made the link gets one email naming what came in, once nothing more has come for two minutes (migration 0043).
+- The account page lists the services one logs in with, links further ones and unlinks them
+  (`/v1/account/idp-links`, `/v1/account/idp-providers`; SDK `idpLinks`, `linkableProviders`, `unlinkIdp`). The last
+  way to log in is never unlinked.
 - Emails kernoid writes itself – invitations, notices of files added through links – are in German or English: the
   account's choice (account page, `/v1/account/language`, `kernoid account language`), else the tenant's
   (Administration → Settings, `/v1/tenant/language`, GraphQL `setTenantLanguage`, `kernoid tenant language`), else
@@ -112,6 +115,8 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 ### Fixed
 
+- Linking a provider to one's account needs a recent login, as adding a passkey or an app password does: a session
+  taken over could otherwise add a lasting way in.
 - An event of a series moved to another time kept its recurrence id only as the new time: JMAP showed it without
   the changes of its override; and an override without a duration of its own lasted to the end of its day in
   iCalendar – it now takes the series' duration.

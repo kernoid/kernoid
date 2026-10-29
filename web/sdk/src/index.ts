@@ -11,6 +11,7 @@ export {
   type Consent,
   type DeclineReason,
   type EmailLanguage,
+  type IdpLink,
   isMultiFactor,
   type LinkProposal,
   LoginClient,

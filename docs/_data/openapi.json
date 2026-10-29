@@ -499,6 +499,37 @@
       }
     },
     "/v1/account/idp-links": {
+      "get": {
+        "tags": [
+          "account"
+        ],
+        "summary": "The providers one's own account is linked to.",
+        "operationId": "own_links",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OwnLinkView"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "no valid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
       "post": {
         "tags": [
           "account"
@@ -537,6 +568,99 @@
           },
           "404": {
             "description": "no such identity provider",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/account/idp-links/{idp}/{subject}": {
+      "delete": {
+        "tags": [
+          "account"
+        ],
+        "summary": "Unlinks a provider from one's own account – after a recent login, and never the last way to log in.",
+        "operationId": "unlink_own",
+        "parameters": [
+          {
+            "name": "idp",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "subject",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {},
+          "400": {
+            "description": "the last way to log in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "no valid session, or not recent enough",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "no such link",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/account/idp-providers": {
+      "get": {
+        "tags": [
+          "account"
+        ],
+        "summary": "The providers one's own account may be linked to: its tenant's and the whole instance's.",
+        "operationId": "linkable_providers",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProviderSummary"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "no valid session",
             "content": {
               "application/json": {
                 "schema": {
@@ -11332,6 +11456,32 @@
           "rights": {
             "type": "string",
             "description": "IMAP ACL rights (RFC 4314): letters of `lrswipkxtea`."
+          }
+        }
+      },
+      "OwnLinkView": {
+        "type": "object",
+        "required": [
+          "identity_provider",
+          "name",
+          "subject",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "identity_provider": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "description": "The provider's name."
+          },
+          "subject": {
+            "type": "string",
+            "description": "Who the account is at the provider."
           }
         }
       },

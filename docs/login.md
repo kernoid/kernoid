@@ -22,8 +22,8 @@ kernoid brings its own login UI, served at `https://<instance domain>/login`:
 - **The account page** is a section of the [web app]({{ '/app/' | relative_url }}) (`/app/#/account`): display name,
   appearance (light, dark or as the system), password, authenticator app, passkeys, recovery codes, app passwords for
   mail programs and file managers with their settings, applications allowed (consents, to withdraw), sessions on
-  other devices. `/login/account` logs in if needed and leads there. Linking further providers is OPEN in the app (the
-  API, `POST /v1/account/idp-links`, has it).
+  other devices, and the services to log in with (linking and unlinking providers, after a recent login; the last way
+  to log in stays). `/login/account` logs in if needed and leads there.
 - **Registering** at `/login/register`, where the instance allows it (see [Accounts and logins](#accounts-and-logins)).
 - **Linking:** a login at a provider that finds an account with the same verified address proposes linking it – the
   person logs in to that account – or, where registration is open, creating a separate account.

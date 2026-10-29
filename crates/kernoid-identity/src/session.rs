@@ -604,7 +604,8 @@ impl Identity {
     }
 
     /// The session of `token`, if it is recent enough to change how its account logs in.
-    pub(crate) async fn recent_session(&self, instance: Uuid, token: &str) -> Result<SessionInfo> {
+    /// The token's session, if it began a short while ago – for changes to how one logs in.
+    pub async fn recent_session(&self, instance: Uuid, token: &str) -> Result<SessionInfo> {
         let session = self.session(instance, token).await?;
         let recent = chrono::Duration::from_std(RECENT).expect("small");
         if Utc::now() - session.created_at > recent {

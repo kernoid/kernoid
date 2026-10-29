@@ -45,6 +45,8 @@ export function AccountView(): JSX.Element {
   const [emailLanguage, { refetch: refetchLanguage }] = createResource(() => client.emailLanguage());
   const [factors, { refetch: refetchFactors }] = createResource(() => client.secondFactors());
   const [passkeys, { refetch: refetchPasskeys }] = createResource(() => client.passkeys());
+  const [idpLinks, { refetch: refetchIdpLinks }] = createResource(() => client.idpLinks());
+  const [providers] = createResource(() => client.linkableProviders());
   const [consents, { refetch: refetchConsents }] = createResource(() => client.consents());
   const [sessions, { refetch: refetchSessions }] = createResource(() => client.sessions());
   const [appPasswords, { refetch: refetchAppPasswords }] = createResource(() => client.http.request<AppPassword[]>("GET", "/v1/account/app-passwords"));
@@ -274,6 +276,43 @@ export function AccountView(): JSX.Element {
                 {t("Create a passkey")}
               </button>
             </section>
+
+            <Show when={(ok(providers)?.length ?? 0) > 0 || (ok(idpLinks)?.length ?? 0) > 0}>
+              <section>
+                <h2>{t("Logging in with other services")}</h2>
+                <ul class="rows">
+                  <For each={ok(idpLinks) ?? []} fallback={<li class="muted">{t("No services linked yet.")}</li>}>
+                    {(link) => (
+                      <li>
+                        <span class="grow">
+                          {link.name}
+                          <small class="muted"> – {t("linked {date}", { date: when(link.created_at) })}</small>
+                        </span>
+                        <button type="button" class="quiet danger" disabled={busy()} onClick={() => void run(async () => {
+                          await client.unlinkIdp(link);
+                          await refetchIdpLinks();
+                          return t("The service was unlinked.");
+                        })()}>
+                          {t("Unlink")}
+                        </button>
+                      </li>
+                    )}
+                  </For>
+                </ul>
+                <div class="row">
+                  <For each={ok(providers) ?? []}>
+                    {(provider) => (
+                      <button type="button" disabled={busy()} onClick={() => void run(async () => {
+                        window.location.assign(await client.startIdpLink(provider.id));
+                        return undefined;
+                      })()}>
+                        {t("Link {name}", { name: provider.name })}
+                      </button>
+                    )}
+                  </For>
+                </div>
+              </section>
+            </Show>
 
             <section>
               <h2>{t("Recovery codes")}</h2>

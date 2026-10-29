@@ -64,6 +64,11 @@ How one says who one is; each finds exactly one account of the instance.
   that address as its contact address, which stays the other account's).
 - Providers that serve domains of a tenant keep `auto_link` and `auto_create` (RFC 0001 7.7): there the tenant
   vouches for the addresses.
+- **On the account page** a user sees the providers linked to the account (`GET /v1/account/idp-links`) and those
+  that may be linked – the tenant's and the whole instance's (`GET /v1/account/idp-providers`) –, links one
+  (`POST /v1/account/idp-links`) and unlinks one (`DELETE /v1/account/idp-links/{idp}/{subject}`). Linking and
+  unlinking change how one logs in, so both need a **recent login**, as passkeys and app passwords do. The **last way
+  to log in** – no password, no passkey, no other link – is not unlinked.
 
 ## 4. Services
 

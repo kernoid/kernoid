@@ -56,6 +56,16 @@ export interface AuthRequest {
   expires_at: string;
 }
 
+/** A login at an identity provider linked to the account. */
+export interface IdpLink {
+  identity_provider: string;
+  /** The provider's name. */
+  name: string;
+  /** Who the account is at the provider. */
+  subject: string;
+  created_at: string;
+}
+
 /** The language of the emails kernoid writes to the account – invitations sent for it, notices. */
 export interface EmailLanguage {
   /** The account's own choice; null follows its tenant's. */
@@ -273,9 +283,25 @@ export class LoginClient {
     return { session: result.session, authRequest: result.auth_request };
   }
 
-  /** Starts linking a provider to the account this client is logged in as; returns where to send the browser. */
+  /** Starts linking a provider to the account this client is logged in as – after a recent login; returns where to
+   * send the browser. */
   async startIdpLink(identityProvider: string): Promise<string> {
     return (await this.http.request<{ url: string }>("POST", "/v1/account/idp-links", { identity_provider: identityProvider })).url;
+  }
+
+  /** The providers the account is linked to. */
+  idpLinks(): Promise<IdpLink[]> {
+    return this.http.request("GET", "/v1/account/idp-links");
+  }
+
+  /** The providers the account may link: its tenant's and the whole instance's. */
+  linkableProviders(): Promise<{ id: string; name: string }[]> {
+    return this.http.request("GET", "/v1/account/idp-providers");
+  }
+
+  /** Unlinks a provider – after a recent login; never the last way to log in. */
+  unlinkIdp(link: Pick<IdpLink, "identity_provider" | "subject">): Promise<void> {
+    return this.http.request("DELETE", `/v1/account/idp-links/${encodeURIComponent(link.identity_provider)}/${encodeURIComponent(link.subject)}`);
   }
 
   session(): Promise<Session> {

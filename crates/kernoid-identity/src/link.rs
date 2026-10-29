@@ -59,6 +59,27 @@ impl Identity {
         .await
     }
 
+    /// Unlinks an external identity from the token's own account – after a recent login, and never the last way to
+    /// log in (no password, no passkey, no other link).
+    pub async fn unlink_own(&self, instance: Uuid, token: &str, idp: Uuid, subject: &str) -> Result<()> {
+        let session = self.recent_session(instance, token).await?;
+        let account = session.account.id;
+        let (instance, tenant) = self.account_owner(account).await?;
+        let subject = subject.to_owned();
+        self.account_command(instance, tenant, account, &format!("account:{account}"), None, |state| {
+            if !state.links.contains(&(idp, subject.clone())) {
+                return Err(IdentityError::NotFound("the link"));
+            }
+            if !state.has_password && state.passkeys.is_empty() && state.links.len() == 1 {
+                return Err(IdentityError::Refused(
+                    "this is the only way to log in to the account; set a password or add a passkey first".into(),
+                ));
+            }
+            Ok(vec![AccountEvent::LinkRemoved { idp, subject: subject.clone() }])
+        })
+        .await
+    }
+
     /// The account an external identity is linked to.
     pub async fn account_by_link(&self, idp: Uuid, subject: &str) -> Result<Option<AccountInfo>> {
         let account = sqlx::query_scalar!(
