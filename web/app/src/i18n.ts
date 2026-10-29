@@ -491,6 +491,8 @@ const de: Record<string, string> = {
   "Days mail stays in the trash": "Tage im Papierkorb",
   "for ever": "unbegrenzt",
   "Days mail stays in junk": "Tage im Spam-Ordner",
+  "Days files stay in the trash": "Tage, die Dateien im Papierkorb bleiben",
+  "Search names and contents": "Namen und Inhalte durchsuchen",
   "Give a size such as 5 GB or 500 MB, or nothing for no limit.": "Geben Sie eine Größe wie 5 GB oder 500 MB an, oder nichts für keine Grenze.",
   "Shown only now – copy it.": "Wird nur jetzt angezeigt – kopieren Sie es.",
   ok: "ok",

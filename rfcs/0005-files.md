@@ -64,8 +64,10 @@ A **node** is a directory or a file (the draft's `@type` `Directory`, `File`). O
 The first use of an account's store creates one top-level directory **Trash** with the role `trash`; a drive has
 none – what is destroyed there is gone, as on a network drive. A directory with a role cannot be
 renamed, moved or destroyed (draft, section 5). What goes into the trash is the clients' choice: kernoid's apps move
-files there, and destroying a node is final. **OPEN:** emptying the trash after a time per tenant, as for mail
-(RFC 0002, 13.2); default names in the tenant's language; further roles (`documents`, `pictures`, …).
+files there, and destroying a node is final. A tenant may keep the trash for a number of days
+(`tenant.files_retention_set`, 1 to 3650, `tenants.files_trash_retention_days`, as for mail, RFC 0002, 13.2): the
+worker destroys what has been at the top of a trash longer – counted from its last change, which moving it there is –
+with all it holds. **OPEN:** default names in the tenant's language; further roles (`documents`, `pictures`, …).
 
 ## 5. Content and garbage
 
@@ -138,8 +140,11 @@ allows them (RFC 0003, 2) – accounts without a native address log in too. **OP
 - **Queries** support the filters `isTopLevel`, `parentId`, `ancestorId`, `descendantId`, `nodeType`, `role`,
   `hasAnyRole`, `blobId`, `isExecutable`, `created…`, `modified…`, `accessed…`, `minSize`, `maxSize`, `name`,
   `nameMatch`, `mediaType`, `mediaTypeMatch` and `text` (on name and media type), and sorting by `name`, `size`,
-  `mediaType`, `created`, `modified`, `nodeType` and `tree`. **OPEN:** `body` – searching inside files (it needs
-  text extraction).
+  `mediaType`, `created`, `modified`, `nodeType` and `tree`. `body` searches the current content of files, `text`
+  their name, media type and content: the worker indexes the text of textual contents (`text/*`, JSON, XML, … up to
+  1 MiB) in `file_contents.body_search` with PostgreSQL's `simple` configuration, as for mail (RFC 0002, 13.1);
+  queries are `websearch_to_tsquery`. Other contents get an empty index. **OPEN:** text from PDFs and office
+  documents (it needs extraction kernoid does not have).
 - **Blobs:** a file's content – current or a version – has the blob id `f-<content id>`; it is downloaded like any
   blob (RFC 8620, 6.2), also in ranges (`Range`, 206). A `FileNode/set` may name any blob the caller may read there –
   an upload, another file, an email or one of its parts (section 5).

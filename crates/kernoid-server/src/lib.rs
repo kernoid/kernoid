@@ -243,6 +243,7 @@ fn rest() -> OpenApiRouter<AppState> {
         .routes(routes!(admin::files::overview))
         .routes(routes!(admin::files::set_quota))
         .routes(routes!(admin::files::default_quota, admin::files::set_default_quota))
+        .routes(routes!(admin::files::retention, admin::files::set_retention))
         .routes(routes!(admin::files::drives, admin::files::add_drive))
         .routes(routes!(admin::files::access, admin::files::set_access, admin::files::remove_access))
         .routes(routes!(admin::mail::export, admin::mail::import_mbox))

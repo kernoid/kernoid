@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE file_nodes SET changed = now() - interval '31 days' WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7eb6763be45edc4e339794fe7134dc5d4a1a676e98e55dc5054cdf9a4c4be005"
+}

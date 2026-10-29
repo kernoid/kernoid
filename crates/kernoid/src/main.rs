@@ -658,6 +658,12 @@ enum TenantCommand {
         #[arg(long, value_parser = parse_days)]
         junk_days: Days,
     },
+    /// How many days what is in the accounts' file trash stays; `none` keeps it.
+    FilesRetention {
+        tenant: Uuid,
+        #[arg(long, value_parser = parse_days)]
+        trash_days: Days,
+    },
     /// Switch a module on or off for the tenant.
     Module {
         tenant: Uuid,
@@ -1083,6 +1089,7 @@ async fn serve(config: Config) -> anyhow::Result<()> {
         }
         tasks.spawn(mail_housekeeping(
             mail_store(db.clone(), blobs.clone(), &config),
+            file_store(db.clone(), blobs.clone(), &config),
             blobs.clone(),
             config.mail.changes_kept_days,
             shutdown.clone(),
@@ -1309,6 +1316,7 @@ fn file_store(db: kernoid_store::PgPool, blobs: BlobStore, config: &Config) -> k
 
 async fn mail_housekeeping(
     mail: kernoid_mail::Mail,
+    files: kernoid_files::Files,
     blobs: BlobStore,
     changes_kept_days: u32,
     shutdown: CancellationToken,
@@ -1421,6 +1429,41 @@ async fn mail_housekeeping(
                 }
                 if expired + indexed > 0 {
                     tracing::info!(expired, indexed, "mail retention and search index");
+                }
+                // Files (RFC 0005, 4 and 8): trashes emptied after the tenants' days, and the text of contents indexed.
+                let (mut emptied, mut files_indexed) = (0, 0);
+                loop {
+                    match files.apply_trash_retention(HOUSEKEEPING_BATCH).await {
+                        Ok(done) => {
+                            emptied += done;
+                            if (done as i64) < HOUSEKEEPING_BATCH || shutdown.is_cancelled() {
+                                break;
+                            }
+                        }
+                        Err(error) => {
+                            tracing::warn!(%error, "emptying file trashes failed; trying again later");
+                            break;
+                        }
+                    }
+                }
+                let indexing_until = std::time::Instant::now() + std::time::Duration::from_secs(300);
+                loop {
+                    match files.index_pending(HOUSEKEEPING_BATCH).await {
+                        Ok(done) => {
+                            files_indexed += done;
+                            let more = done as i64 == HOUSEKEEPING_BATCH;
+                            if !more || shutdown.is_cancelled() || std::time::Instant::now() > indexing_until {
+                                break;
+                            }
+                        }
+                        Err(error) => {
+                            tracing::warn!(%error, "indexing files for search failed; trying again later");
+                            break;
+                        }
+                    }
+                }
+                if emptied + files_indexed > 0 {
+                    tracing::info!(emptied, indexed = files_indexed, "file trashes and search index");
                 }
                 if collected + pruned as usize > 0 {
                     tracing::info!(objects = collected, journal_rows = pruned, "mail housekeeping");
@@ -1840,6 +1883,9 @@ async fn tenant(config: &Config, command: TenantCommand) -> anyhow::Result<()> {
         }
         TenantCommand::MailRetention { tenant, trash_days, junk_days } => {
             identity.set_mail_retention(tenant, trash_days.0, junk_days.0, OPERATOR).await?;
+        }
+        TenantCommand::FilesRetention { tenant, trash_days } => {
+            identity.set_files_retention(tenant, trash_days.0, OPERATOR).await?;
         }
         TenantCommand::Module { tenant, module, enabled } => {
             let known: Vec<&str> = MODULES.iter().map(|module| module.name()).collect();

@@ -57,6 +57,14 @@ pub(crate) async fn set_default_quota(state: &AppState, admin: &Admin, bytes: Op
     Ok(state.identity.admin_set_default_files_quota(admin, bytes).await?)
 }
 
+pub(crate) async fn retention(state: &AppState, admin: &Admin) -> Result<Option<u32>> {
+    Ok(state.identity.admin_files_retention(admin).await?)
+}
+
+pub(crate) async fn set_retention(state: &AppState, admin: &Admin, trash_days: Option<u32>) -> Result<()> {
+    Ok(state.identity.admin_set_files_retention(admin, trash_days).await?)
+}
+
 pub(crate) async fn drives(state: &AppState, admin: &Admin) -> Result<Vec<DriveInfo>> {
     Ok(state.identity.admin_drives(admin).await?)
 }

@@ -39,6 +39,9 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   kernoid's JMAP extension `FileLink/*`, opened at `/app/link.html#<token>` (`/v1/links/…`; migration 0038).
 - JMAP Blob Management (RFC 9404): `Blob/upload` joins uploaded pieces, `Blob/get`, `Blob/lookup`. The web app
   uploads files over 16 MiB in pieces and sends a piece again when its connection breaks.
+- Searching inside text files (JMAP `body` and `text`, the web app's new search box in Files), and emptying the file
+  trash after a tenant's number of days (`kernoid tenant files-retention`, `/v1/tenant/files-retention`, GraphQL,
+  the administration's settings; migration 0039).
 - SAML single logout in the HTTP-POST binding, and at OpenID Connect `end_session`: an application's logout of a
   session from a SAML provider logs out at the provider too, then returns to the application.
 - `http.public_port`: instances reached on a port other than 443 or 80 name it in their issuer and links (JMAP);

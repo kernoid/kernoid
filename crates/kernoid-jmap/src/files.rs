@@ -212,9 +212,31 @@ fn glob(pattern: &str, value: &str) -> bool {
     matches(&pattern, &value)
 }
 
+/// The texts a filter searches file contents for (`body` and `text`, in any condition).
+fn searched_texts(filter: &Map<String, Value>, out: &mut HashSet<String>) {
+    if let Some(Value::Array(conditions)) = filter.get("conditions") {
+        for condition in conditions.iter().filter_map(Value::as_object) {
+            searched_texts(condition, out);
+        }
+    }
+    for key in ["body", "text"] {
+        if let Some(text) = filter.get(key).and_then(Value::as_str) {
+            out.insert(text.to_owned());
+        }
+    }
+}
+
+/// Files whose content holds a text, by the text (RFC 0005, 8; the worker's index, `kernoid_files::housekeeping`).
+type BodyMatches = HashMap<String, HashSet<Uuid>>;
+
 /// Whether a node matches a filter (a condition, or an operator with conditions). Conditions on what the user may
 /// not read do not match (draft, 3.2.5).
-fn filter_matches(view: &View, node: &NodeInfo, filter: &Map<String, Value>) -> Result<bool, MethodError> {
+fn filter_matches(
+    view: &View,
+    node: &NodeInfo,
+    filter: &Map<String, Value>,
+    bodies: &BodyMatches,
+) -> Result<bool, MethodError> {
     if let Some(operator) = filter.get("operator").and_then(Value::as_str) {
         let conditions = filter
             .get("conditions")
@@ -224,7 +246,7 @@ fn filter_matches(view: &View, node: &NodeInfo, filter: &Map<String, Value>) -> 
         for condition in conditions {
             let condition =
                 condition.as_object().ok_or_else(|| MethodError::new("unsupportedFilter", "conditions are objects"))?;
-            results.push(filter_matches(view, node, condition)?);
+            results.push(filter_matches(view, node, condition, bodies)?);
         }
         return match operator {
             "AND" => Ok(results.iter().all(|result| *result)),
@@ -270,8 +292,14 @@ fn filter_matches(view: &View, node: &NodeInfo, filter: &Map<String, Value>) -> 
             }
             "text" => {
                 let needle = value.as_str().unwrap_or_default().to_lowercase();
+                let in_body =
+                    value.as_str().and_then(|text| bodies.get(text)).is_some_and(|ids| ids.contains(&node.id));
                 node.name.to_lowercase().contains(&needle)
                     || (file && node.media_type.as_deref().is_some_and(|kind| kind.contains(&needle)))
+                    || (file && in_body)
+            }
+            "body" => {
+                file && value.as_str().and_then(|text| bodies.get(text)).is_some_and(|ids| ids.contains(&node.id))
             }
             other => return Err(MethodError::new("unsupportedFilter", format!("{other} is not supported"))),
         };
@@ -553,12 +581,19 @@ impl Context<'_> {
             Some(Value::Object(filter)) => filter.clone(),
             Some(_) => return Err(MethodError::invalid("filter is an object")),
         };
+        let mut texts = HashSet::new();
+        searched_texts(&filter, &mut texts);
+        let mut bodies = BodyMatches::new();
+        for text in texts {
+            let found = files.body_matches(owner, &text).await?;
+            bodies.insert(text, found);
+        }
         let mut matched = Vec::new();
         for node in view.nodes() {
             if depth.is_some_and(|depth| view.ancestors(node.id).len() > depth) {
                 continue;
             }
-            if filter_matches(&view, node, &filter)? {
+            if filter_matches(&view, node, &filter, &bodies)? {
                 matched.push(node);
             }
         }

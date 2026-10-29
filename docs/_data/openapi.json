@@ -8321,6 +8321,83 @@
         }
       }
     },
+    "/v1/tenant/files-retention": {
+      "get": {
+        "tags": [
+          "files"
+        ],
+        "summary": "How long what is in the accounts' file trash stays (needs `directory.read`).",
+        "operationId": "retention",
+        "parameters": [
+          {
+            "name": "kernoid-tenant",
+            "in": "header",
+            "description": "The tenant to act on – for instance administrators; the caller's own tenant if left out.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FilesRetention"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "files"
+        ],
+        "summary": "Sets how long what is in the accounts' file trash stays, 1 to 3650 days; null keeps it (needs `tenant.manage`).",
+        "operationId": "set_retention",
+        "parameters": [
+          {
+            "name": "kernoid-tenant",
+            "in": "header",
+            "description": "The tenant to act on – for instance administrators; the caller's own tenant if left out.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FilesRetention"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/tenant/login-policy": {
       "get": {
         "tags": [
@@ -9897,6 +9974,20 @@
             ],
             "format": "int64",
             "description": "Bytes; null for none (the tenant's default, or no limit).",
+            "minimum": 0
+          }
+        }
+      },
+      "FilesRetention": {
+        "type": "object",
+        "properties": {
+          "trash_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Days what is in a file trash stays; null keeps it.",
             "minimum": 0
           }
         }

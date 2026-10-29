@@ -50,6 +50,16 @@ tenant. Rights add up down the tree: what is granted on a folder holds for every
 - What is shared with someone appears in their session as another account (JMAP), in `/webdav/` as another folder,
   and in the web app on the side.
 
+## Search and the trash
+
+- **Search:** the web app's search box finds files and folders of a store by name and – for text files up to 1 MiB
+  (plain text, Markdown, CSV, JSON, XML, source code, …) – by their content; JMAP's `FileNode/query` takes `body`
+  (content only) and `text` (name, media type and content). The worker indexes contents in PostgreSQL's full-text
+  search (`simple`, as mail) within ten minutes of their upload.
+- **The trash:** what is deleted in the web app goes to the trash first. A tenant may have it emptied after a number
+  of days – the administration's settings, `kernoid tenant files-retention`, `PUT /v1/tenant/files-retention`,
+  GraphQL `setFilesRetention`; the days count from when something went into the trash.
+
 ## Links
 
 A **link** opens a file, or a folder with all below it, to anyone who has it – to view and download, without an
@@ -127,5 +137,5 @@ from writing the same file, and a file written again keeps its earlier content a
 - **Content** is encrypted with the tenant's key before it goes to object storage.
 
 {: .note }
-OPEN: links that let people add files, uploads that resume after the page is closed, searching inside files, symbolic links, moving
-between stores over WebDAV, emptying the trash after a time.
+OPEN: links that let people add files, uploads that resume after the page is closed, searching inside PDFs and office
+documents, symbolic links, moving between stores over WebDAV.

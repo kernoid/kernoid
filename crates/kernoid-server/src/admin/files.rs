@@ -89,6 +89,32 @@ pub(crate) async fn set_default_quota(
     respond(files_admin::set_default_quota(&state, &admin, body.bytes).await, no_content)
 }
 
+#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
+pub(crate) struct FilesRetention {
+    /// Days what is in a file trash stays; null keeps it.
+    trash_days: Option<u32>,
+}
+
+/// How long what is in the accounts' file trash stays (needs `directory.read`).
+#[utoipa::path(get, path = "/v1/tenant/files-retention", tag = "files", params(TenantHeader),
+    responses((status = 200, body = FilesRetention)))]
+pub(crate) async fn retention(State(state): State<AppState>, AdminSession(admin): AdminSession) -> Response {
+    respond(files_admin::retention(&state, &admin).await, |trash_days| {
+        Json(FilesRetention { trash_days }).into_response()
+    })
+}
+
+/// Sets how long what is in the accounts' file trash stays, 1 to 3650 days; null keeps it (needs `tenant.manage`).
+#[utoipa::path(put, path = "/v1/tenant/files-retention", tag = "files", params(TenantHeader),
+    request_body = FilesRetention, responses((status = 204), (status = 400, body = Problem)))]
+pub(crate) async fn set_retention(
+    State(state): State<AppState>,
+    AdminSession(admin): AdminSession,
+    Json(body): Json<FilesRetention>,
+) -> Response {
+    respond(files_admin::set_retention(&state, &admin, body.trash_days).await, no_content)
+}
+
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub(crate) struct DriveView {
     id: String,

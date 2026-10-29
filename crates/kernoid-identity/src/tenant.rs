@@ -72,6 +72,9 @@ pub enum TenantEvent {
     /// Days after which emails leave the accounts' Trash and Junk (RFC 0002, 13.2); `None` keeps them.
     #[serde(rename = "tenant.mail_retention_set")]
     MailRetentionSet { trash_days: Option<u32>, junk_days: Option<u32> },
+    /// Days after which what is in the accounts' file trash goes (RFC 0005, 4); `None` keeps it.
+    #[serde(rename = "tenant.files_retention_set")]
+    FilesRetentionSet { trash_days: Option<u32> },
     /// How the tenant's accounts log in (RFC 0003, 2): with usernames, with their verified contact address.
     #[serde(rename = "tenant.login_policy_set")]
     LoginPolicySet { usernames: bool, email_login: bool },
@@ -108,6 +111,8 @@ pub struct Tenant {
     pub default_files_quota: Option<u64>,
     /// Days in Trash and in Junk.
     pub mail_retention: (Option<u32>, Option<u32>),
+    /// Days in the file trash.
+    pub files_retention: Option<u32>,
     pub login_policy: LoginPolicy,
     pub registration: Registration,
     pub service_policies: BTreeMap<Service, ServicePolicy>,
@@ -185,6 +190,7 @@ impl Aggregate for Tenant {
             TenantEvent::DefaultMailQuotaSet { bytes } => self.default_mail_quota = bytes,
             TenantEvent::DefaultFilesQuotaSet { bytes } => self.default_files_quota = bytes,
             TenantEvent::MailRetentionSet { trash_days, junk_days } => self.mail_retention = (trash_days, junk_days),
+            TenantEvent::FilesRetentionSet { trash_days } => self.files_retention = trash_days,
             TenantEvent::LoginPolicySet { usernames, email_login } => {
                 self.login_policy = LoginPolicy { usernames, email_login };
             }
@@ -294,6 +300,15 @@ pub(crate) async fn project(connection: &mut PgConnection, events: &[Event]) -> 
                     service.as_str(),
                     assign.as_str(),
                     approval,
+                )
+                .execute(&mut *connection)
+                .await?;
+            }
+            TenantEvent::FilesRetentionSet { trash_days } => {
+                sqlx::query!(
+                    "UPDATE tenants SET files_trash_retention_days = $2 WHERE id = $1",
+                    id,
+                    trash_days.map(|days| days as i32),
                 )
                 .execute(&mut *connection)
                 .await?;

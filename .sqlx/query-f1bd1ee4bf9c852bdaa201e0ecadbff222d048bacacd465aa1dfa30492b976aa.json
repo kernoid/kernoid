@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT n.id FROM file_nodes n JOIN file_contents c ON c.id = n.content_id\n             WHERE n.account_id = $1 AND c.body_search @@ websearch_to_tsquery('simple', $2)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "file_nodes",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f1bd1ee4bf9c852bdaa201e0ecadbff222d048bacacd465aa1dfa30492b976aa"
+}

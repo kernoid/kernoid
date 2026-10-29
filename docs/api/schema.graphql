@@ -881,6 +881,11 @@ type MutationRoot {
 	"""
 	removeFileAccess(account: String!, granteeKind: String!, granteeId: String!, node: String): Boolean!
 	"""
+	Sets how many days (1 to 3650) what is in the accounts' file trash stays; null keeps it (needs
+	`tenant.manage`).
+	"""
+	setFilesRetention(trashDays: Int): Boolean!
+	"""
 	Sets the tenant's default files quota; null for no limit (needs `tenant.manage`).
 	"""
 	setTenantFilesQuota(bytes: Int): Boolean!
@@ -1171,6 +1176,10 @@ type QueryRoot {
 	The tenant's default files quota (needs `directory.read`).
 	"""
 	tenantFilesQuota: Int
+	"""
+	Days what is in the accounts' file trash stays; null keeps it (needs `directory.read`).
+	"""
+	filesRetention: Int
 	"""
 	The tenant's drives (needs `directory.read`).
 	"""

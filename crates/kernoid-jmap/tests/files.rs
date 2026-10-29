@@ -189,7 +189,7 @@ async fn file_nodes_are_created_queried_changed_and_destroyed(pool: PgPool) {
         .await;
     // By code point: "a (2).txt" before "a.txt".
     assert_eq!(query["ids"][1], json!(file));
-    let (_, error) = setup.one(&alice, "FileNode/query", json!({ "filter": { "body": "x" } })).await;
+    let (_, error) = setup.one(&alice, "FileNode/query", json!({ "filter": { "colour": "x" } })).await;
     assert_eq!(error["type"], "unsupportedFilter");
 
     // New content keeps the old as a version, which restores by its blob.
@@ -465,4 +465,62 @@ async fn large_files_are_uploaded_in_pieces_and_joined(pool: PgPool) {
     assert_eq!(found["list"][1]["matchedIds"]["FileNode"], json!([]));
     let (name, _) = setup.one(&dana, "Blob/lookup", json!({ "typeNames": ["Calendar"], "ids": [blob] })).await;
     assert_eq!(name, "error");
+}
+
+#[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
+async fn contents_are_searched_and_trashes_emptied(pool: PgPool) {
+    let setup = setup(pool).await;
+    let erik = setup.caller("erik", false).await;
+    let files = setup.jmap.files().unwrap().clone();
+    let letter = setup.upload(&erik, "Der Antrag für das Gartenfest liegt bei.".as_bytes()).await;
+    let other = setup.upload(&erik, b"Nothing about parties here.").await;
+    let (_, created) = setup
+        .one(
+            &erik,
+            "FileNode/set",
+            json!({ "create": {
+                "a": { "@type": "File", "parentId": null, "name": "antrag.txt", "blobId": letter, "mediaType": "text/plain" },
+                "b": { "@type": "File", "parentId": null, "name": "other.txt", "blobId": other, "mediaType": "text/plain" },
+                "c": { "@type": "File", "parentId": null, "name": "gartenfest.bin", "blobId": other, "mediaType": "application/octet-stream" },
+            } }),
+        )
+        .await;
+    let id = |key: &str| created["created"][key]["id"].as_str().unwrap().to_owned();
+
+    // Before the worker indexed them, contents are not found; afterwards they are, by `body` and by `text`.
+    let query = |filter: Value| {
+        setup.one(&erik, "FileNode/query", json!({ "filter": filter, "sort": [{ "property": "name" }] }))
+    };
+    let (_, found) = query(json!({ "body": "gartenfest" })).await;
+    assert_eq!(found["ids"], json!([]));
+    assert!(files.index_pending(100).await.unwrap() >= 3);
+    let (_, found) = query(json!({ "body": "gartenfest" })).await;
+    assert_eq!(found["ids"], json!([id("a")]));
+    let (_, found) = query(json!({ "text": "gartenfest" })).await;
+    assert_eq!(found["ids"], json!([id("a"), id("c")]), "the name of one, the content of the other");
+    let (_, found) = query(json!({ "operator": "NOT", "conditions": [{ "body": "Antrag Gartenfest" }] })).await;
+    assert!(!found["ids"].as_array().unwrap().contains(&json!(id("a"))));
+
+    // The tenant keeps the trash 30 days: what went there 31 days ago goes, what went there today stays.
+    let (_, trash) = query(json!({ "role": "trash" })).await;
+    let trash = trash["ids"][0].clone();
+    setup
+        .one(
+            &erik,
+            "FileNode/set",
+            json!({ "update": { id("a"): { "parentId": trash }, id("b"): { "parentId": trash } } }),
+        )
+        .await;
+    let old = Uuid::parse_str(&id("a")).unwrap();
+    sqlx::query!("UPDATE file_nodes SET changed = now() - interval '31 days' WHERE id = $1", old)
+        .execute(&setup.pool)
+        .await
+        .unwrap();
+    assert_eq!(files.apply_trash_retention(100).await.unwrap(), 0, "no retention set: kept");
+    setup.identity.set_files_retention(setup.tenant, Some(30), WHO).await.unwrap();
+    assert_eq!(setup.identity.files_retention(setup.tenant).await.unwrap(), Some(30));
+    assert!(setup.identity.set_files_retention(setup.tenant, Some(0), WHO).await.is_err());
+    assert_eq!(files.apply_trash_retention(100).await.unwrap(), 1);
+    let (_, left) = query(json!({ "parentId": trash })).await;
+    assert_eq!(left["ids"], json!([id("b")]));
 }

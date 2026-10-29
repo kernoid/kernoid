@@ -282,4 +282,43 @@ impl Identity {
         admin.require(Permission::TenantManage)?;
         self.set_default_files_quota(admin.tenant(), bytes, &admin.creator()).await
     }
+
+    /// Sets how many days what is in the file trash of the tenant's accounts stays (RFC 0005, 4); `None` keeps it.
+    /// At most ten years.
+    pub async fn set_files_retention(&self, tenant: Uuid, trash_days: Option<u32>, creator: &str) -> Result<()> {
+        if trash_days.is_some_and(|days| days == 0 || days > 3650) {
+            return Err(IdentityError::Refused("retention is 1 to 3650 days".into()));
+        }
+        let instance = self.tenant_instance(tenant).await?;
+        self.tenant_command(instance, tenant, creator, None, |state| {
+            if !state.exists {
+                return Err(IdentityError::NotFound("the tenant"));
+            }
+            if state.files_retention == trash_days {
+                return Ok(Vec::new());
+            }
+            Ok(vec![TenantEvent::FilesRetentionSet { trash_days }])
+        })
+        .await
+    }
+
+    /// Days in the file trash.
+    pub async fn files_retention(&self, tenant: Uuid) -> Result<Option<u32>> {
+        let days = sqlx::query_scalar!("SELECT files_trash_retention_days FROM tenants WHERE id = $1", tenant)
+            .fetch_optional(self.pool())
+            .await
+            .map_err(store_error)?
+            .ok_or(IdentityError::NotFound("the tenant"))?;
+        Ok(days.map(|days| days as u32))
+    }
+
+    pub async fn admin_files_retention(&self, admin: &Admin) -> Result<Option<u32>> {
+        admin.require(Permission::DirectoryRead)?;
+        self.files_retention(admin.tenant()).await
+    }
+
+    pub async fn admin_set_files_retention(&self, admin: &Admin, trash_days: Option<u32>) -> Result<()> {
+        admin.require(Permission::TenantManage)?;
+        self.set_files_retention(admin.tenant(), trash_days, &admin.creator()).await
+    }
 }

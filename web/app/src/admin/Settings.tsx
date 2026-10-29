@@ -18,6 +18,7 @@ export function Settings(): JSX.Element {
   const [mailQuota] = createResource(() => api<{ bytes?: number | null }>("GET", "/v1/tenant/mail-quota"));
   const [filesQuota] = createResource(() => api<{ bytes?: number | null }>("GET", "/v1/tenant/files-quota"));
   const [retention] = createResource(() => api<{ trash_days?: number | null; junk_days?: number | null }>("GET", "/v1/tenant/mail-retention"));
+  const [filesRetention] = createResource(() => api<{ trash_days?: number | null }>("GET", "/v1/tenant/files-retention"));
   const days = (text: string) => (text ? Number.parseInt(text, 10) : null);
 
   return (
@@ -140,11 +141,15 @@ export function Settings(): JSX.Element {
         <Form
           class="stack"
           submit={(field) =>
-            void action.run(() => api("PUT", "/v1/tenant/mail-retention", { trash_days: days(field("trash")), junk_days: days(field("junk")) }), t("Saved."))
+            void action.run(async () => {
+              await api("PUT", "/v1/tenant/mail-retention", { trash_days: days(field("trash")), junk_days: days(field("junk")) });
+              await api("PUT", "/v1/tenant/files-retention", { trash_days: days(field("files-trash")) });
+            }, t("Saved."))
           }
         >
           <Field label={t("Days mail stays in the trash")} name="trash" type="number" min="1" placeholder={t("for ever")} value={ok(retention)?.trash_days ?? ""} />
           <Field label={t("Days mail stays in junk")} name="junk" type="number" min="1" placeholder={t("for ever")} value={ok(retention)?.junk_days ?? ""} />
+          <Field label={t("Days files stay in the trash")} name="files-trash" type="number" min="1" placeholder={t("for ever")} value={ok(filesRetention)?.trash_days ?? ""} />
           <Buttons busy={action.busy()} />
         </Form>
       </section>

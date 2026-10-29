@@ -92,6 +92,12 @@ impl FilesQuery {
         files_admin::default_quota(state(context)?, &admin).await.map_err(files_error)
     }
 
+    /// Days what is in the accounts' file trash stays; null keeps it (needs `directory.read`).
+    async fn files_retention(&self, context: &Context<'_>) -> async_graphql::Result<Option<u32>> {
+        let (_, admin) = admin(context).await?;
+        files_admin::retention(state(context)?, &admin).await.map_err(files_error)
+    }
+
     /// The tenant's drives (needs `directory.read`).
     async fn drives(&self, context: &Context<'_>) -> async_graphql::Result<Vec<DriveObject>> {
         let (_, admin) = admin(context).await?;
@@ -187,6 +193,14 @@ impl FilesMutation {
         files_admin::remove_access(state(context)?, &admin, owner, self::node(node.as_deref())?, grantee)
             .await
             .map_err(files_error)?;
+        Ok(true)
+    }
+
+    /// Sets how many days (1 to 3650) what is in the accounts' file trash stays; null keeps it (needs
+    /// `tenant.manage`).
+    async fn set_files_retention(&self, context: &Context<'_>, trash_days: Option<u32>) -> async_graphql::Result<bool> {
+        let (_, admin) = admin(context).await?;
+        files_admin::set_retention(state(context)?, &admin, trash_days).await.map_err(files_error)?;
         Ok(true)
     }
 

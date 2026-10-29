@@ -116,6 +116,15 @@ export async function children(jmap: Jmap, accountId: string, parent: string | n
   return (responses.get("g")?.[0] as { list: FileNode[] } | undefined)?.list ?? [];
 }
 
+/** What in a store holds `text` in its name or – for text files kernoid has indexed – its content. */
+export async function search(jmap: Jmap, accountId: string, text: string): Promise<FileNode[]> {
+  const responses = await jmap.request(USING, [
+    ["FileNode/query", { accountId, filter: { text }, sort: [{ property: "name" }], limit: 200 }, "q"],
+    ["FileNode/get", { accountId, properties: PROPERTIES, "#ids": { resultOf: "q", name: "FileNode/query", path: "/ids" } }, "g"],
+  ]);
+  return (responses.get("g")?.[0] as { list: FileNode[] } | undefined)?.list ?? [];
+}
+
 /** A directory and the ones above it, from the top down. */
 export async function path(jmap: Jmap, accountId: string, id: string | null): Promise<FileNode[]> {
   if (!id) return [];

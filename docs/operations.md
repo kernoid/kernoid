@@ -16,7 +16,8 @@ Every process runs the same binary; the configuration key `roles` decides what i
 - `worker` – background work: projections, cleaning up expired sessions, tokens and failure counts (every 10 minutes),
   delivering back-channel logout notifications, rotating signing keys, ordering certificates (ACME), removing objects
   of deleted mail from object storage and old rows of the mail journal, emptying Trash and Junk after the tenants'
-  retention and indexing older emails for search (every 10 minutes), making DKIM keys for new
+  retention and indexing older emails for search, emptying file trashes after the tenants' retention and indexing
+  the text of files for search (every 10 minutes), making DKIM keys for new
   domains and letting new keys sign once DNS shows them, delivering the queue of outgoing mail, and the jobs of modules.
 
 - `smtp` – the MX on port 25 and submission on ports 587 and 465, when `[smtp]` is configured (see

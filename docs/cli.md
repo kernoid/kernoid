@@ -71,6 +71,7 @@ as their creator. Secrets – passwords, keys – are read from standard input, 
 | `kernoid tenant mail-quota <TENANT> <BYTES>` | the mail quota of every account without its own; `none` for no limit |
 | `kernoid tenant files-quota <TENANT> <BYTES>` | the files quota of every account without its own; `none` for no limit |
 | `kernoid tenant mail-retention <TENANT> --trash-days <DAYS> --junk-days <DAYS>` | empties Trash and Junk after so many days; `none` keeps them |
+| `kernoid tenant files-retention <TENANT> --trash-days <DAYS>` | empties the accounts' file trash after so many days; `none` keeps what is there |
 | `kernoid tenant mail-dns <TENANT>` | the DNS records the tenant's mail domains need (MX, SPF, DKIM, DMARC) and whether they are published |
 | `kernoid tenant dkim-rotate <TENANT> --domain <DOMAIN> [--algorithm rsa\|ed25519]` | a new DKIM key for the domain; it signs once DNS shows its record |
 | `kernoid tenant grant <TENANT> --account <ID> \| --group <ID> --role <ROLE>` | assigns a tenant role, e.g. the first `tenant_admin` |

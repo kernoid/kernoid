@@ -34,6 +34,7 @@ import {
   removeLink,
   rename,
   restore,
+  search,
   share,
   sortNodes,
   stores,
@@ -71,9 +72,11 @@ export function FilesView(): JSX.Element {
   const account = () => store()?.id ?? "";
   const directory = () => (place().account === account() ? place().directory : null);
 
+  // A search lists what matches anywhere in the store instead of one directory.
+  const [query, setQuery] = createSignal("");
   const [list] = createResource(
-    () => ({ account: account(), id: directory(), version: changed("FileNode") }),
-    ({ account, id }) => children(jmap, account, id),
+    () => ({ account: account(), id: directory(), text: query().trim(), version: changed("FileNode") }),
+    ({ account, id, text }) => (text ? search(jmap, account, text) : children(jmap, account, id)),
   );
   const [trail] = createResource(
     () => ({ account: account(), id: directory(), version: changed("FileNode") }),
@@ -220,6 +223,15 @@ export function FilesView(): JSX.Element {
             </For>
           </nav>
           <span class="grow" />
+          <form
+            role="search"
+            onSubmit={(event) => {
+              event.preventDefault();
+              setQuery(String(new FormData(event.currentTarget).get("q") ?? ""));
+            }}
+          >
+            <input type="search" name="q" placeholder={t("Search names and contents")} aria-label={t("Search")} value={query()} onInput={(event) => event.currentTarget.value === "" && setQuery("")} />
+          </form>
           <button type="button" class="quiet" onClick={() => setConnecting(true)}>
             {t("Connect a file manager")}
           </button>
@@ -267,7 +279,14 @@ export function FilesView(): JSX.Element {
                           </Show>
                         }
                       >
-                        <button type="button" class="quiet folder" onClick={() => open(account(), node.id)}>
+                        <button
+                          type="button"
+                          class="quiet folder"
+                          onClick={() => {
+                            setQuery("");
+                            open(account(), node.id);
+                          }}
+                        >
                           {label(node)}
                         </button>
                         <Show when={shared()}>
