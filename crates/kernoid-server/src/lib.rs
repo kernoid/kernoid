@@ -160,7 +160,12 @@ impl AppState {
 }
 
 #[derive(OpenApi)]
-#[openapi(info(title = "kernoid", description = "Administration API of kernoid."))]
+// The description is MIT – unlike the server –, so that other clients may be generated from it.
+#[openapi(info(
+    title = "kernoid",
+    description = "Administration API of kernoid.",
+    license(name = "MIT", identifier = "MIT")
+))]
 struct ApiDoc;
 
 /// kernoid's own routes, together with `modules` (the routes of the modules that are on), with the layers every

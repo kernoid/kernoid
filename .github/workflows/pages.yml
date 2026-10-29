@@ -1,11 +1,14 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# The documentation site kernoid.dev: docs/ built with Jekyll as GitHub Pages builds it (remote theme Just the Docs)
-# and published, on every change of docs/ on main. Actions are pinned by commit, with the version as a comment.
+# The documentation site kernoid.dev: docs/ built with Jekyll and published with GitHub Actions on every change of
+# docs/ on main; on a pull request only built. The workflow comes from falkoss/starterpack, pinned by commit; the
+# domain is set in the repository's Pages settings.
 name: Pages
 
 on:
   push:
     branches: [main]
+    paths: ["docs/**", ".github/workflows/pages.yml"]
+  pull_request:
     paths: ["docs/**", ".github/workflows/pages.yml"]
   workflow_dispatch:
 
@@ -14,30 +17,16 @@ permissions:
 
 # One publication at a time; a newer one replaces one that waits.
 concurrency:
-  group: pages
+  group: pages-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
-      - uses: actions/jekyll-build-pages@44a6e6beabd48582f863aeeb6cb2151cc1716697 # v1.0.13
-        with:
-          source: ./docs
-          destination: ./_site
-      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
+  docs:
+    uses: falkoss/starterpack/.github/workflows/pages-jekyll.yml@1e2fad7b6afb0f45f7d62d6a9472c97484ff4585
+    with:
+      source: docs
+      publish: ${{ github.event_name != 'pull_request' }}
     permissions:
+      contents: read
       pages: write
       id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: MIT */
-/* kernoid's colours (brand/README.md): Night, glitch white, mint – dark by default, light when the system is light,
+/* kernoid's colours (kernoid/brand's README): Night, glitch white, mint – dark by default, light when the system is light,
    unless the web app's choice says otherwise (data-theme, theme.ts). */
 :root {
   --bg: #0b0d10;

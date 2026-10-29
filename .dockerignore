@@ -1,6 +1,5 @@
 target/
 operator/target/
-brand/
 .git/
 web/node_modules
 web/sdk/node_modules

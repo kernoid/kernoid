@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# Format, lints, the sqlx query cache, tests against PostgreSQL and the API files of the documentation; the web
-# SDK, login UI and web app (types, tests, build); the terminal app (its own Cargo workspace: format, lints, tests);
-# the licence checks (REUSE, no Stalwart Enterprise License material); known vulnerabilities and licences of the
-# dependencies; the container image builds, and is pushed to ghcr.io from main and version tags – with the operator's
-# Helm chart on version tags. Actions are pinned
-# by commit, with the version as a comment.
+# Format, lints, the sqlx query cache, tests against PostgreSQL and the API files of the documentation – on Linux and
+# on macOS; the web SDK, login UI and web app (types, tests, build); the terminal app (its own Cargo workspace:
+# format, lints, tests); the operator and its Helm chart; no Stalwart Enterprise License material; known
+# vulnerabilities and licences of the dependencies; the container image builds, and is pushed to ghcr.io from main
+# and version tags – with the operator's Helm chart on version tags. The licence check (REUSE) and the sign-off (DCO)
+# come from falkoss/starterpack, pinned by commit. Actions are pinned by commit, with the version as a comment.
 name: CI
 
 on:
@@ -139,20 +139,59 @@ jobs:
           npm install --global --ignore-scripts --no-audit --no-fund pnpm@12.12.0
           pnpm audit
 
-  licences:
+  # The server and the terminal app on macOS too, where much of the development happens. macOS runners have no
+  # containers: PostgreSQL comes from Homebrew, its major version pinned (the minor one is Homebrew's).
+  macos:
+    runs-on: macos-latest
+    env:
+      DATABASE_URL: postgres://kernoid:kernoid@localhost:5432/kernoid
+      CARGO_PROFILE_DEV_DEBUG: "0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: PostgreSQL 18
+        run: |
+          brew install postgresql@18
+          brew services start postgresql@18
+          bin="$(brew --prefix postgresql@18)/bin"
+          for _ in $(seq 1 30); do "$bin/pg_isready" -h localhost && break; sleep 1; done
+          "$bin/createuser" -h localhost --superuser kernoid
+          "$bin/psql" -h localhost -d postgres -c "ALTER ROLE kernoid PASSWORD 'kernoid'"
+          "$bin/createdb" -h localhost --owner kernoid kernoid
+      - name: Rust toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@2201cc584a476d1b508be977bbe4b7d1c7a52e9c # v2.9.3
+        with:
+          workspaces: |
+            .
+            apps/tui
+      - run: cargo clippy --locked --all-targets
+      - run: cargo test --locked
+      - name: Terminal app
+        working-directory: apps/tui
+        run: |
+          cargo clippy --locked --all-targets
+          cargo test --locked
+
+  # No material under the Stalwart Enterprise License (scripts/check-sel.sh).
+  stalwart:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: No Stalwart Enterprise License material
-        run: ./scripts/check-sel.sh
-      - uses: fsfe/reuse-action@9a55738c6490d015afe69ad187520395d2b7a1fa # v6.0.0
+      - run: ./scripts/check-sel.sh
+
+  # The licence check (REUSE) and a sign-off (DCO) on every commit of a pull request, from falkoss/starterpack, pinned
+  # by commit.
+  licences:
+    uses: falkoss/starterpack/.github/workflows/reuse.yml@1e2fad7b6afb0f45f7d62d6a9472c97484ff4585
+  sign-off:
+    uses: falkoss/starterpack/.github/workflows/dco.yml@1e2fad7b6afb0f45f7d62d6a9472c97484ff4585
 
   # Builds the image for every change, for amd64 and arm64 – each on a runner of its own architecture, since
   # building Rust under emulation takes hours. From main and version tags, once the other jobs passed, each pushes its
   # image by digest, and `manifest` names both with the tags: `main` and `sha-<commit>` from main, the version
   # (`0.2.0`, `0.2`) from a tag `v0.2.0`.
   image:
-    needs: [rust, tui, operator, web, licences]
+    needs: [rust, macos, tui, operator, web, stalwart, licences]
     strategy:
       matrix:
         include:

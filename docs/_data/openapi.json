@@ -4,8 +4,8 @@
     "title": "kernoid",
     "description": "Administration API of kernoid.",
     "license": {
-      "name": "AGPL-3.0-or-later",
-      "identifier": "AGPL-3.0-or-later"
+      "name": "MIT",
+      "identifier": "MIT"
     },
     "version": "0.1.0"
   },

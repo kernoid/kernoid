@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: MIT */
-/* kernoid's colours (brand/README.md), as in the login UI: dark by default, light when the system is light – unless
+/* kernoid's colours (kernoid/brand's README), as in the login UI: dark by default, light when the system is light – unless
    the account chose one (data-theme, theme.ts). */
 :root {
   --bg: #0b0d10;
