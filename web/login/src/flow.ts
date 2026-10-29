@@ -5,9 +5,10 @@
 
 import { type AuthRequest, type DeclineReason, type KernoidError } from "@kernoid/sdk";
 
-import { action, card, h, message, show } from "./dom.js";
 import { showLogin, showSecondFactor, showSetup } from "./factors.js";
 import { t, when } from "./i18n.js";
+import { show } from "./screen.svelte.js";
+import Choice from "./screens/Choice.svelte";
 import { client, currentSession } from "./session.js";
 
 export async function answer(id: string): Promise<void> {
@@ -16,7 +17,7 @@ export async function answer(id: string): Promise<void> {
     request = await client.authRequest(id);
   } catch (error) {
     if ((error as KernoidError).kind !== "not-found") throw error;
-    show(card(t("This login has expired"), message(t("Go back to the application and start again."), "info")));
+    show(Choice, { title: t("This login has expired"), notice: { text: t("Go back to the application and start again."), kind: "info" } });
     return;
   }
   const decline = async (reason: DeclineReason) => window.location.assign(await client.declineAuthRequest(id, reason));
@@ -44,14 +45,14 @@ export async function answer(id: string): Promise<void> {
       const due = (await client.secondFactors().catch(() => undefined))?.setup_due;
       if (due) {
         const relogin = () => login(t("Log in again to set up a second factor."));
-        return show(
-          card(
-            t("Set up a second factor"),
-            message(t("Your organisation requires a second factor. Until {date} you can log in without one.", { date: when(due, false) }), "info"),
-            action(t("Set it up now"), async () => showSetup(() => finish(consent), relogin), "primary"),
-            action(t("Later"), () => finish(consent), "link"),
-          ),
-        );
+        return show(Choice, {
+          title: t("Set up a second factor"),
+          notice: { text: t("Your organisation requires a second factor. Until {date} you can log in without one.", { date: when(due, false) }), kind: "info" },
+          actions: [
+            { label: t("Set it up now"), run: async () => showSetup(() => finish(consent), relogin), kind: "primary" },
+            { label: t("Later"), run: () => finish(consent), kind: "link" },
+          ],
+        });
       }
     }
     try {
@@ -74,18 +75,21 @@ export async function answer(id: string): Promise<void> {
     return login(t("Log in to continue to {application}.", { application: request.application }));
   }
   if (request.prompt.includes("select_account")) {
-    return show(
-      card(
-        t("Continue to {application}", { application: request.application }),
-        h("p", {}, t("You are logged in as {name} ({address}).", { name: session.account.display_name, address: session.account.address })),
-        action(t("Continue as {name}", { name: session.account.display_name }), () => finish(), "primary"),
-        action(t("Use another account"), async () => {
-          await client.logout().catch(() => undefined);
-          login();
-        }),
-        action(t("Cancel"), cancel, "link"),
-      ),
-    );
+    return show(Choice, {
+      title: t("Continue to {application}", { application: request.application }),
+      text: t("You are logged in as {name} ({address}).", { name: session.account.display_name, address: session.account.address }),
+      actions: [
+        { label: t("Continue as {name}", { name: session.account.display_name }), run: () => finish(), kind: "primary" },
+        {
+          label: t("Use another account"),
+          run: async () => {
+            await client.logout().catch(() => undefined);
+            login();
+          },
+        },
+        { label: t("Cancel"), run: cancel, kind: "link" },
+      ],
+    });
   }
   return finish();
 }
@@ -120,28 +124,32 @@ function describeScope(scope: string): string | null {
 /** The application needs the person's agreement: show what it asks for. */
 function askConsent(request: AuthRequest, accept: () => Promise<void>, cancel: () => Promise<void>): void {
   const items = request.scopes.map(describeScope).filter((text): text is string => text !== null);
-  show(
-    card(
-      t("Allow {application}?", { application: request.application }),
-      h("p", {}, t("{application} asks to:", { application: request.application })),
-      h("ul", { class: "list" }, ...items.map((text) => h("li", {}, text))),
-      h("p", { class: "muted" }, t("You can withdraw this on your account page at any time.")),
-      action(t("Allow"), accept, "primary"),
-      action(t("Cancel"), cancel, "link"),
-    ),
-  );
+  show(Choice, {
+    title: t("Allow {application}?", { application: request.application }),
+    text: t("{application} asks to:", { application: request.application }),
+    items,
+    note: t("You can withdraw this on your account page at any time."),
+    actions: [
+      { label: t("Allow"), run: accept, kind: "primary" },
+      { label: t("Cancel"), run: cancel, kind: "link" },
+    ],
+  });
 }
 
 function refused(request: AuthRequest, cancel: () => Promise<void>): void {
-  show(
-    card(
-      t("Not allowed"),
-      message(t("This account may not use {application}.", { application: request.application })),
-      action(t("Use another account"), async () => {
-        await client.logout().catch(() => undefined);
-        window.location.reload();
-      }, "primary"),
-      action(t("Back to the application"), cancel, "link"),
-    ),
-  );
+  show(Choice, {
+    title: t("Not allowed"),
+    notice: { text: t("This account may not use {application}.", { application: request.application }) },
+    actions: [
+      {
+        label: t("Use another account"),
+        run: async () => {
+          await client.logout().catch(() => undefined);
+          window.location.reload();
+        },
+        kind: "primary",
+      },
+      { label: t("Back to the application"), run: cancel, kind: "link" },
+    ],
+  });
 }

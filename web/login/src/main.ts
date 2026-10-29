@@ -5,17 +5,27 @@
 
 import "./style.css";
 
+import { mount } from "svelte";
+
 import { applyTheme } from "./theme.js";
 
 import { account, rememberNext } from "./account.js";
-import { action, card, describe, h, message, show } from "./dom.js";
+import App from "./App.svelte";
+import { describe } from "./describe.js";
 import { showLogin } from "./factors.js";
 import { answer } from "./flow.js";
 import { lang, t } from "./i18n.js";
 import { showRegistration } from "./register.js";
+import { show } from "./screen.svelte.js";
+import Choice from "./screens/Choice.svelte";
 import { client } from "./session.js";
 
 applyTheme();
+const target = document.getElementById("app");
+if (target) {
+  target.replaceChildren();
+  mount(App, { target });
+}
 
 /** Back from an identity provider: the fragment holds a one-time code for the session, or an error. */
 async function returned(): Promise<void> {
@@ -32,7 +42,11 @@ async function returned(): Promise<void> {
   if (link) return propose(link, request, next);
   if (!login) {
     const again = request ? `/login?authRequest=${encodeURIComponent(request)}` : "/login/account";
-    return show(card(t("Login failed"), message(fragment.get("error") ?? t("The login could not be completed.")), h("p", {}, h("a", { href: again }, t("Try again")))));
+    return show(Choice, {
+      title: t("Login failed"),
+      notice: { text: fragment.get("error") ?? t("The login could not be completed.") },
+      link: { href: again, text: t("Try again") },
+    });
   }
   const result = await client.exchangeIdpLogin(login);
   return next(result.authRequest);
@@ -42,23 +56,38 @@ async function returned(): Promise<void> {
  * provider – or create a separate account. */
 async function propose(link: string, request: string | null, next: (authRequest: string | null) => Promise<void>): Promise<void> {
   const proposal = await client.linkProposal(link);
-  show(
-    card(
-      t("Link {provider}?", { provider: proposal.provider }),
-      message(t("There is an account with {email} already. Log in to it to sign in with {provider} from now on.", { email: proposal.email, provider: proposal.provider }), "info"),
-      action(t("Log in and link"), async () =>
-        showLogin(async () => {
-          await client.confirmIdpLink(link);
-          await next(request);
-        }, { address: proposal.email }), "primary"),
-      proposal.may_register
-        ? action(t("Create a separate account"), async () => {
-            const result = await client.registerInstead(link);
-            await next(result.authRequest ?? request);
-          })
-        : null,
-    ),
-  );
+  show(Choice, {
+    title: t("Link {provider}?", { provider: proposal.provider }),
+    notice: {
+      text: t("There is an account with {email} already. Log in to it to sign in with {provider} from now on.", { email: proposal.email, provider: proposal.provider }),
+      kind: "info",
+    },
+    actions: [
+      {
+        label: t("Log in and link"),
+        run: async () =>
+          showLogin(
+            async () => {
+              await client.confirmIdpLink(link);
+              await next(request);
+            },
+            { address: proposal.email },
+          ),
+        kind: "primary",
+      },
+      ...(proposal.may_register
+        ? [
+            {
+              label: t("Create a separate account"),
+              run: async () => {
+                const result = await client.registerInstead(link);
+                await next(result.authRequest ?? request);
+              },
+            },
+          ]
+        : []),
+    ],
+  });
 }
 
 async function start(): Promise<void> {
@@ -80,4 +109,4 @@ async function start(): Promise<void> {
   return account();
 }
 
-start().catch((error: unknown) => show(card(t("Something went wrong"), message(describe(error)))));
+start().catch((error: unknown) => show(Choice, { title: t("Something went wrong"), notice: { text: describe(error) } }));
