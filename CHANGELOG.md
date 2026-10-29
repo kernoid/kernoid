@@ -37,6 +37,8 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   administration's signing keys page; migration 0037).
 - Links to files and folders for people without an account, with expiry and password: made in the web app or with
   kernoid's JMAP extension `FileLink/*`, opened at `/app/link.html#<token>` (`/v1/links/…`; migration 0038).
+- JMAP Blob Management (RFC 9404): `Blob/upload` joins uploaded pieces, `Blob/get`, `Blob/lookup`. The web app
+  uploads files over 16 MiB in pieces and sends a piece again when its connection breaks.
 - SAML single logout in the HTTP-POST binding, and at OpenID Connect `end_session`: an application's logout of a
   session from a SAML provider logs out at the provider too, then returns to the application.
 - `http.public_port`: instances reached on a port other than 443 or 80 name it in their issuer and links (JMAP);

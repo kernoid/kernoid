@@ -391,3 +391,78 @@ async fn mailboxes_are_shared_with_share_with(pool: PgPool) {
     let gone = call(&bob, alice.account, "Mailbox/get", json!({})).await;
     assert!(gone["type"].is_string() || gone["list"].as_array().is_some_and(Vec::is_empty), "{gone}");
 }
+
+#[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
+async fn large_files_are_uploaded_in_pieces_and_joined(pool: PgPool) {
+    let setup = setup(pool).await;
+    let dana = setup.caller("dana", false).await;
+    // Three pieces, as a client sends them; the second broke off once and came again.
+    let first = setup.upload(&dana, b"Hello, ").await;
+    let _broken = setup.upload(&dana, b"wor").await;
+    let second = setup.upload(&dana, b"world").await;
+    let third = setup.upload(&dana, b"!! and more").await;
+
+    let (name, joined) = setup
+        .one(
+            &dana,
+            "Blob/upload",
+            json!({ "create": { "j": { "type": "text/plain", "data": [
+                { "blobId": first },
+                { "blobId": second },
+                { "blobId": third, "length": 1 },
+                { "data:asText": " – " },
+                { "data:asBase64": "QnllLg==" },
+            ] } } }),
+        )
+        .await;
+    assert_eq!(name, "Blob/upload", "{joined}");
+    let blob = joined["created"]["j"]["id"].as_str().unwrap().to_owned();
+    assert_eq!(joined["created"]["j"]["size"], 22);
+    assert_eq!(setup.download(&dana, dana.account, &blob).await, "Hello, world! – Bye.".as_bytes());
+
+    // A piece that is not there, or a range outside one, makes nothing.
+    let (_, refused) = setup
+        .one(
+            &dana,
+            "Blob/upload",
+            json!({ "create": {
+                "a": { "data": [{ "blobId": "u-0190a3d6-0000-7000-8000-000000000000" }] },
+                "b": { "data": [{ "blobId": first, "offset": 3, "length": 10 }] },
+            } }),
+        )
+        .await;
+    assert_eq!(refused["notCreated"]["a"]["type"], "blobNotFound", "{refused}");
+    assert_eq!(refused["notCreated"]["b"]["type"], "invalidProperties", "{refused}");
+
+    // Blob/get: size, digest and data of a range.
+    let (_, got) = setup
+        .one(
+            &dana,
+            "Blob/get",
+            json!({ "ids": [blob], "properties": ["size", "data:asText", "digest:sha-256"], "offset": 7, "length": 5 }),
+        )
+        .await;
+    assert_eq!(got["list"][0]["size"], 22);
+    assert_eq!(got["list"][0]["data:asText"], "world");
+    use base64::Engine;
+    use sha2::Digest;
+    let digest = base64::engine::general_purpose::STANDARD.encode(sha2::Sha256::digest(b"world"));
+    assert_eq!(got["list"][0]["digest:sha-256"], digest);
+
+    // The joined blob becomes a file; Blob/lookup finds it.
+    let (_, created) = setup
+        .one(
+            &dana,
+            "FileNode/set",
+            json!({ "create": { "f": { "@type": "File", "parentId": null, "name": "big.txt", "blobId": blob } } }),
+        )
+        .await;
+    let node = created["created"]["f"]["id"].as_str().unwrap().to_owned();
+    let file_blob = created["created"]["f"]["blobId"].as_str().unwrap_or_default().to_owned();
+    let (_, found) =
+        setup.one(&dana, "Blob/lookup", json!({ "typeNames": ["FileNode", "Email"], "ids": [file_blob, blob] })).await;
+    assert_eq!(found["list"][0]["matchedIds"]["FileNode"], json!([node]), "{found}");
+    assert_eq!(found["list"][1]["matchedIds"]["FileNode"], json!([]));
+    let (name, _) = setup.one(&dana, "Blob/lookup", json!({ "typeNames": ["Calendar"], "ids": [blob] })).await;
+    assert_eq!(name, "error");
+}

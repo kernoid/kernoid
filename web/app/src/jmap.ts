@@ -11,6 +11,11 @@ export const FILENODE = "urn:ietf:params:jmap:filenode";
 export const FILE_VERSIONS = "https://kernoid.dev/jmap/file-versions";
 export const FILE_LINKS = "https://kernoid.dev/jmap/file-links";
 export const PRINCIPALS = "urn:ietf:params:jmap:principals";
+export const BLOB = "urn:ietf:params:jmap:blob";
+
+/** Files larger than this go up in pieces of this size (RFC 9404), each sent again if its connection breaks. */
+export const PIECE_SIZE = 16 * 1024 * 1024;
+const PIECE_TRIES = 4;
 
 export interface JmapSession {
   apiUrl: string;
@@ -128,7 +133,37 @@ export class Jmap {
     return (await response.json()) as { blobId: string; type: string; size: number };
   }
 
-  /** Uploads a file of any size, telling how far it got; its blob id. */
+  /** Uploads a file of any size, telling how far it got; its blob id. A large file goes up in pieces where the server
+   * joins blobs (`Blob/upload`): a piece whose connection breaks is sent again, not the whole file. */
+  async uploadInPieces(accountId: string, file: Blob, progress: (sent: number, total: number) => void): Promise<{ blobId: string; size: number }> {
+    if (file.size <= PIECE_SIZE || !(BLOB in (this.session.capabilities ?? {}))) return this.uploadWithProgress(accountId, file, progress);
+    // Too large for the server: say so before sending anything.
+    const largest = Number(this.session.accounts[accountId]?.accountCapabilities[BLOB] && (this.session.accounts[accountId].accountCapabilities[BLOB] as { maxSizeBlobSet?: number }).maxSizeBlobSet);
+    if (largest && file.size > largest) throw new JmapError("tooLarge", `larger than ${largest} bytes`);
+    const pieces: string[] = [];
+    for (let start = 0; start < file.size; start += PIECE_SIZE) {
+      const piece = file.slice(start, Math.min(start + PIECE_SIZE, file.size), "application/octet-stream");
+      for (let attempt = 1; ; attempt++) {
+        try {
+          const { blobId } = await this.uploadWithProgress(accountId, piece, (sent) => progress(start + sent, file.size));
+          pieces.push(blobId);
+          break;
+        } catch (failure) {
+          if (attempt >= PIECE_TRIES) throw failure;
+          await new Promise((resume) => setTimeout(resume, 1000 * 2 ** attempt));
+        }
+      }
+    }
+    const result = await this.call<{ created?: Record<string, { id: string; size: number }> }>([BLOB], "Blob/upload", {
+      accountId,
+      create: { whole: { type: file.type || "application/octet-stream", data: pieces.map((blobId) => ({ blobId })) } },
+    });
+    const whole = result.created?.whole;
+    if (!whole) throw new JmapError("uploadFailed", "the pieces could not be joined");
+    return { blobId: whole.id, size: whole.size };
+  }
+
+  /** Uploads a blob in one request, telling how far it got; its blob id. */
   uploadWithProgress(accountId: string, file: Blob, progress: (sent: number, total: number) => void): Promise<{ blobId: string; size: number }> {
     const url = new URL(this.session.uploadUrl.replace("{accountId}", encodeURIComponent(accountId)));
     return new Promise((resolve, reject) => {

@@ -153,7 +153,7 @@ export async function uploadFile(
   progress: (sent: number, total: number) => void,
   existing?: FileNode,
 ): Promise<void> {
-  const { blobId } = await jmap.uploadWithProgress(accountId, file, progress);
+  const { blobId } = await jmap.uploadInPieces(accountId, file, progress);
   const modified = new Date(file.lastModified).toISOString();
   if (existing && !isDirectory(existing)) {
     await set(jmap, accountId, { update: { [existing.id]: { blobId, mediaType: file.type || null, modified } } });

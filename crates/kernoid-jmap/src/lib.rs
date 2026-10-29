@@ -5,6 +5,7 @@
 //! in already.
 
 pub mod blob;
+mod blob_methods;
 mod calendars;
 mod contacts;
 mod email;
@@ -190,6 +191,13 @@ impl Jmap {
             entry["accountCapabilities"][PRINCIPALS] = json!({ "currentUserPrincipalId": own });
             primary.insert(PRINCIPALS.into(), json!(own));
         }
+        // Blobs (RFC 9404) in every account the caller reaches: uploads in pieces, joined.
+        for entry in accounts.values_mut() {
+            entry["accountCapabilities"][blob_methods::BLOB] = blob_methods::capability(self.max_size);
+        }
+        if accounts.contains_key(&own) {
+            primary.insert(blob_methods::BLOB.into(), json!(own));
+        }
         let mut capabilities = json!({
             CORE: {
                 "maxSizeUpload": self.max_size,
@@ -218,6 +226,7 @@ impl Jmap {
         if self.identity.is_some() {
             capabilities[PRINCIPALS] = json!({});
         }
+        capabilities[blob_methods::BLOB] = json!({});
         // RFC 8887: requests and push over one WebSocket.
         let websocket = base.replacen("https://", "wss://", 1).replacen("http://", "ws://", 1);
         capabilities[WEBSOCKET] = json!({ "url": format!("{websocket}/jmap/ws"), "supportsPush": true });

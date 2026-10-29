@@ -84,6 +84,11 @@ revision 19 – a draft, which may still change – and JMAP Sharing's principal
   `Principal/query`.
 - Content is uploaded as a blob (`/jmap/upload/<account>/`, streamed) and given to a file with its `blobId`; any blob
   the account may read will do – an attachment of an email, too. Downloads take ranges.
+- **Large files in pieces:** JMAP Blob Management ([RFC 9404](https://www.rfc-editor.org/rfc/rfc9404),
+  `urn:ietf:params:jmap:blob`) joins uploaded blobs – or ranges of them, and inline data – into one with
+  `Blob/upload`; a piece whose connection broke is uploaded again, not the whole file. The web app sends files over
+  16 MiB this way, each piece tried up to four times. `Blob/get` gives a blob's size, SHA-256 and (small) data,
+  `Blob/lookup` the emails, mailboxes, threads and files that use it.
 - `PUT /jmap/files/<account>/<node>` replaces a file's content directly; the `Content-Type` becomes its type.
 - Names: up to 255 bytes, none of `/ < > : " \ | ? *` or control characters, not `.` or `..`; unique in their folder.
   At most 64 levels.
@@ -122,5 +127,5 @@ from writing the same file, and a file written again keeps its earlier content a
 - **Content** is encrypted with the tenant's key before it goes to object storage.
 
 {: .note }
-OPEN: links that let people add files, uploads that resume after a broken connection, searching inside files, symbolic links, moving
+OPEN: links that let people add files, uploads that resume after the page is closed, searching inside files, symbolic links, moving
 between stores over WebDAV, emptying the trash after a time.

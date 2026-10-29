@@ -83,8 +83,14 @@ media type. A part missing or cut off fails to open.
   due when the upload expires, a file's within an hour –; the transaction that gives the content to a file takes
   the names back; a content that goes hands parts no other content names to the garbage at once.
 - **Size:** at most `files.max_file_size` bytes (default 10 GiB). Reading takes ranges (`Range`), part by part.
-- **OPEN:** uploads that resume after a broken connection (a single request carries a file today; JMAP's blob
-  extension, [RFC 9404](https://www.rfc-editor.org/rfc/rfc9404), could join uploaded pieces).
+- **Uploads in pieces:** JMAP Blob Management ([RFC 9404](https://www.rfc-editor.org/rfc/rfc9404),
+  `urn:ietf:params:jmap:blob`) – `Blob/upload` makes a blob of up to 1024 sources: blobs the caller may read, or
+  ranges of them, and inline data. A client uploads a large file in pieces, uploads a piece again whose connection
+  broke, and joins them; the joined content streams into a new upload (the pieces are read, not copied by
+  reference, and expire as uploads do). `Blob/get` (size, `digest:sha-256`, data up to the request limit) and
+  `Blob/lookup` (`Email`, `Mailbox`, `Thread`, `FileNode`) complete the capability. The web app uploads files over
+  16 MiB in pieces of 16 MiB. **OPEN:** resuming after the page is closed (the client would have to remember its
+  pieces); joining without reading the pieces again.
 
 ## 6. Versions
 
