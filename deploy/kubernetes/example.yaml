@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# A kernoid in the namespace kernoid, with PostgreSQL and S3-compatible object storage from elsewhere. The secret
+# holds what must stay secret; make it first, e.g.:
+#   kubectl -n kernoid create secret generic kernoid \
+#     --from-literal=database-url=postgres://kernoid_app:…@postgres/kernoid \
+#     --from-literal=migrate-url=postgres://kernoid_owner:…@postgres/kernoid \
+#     --from-literal=main-key=$(openssl rand -hex 32) \
+#     --from-literal=s3-access-key-id=… --from-literal=s3-secret-access-key=…
+# Keep a copy of main-key apart from the cluster: without it, the content in object storage cannot be read again.
+apiVersion: kernoid.dev/v1alpha1
+kind: Kernoid
+metadata:
+  name: kernoid
+  namespace: kernoid
+spec:
+  # Changing the tag upgrades: the schema is migrated with the new image first, then the processes are replaced.
+  image: ghcr.io/kernoid/kernoid:0.2.0
+  env:
+    - name: KERNOID__DATABASE__URL
+      valueFrom: { secretKeyRef: { name: kernoid, key: database-url } }
+    - name: KERNOID__ENCRYPTION__MAIN_KEY
+      valueFrom: { secretKeyRef: { name: kernoid, key: main-key } }
+    - { name: KERNOID__BLOB__KIND, value: s3 }
+    - { name: KERNOID__BLOB__ENDPOINT, value: "https://s3.example.org" }
+    - { name: KERNOID__BLOB__REGION, value: garage }
+    - { name: KERNOID__BLOB__BUCKET, value: kernoid }
+    - name: KERNOID__BLOB__ACCESS_KEY_ID
+      valueFrom: { secretKeyRef: { name: kernoid, key: s3-access-key-id } }
+    - name: KERNOID__BLOB__SECRET_ACCESS_KEY
+      valueFrom: { secretKeyRef: { name: kernoid, key: s3-secret-access-key } }
+    # Behind an ingress that terminates TLS: believe its forwarded headers (the cluster's pod network).
+    - { name: KERNOID__HTTP__TRUSTED_PROXIES, value: '["10.0.0.0/8"]' }
+    # Mail from outside and mail clients – with the roles smtp and imap below:
+    # - { name: KERNOID__SMTP__HOSTNAME, value: mail.example.org }
+    # - { name: KERNOID__IMAP__TIMEOUT_SECONDS, value: "1800" }
+    # - { name: KERNOID__MAIL__TLS__CERTIFICATE, value: /tls/tls.crt }
+    # - { name: KERNOID__MAIL__TLS__KEY, value: /tls/tls.key }
+  # The certificate of the mail protocols, e.g. from cert-manager; kernoid reads it again when it changes.
+  # volumes:
+  #   - { name: tls, secret: { secretName: mail-tls } }
+  # volumeMounts:
+  #   - { name: tls, mountPath: /tls, readOnly: true }
+  migrateEnv:
+    - name: KERNOID__DATABASE__MIGRATE_URL
+      valueFrom: { secretKeyRef: { name: kernoid, key: migrate-url } }
+  roles:
+    api: { replicas: 2 }
+    worker: { replicas: 1 }
+    # smtp: { replicas: 2, serviceType: LoadBalancer }
+    # imap: { replicas: 1, serviceType: LoadBalancer }

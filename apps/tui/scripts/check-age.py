@@ -4,7 +4,8 @@
 # crawler policy asks. Exit status 1 if there is one. With --fix, each is set back to its newest version old enough
 # (`cargo update -p <crate>@<version> --precise <older>`), and the lock file is checked again. Run it after changing
 # Cargo.lock; CI does not (it needs the network and minutes).
-#   scripts/check-age.py [--fix] [days]
+#   scripts/check-age.py [--fix] [--dir=<workspace>] [days]
+# --dir checks another workspace's Cargo.lock than the terminal app's, e.g. `--dir=operator`.
 import json
 import subprocess
 import sys
@@ -14,7 +15,10 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = next(
+    (Path(a.split("=", 1)[1]).resolve() for a in sys.argv[1:] if a.startswith("--dir=")),
+    Path(__file__).resolve().parent.parent,
+)
 # The one exception to the two weeks: the smallest version that fixes a RustSec advisory, with the advisory's id.
 SECURITY_FIXES = {
     ("rustls-webpki", "0.103.16"): "RUSTSEC-2026-0382",
@@ -62,7 +66,7 @@ def fix(name, version, limit):
 
 
 def main():
-    args = [a for a in sys.argv[1:] if a != "--fix"]
+    args = [a for a in sys.argv[1:] if a != "--fix" and not a.startswith("--dir=")]
     days = int(args[0]) if args else 14
     limit = datetime.now(timezone.utc) - timedelta(days=days)
     found = young(limit)

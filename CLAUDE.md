@@ -6,8 +6,9 @@ Notes for working on this repository with an AI assistant – and for anyone new
 
 ## Layout
 
-A Cargo workspace; one binary (`crates/kernoid`), one container image. The configuration decides which **roles** a
-process takes on (`kernoid_config::Role`); add a role there when a component can run on its own.
+A Cargo workspace; one binary (`crates/kernoid`), one container image (which carries the operator's binary too). The
+configuration decides which **roles** a process takes on (`kernoid_config::Role`); add a role there when a component
+can run on its own.
 
 | Crate | Depends on | Holds |
 |---|---|---|
@@ -50,6 +51,15 @@ only through the protocols (JMAP, push) and logs in with HTTP Basic (an address 
 from `KERNOID_PASSWORD`, a command or a prompt, never an argument), sending it only to the origin it logged in to.
 Dependencies are exact (`=` in `Cargo.toml`) and at least two weeks old when taken – `apps/tui/scripts/check-age.py
 [--fix]` lists the younger ones in `Cargo.lock` (and sets them back); run it after changing the lock file.
+
+`operator/` (AGPL) is the Kubernetes operator `kernoid-operator` (kube-rs; docs: Operations, Kubernetes): the resource
+`Kernoid` (`crd.rs`), what it becomes – a migration Job per image, a Deployment and Service per role – as pure
+functions with tests (`resources.rs`), and the loop that applies them server-side (`controller.rs`). It is a **Cargo
+workspace of its own**, like the terminal app: kube's dependencies and the mail libraries need versions of the same
+crates that do not go together (smallvec), and the server need not carry the Kubernetes client. The image builds it
+beside `kernoid` (`/usr/local/bin/kernoid-operator`). `deploy/kubernetes/crd.json` comes from `kernoid-operator crd`,
+and CI checks it is current. Dependencies are exact and at least two weeks old
+(`apps/tui/scripts/check-age.py --dir=operator`).
 
 The documentation site lives in `docs/` (GitHub Pages, Jekyll with Just the Docs); `docs/_data/openapi.json` and
 `docs/api/schema.graphql` come from `kernoid openapi` and `kernoid graphql-schema`, and CI checks they are current –
@@ -141,7 +151,9 @@ calendars and contacts, [0005](rfcs/0005-files.md) files. Change the RFC with th
 ```sh
 cargo fmt --check && cargo clippy --all-targets && cargo test   # tests need DATABASE_URL, see README
 (cd apps/tui && cargo fmt --check && cargo clippy --locked --all-targets && cargo test --locked)
+(cd operator && cargo fmt --check && cargo clippy --locked --all-targets && cargo test --locked)
+scripts/upgrade-check.sh v0.1.0 kernoid:local   # after `docker build -t kernoid:local .`
 ./scripts/check-sel.sh
-cargo deny check && (cd apps/tui && cargo deny check)    # cargo-deny 0.20.2
+cargo deny check && (cd apps/tui && cargo deny check) && (cd operator && cargo deny check)    # cargo-deny 0.20.2
 docker run --rm -v "$PWD":/data fsfe/reuse:6.2.0 lint
 ```

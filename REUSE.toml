@@ -11,7 +11,7 @@ precedence = "aggregate"
 SPDX-FileCopyrightText = "falkOSS – Falcon Lake Open Source Software gUG (haftungsbeschränkt) i. G. and the kernoid contributors"
 
 [[annotations]]
-path = ["**/*.md", "Cargo.lock", ".sqlx/**", "**/.gitignore", ".dockerignore", "brand/svg/**", "brand/png/**", "brand/web/**",
+path = ["**/*.md", "Cargo.lock", "operator/Cargo.lock", "deploy/kubernetes/crd.json", ".sqlx/**", "**/.gitignore", ".dockerignore", "brand/svg/**", "brand/png/**", "brand/web/**",
         "docs/assets/**", "docs/_data/**", "docs/api/**", "docs/CNAME"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "falkOSS – Falcon Lake Open Source Software gUG (haftungsbeschränkt) i. G. and the kernoid contributors"

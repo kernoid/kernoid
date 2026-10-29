@@ -1,0 +1,90 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# The operator in the namespace kernoid-system, watching Kernoid resources in every namespace. Apply the
+# CustomResourceDefinition (crd.json) first:
+#   kubectl apply -f crd.json -f operator.yaml
+# The operator runs from kernoid's image, which carries both binaries; keep its tag at the release you run.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kernoid-system
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kernoid-operator
+  namespace: kernoid-system
+---
+# What the operator does: reads Kernoid resources and writes their status; makes, changes and removes the
+# Deployments, Services and migration Jobs they own. Nothing else – no Secrets: those reach kernoid's own pods by
+# reference.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kernoid-operator
+rules:
+  - apiGroups: ["kernoid.dev"]
+    resources: ["kernoids"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["kernoid.dev"]
+    resources: ["kernoids/status"]
+    verbs: ["get", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch", "create", "patch", "delete"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch", "create", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kernoid-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kernoid-operator
+subjects:
+  - kind: ServiceAccount
+    name: kernoid-operator
+    namespace: kernoid-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kernoid-operator
+  namespace: kernoid-system
+  labels:
+    app.kubernetes.io/name: kernoid-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kernoid-operator
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kernoid-operator
+    spec:
+      serviceAccountName: kernoid-operator
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: operator
+          image: ghcr.io/kernoid/kernoid:0.2.0
+          command: ["/usr/local/bin/kernoid-operator"]
+          args: ["run", "--log-format", "json"]
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 128Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

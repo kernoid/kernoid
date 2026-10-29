@@ -52,6 +52,12 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   `clamav` (profile `clamav`). Tenants see and switch the modules the installation offers with
   `GET /v1/tenant/modules`, GraphQL `tenantModules`, and in the administration's settings; only modules the
   installation has switched on can be switched on.
+- Kubernetes: the operator `kernoid-operator` (in the image; `deploy/kubernetes`, docs: Operations) runs kernoid as a
+  resource `Kernoid` describes – the schema migrated with a new image before the processes are replaced, one
+  Deployment and Service per role, non-root pods with a read-only root filesystem.
+- Images for `linux/arm64` besides `linux/amd64`, built on runners of each architecture.
+- `scripts/upgrade-check.sh`: an installation of a release, with mail and a file in it, upgraded to a new image and
+  checked; CI runs it from the last release for every image of `main`.
 - The directory over LDAP (docs: Directory, RFC 0003, 8): each tenant's people and groups at `o=<tenant id>`, read
   only, for software that reads users from a directory – `inetOrgPerson` and `groupOfNames` with `mail`, `member` and
   `memberOf`. Binds over LDAPS or StartTLS with the login name or DN and an app password (or the password without a
@@ -62,6 +68,15 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   meeting's owner as moderator –, to the login, or (with `guests = true`) in as a guest (migration 0040).
 - `http.public_port`: instances reached on a port other than 443 or 80 name it in their issuer and links (JMAP);
   `deploy/compose` sets 8080.
+
+### Upgrading from 0.1
+
+- Take the new `deploy/compose` with the new image: the 0.1 image refuses the module settings the new compose file
+  passes (`[modules.clamav]` did not exist).
+- `kernoid migrate` adds migrations 0034 to 0040 (checked from 0.1.0 with mail and files in it).
+- DKIM: each domain gets an Ed25519 key beside its RSA key – publish the new TXT record `kernoid-ed1._domainkey`
+  that the domain's DNS check shows; mail is signed with it once DNS has it.
+- Nothing else changes by itself: LDAP, ClamAV and Jitsi stay off until configured.
 
 ### Fixed
 

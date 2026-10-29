@@ -42,8 +42,45 @@ one or more `worker` processes. **Several workers share the work without doing i
 
 A second worker is for availability more than for load: if one stops, the other carries on.
 
-Deployment today: Docker Compose – `deploy/compose` to try kernoid out, `deploy/test` for a public test machine
-behind Caddy, with mail (its `README.md` walks through the setup). A Kubernetes operator is planned for 0.2.
+Deployment: Docker Compose – `deploy/compose` to try kernoid out, `deploy/test` for a public test machine behind
+Caddy, with mail (its `README.md` walks through the setup) – or Kubernetes with the operator (below). The image is
+built for `linux/amd64` and `linux/arm64`.
+
+## Kubernetes
+
+The operator (`kernoid-operator`, in the same image as kernoid) runs kernoid as a resource `Kernoid` describes. It
+needs PostgreSQL and S3-compatible object storage from elsewhere, like every installation.
+
+```sh
+kubectl apply -f deploy/kubernetes/crd.json -f deploy/kubernetes/operator.yaml
+kubectl create namespace kernoid
+kubectl -n kernoid create secret generic kernoid --from-literal=database-url=… --from-literal=migrate-url=… \
+  --from-literal=main-key=$(openssl rand -hex 32) --from-literal=s3-access-key-id=… --from-literal=s3-secret-access-key=…
+kubectl apply -f deploy/kubernetes/example.yaml   # after editing it
+kubectl -n kernoid get kernoid                      # IMAGE, READY
+```
+
+A `Kernoid` names the **image**, kernoid's settings as **environment variables** for every process (`env`, the same
+`KERNOID__…` as for a container; secrets with `valueFrom.secretKeyRef`), variables only for the migration
+(`migrateEnv`: `KERNOID__DATABASE__MIGRATE_URL`), volumes (e.g. the certificate of the mail protocols) and the
+**replicas of each role**: `api` and `worker` one each unless set, `smtp`, `imap` and `ldap` none. From it the
+operator makes:
+
+| Object | What |
+|---|---|
+| Job `<name>-migrate-<hash>` | `kernoid migrate` with the image – once per image |
+| Deployment `<name>-<role>` | the role's processes, only that role (`KERNOID__ROLES`), with the migrated image; `api` ready by `/readyz`, the others when they listen |
+| Service `<name>-<role>` | the role's ports (not for `worker`); `serviceType: LoadBalancer` for mail from outside, which keeps the client's address (`externalTrafficPolicy: Local`) |
+
+**Upgrading** is changing `image`: the operator migrates the schema with the new image first – the running
+processes keep their image meanwhile – and replaces the processes only once the migration succeeded, one pod at a
+time. A failed migration leaves everything as it was; the condition `Migrated` names the Job whose log says why.
+Every pod runs as non-root with a read-only root filesystem and no capabilities; the mail and directory roles may
+open their ports below 1024 through the namespaced sysctl `net.ipv4.ip_unprivileged_port_start`.
+
+The operator reads `Kernoid` resources and changes only Deployments, Services and Jobs (`operator.yaml`'s
+ClusterRole); it never reads Secrets. `--namespace` limits it to one namespace. **OPEN:** a Helm chart, an ingress or
+Gateway route made by the operator, scaling by load.
 
 ## TLS and reverse proxies
 
@@ -95,6 +132,20 @@ kernoid uses two PostgreSQL roles:
 
 Migrations do not run when kernoid starts: run `kernoid migrate` before starting a new version. Connections carry a
 statement timeout and an idle-in-transaction timeout (see [Configuration]({{ '/configuration/' | relative_url }})).
+
+### Upgrading
+
+Read the release's section in the [changelog](https://github.com/kernoid/kernoid/blob/main/CHANGELOG.md) first –
+it says what to do besides migrating. Then:
+
+1. Back up the database and the object storage (below).
+2. Run `kernoid migrate` with the new version – Compose's `migrate` service does it before `kernoid` starts; the
+   operator runs it as a Job.
+3. Start the new version.
+
+While the migration runs, processes of the old version keep running against the new schema; a release whose
+migrations the old version cannot work with says so in the changelog, and then the old processes stop first. Every release is checked by upgrading an installation of the release
+before it, with mail and files in it (`scripts/upgrade-check.sh`, CI job `upgrade`).
 
 ## Health, metrics, logs
 

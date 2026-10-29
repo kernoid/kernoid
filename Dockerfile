@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# One image for every role; the configuration decides what a container does.
+# One image for every role; the configuration decides what a container does. It carries the Kubernetes operator too.
 
 # The login UI (web/, MIT): built here, served by kernoid from /usr/share/kernoid/login. Install scripts of
 # dependencies do not run.
@@ -22,10 +22,15 @@ COPY . .
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/target \
     cargo build --release --locked --bin kernoid && cp target/release/kernoid /kernoid
+# The Kubernetes operator (operator/, a workspace of its own): the same image runs it.
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/src/operator/target \
+    cargo build --release --locked --manifest-path operator/Cargo.toml && cp operator/target/release/kernoid-operator /kernoid-operator
 
 # distroless publishes no version tags; the digest pins the nonroot image of 2026-10-23.
 FROM gcr.io/distroless/cc-debian13:nonroot@sha256:83b9b50586253821cf63ffcec87d3d94265a093ad30da232039af962dd8f4edf
 COPY --from=build /kernoid /usr/local/bin/kernoid
+COPY --from=build /kernoid-operator /usr/local/bin/kernoid-operator
 COPY --from=web /web/login/dist /usr/share/kernoid/login
 COPY --from=web /web/app/dist /usr/share/kernoid/app
 EXPOSE 8080 2525

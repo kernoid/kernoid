@@ -76,6 +76,26 @@ jobs:
       - run: cargo test --locked
       - run: cargo build --locked --release
 
+  # The Kubernetes operator: a workspace of its own (operator/); its CustomResourceDefinition must be the one in
+  # deploy/kubernetes.
+  operator:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: operator
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Rust toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@2201cc584a476d1b508be977bbe4b7d1c7a52e9c # v2.9.3
+        with:
+          workspaces: operator
+      - run: cargo fmt --check
+      - run: cargo clippy --locked --all-targets
+      - run: cargo test --locked
+      - name: The CustomResourceDefinition is current
+        run: cargo run --locked -q -- crd | diff - ../deploy/kubernetes/crd.json
+
   web:
     runs-on: ubuntu-latest
     container: docker.io/library/node:26.11.1-trixie-slim
@@ -102,6 +122,10 @@ jobs:
         uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
         with:
           manifest-path: apps/tui/Cargo.toml
+      - name: Operator
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          manifest-path: operator/Cargo.toml
       - name: Web
         working-directory: web
         run: |
@@ -116,11 +140,20 @@ jobs:
         run: ./scripts/check-sel.sh
       - uses: fsfe/reuse-action@9a55738c6490d015afe69ad187520395d2b7a1fa # v6.0.0
 
-  # Builds the image for every change; pushes it to ghcr.io/kernoid/kernoid only from main and version tags, and only
-  # once the other jobs passed: `main` and `sha-<commit>` from main, the version (`0.1.0`, `0.1`) from a tag `v0.1.0`.
+  # Builds the image for every change, for amd64 and arm64 – each on a runner of its own architecture, since
+  # building Rust under emulation takes hours. From main and version tags, once the other jobs passed, each pushes its
+  # image by digest, and `manifest` names both with the tags: `main` and `sha-<commit>` from main, the version
+  # (`0.2.0`, `0.2`) from a tag `v0.2.0`.
   image:
-    needs: [rust, tui, web, licences]
-    runs-on: ubuntu-latest
+    needs: [rust, tui, operator, web, licences]
+    strategy:
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
@@ -128,6 +161,49 @@ jobs:
       PUSH: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - if: env.PUSH == 'true'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          # Pushed without a tag: `manifest` gives the tags to both architectures at once.
+          outputs: ${{ env.PUSH == 'true' && 'type=image,name=ghcr.io/kernoid/kernoid,push-by-digest=true,name-canonical=true,push=true' || 'type=cacheonly' }}
+          # Layers that did not change (the web build, the toolchain stage) come from GitHub's cache.
+          cache-from: type=gha,scope=${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.platform }}
+      - if: env.PUSH == 'true'
+        run: |
+          mkdir -p digests
+          digest='${{ steps.build.outputs.digest }}'
+          touch "digests/${digest#sha256:}"
+      - if: env.PUSH == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: digest-${{ strategy.job-index }}
+          path: digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  manifest:
+    needs: image
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: digest-*
+          merge-multiple: true
+          path: digests
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
@@ -138,19 +214,28 @@ jobs:
             type=sha,format=long,enable={{is_default_branch}}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-      - if: env.PUSH == 'true'
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+      - working-directory: digests
+        run: |
+          mapfile -t tags < <(jq -r '.tags[] | ("-t", .)' <<< "$DOCKER_METADATA_OUTPUT_JSON")
+          images=()
+          for digest in *; do images+=("ghcr.io/kernoid/kernoid@sha256:$digest"); done
+          docker buildx imagetools create "${tags[@]}" "${images[@]}"
+          docker buildx imagetools inspect "ghcr.io/kernoid/kernoid:${{ steps.meta.outputs.version }}"
+
+  # An installation of the last release, with mail and a file in it, upgraded to the image just pushed: the schema
+  # migrated to the newest migration, the data still there (scripts/upgrade-check.sh).
+  upgrade:
+    needs: manifest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          context: .
-          platforms: linux/amd64
-          push: ${{ env.PUSH == 'true' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          # Layers that did not change (the web build, the toolchain stage) come from GitHub's cache.
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          fetch-depth: 0
+      - run: |
+          from=$(git describe --tags --abbrev=0 --match 'v*' HEAD^)
+          scripts/upgrade-check.sh "$from" "ghcr.io/kernoid/kernoid:sha-${{ github.sha }}"

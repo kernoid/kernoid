@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# kernoid's Kubernetes operator: runs kernoid as the resource `Kernoid` describes – the schema migrated before new
+# processes start, one Deployment per role. A workspace of its own, apart from the server's: the Kubernetes client
+# and the mail libraries need versions of the same crates that do not go together, and the server's image need not
+# carry the client. It talks to kernoid only through Kubernetes. Dependencies are exact (`=`) and at least two weeks
+# old when taken (`apps/tui/scripts/check-age.py --dir=operator`).
+[workspace]
+
+[package]
+name = "kernoid-operator"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.94"
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/kernoid/kernoid"
+description = "Runs kernoid on Kubernetes"
+publish = false
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+
+[dependencies]
+anyhow = "=1.0.104"
+clap = { version = "=4.6.7", features = ["derive", "env"] }
+futures-util = { version = "=0.3.34", default-features = false }
+k8s-openapi = { version = "=0.28.0", default-features = false, features = ["v1_32", "schemars", "std"] }
+kube = { version = "=4.2.0", default-features = false, features = ["client", "rustls-tls", "aws-lc-rs", "derive", "runtime"] }
+schemars = "=1.2.2"
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.151"
+sha2 = "=0.11.1"
+thiserror = "=2.0.21"
+tokio = { version = "=1.53.3", features = ["rt-multi-thread", "macros", "signal"] }
+tracing = "=0.1.44"
+tracing-subscriber = { version = "=0.3.23", features = ["env-filter", "json"] }
