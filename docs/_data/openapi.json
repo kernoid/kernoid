@@ -756,7 +756,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/GrantView"
+                    "$ref": "#/components/schemas/MailGrantView"
                   }
                 }
               }
@@ -2373,7 +2373,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/LinkView"
+                    "$ref": "#/components/schemas/IdpLinkView"
                   }
                 }
               }
@@ -2528,7 +2528,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/GrantView"
+                    "$ref": "#/components/schemas/MailGrantView"
                   }
                 }
               }
@@ -9223,7 +9223,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Policy"
+                "$ref": "#/components/schemas/TenantPolicy"
               }
             }
           },
@@ -10608,6 +10608,27 @@
           }
         }
       },
+      "IdpLinkView": {
+        "type": "object",
+        "required": [
+          "identity_provider",
+          "subject",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "identity_provider": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string",
+            "description": "The account's `sub` at the provider."
+          }
+        }
+      },
       "ImportedView": {
         "type": "object",
         "required": [
@@ -10962,6 +10983,43 @@
             "items": {
               "$ref": "#/components/schemas/RecordCheckView"
             }
+          }
+        }
+      },
+      "MailGrantView": {
+        "type": "object",
+        "required": [
+          "grantee_kind",
+          "grantee_id",
+          "grantee_name",
+          "rights",
+          "send_as"
+        ],
+        "properties": {
+          "grantee_id": {
+            "type": "string"
+          },
+          "grantee_kind": {
+            "type": "string",
+            "description": "`account` or `group`."
+          },
+          "grantee_name": {
+            "type": "string",
+            "description": "The account's address, or `$` and the group's name."
+          },
+          "mailbox": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Null: the whole store."
+          },
+          "rights": {
+            "type": "string",
+            "description": "IMAP ACL rights (RFC 4314), e.g. `lrs`."
+          },
+          "send_as": {
+            "type": "boolean"
           }
         }
       },
@@ -12653,6 +12711,26 @@
               "null"
             ],
             "description": "The language of the emails kernoid writes to accounts that chose none – `en` or `de`; null for English."
+          }
+        }
+      },
+      "TenantPolicy": {
+        "type": "object",
+        "required": [
+          "mfa_required"
+        ],
+        "properties": {
+          "mfa_grace_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "0 to 365; left out, it stays as it is.",
+            "minimum": 0
+          },
+          "mfa_required": {
+            "type": "boolean"
           }
         }
       },

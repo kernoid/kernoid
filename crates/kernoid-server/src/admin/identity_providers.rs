@@ -158,6 +158,7 @@ pub(crate) struct Secret {
 }
 
 #[derive(Debug, Serialize, utoipa::ToSchema)]
+#[schema(as = IdpLinkView)]
 pub(crate) struct LinkView {
     identity_provider: String,
     /// The account's `sub` at the provider.

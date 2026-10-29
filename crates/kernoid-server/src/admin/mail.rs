@@ -94,6 +94,7 @@ pub(crate) struct MboxImportView {
 }
 
 #[derive(Debug, Serialize, utoipa::ToSchema)]
+#[schema(as = MailGrantView)]
 pub(crate) struct GrantView {
     /// `account` or `group`.
     grantee_kind: String,

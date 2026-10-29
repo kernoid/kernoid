@@ -88,6 +88,7 @@ pub(crate) struct Name {
 }
 
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
+#[schema(as = TenantPolicy)]
 pub(crate) struct Policy {
     mfa_required: bool,
     /// 0 to 365; left out, it stays as it is.
