@@ -9,6 +9,8 @@
   import { FILENODE, type Jmap, MAIL } from "./jmap.js";
   import MailNotifications from "./mail/MailNotifications.svelte";
   import MailView from "./mail/MailView.svelte";
+  import CalendarView from "./calendar/CalendarView.svelte";
+  import ContactsView from "./contacts/ContactsView.svelte";
   import Pending from "./pending/Pending.svelte";
   import { THEMES, setTheme, theme } from "./theme.svelte.js";
 
@@ -95,6 +97,10 @@
     {#key current}
       {#if current === "mail"}
         <MailView />
+      {:else if current === "calendar"}
+        <CalendarView />
+      {:else if current === "contacts"}
+        <ContactsView />
       {:else}
         <Pending name={current} />
       {/if}
