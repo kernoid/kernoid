@@ -152,7 +152,9 @@ account without a second factor – and only over TLS.
 - Flags are the JMAP keywords, so a message read or flagged in one program is read or flagged in all. `\Deleted`
   takes effect with `EXPUNGE`.
 - **POP3** sees the inbox only; deleted messages leave it when the client quits.
-- Not yet: `SORT`, `THREAD`, quotas over IMAP, renaming `INBOX`.
+- `SORT` and `THREAD` sort and group on the server (threads as kernoid threads them), `GETQUOTAROOT` and `GETQUOTA`
+  show the account's quota.
+- Not yet: renaming `INBOX`.
 
 Mail programs that support Mozilla's autoconfiguration (Thunderbird and others) find these settings by themselves at
 `https://<domain>/.well-known/autoconfig/mail/config-v1.1.xml` – served by kernoid at the instance's host, and at

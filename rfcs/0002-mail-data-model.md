@@ -343,7 +343,10 @@ the process role `imap` (part of `all`) when `[imap]` is configured, in `kernoid
   (30 minutes) is logged out.
 - `SEARCH` evaluates its criteria in kernoid on the selected mailbox, text through the index of 13.1; only `HEADER`
   reads the messages.
-- **OPEN:** `SORT`, `THREAD`, `QUOTA`, `COMPRESS`, `OBJECTID`, `PREVIEW`; renaming `INBOX` (RFC 9051 moves its
+- `SORT` (also `SORT=DISPLAY`) and `THREAD` (RFC 5256) on the summaries: `REFERENCES` gives kernoid's threads
+  (5), each oldest first as one chain; `ORDEREDSUBJECT` groups by base subject. `QUOTA` (RFC 9208): one root, `""`,
+  for all of the account's mailboxes, `STORAGE` in KiB – none without a quota.
+- **OPEN:** `COMPRESS`, `OBJECTID`, `PREVIEW`; renaming `INBOX` (RFC 9051 moves its
   messages into the new mailbox).
 
 ### 11.3 POP3

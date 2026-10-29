@@ -238,11 +238,16 @@ fn node_matches(node: &Node, candidate: &Candidate<'_>, selected: &Selected) -> 
 }
 
 impl Session {
-    pub(crate) async fn search(&mut self, arguments: search::Arguments, is_uid: bool) -> StatusResponse {
-        let command = Command::Search(is_uid);
-        let Some(selected) = self.selected.clone() else { return StatusResponse::bad("No mailbox selected") };
+    /// The positions of the selected mailbox's messages that match `filter`, and whether it asked for `MODSEQ`.
+    pub(crate) async fn matching(
+        &mut self,
+        filter: Vec<Filter>,
+    ) -> Result<(Selected, Vec<usize>, bool), Box<StatusResponse>> {
+        let Some(selected) = self.selected.clone() else {
+            return Err(Box::new(StatusResponse::bad("No mailbox selected")));
+        };
         let account = selected.owner;
-        let nodes = tree(&mut arguments.filter.into_iter());
+        let nodes = tree(&mut filter.into_iter());
         let with_messages = needs_message(&nodes);
         let mail = &self.inner.mail;
         let mut words = Vec::new();
@@ -254,7 +259,7 @@ impl Session {
                     Ok(ids) => {
                         slot.insert(ids);
                     }
-                    Err(error) => return mail_error(error),
+                    Err(error) => return Err(Box::new(mail_error(error))),
                 }
             }
         }
@@ -262,7 +267,7 @@ impl Session {
             let ids: Vec<Uuid> = selected.entries.iter().map(|entry| entry.email).collect();
             match mail.emails(account, &ids).await {
                 Ok(infos) => infos.into_iter().map(|info| (info.id, info)).collect(),
-                Err(error) => return mail_error(error),
+                Err(error) => return Err(Box::new(mail_error(error))),
             }
         } else {
             HashMap::new()
@@ -273,7 +278,7 @@ impl Session {
                 match mail.raw_email(account, entry.email).await {
                     Ok(raw) => Some(raw),
                     Err(kernoid_mail::MailError::NotFound(_)) => continue,
-                    Err(error) => return mail_error(error),
+                    Err(error) => return Err(Box::new(mail_error(error))),
                 }
             } else {
                 None
@@ -291,15 +296,22 @@ impl Session {
                 found.push(position);
             }
         }
+        let modseq = uses_modseq(&nodes);
+        Ok((selected, found, modseq))
+    }
+
+    pub(crate) async fn search(&mut self, arguments: search::Arguments, is_uid: bool) -> StatusResponse {
+        let command = Command::Search(is_uid);
+        let (selected, found, modseq) = match self.matching(arguments.filter).await {
+            Ok(matched) => matched,
+            Err(response) => return *response,
+        };
         let ids: Vec<u32> = found
             .iter()
             .map(|&position| if is_uid { selected.entries[position].uid } else { position as u32 + 1 })
             .collect();
-        let highest_modseq = if uses_modseq(&nodes) {
-            found.iter().map(|&position| selected.entries[position].modseq).max()
-        } else {
-            None
-        };
+        let highest_modseq =
+            if modseq { found.iter().map(|&position| selected.entries[position].modseq).max() } else { None };
         let options = arguments.result_options;
         if options.contains(&ResultOption::Save) {
             let uids = found.iter().map(|&position| selected.entries[position].uid).collect();

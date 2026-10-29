@@ -21,7 +21,7 @@ use crate::{
         protocol::{
             ImapResponse, ProtocolVersion, SerializeResponse,
             authenticate::Mechanism,
-            capability::{self, Capability},
+            capability::{self, Capability, QuotaResourceName},
             enable, namespace,
         },
         receiver::{self, Receiver, Request},
@@ -165,6 +165,11 @@ impl Session {
                 Capability::StatusSize,
                 Capability::ACL,
                 Capability::Rights,
+                Capability::Sort,
+                Capability::SortDisplay,
+                Capability::Thread,
+                Capability::Quota,
+                Capability::QuotaResource(QuotaResourceName::Storage),
             ]);
         } else if self.tls {
             capabilities.push(Capability::Auth(Mechanism::Plain));
@@ -467,6 +472,22 @@ impl Session {
                 Ok(arguments) => self.search(arguments, is_uid).await,
                 Err(error) => return self.parse_error(error),
             },
+            Command::Sort(is_uid) => match request.parse_sort() {
+                Ok(arguments) => self.sort(arguments, is_uid).await,
+                Err(error) => return self.parse_error(error),
+            },
+            Command::Thread(is_uid) => match request.parse_thread() {
+                Ok(arguments) => self.thread(arguments, is_uid).await,
+                Err(error) => return self.parse_error(error),
+            },
+            Command::GetQuotaRoot => match request.parse_get_quota_root(self.is_utf8) {
+                Ok(arguments) => self.get_quota_root(arguments).await,
+                Err(error) => return self.parse_error(error),
+            },
+            Command::GetQuota => match request.parse_get_quota() {
+                Ok(arguments) => self.get_quota(arguments).await,
+                Err(error) => return self.parse_error(error),
+            },
             Command::Copy(is_uid) | Command::Move(is_uid) => match request.parse_copy_move(self.is_utf8) {
                 Ok(arguments) => self.copy_move(arguments, is_uid, matches!(command, Command::Move(_))).await,
                 Err(error) => return self.parse_error(error),
@@ -474,7 +495,14 @@ impl Session {
             _ => StatusResponse::bad("Command not supported"),
         };
         // RFC 9051, 7.5.1: no EXPUNGE while a command refers to messages by sequence number.
-        let keeps_numbers = matches!(command, Command::Fetch(false) | Command::Store(false) | Command::Search(false));
+        let keeps_numbers = matches!(
+            command,
+            Command::Fetch(false)
+                | Command::Store(false)
+                | Command::Search(false)
+                | Command::Sort(false)
+                | Command::Thread(false)
+        );
         if self.selected.is_some()
             && !keeps_numbers
             && !matches!(command, Command::Select | Command::Examine | Command::Logout)

@@ -15,6 +15,7 @@ pub mod pop3;
 mod search;
 mod selected;
 mod session;
+mod sort;
 
 use std::{net::IpAddr, sync::Arc, time::Duration};
 

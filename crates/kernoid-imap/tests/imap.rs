@@ -278,6 +278,15 @@ async fn mailboxes_messages_and_flags(pool: PgPool) {
     assert!(search.contains("* SEARCH 2\r\n"), "{search}");
     let search = client.run("k UID SEARCH RETURN (COUNT ALL) OR SUBJECT second BODY hello SEEN").await;
     assert!(search.contains("* ESEARCH (TAG \"k\") UID COUNT 1 ALL 1"), "{search}");
+    // SORT and THREAD (RFC 5256), and the quota (RFC 9208): none set, so no root.
+    let capability = client.run("k1 CAPABILITY").await;
+    assert!(capability.contains(" SORT") && capability.contains("THREAD=REFERENCES") && capability.contains(" QUOTA"));
+    assert!(client.run("k2 SORT (REVERSE SUBJECT) UTF-8 ALL").await.contains("* SORT 2 1\r\n"));
+    assert!(client.run("k3 UID SORT (ARRIVAL) UTF-8 SUBJECT second").await.contains("* SORT 2\r\n"));
+    let threads = client.run("k4 THREAD REFERENCES UTF-8 ALL").await;
+    assert!(threads.contains("* THREAD (1)(2)\r\n"), "{threads}");
+    let root = client.run("k5 GETQUOTAROOT INBOX").await;
+    assert!(root.contains("* QUOTAROOT \"INBOX\"\r\n") && root.contains("k5 OK"), "{root}");
 
     // COPY and MOVE answer with UIDs.
     let copy = client.run("l COPY 1 Work/2026").await;
