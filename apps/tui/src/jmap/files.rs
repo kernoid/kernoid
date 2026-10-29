@@ -173,6 +173,72 @@ pub fn move_to(client: &Client, account: &str, id: &str, parent: Option<&str>) -
     Ok(())
 }
 
+/// Copies a node – a directory with all it holds – from one store into a directory of another (`None`: its top); with
+/// `move_it` the original goes (it needs the right to delete). A name taken there gets a number.
+pub fn copy_to(client: &Client, from: &str, to: &str, id: &str, parent: Option<&str>, move_it: bool) -> Result<()> {
+    let result = client.call(
+        &USING,
+        "FileNode/copy",
+        json!({
+            "fromAccountId": from,
+            "accountId": to,
+            "create": { "c": { "id": id, "parentId": parent } },
+            "onSuccessDestroyOriginal": move_it,
+            "onExists": "rename",
+        }),
+    )?;
+    super::set_error(&result)
+}
+
+/// A node found by a search, and the directories above it, the top first.
+#[derive(Debug, Clone)]
+pub struct Found {
+    pub node: FileNode,
+    pub path: Vec<FileNode>,
+}
+
+/// The nodes of a store whose name or text content holds `text` (kernoid's `text` filter), with where they are.
+pub fn search(client: &Client, account: &str, text: &str) -> Result<Vec<Found>> {
+    let responses = client.request(
+        &USING,
+        vec![
+            ("FileNode/query", json!({ "accountId": account, "filter": { "text": text }, "limit": 200 }), "q"),
+            (
+                "FileNode/get",
+                json!({
+                    "accountId": account, "properties": PROPERTIES, "fetchParents": true,
+                    "#ids": ids_of("q", "FileNode/query"),
+                }),
+                "g",
+            ),
+        ],
+    )?;
+    let hits: Vec<String> = responses
+        .get("q")
+        .and_then(|query| query.get("ids"))
+        .and_then(Value::as_array)
+        .map(|ids| ids.iter().filter_map(Value::as_str).map(str::to_owned).collect())
+        .unwrap_or_default();
+    let nodes: Vec<FileNode> = list(responses.get("g"))?;
+    let by_id: BTreeMap<&str, &FileNode> = nodes.iter().map(|node| (node.id.as_str(), node)).collect();
+    Ok(hits
+        .iter()
+        .filter_map(|id| by_id.get(id.as_str()))
+        .map(|node| {
+            let mut path = Vec::new();
+            let mut next = node.parent_id.as_deref();
+            while let Some(parent) = next.and_then(|id| by_id.get(id)) {
+                if path.len() > 64 {
+                    break;
+                }
+                path.insert(0, (*parent).clone());
+                next = parent.parent_id.as_deref();
+            }
+            Found { node: (*node).clone(), path }
+        })
+        .collect())
+}
+
 /// Removes a node and all it holds, for good.
 pub fn destroy(client: &Client, account: &str, id: &str) -> Result<()> {
     client.set(&USING, "FileNode", account, json!({ "destroy": [id] }), json!({ "onDestroyRemoveChildren": true }))?;

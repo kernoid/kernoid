@@ -21,7 +21,7 @@ use kernoid_tui::{
         self, Client, MAIL,
         calendars::{self, Calendar, Event, EventForm},
         contacts::{self, AddressBook, Card, CardForm},
-        files::{self, FileLink, FileNode, Level, LinkMode, Principal, Store, Version},
+        files::{self, FileLink, FileNode, Found, Level, LinkMode, Principal, Store, Version},
         mail::{self, Conversation, Email, EmailSummary, Identity, Mailbox, Vacation},
         push::Push,
         transfer,
@@ -76,6 +76,7 @@ pub struct Transfer {
 pub enum Prompt {
     SearchMail,
     SearchContacts,
+    SearchFiles,
     /// Save a blob to the path typed.
     Download {
         account: String,
@@ -185,6 +186,20 @@ pub struct Linking {
     pub made: Option<String>,
 }
 
+/// Where a file or folder is copied or moved to: a store and a folder in it, chosen like in the files.
+#[derive(Debug, Clone)]
+pub struct Destination {
+    pub node: FileNode,
+    /// The store it is in.
+    pub from: String,
+    /// The store chosen, by its index in the stores.
+    pub store: usize,
+    /// The folders from the top of that store down to the one shown.
+    pub path: Vec<FileNode>,
+    pub folders: Vec<FileNode>,
+    pub selected: usize,
+}
+
 /// A window over the rest.
 #[derive(Debug, Clone)]
 pub enum Popup {
@@ -222,6 +237,8 @@ pub enum Popup {
     Share(Sharing),
     /// The links to a file or folder: make one (in a mode), remove one.
     Links(Linking),
+    /// Where to copy or move a file or folder.
+    Destination(Destination),
     /// People and groups found for sharing: choose one.
     Pick {
         sharing: Sharing,
@@ -279,6 +296,9 @@ pub struct FilesState {
     pub nodes: Vec<FileNode>,
     pub list: ListState,
     pub loaded: bool,
+    /// What the store is searched for; while set, `nodes` are the hits and `found` where they are.
+    pub search: String,
+    pub found: Vec<Found>,
 }
 
 #[derive(Debug, Default)]
@@ -896,6 +916,17 @@ impl App {
             return;
         };
         let selected = self.selected_node().map(|n| n.id.clone());
+        if !self.files.search.is_empty() {
+            let text = self.files.search.clone();
+            if let Some(found) = self.attempt(|app| files::search(&app.client, &store, &text)) {
+                self.files.nodes = found.iter().map(|hit| hit.node.clone()).collect();
+                self.files.found = found;
+                let index = selected.and_then(|id| self.files.nodes.iter().position(|n| n.id == id)).unwrap_or(0);
+                select(&mut self.files.list, self.files.nodes.len(), index);
+            }
+            return;
+        }
+        self.files.found.clear();
         let parent = self.files.path.last().map(|n| n.id.clone());
         if let Some(nodes) = self.attempt(|app| files::children(&app.client, &store, parent.as_deref())) {
             self.files.nodes = nodes;
@@ -906,6 +937,24 @@ impl App {
 
     fn enter_node(&mut self) {
         let Some(node) = self.selected_node().cloned() else { return };
+        // A hit of a search: open where it is, the search done.
+        if !self.files.search.is_empty() {
+            let index = self.files.list.selected().unwrap_or(0);
+            let Some(hit) = self.files.found.get(index).cloned() else { return };
+            self.files.search.clear();
+            self.files.path = hit.path;
+            if node.is_directory() {
+                self.files.path.push(node);
+                self.files.list.select(None);
+                self.load_nodes();
+            } else {
+                self.load_nodes();
+                if let Some(index) = self.files.nodes.iter().position(|n| n.id == node.id) {
+                    self.files.list.select(Some(index));
+                }
+            }
+            return;
+        }
         if node.is_directory() {
             self.files.path.push(node);
             self.files.list.select(None);
@@ -917,6 +966,11 @@ impl App {
     }
 
     fn leave_directory(&mut self) {
+        if !self.files.search.is_empty() {
+            self.files.search.clear();
+            self.load_nodes();
+            return;
+        }
         if let Some(left) = self.files.path.pop() {
             self.load_nodes();
             if let Some(index) = self.files.nodes.iter().position(|n| n.id == left.id) {
@@ -1596,6 +1650,79 @@ impl App {
         self.popup = Some(Popup::Share(Sharing { node, entries, selected: 0 }));
     }
 
+    /// Opens where to copy or move the selected file or folder: at first the folder shown.
+    fn choose_destination(&mut self) {
+        let (Some(store), Some(node)) = (self.store().cloned(), self.selected_node().cloned()) else { return };
+        if node.role.is_some() {
+            self.fail("the trash stays where it is");
+            return;
+        }
+        let index = self.files.store_list.selected().unwrap_or(0);
+        let path = if self.files.search.is_empty() {
+            self.files.path.clone()
+        } else {
+            self.files
+                .found
+                .get(self.files.list.selected().unwrap_or(0))
+                .map(|hit| hit.path.clone())
+                .unwrap_or_default()
+        };
+        let mut destination =
+            Destination { node, from: store.id, store: index, path, folders: Vec::new(), selected: 0 };
+        self.load_folders(&mut destination);
+        self.popup = Some(Popup::Destination(destination));
+    }
+
+    /// The folders a node may go into, in the folder the destination shows – not the node itself, not the trash.
+    fn load_folders(&mut self, destination: &mut Destination) {
+        let Some(store) = self.files.stores.get(destination.store).map(|s| s.id.clone()) else { return };
+        let parent = destination.path.last().map(|n| n.id.clone());
+        if let Some(nodes) = self.attempt(|app| files::children(&app.client, &store, parent.as_deref())) {
+            destination.folders = nodes
+                .into_iter()
+                .filter(|n| n.is_directory() && n.role.is_none() && n.id != destination.node.id)
+                .collect();
+            destination.selected = destination.selected.min(destination.folders.len().saturating_sub(1));
+        }
+    }
+
+    /// Copies or moves the node into the folder the destination shows.
+    fn put_there(&mut self, destination: Destination, move_it: bool) {
+        let Some(to) = self.files.stores.get(destination.store).map(|s| s.id.clone()) else { return };
+        let parent = destination.path.last().map(|n| n.id.clone());
+        let node = &destination.node;
+        let same = to == destination.from;
+        if same && !move_it {
+            self.fail("within a store a file or folder is moved (m), not copied");
+            self.popup = Some(Popup::Destination(destination));
+            return;
+        }
+        if same && destination.path.iter().any(|folder| folder.id == node.id) {
+            self.fail("a folder cannot go into itself");
+            self.popup = Some(Popup::Destination(destination));
+            return;
+        }
+        let done = self.attempt(|app| {
+            if same {
+                files::move_to(&app.client, &to, &node.id, parent.as_deref())
+            } else {
+                files::copy_to(&app.client, &destination.from, &to, &node.id, parent.as_deref(), move_it)
+            }
+        });
+        match done {
+            Some(()) => {
+                let place = destination.path.last().map_or_else(
+                    || self.files.stores.get(destination.store).map(store_title).unwrap_or_default(),
+                    |folder| folder.name.clone(),
+                );
+                let verb = if move_it { "moved" } else { "copied" };
+                self.info(format!("{} {verb} to {place}", node.name));
+                self.load_nodes();
+            }
+            None => self.popup = Some(Popup::Destination(destination)),
+        }
+    }
+
     /// Opens the links to the selected file or folder.
     fn link_node(&mut self) {
         let (Some(store), Some(node)) = (self.store().cloned(), self.selected_node().cloned()) else { return };
@@ -1791,6 +1918,10 @@ impl App {
                         self.contacts.search.clear();
                         self.load_cards();
                     }
+                    Some(Prompt::SearchFiles) if !self.files.search.is_empty() => {
+                        self.files.search.clear();
+                        self.load_nodes();
+                    }
                     _ => {}
                 }
             }
@@ -1819,6 +1950,11 @@ impl App {
             Prompt::SearchContacts => {
                 self.contacts.search = text;
                 self.load_cards();
+            }
+            Prompt::SearchFiles => {
+                self.files.search = text;
+                self.files.list.select(None);
+                self.load_nodes();
             }
             Prompt::Download { account, blob, name, kind } if !text.is_empty() => {
                 let mut path = expand(&text);
@@ -2046,6 +2182,37 @@ impl App {
                     self.popup = Some(Popup::Links(linking));
                 }
             },
+            Popup::Destination(mut destination) => match key.code {
+                KeyCode::Enter | KeyCode::Right | KeyCode::Char('l') => {
+                    if let Some(folder) = destination.folders.get(destination.selected).cloned() {
+                        destination.path.push(folder);
+                        destination.selected = 0;
+                        self.load_folders(&mut destination);
+                    }
+                    self.popup = Some(Popup::Destination(destination));
+                }
+                KeyCode::Backspace | KeyCode::Left | KeyCode::Char('h') => {
+                    if let Some(left) = destination.path.pop() {
+                        self.load_folders(&mut destination);
+                        destination.selected = destination.folders.iter().position(|f| f.id == left.id).unwrap_or(0);
+                    }
+                    self.popup = Some(Popup::Destination(destination));
+                }
+                KeyCode::Tab => {
+                    destination.store = (destination.store + 1) % self.files.stores.len().max(1);
+                    destination.path.clear();
+                    destination.selected = 0;
+                    self.load_folders(&mut destination);
+                    self.popup = Some(Popup::Destination(destination));
+                }
+                KeyCode::Char('m') => self.put_there(destination, true),
+                KeyCode::Char('c') => self.put_there(destination, false),
+                KeyCode::Esc | KeyCode::Char('q') => {}
+                _ => {
+                    destination.selected = moved(destination.selected, destination.folders.len());
+                    self.popup = Some(Popup::Destination(destination));
+                }
+            },
             Popup::Pick { mut sharing, found, selected } => match key.code {
                 KeyCode::Enter => {
                     if let Some(principal) = found.get(selected) {
@@ -2216,7 +2383,7 @@ impl App {
             (FilesFocus::Nodes, KeyCode::PageUp) => step(&mut self.files.list, self.files.nodes.len(), -20),
             (FilesFocus::Nodes, KeyCode::Enter | KeyCode::Right | KeyCode::Char('l')) => self.enter_node(),
             (FilesFocus::Nodes, KeyCode::Backspace | KeyCode::Left | KeyCode::Char('h')) => {
-                if self.files.path.is_empty() {
+                if self.files.path.is_empty() && self.files.search.is_empty() {
                     self.files_focus = FilesFocus::Stores;
                 } else {
                     self.leave_directory();
@@ -2240,6 +2407,10 @@ impl App {
             (FilesFocus::Nodes, KeyCode::Char('i')) => self.node_info(),
             (FilesFocus::Nodes, KeyCode::Char('S')) => self.share_node(),
             (FilesFocus::Nodes, KeyCode::Char('L')) => self.link_node(),
+            (FilesFocus::Nodes, KeyCode::Char('m')) => self.choose_destination(),
+            (_, KeyCode::Char('/')) => {
+                self.prompt(Prompt::SearchFiles, "Search names and contents", self.files.search.clone())
+            }
             (_, KeyCode::Char('u')) => self.prompt(Prompt::Upload, "Upload file", String::new()),
             (_, KeyCode::Char('n')) => self.prompt(Prompt::NewFolder, "New folder", String::new()),
             (FilesFocus::Nodes, KeyCode::Char('R')) => {
@@ -2395,6 +2566,11 @@ pub fn event_when(event: &Event) -> String {
         Some(end) => format!("{} – {}", start.format("%a %d %b %Y %H:%M"), end.format("%a %d %b %Y %H:%M")),
         None => start.format("%a %d %b %Y %H:%M").to_string(),
     }
+}
+
+/// The name a store is shown with.
+pub fn store_title(store: &Store) -> String {
+    if store.kind == files::StoreKind::Own { "My files".to_owned() } else { store.name.clone() }
 }
 
 /// A date typed for a link's expiry: the end of that day here, as a UTCDate; nothing for none.

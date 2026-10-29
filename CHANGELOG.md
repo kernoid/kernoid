@@ -68,7 +68,8 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   (`/v1/account/idp-links`, `/v1/account/idp-providers`; SDK `idpLinks`, `linkableProviders`, `unlinkIdp`). The last
   way to log in is never unlinked.
 - The terminal app makes and removes links to files and folders – to view, to view and add, or a drop box; with an
-  expiry and a password (`L`) – and edits the vacation response in the editor (`V`).
+  expiry and a password (`L`) –, edits the vacation response in the editor (`V`), searches a store's files by name
+  and content (`/`), and copies and moves files and folders, also between stores (`m`).
 - The Kubernetes operator makes an Ingress to the `api` role when the `Kernoid` asks for one (`ingress`: hosts,
   class, TLS Secret, annotations); its ClusterRole may now manage Ingresses.
 - A Helm chart for the Kubernetes operator (`deploy/helm/kernoid-operator`): the CustomResourceDefinition and the

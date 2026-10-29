@@ -97,7 +97,16 @@ fn method(name: &str, arguments: &Value) -> Value {
         "Identity/get" => {
             json!({ "accountId": account, "list": [{ "id": "i1", "name": "Alice", "email": "alice@firma.example" }] })
         }
+        "FileNode/query" if arguments["filter"].get("text").is_some() => {
+            json!({ "accountId": account, "ids": ["n5", "n2"] })
+        }
         "FileNode/query" => json!({ "accountId": account, "ids": ["n1", "n2", "n3"] }),
+        // A search's hits with their parents (fetchParents): n5 lies in Projects / 2026.
+        "FileNode/get" if arguments["fetchParents"] == true => json!({ "accountId": account, "list": [
+            { "@type": "File", "id": "n5", "parentId": "n6", "name": "plan.txt", "blobId": "F5", "size": 4 },
+            { "@type": "Directory", "id": "n2", "parentId": null, "name": "Projects" },
+            { "@type": "Directory", "id": "n6", "parentId": "n2", "name": "2026" },
+        ] }),
         "FileNode/get" => json!({ "accountId": account, "list": [
             { "@type": "File", "id": "n1", "parentId": null, "name": "b.txt", "blobId": "F1", "size": 5,
               "mediaType": "text/plain", "myRights": { "mayRead": true } },
@@ -107,6 +116,9 @@ fn method(name: &str, arguments: &Value) -> Value {
         "FileNode/set" => {
             json!({ "accountId": account, "newState": "2", "created": { "f": { "id": "n4" } }, "updated": {} })
         }
+        "FileNode/copy" if arguments["create"]["c"]["id"] == "locked" => json!({ "accountId": account,
+            "notCreated": { "c": { "type": "forbidden", "description": "moving needs the right to delete" } } }),
+        "FileNode/copy" => json!({ "accountId": account, "created": { "c": { "id": "n7" } } }),
         "FileVersion/get" => json!({ "accountId": account, "list": [
             { "id": "v2", "blobId": "V2", "size": 5, "modified": "2026-10-28T10:00:00Z", "created": "2026-10-28T10:00:00Z", "isCurrent": true },
             { "id": "v1", "blobId": "V1", "size": 3, "modified": "2026-10-27T10:00:00Z", "created": "2026-10-27T10:00:00Z", "isCurrent": false },
@@ -502,6 +514,33 @@ fn the_vacation_response_read_and_set() {
     assert_eq!(update["fromDate"], "2026-11-02T07:00:00Z");
     assert_eq!((update["toDate"].clone(), update["subject"].clone()), (json!(null), json!(null)));
     assert_eq!(update["textBody"], "Back on Monday.");
+}
+
+#[test]
+fn files_searched_and_copied_between_stores() {
+    let server = server();
+    let client = connect(&server);
+    let found = files::search(&client, "A", "plan").unwrap();
+    let calls = server.api_requests().pop().unwrap().calls();
+    assert_eq!(calls[0].1["filter"], json!({ "text": "plan" }));
+    assert_eq!(calls[1].1["fetchParents"], true);
+    let places: Vec<(String, Vec<String>)> = found
+        .iter()
+        .map(|hit| (hit.node.name.clone(), hit.path.iter().map(|folder| folder.name.clone()).collect()))
+        .collect();
+    assert_eq!(places, [("plan.txt".into(), vec!["Projects".into(), "2026".into()]), ("Projects".into(), vec![])]);
+
+    files::copy_to(&client, "A", "D", "n1", Some("d9"), false).unwrap();
+    let copy = &server.api_requests().pop().unwrap().calls()[0];
+    assert_eq!(copy.0, "FileNode/copy");
+    assert_eq!((copy.1["fromAccountId"].clone(), copy.1["accountId"].clone()), (json!("A"), json!("D")));
+    assert_eq!(copy.1["create"]["c"], json!({ "id": "n1", "parentId": "d9" }));
+    assert_eq!(
+        (copy.1["onSuccessDestroyOriginal"].clone(), copy.1["onExists"].clone()),
+        (json!(false), json!("rename"))
+    );
+    let refused = files::copy_to(&client, "A", "D", "locked", None, true).unwrap_err();
+    assert!(matches!(refused, Error::Set { ref kind, .. } if kind == "forbidden"), "{refused:?}");
 }
 
 #[test]

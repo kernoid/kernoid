@@ -94,7 +94,7 @@ fn hint(app: &App) -> &'static str {
             _ => "Enter open  c write  / search  r reply  m move  d delete  u read  s flag  t threads  ? help",
         },
         Tab::Files => {
-            "Enter open  ← up  d download  u upload  v versions  i info  S share  n folder  R rename  D delete"
+            "Enter open  ← up  / search  d download  u upload  v versions  i info  S share  L links  m copy/move  n folder  R rename  D delete"
         }
         Tab::Calendar => {
             "Enter details  n new  e edit  E edit this one  D delete  a accept  m maybe  x decline  [ ] week  t today"
@@ -246,23 +246,35 @@ fn draw_files(frame: &mut Frame, app: &mut App, area: Rect) {
         List::new(items).block(pane("Stores", app.files_focus == FilesFocus::Stores)).highlight_style(highlight());
     frame.render_stateful_widget(list, stores, &mut app.files.store_list);
 
-    let mut path = app
-        .store()
-        .map(|s| if s.kind == StoreKind::Own { "My files".to_owned() } else { s.name.clone() })
-        .unwrap_or_default();
-    for node in &app.files.path {
-        path.push_str(" / ");
-        path.push_str(&node.name);
+    let mut path = app.store().map(app::store_title).unwrap_or_default();
+    if app.files.search.is_empty() {
+        for node in &app.files.path {
+            path.push_str(" / ");
+            path.push_str(&node.name);
+        }
+    } else {
+        path = format!("{path}: “{}” (Esc or ← ends the search)", app.files.search);
     }
+    let searching = !app.files.search.is_empty();
     let width = rest.width.saturating_sub(2) as usize;
     let items: Vec<ListItem> = app
         .files
         .nodes
         .iter()
-        .map(|node| {
+        .enumerate()
+        .map(|(index, node)| {
             let size =
                 if node.is_directory() { String::new() } else { node.size.map(app::size_text).unwrap_or_default() };
-            let modified = node.modified.as_deref().map(app::time_text).unwrap_or_default();
+            // A hit of a search shows where it is instead of when it changed.
+            let modified = match app.files.found.get(index).filter(|_| searching) {
+                Some(hit) if hit.path.is_empty() => "/".to_owned(),
+                Some(hit) => hit.path.iter().map(|folder| folder.name.as_str()).collect::<Vec<_>>().join("/"),
+                None => node.modified.as_deref().map(app::time_text).unwrap_or_default(),
+            };
+            // A long place keeps its end: the folder it is in.
+            let skip = modified.chars().count().saturating_sub(24);
+            let modified =
+                if skip > 0 { format!("…{}", modified.chars().skip(skip + 1).collect::<String>()) } else { modified };
             let shared = if node.share_with.as_ref().is_some_and(|s| !s.is_empty()) { " ⇆" } else { "" };
             let icon = if node.role.as_deref() == Some("trash") {
                 "🗑 "
@@ -374,7 +386,7 @@ fn centered(area: Rect, width: u16, height: u16) -> Rect {
 }
 
 fn list_popup(frame: &mut Frame, title: &str, items: Vec<ListItem>, selected: usize, footer: &str) {
-    let height = items.len() as u16 + 3;
+    let height = items.iter().map(ListItem::height).sum::<usize>() as u16 + 3;
     let area = centered(frame.area(), 70, height.max(5));
     frame.render_widget(Clear, area);
     let mut state = ListState::default().with_selected(Some(selected));
@@ -490,10 +502,16 @@ fn draw_popup(frame: &mut Frame, app: &App, popup: &Popup) {
         }
         Popup::Links(linking) => {
             // The address of a link just made comes first – it is not shown again.
+            // Wrapped to the popup's width, so that the whole address can be copied.
             let mut items: Vec<ListItem> = linking
                 .made
                 .iter()
-                .map(|url| ListItem::new(vec![Line::from("new link:").fg(DIM), Line::from(url.clone()).fg(ACCENT)]))
+                .map(|url| {
+                    let chars: Vec<char> = url.chars().collect();
+                    let mut lines = vec![Line::from("new link:").fg(DIM)];
+                    lines.extend(chars.chunks(66).map(|part| Line::from(part.iter().collect::<String>()).fg(ACCENT)));
+                    ListItem::new(lines)
+                })
                 .collect();
             for link in &linking.list {
                 let until = match &link.expires {
@@ -513,6 +531,26 @@ fn draw_popup(frame: &mut Frame, app: &App, popup: &Popup) {
             let title = format!("Links to {}", linking.node.name);
             let footer = format!("n new ({})  m mode  x remove  Esc close", linking.mode.name());
             list_popup(frame, &title, items, linking.selected + offset, &footer);
+        }
+        Popup::Destination(destination) => {
+            let mut place = app.files.stores.get(destination.store).map(app::store_title).unwrap_or_default();
+            for folder in &destination.path {
+                place.push_str(" / ");
+                place.push_str(&folder.name);
+            }
+            let mut items: Vec<ListItem> =
+                destination.folders.iter().map(|folder| ListItem::new(format!("▸ {}", folder.name)).bold()).collect();
+            if items.is_empty() {
+                items.push(ListItem::new(Line::from("no folders here").fg(DIM)));
+            }
+            let same = app.files.stores.get(destination.store).is_some_and(|store| store.id == destination.from);
+            let keys = if same {
+                "Enter open  ← up  Tab store  m move here  Esc cancel"
+            } else {
+                "Enter open  ← up  Tab store  c copy here  m move here  Esc cancel"
+            };
+            let title = format!("{} → {place}", destination.node.name);
+            list_popup(frame, &title, items, destination.selected, keys);
         }
         Popup::Pick { found, selected, .. } => {
             let items = found
@@ -544,6 +582,8 @@ Files        Enter open folder / versions of a file   ← or Backspace up
              d download   u upload (a file of that name gets a new version)
              v versions (Enter save, r restore)   i details and sharing
              n new folder   R rename   D delete (to the trash)
+             / search names and contents (Enter goes to a hit)
+             m copy or move (Tab another store, Enter a folder, c copy, m move)
              S share a folder (a add, Enter level, x remove, s save)
              L links for people without an account (n new, m view /
                view and add / only add – a drop box –, x remove)
