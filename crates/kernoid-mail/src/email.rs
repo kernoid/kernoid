@@ -196,6 +196,22 @@ pub(crate) async fn destroy_in(
 }
 
 impl Mail {
+    /// Checks a message for malware before it is accepted – for the accounts it goes to and the tenants it passes
+    /// through – if one of their tenants switched the scanning module on (`kernoid_store::scan`).
+    pub async fn scan_message(&self, accounts: &[Uuid], tenants: &[Uuid], raw: &Bytes) -> Result<()> {
+        if self.blobs.scanner().is_none() {
+            return Ok(());
+        }
+        let mut all = sqlx::query_scalar!("SELECT DISTINCT tenant_id FROM accounts WHERE id = ANY($1)", accounts)
+            .fetch_all(&self.pool)
+            .await?;
+        all.extend_from_slice(tenants);
+        kernoid_store::scan::check_bytes(&self.blobs, &self.pool, &all, raw).await.map_err(|error| match error {
+            kernoid_store::scan::ScanError::Refused(refused) => MailError::Refused(refused),
+            kernoid_store::scan::ScanError::Database(error) => MailError::Store(error),
+        })
+    }
+
     /// Stores a raw message in the account: parsed, checked against size and quota, sealed into object storage,
     /// threaded and put into the given mailboxes. Delivery and JMAP `Email/import` both come here.
     pub async fn import_email(&self, account: Uuid, raw: Bytes, new: NewEmail) -> Result<Imported> {

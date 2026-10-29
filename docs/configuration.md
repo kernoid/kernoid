@@ -112,5 +112,5 @@ KERNOID__ENCRYPTION__MAIN_KEY=…
 KERNOID__HTTP__TRUSTED_PROXIES='["172.16.0.0/12"]'
 ```
 
-There are no modules compiled in yet – the first ones are planned for 1.0 (Jitsi, WOPI, virus scanning). A table
-`[modules.<name>]` for a module that does not exist is an error.
+The modules compiled in and their settings are listed under [Modules](modules.md). A table `[modules.<name>]` for a
+module that does not exist is an error, and so is a setting a module does not know.

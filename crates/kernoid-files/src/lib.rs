@@ -58,6 +58,9 @@ pub enum FilesError {
     Store(#[from] sqlx::Error),
     #[error(transparent)]
     Blob(#[from] BlobError),
+    /// The malware scanner refused the content (`kernoid_store::scan`).
+    #[error(transparent)]
+    Refused(#[from] kernoid_store::scan::Refused),
 }
 
 pub type Result<T> = std::result::Result<T, FilesError>;

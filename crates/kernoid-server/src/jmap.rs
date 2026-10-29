@@ -176,6 +176,7 @@ fn blob_problem(error: kernoid_jmap::blob::BlobError) -> Response {
         BlobError::NotFound => Problem::new(StatusCode::NOT_FOUND).detail("no such blob").into_response(),
         BlobError::Forbidden => Problem::new(StatusCode::FORBIDDEN).detail("not your account").into_response(),
         BlobError::TooLarge(detail) => Problem::new(StatusCode::PAYLOAD_TOO_LARGE).detail(detail).into_response(),
+        BlobError::Refused(refused) => refused_problem(&refused),
         BlobError::Mail(error) => {
             tracing::warn!(%error, "a JMAP blob");
             Problem::new(StatusCode::INTERNAL_SERVER_ERROR).into_response()
@@ -189,6 +190,15 @@ fn blob_problem(error: kernoid_jmap::blob::BlobError) -> Response {
             Problem::new(StatusCode::INTERNAL_SERVER_ERROR).into_response()
         }
     }
+}
+
+/// Content the malware scanner refused: 422 with the malware's name, or 503 when it could not be asked.
+pub(crate) fn refused_problem(refused: &kernoid_store::scan::Refused) -> Response {
+    let status = match refused {
+        kernoid_store::scan::Refused::Infected(_) => StatusCode::UNPROCESSABLE_ENTITY,
+        kernoid_store::scan::Refused::Unavailable => StatusCode::SERVICE_UNAVAILABLE,
+    };
+    Problem::new(status).detail(refused.to_string()).into_response()
 }
 
 /// A `Range` header with one range of bytes (RFC 9110, 14.1.2): its start and inclusive end; `bytes=-n` (the last n
@@ -350,6 +360,7 @@ pub(crate) async fn write_file(
                 FilesError::TooLarge { .. } => StatusCode::PAYLOAD_TOO_LARGE,
                 FilesError::OverQuota => StatusCode::INSUFFICIENT_STORAGE,
                 FilesError::Forbidden(_) => StatusCode::FORBIDDEN,
+                FilesError::Refused(refused) => return refused_problem(refused),
                 _ => {
                     tracing::warn!(%error, "a direct write");
                     return Problem::new(StatusCode::INTERNAL_SERVER_ERROR).into_response();

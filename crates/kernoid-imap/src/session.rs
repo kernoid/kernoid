@@ -89,6 +89,10 @@ pub(crate) fn mail_error(error: MailError) -> StatusResponse {
             StatusResponse::no("the mailbox has child mailboxes").with_code(ResponseCode::HasChildren)
         }
         MailError::Unparsable => StatusResponse::no("the message could not be parsed").with_code(ResponseCode::Parse),
+        MailError::Refused(refused @ kernoid_store::scan::Refused::Infected(_)) => {
+            StatusResponse::no(refused.to_string()).with_code(ResponseCode::Cannot)
+        }
+        MailError::Refused(refused) => StatusResponse::no(refused.to_string()).with_code(ResponseCode::Unavailable),
         error => {
             tracing::warn!(%error, "an IMAP command failed");
             StatusResponse::database_failure()

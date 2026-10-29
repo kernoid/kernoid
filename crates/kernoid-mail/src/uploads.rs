@@ -39,6 +39,7 @@ impl From<parts::PartsError> for MailError {
             parts::PartsError::Source(detail) => Self::Invalid(format!("the upload could not be read: {detail}")),
             parts::PartsError::Blob(error) => Self::Blob(error),
             parts::PartsError::Database(error) => Self::Store(error),
+            parts::PartsError::Refused(refused) => Self::Refused(refused),
         }
     }
 }

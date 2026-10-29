@@ -91,10 +91,10 @@ export function Field(props: { label: string; hint?: string } & JSX.InputHTMLAtt
   );
 }
 
-export function Check(props: { label: string; name: string; checked?: boolean; hint?: string }): JSX.Element {
+export function Check(props: { label: string; name: string; value?: string; checked?: boolean; hint?: string }): JSX.Element {
   return (
     <label class="inline">
-      <input type="checkbox" name={props.name} checked={props.checked ?? false} />
+      <input type="checkbox" name={props.name} value={props.value ?? "on"} checked={props.checked ?? false} />
       <span>
         {props.label}
         <Show when={props.hint}>

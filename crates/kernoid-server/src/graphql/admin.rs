@@ -101,6 +101,13 @@ pub struct Tenant {
     modules: Vec<String>,
 }
 
+#[derive(Debug, SimpleObject)]
+pub struct TenantModule {
+    name: String,
+    /// Whether the tenant uses it.
+    enabled: bool,
+}
+
 fn domain_object(domain: String, verified: bool, token: Option<&str>) -> TenantDomain {
     TenantDomain {
         record_name: token.map(|_| format!("{CHALLENGE_LABEL}.{domain}")),
@@ -618,6 +625,17 @@ impl AdminQuery {
         Ok(identity.admin_tenant(&admin).await.map_err(error)?.into())
     }
 
+    /// The modules the installation has switched on, which the tenant may use, and whether it does.
+    async fn tenant_modules(&self, context: &Context<'_>) -> async_graphql::Result<Vec<TenantModule>> {
+        let (identity, admin) = admin(context).await?;
+        let tenant = identity.admin_tenant(&admin).await.map_err(error)?;
+        let modules = &context.data::<AppState>()?.modules;
+        Ok(modules
+            .iter()
+            .map(|name| TenantModule { name: (*name).to_owned(), enabled: tenant.modules.iter().any(|on| on == name) })
+            .collect())
+    }
+
     /// The tenant's verified domains as mail domains: the DNS records to publish and whether they are published
     /// (reads DNS, changes nothing).
     async fn mail_dns(&self, context: &Context<'_>) -> async_graphql::Result<Vec<MailDns>> {
@@ -942,7 +960,8 @@ impl AdminMutation {
         Ok(identity.admin_tenant(&admin).await.map_err(error)?.into())
     }
 
-    /// Switches a compiled-in module on or off for the tenant (needs `tenant.manage`).
+    /// Switches a module on or off for the tenant (needs `tenant.manage`); only a module the installation has switched
+    /// on can be switched on.
     async fn set_tenant_module(
         &self,
         context: &Context<'_>,

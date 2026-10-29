@@ -93,6 +93,11 @@ media type. A part missing or cut off fails to open.
   `Blob/lookup` (`Email`, `Mailbox`, `Thread`, `FileNode`) complete the capability. The web app uploads files over
   16 MiB in pieces of 16 MiB. **OPEN:** resuming after the page is closed (the client would have to remember its
   pieces); joining without reading the pieces again.
+- **Malware:** where the tenant switched on a scanning module (`clamav`, docs: Modules), `parts::put` hands the
+  content to the scanner while it stores it – uploads, joined pieces, direct writes, WebDAV – up to the scanner's
+  size; refused content fails the request, and its parts are garbage at once. A file made from an upload is not
+  scanned again. **OPEN:** scanning what was stored before the module was switched on, and content larger than the
+  scanner takes.
 
 ## 6. Versions
 

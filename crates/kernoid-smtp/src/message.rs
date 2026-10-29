@@ -19,6 +19,29 @@ use crate::{
     spam::{self, Signals},
 };
 
+/// Checks a message for malware before it is accepted (`Mail::scan_message`); the reply that refuses it.
+pub(crate) async fn scan(
+    mail: &kernoid_mail::Mail,
+    accounts: &[uuid::Uuid],
+    tenants: &[uuid::Uuid],
+    raw: &[u8],
+) -> Result<(), String> {
+    match mail.scan_message(accounts, tenants, &Bytes::copy_from_slice(raw)).await {
+        Ok(()) => Ok(()),
+        Err(MailError::Refused(kernoid_store::scan::Refused::Infected(name))) => {
+            // The scanner's name for it, as far as it is safe in a reply line.
+            let name: String = name.chars().filter(|c| c.is_ascii_graphic() || *c == ' ').take(100).collect();
+            Err(format!("554 5.7.1 Rejected: the message contains malware ({name})"))
+        }
+        Err(error) => {
+            if !matches!(error, MailError::Refused(_)) {
+                tracing::warn!(%error, "checking a message for malware");
+            }
+            Err("451 4.7.1 The message could not be checked for malware, try again later".into())
+        }
+    }
+}
+
 impl Session {
     /// The response to `DATA` (or the last `BDAT`): the message read goes in, by MX or by submission.
     pub(crate) async fn finish(&mut self) -> String {
@@ -62,6 +85,12 @@ impl Session {
             return "550 5.7.1 Rejected by the sender's DMARC policy".into();
         }
         let quarantine = dmarc_failed && dmarc.policy() == Policy::Quarantine;
+        let accounts: Vec<uuid::Uuid> = self.rcpts.iter().flat_map(|rcpt| rcpt.accounts.iter().copied()).collect();
+        let tenants: Vec<uuid::Uuid> =
+            self.rcpts.iter().filter_map(|rcpt| rcpt.bounce_to.as_ref()).map(|(_, tenant)| *tenant).collect();
+        if let Err(reply) = scan(&self.inner.mail, &accounts, &tenants, &raw).await {
+            return reply;
+        }
 
         let mut results = AuthenticationResults::new(hostname);
         if !dkim.is_empty() {

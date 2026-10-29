@@ -79,7 +79,7 @@ pub struct AppState {
     pub blobs: BlobStore,
     pub identity: Identity,
     pub oidc: kernoid_oidc::Oidc,
-    /// The modules compiled in, which tenants may switch on.
+    /// The modules the installation has switched on, which tenants may switch on for themselves.
     pub modules: Arc<[&'static str]>,
     /// For verifying tenants' domains; without it, only instance administrators can mark domains verified.
     pub dns: Option<DnsResolver>,
@@ -198,6 +198,7 @@ fn rest() -> OpenApiRouter<AppState> {
         .routes(routes!(consents::revoke_own))
         .routes(routes!(admin::tenant::get, admin::tenant::rename))
         .routes(routes!(admin::tenant::set_policy))
+        .routes(routes!(admin::tenant::modules))
         .routes(routes!(admin::tenant::set_module))
         .routes(routes!(admin::tenant::permissions))
         .routes(routes!(admin::tenant::add_domain))

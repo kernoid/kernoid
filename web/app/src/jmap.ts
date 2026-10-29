@@ -48,6 +48,16 @@ function toLogin(): never {
   throw new JmapError("unauthenticated");
 }
 
+/** The `detail` of a problem (RFC 9457) answered – e.g. why an upload was refused. */
+function problemDetail(body: string): string | undefined {
+  try {
+    const detail = (JSON.parse(body) as { detail?: unknown }).detail;
+    return typeof detail === "string" ? detail : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function fetchSession(): Promise<JmapSession> {
   const response = await fetch("/jmap/session", { headers: HEADERS, credentials: "same-origin" });
   if (response.status === 401) toLogin();
@@ -129,7 +139,7 @@ export class Jmap {
       body: file,
     });
     if (response.status === 401) toLogin();
-    if (!response.ok) throw new JmapError("uploadFailed", `${response.status}`);
+    if (!response.ok) throw new JmapError("uploadFailed", problemDetail(await response.text()) ?? `${response.status}`);
     return (await response.json()) as { blobId: string; type: string; size: number };
   }
 
@@ -159,7 +169,8 @@ export class Jmap {
       create: { whole: { type: file.type || "application/octet-stream", data: pieces.map((blobId) => ({ blobId })) } },
     });
     const whole = result.created?.whole;
-    if (!whole) throw new JmapError("uploadFailed", "the pieces could not be joined");
+    const refused = (result as { notCreated?: Record<string, { description?: string }> }).notCreated?.whole;
+    if (!whole) throw new JmapError("uploadFailed", refused?.description ?? "the pieces could not be joined");
     return { blobId: whole.id, size: whole.size };
   }
 
@@ -175,7 +186,7 @@ export class Jmap {
       request.upload.onprogress = (event) => progress(event.loaded, event.total || file.size);
       request.onload = () => {
         if (request.status === 401) toLogin();
-        if (request.status < 200 || request.status >= 300) reject(new JmapError("uploadFailed", `${request.status}`));
+        if (request.status < 200 || request.status >= 300) reject(new JmapError("uploadFailed", problemDetail(request.responseText) ?? `${request.status}`));
         else resolve(JSON.parse(request.responseText) as { blobId: string; size: number });
       };
       request.onerror = () => reject(new JmapError("uploadFailed", "the connection broke"));

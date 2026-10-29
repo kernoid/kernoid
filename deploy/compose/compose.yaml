@@ -37,6 +37,12 @@ services:
       # IMAP (143, 993) needs certificates as well; without them kernoid says so in its log and does not listen.
       KERNOID__IMAP__LISTEN: 0.0.0.0:5143
       KERNOID__IMAP__TLS_LISTEN: 0.0.0.0:5993
+      # The virus scan module (docs: Modules): KERNOID_CLAMAV=true in .env and `docker compose --profile clamav up -d`;
+      # tenants then switch it on for themselves.
+      KERNOID__MODULES__CLAMAV__ENABLED: ${KERNOID_CLAMAV:-false}
+      KERNOID__MODULES__CLAMAV__ADDRESS: clamav:3310
+      # The image's StreamMaxLength.
+      KERNOID__MODULES__CLAMAV__MAX_SIZE: "104857600"
     ports:
       - "127.0.0.1:8080:8080"
       - "127.0.0.1:2525:2525"
@@ -53,6 +59,12 @@ services:
     environment:
       <<: *kernoid-env
       KERNOID__DATABASE__MIGRATE_URL: postgres://kernoid_owner:${KERNOID_OWNER_PASSWORD:?set in .env}@postgres/kernoid
+
+  # clamd for the module clamav; the image keeps its signatures current (freshclam).
+  clamav:
+    image: docker.io/clamav/clamav:1.5.4-debian13-slim
+    profiles: [clamav]
+    restart: unless-stopped
 
   postgres:
     image: docker.io/library/postgres:18.6-alpine3.24

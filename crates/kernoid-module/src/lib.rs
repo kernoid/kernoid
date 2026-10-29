@@ -107,6 +107,11 @@ impl Registry {
         self.enabled.iter().map(|(module, _)| module.name())
     }
 
+    /// The configuration of a module that is on.
+    pub fn config(&self, name: &str) -> Option<&toml::Table> {
+        self.enabled.iter().find(|(module, _)| module.name() == name).map(|(_, table)| table)
+    }
+
     /// The routes of all modules that are on, each nested below `/modules/<name>`.
     pub fn routes(&self, context: impl Fn(toml::Table) -> Context) -> Router {
         self.enabled.iter().fold(Router::new(), |router, (module, table)| {

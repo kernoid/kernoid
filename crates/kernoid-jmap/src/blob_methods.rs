@@ -7,6 +7,7 @@
 use base64::{Engine, engine::general_purpose::STANDARD};
 use bytes::Bytes;
 use futures_util::{Stream, StreamExt, stream};
+use kernoid_store::scan::Refused;
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
@@ -40,6 +41,10 @@ fn blob_error(error: BlobError) -> Value {
     match error {
         BlobError::NotFound | BlobError::Forbidden => json!({ "type": "blobNotFound" }),
         BlobError::TooLarge(description) => json!({ "type": "tooLarge", "description": description }),
+        BlobError::Refused(refused @ Refused::Infected(_)) => {
+            json!({ "type": "forbidden", "description": refused.to_string() })
+        }
+        BlobError::Refused(refused) => json!({ "type": "serverFail", "description": refused.to_string() }),
         _ => json!({ "type": "serverFail" }),
     }
 }

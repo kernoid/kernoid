@@ -526,7 +526,8 @@ type MutationRoot {
 	"""
 	setTenantPolicy(mfaRequired: Boolean!, mfaGraceDays: Int): Tenant!
 	"""
-	Switches a compiled-in module on or off for the tenant (needs `tenant.manage`).
+	Switches a module on or off for the tenant (needs `tenant.manage`); only a module the installation has switched
+	on can be switched on.
 	"""
 	setTenantModule(module: String!, enabled: Boolean!): Boolean!
 	"""
@@ -990,6 +991,10 @@ type QueryRoot {
 	"""
 	tenant: Tenant!
 	"""
+	The modules the installation has switched on, which the tenant may use, and whether it does.
+	"""
+	tenantModules: [TenantModule!]!
+	"""
 	The tenant's verified domains as mail domains: the DNS records to publish and whether they are published
 	(reads DNS, changes nothing).
 	"""
@@ -1406,6 +1411,14 @@ type TenantDomain {
 	"""
 	recordName: String
 	recordValue: String
+}
+
+type TenantModule {
+	name: String!
+	"""
+	Whether the tenant uses it.
+	"""
+	enabled: Boolean!
 }
 
 type TenantRegistration {

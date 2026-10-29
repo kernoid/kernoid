@@ -573,7 +573,10 @@ impl Identity {
         known: &[&str],
         creator: &str,
     ) -> Result<()> {
-        valid_module(module, known)?;
+        // Switching off works also for a module the installation no longer offers.
+        if enabled {
+            valid_module(module, known)?;
+        }
         self.tenant_command(instance, tenant, creator, None, |state| {
             existing_tenant(state)?;
             let module = module.to_owned();

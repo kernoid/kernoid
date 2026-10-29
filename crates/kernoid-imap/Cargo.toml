@@ -19,6 +19,7 @@ hashify = "0.2.9"
 kernoid-config = { version = "0.1.0", path = "../kernoid-config" }
 kernoid-identity = { version = "0.1.0", path = "../kernoid-identity" }
 kernoid-mail = { version = "0.1.0", path = "../kernoid-mail" }
+kernoid-store = { version = "0.1.0", path = "../kernoid-store" }
 mail-parser = { version = "0.11.9", features = ["full_encoding"] }
 rustls = { version = "0.23.46", default-features = false, features = ["aws-lc-rs", "std", "tls12"] }
 tokio = { version = "1.54.1", features = ["net", "io-util", "time", "sync", "rt", "macros"] }

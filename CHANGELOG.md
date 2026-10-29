@@ -46,6 +46,12 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   before, file managers got 502 and copied themselves.
 - SAML single logout in the HTTP-POST binding, and at OpenID Connect `end_session`: an application's logout of a
   session from a SAML provider logs out at the provider too, then returns to the application.
+- The first module, `clamav` (docs: Modules): content of tenants that switch it on is checked for malware by ClamAV's
+  daemon before kernoid keeps it – uploads and files while they are stored (refused with HTTP 422, WebDAV 403), mail
+  at the MX and at submission before it is accepted (`554 5.7.1`), IMAP `APPEND`. `deploy/compose` has the service
+  `clamav` (profile `clamav`). Tenants see and switch the modules the installation offers with
+  `GET /v1/tenant/modules`, GraphQL `tenantModules`, and in the administration's settings; only modules the
+  installation has switched on can be switched on.
 - `http.public_port`: instances reached on a port other than 443 or 80 name it in their issuer and links (JMAP);
   `deploy/compose` sets 8080.
 

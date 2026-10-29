@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // The tenant's settings: name, second factor, how accounts log in, registration, who gets which service, quotas and
-// how long the trash and junk keep mail.
+// how long the trash and junk keep mail, and the modules the tenant uses.
 
 import { For, type JSX, Show, createResource } from "solid-js";
 
@@ -18,6 +18,7 @@ export function Settings(): JSX.Element {
   const [mailQuota] = createResource(() => api<{ bytes?: number | null }>("GET", "/v1/tenant/mail-quota"));
   const [filesQuota] = createResource(() => api<{ bytes?: number | null }>("GET", "/v1/tenant/files-quota"));
   const [retention] = createResource(() => api<{ trash_days?: number | null; junk_days?: number | null }>("GET", "/v1/tenant/mail-retention"));
+  const [modules] = createResource(() => api<{ name: string; enabled: boolean }[]>("GET", "/v1/tenant/modules"));
   const [filesRetention] = createResource(() => api<{ trash_days?: number | null }>("GET", "/v1/tenant/files-retention"));
   const days = (text: string) => (text ? Number.parseInt(text, 10) : null);
 
@@ -118,6 +119,31 @@ export function Settings(): JSX.Element {
         </For>
       </section>
 
+      <Show when={(ok(modules) ?? []).length > 0}>
+        <section>
+          <h2>{t("Modules")}</h2>
+          <p class="muted">{t("Connections to outside services the installation offers; each tenant decides whether it uses them.")}</p>
+          <Form
+            class="stack"
+            submit={(_, all) =>
+              void action.run(async () => {
+                const on = all("module");
+                for (const module of ok(modules) ?? []) {
+                  if (on.includes(module.name) !== module.enabled) {
+                    await api("PUT", `/v1/tenant/modules/${seg(module.name)}`, { enabled: on.includes(module.name) });
+                  }
+                }
+              }, t("Saved."))
+            }
+          >
+            <For each={ok(modules) ?? []}>
+              {(module) => <Check label={moduleName(module.name)} name="module" value={module.name} checked={module.enabled} hint={moduleHint(module.name)} />}
+            </For>
+            <Buttons busy={action.busy()} />
+          </Form>
+        </section>
+      </Show>
+
       <section>
         <h2>{t("Quotas")}</h2>
         <p class="muted">{t("The default for accounts without a quota of their own. Empty: no limit.")}</p>
@@ -155,4 +181,12 @@ export function Settings(): JSX.Element {
       </section>
     </>
   );
+}
+
+function moduleName(name: string): string {
+  return name === "clamav" ? t("Virus scan (ClamAV)") : name;
+}
+
+function moduleHint(name: string): string {
+  return name === "clamav" ? t("uploads, files and mail are checked for malware before they are kept") : "";
 }

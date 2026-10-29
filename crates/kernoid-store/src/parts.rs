@@ -14,7 +14,7 @@ use sha2::{Digest, Sha256};
 use sqlx::{PgConnection, PgPool};
 use uuid::Uuid;
 
-use crate::{BlobError, BlobStore, garbage};
+use crate::{BlobError, BlobStore, garbage, scan};
 
 /// Size of every part but the last.
 pub const PART_SIZE: usize = 8 * 1024 * 1024;
@@ -30,6 +30,9 @@ pub enum PartsError {
     Blob(#[from] BlobError),
     #[error(transparent)]
     Database(#[from] sqlx::Error),
+    /// The malware scanner refused it (`crate::scan`); what was stored of it is garbage at once.
+    #[error(transparent)]
+    Refused(#[from] scan::Refused),
 }
 
 /// What was stored: the number of parts, the size and the SHA-256 of the whole.
@@ -60,6 +63,7 @@ where
     S: Stream<Item = Result<Bytes, E>>,
     E: std::fmt::Display,
 {
+    let mut scan = scan::for_tenants(blobs, pool, &[tenant]).await?.map(|scanner| scan::Scan::start(&scanner));
     let mut content = std::pin::pin!(content);
     let mut buffer = BytesMut::new();
     let mut hash = Sha256::new();
@@ -81,6 +85,9 @@ where
             return Err(PartsError::TooLarge { limit });
         }
         hash.update(&chunk);
+        if let Some(scan) = &mut scan {
+            scan.feed(&chunk).await;
+        }
         buffer.extend_from_slice(&chunk);
         while buffer.len() >= PART_SIZE {
             let part = buffer.split_to(PART_SIZE).freeze();
@@ -89,6 +96,13 @@ where
     }
     if !buffer.is_empty() {
         store(buffer.freeze(), &mut parts).await?;
+    }
+    if let Some(scan) = scan
+        && let Err(refused) = scan.finish().await
+    {
+        let mut connection = pool.acquire().await?;
+        mark(&mut connection, tenant, prefix, parts, Utc::now()).await?;
+        return Err(refused.into());
     }
     Ok(Stored { parts, size, sha256: hash.finalize().into() })
 }

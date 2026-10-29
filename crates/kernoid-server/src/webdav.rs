@@ -100,6 +100,13 @@ impl IntoResponse for Failure {
                 FilesError::TooLarge { .. } => StatusCode::PAYLOAD_TOO_LARGE,
                 FilesError::OverQuota => StatusCode::INSUFFICIENT_STORAGE,
                 FilesError::Locked => StatusCode::LOCKED,
+                // Malware is forbidden content, as WebDAV servers commonly answer; a scanner away is a pause.
+                FilesError::Refused(kernoid_store::scan::Refused::Infected(name)) => {
+                    return Problem::new(StatusCode::FORBIDDEN)
+                        .detail(format!("the content contains malware ({name})"))
+                        .into_response();
+                }
+                FilesError::Refused(kernoid_store::scan::Refused::Unavailable) => StatusCode::SERVICE_UNAVAILABLE,
                 other => {
                     tracing::warn!(error = %other, "a WebDAV request");
                     StatusCode::INTERNAL_SERVER_ERROR

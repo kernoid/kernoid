@@ -64,6 +64,9 @@ pub enum BlobError {
     Files(#[from] kernoid_files::FilesError),
     #[error(transparent)]
     Blob(#[from] kernoid_store::BlobError),
+    /// The malware scanner refused it.
+    #[error(transparent)]
+    Refused(#[from] kernoid_store::scan::Refused),
 }
 
 /// Whether an email is in a mailbox the caller may read (RFC 0002, 12.2).
@@ -239,6 +242,7 @@ impl Jmap {
         let (id, size) =
             self.mail().put_upload(account, kind, content, self.max_size).await.map_err(|error| match error {
                 kernoid_mail::MailError::TooLarge { .. } => BlobError::TooLarge(error.to_string()),
+                kernoid_mail::MailError::Refused(refused) => BlobError::Refused(refused),
                 other => BlobError::Mail(other),
             })?;
         Ok(

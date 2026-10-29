@@ -803,7 +803,7 @@ async fn main() -> anyhow::Result<()> {
 }
 
 /// The modules compiled into kernoid; each is off unless `[modules.<name>] enabled = true`.
-const MODULES: &[&dyn Module] = &[];
+const MODULES: &[&dyn Module] = &[&kernoid_clamav::ClamAvModule];
 
 async fn serve(config: Config) -> anyhow::Result<()> {
     let modules = Registry::new(MODULES, &config.modules).context("modules")?;
@@ -821,12 +821,17 @@ async fn serve(config: Config) -> anyhow::Result<()> {
         None => None,
     };
     let keys = Arc::new(TenantKeys::with_main_keys(db.clone(), main_keys.clone()));
-    let blobs = BlobStore::from_config(&config.blob, keys.clone()).context("setting up object storage")?;
+    let mut blobs = BlobStore::from_config(&config.blob, keys.clone()).context("setting up object storage")?;
+    // Content of tenants that switched the module on is scanned as it is stored, mail before it is accepted.
+    if let Some(table) = modules.config(kernoid_clamav::NAME) {
+        blobs = blobs.with_scanner(kernoid_clamav::ClamAvModule::scanner(table).map_err(anyhow::Error::msg)?);
+    }
     let events = EventStore::new(db.clone());
     let oidc = Oidc::new(events.clone(), main_keys.clone(), config.http.public_scheme.as_str())
         .public_port(config.http.public_port)
         .allow_private_networks(config.outbound.allow_private_networks);
-    let known: Vec<&'static str> = MODULES.iter().map(|module| module.name()).collect();
+    // Tenants switch on for themselves what the installation switched on.
+    let known: Vec<&'static str> = modules.names().collect();
     let mut state = AppState::new(
         db.clone(),
         blobs.clone(),

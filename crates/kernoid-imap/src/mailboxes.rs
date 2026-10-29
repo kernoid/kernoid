@@ -349,7 +349,11 @@ impl Session {
                     .collect(),
                 received_at: message.received_at.and_then(|at| DateTime::from_timestamp(at, 0)),
             };
-            let imported = match self.inner.mail.import_email(owner, Bytes::from(message.message), new).await {
+            let raw = Bytes::from(message.message);
+            if let Err(error) = self.inner.mail.scan_message(&[owner], &[], &raw).await {
+                return mail_error(error);
+            }
+            let imported = match self.inner.mail.import_email(owner, raw, new).await {
                 Ok(imported) => imported,
                 Err(error) => return mail_error(error),
             };

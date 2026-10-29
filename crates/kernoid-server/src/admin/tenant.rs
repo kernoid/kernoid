@@ -162,8 +162,32 @@ pub(crate) async fn set_policy(
     respond(result, |tenant| Json(TenantView::from(tenant)).into_response())
 }
 
-/// Switches a module on or off for the tenant (needs `tenant.manage`). The module must be compiled in; whether it
-/// runs is decided by the installation's configuration.
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub(crate) struct ModuleView {
+    name: String,
+    /// Whether the tenant uses it.
+    enabled: bool,
+}
+
+/// The modules the installation has switched on, which the tenant may use, and whether it does (needs
+/// `directory.read`).
+#[utoipa::path(get, path = "/v1/tenant/modules", tag = "tenant", params(TenantHeader), responses(
+    (status = 200, body = [ModuleView]),
+    (status = 403, description = "needs directory.read", body = Problem),
+))]
+pub(crate) async fn modules(State(state): State<AppState>, AdminSession(admin): AdminSession) -> Response {
+    respond(state.identity.admin_tenant(&admin).await, |tenant| {
+        let views: Vec<ModuleView> = state
+            .modules
+            .iter()
+            .map(|name| ModuleView { name: (*name).to_owned(), enabled: tenant.modules.iter().any(|on| on == name) })
+            .collect();
+        Json(views).into_response()
+    })
+}
+
+/// Switches a module on or off for the tenant (needs `tenant.manage`); only a module the installation has switched
+/// on can be switched on.
 #[utoipa::path(put, path = "/v1/tenant/modules/{module}", tag = "tenant", params(TenantHeader), request_body = Switch,
     responses((status = 204), (status = 400, description = "no such module", body = Problem)))]
 pub(crate) async fn set_module(

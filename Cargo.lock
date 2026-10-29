@@ -2412,6 +2412,7 @@ dependencies = [
  "bytes",
  "chrono",
  "clap",
+ "kernoid-clamav",
  "kernoid-config",
  "kernoid-dav",
  "kernoid-events",
@@ -2437,6 +2438,19 @@ dependencies = [
  "tracing-opentelemetry",
  "tracing-subscriber",
  "uuid",
+]
+
+[[package]]
+name = "kernoid-clamav"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "futures-util",
+ "kernoid-module",
+ "kernoid-store",
+ "tokio",
+ "toml",
+ "tracing",
 ]
 
 [[package]]
@@ -2753,6 +2767,7 @@ dependencies = [
  "base64 0.22.1",
  "bytes",
  "chrono",
+ "futures-util",
  "idna",
  "kernoid-config",
  "kernoid-events",

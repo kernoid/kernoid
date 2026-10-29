@@ -16,6 +16,7 @@ use uuid::Uuid;
 use crate::{
     crypto::{self, CryptoError},
     keys::{KeyError, TenantKeys},
+    scan::Scanner,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -45,6 +46,7 @@ impl From<object_store::Error> for BlobError {
 pub struct BlobStore {
     inner: Arc<dyn ObjectStore>,
     keys: Arc<TenantKeys>,
+    scanner: Option<Arc<dyn Scanner>>,
 }
 
 impl BlobStore {
@@ -70,7 +72,17 @@ impl BlobStore {
 
     /// Over any object store – for tests, which keep their own handle to look at what it holds.
     pub fn new(inner: Arc<dyn ObjectStore>, keys: Arc<TenantKeys>) -> Self {
-        Self { inner, keys }
+        Self { inner, keys, scanner: None }
+    }
+
+    /// Scans what tenants that switched the scanner's module on store (`crate::scan`).
+    pub fn with_scanner(mut self, scanner: Arc<dyn Scanner>) -> Self {
+        self.scanner = Some(scanner);
+        self
+    }
+
+    pub fn scanner(&self) -> Option<&Arc<dyn Scanner>> {
+        self.scanner.as_ref()
     }
 
     /// Stores `content` at `key`, sealed with the tenant's current key.

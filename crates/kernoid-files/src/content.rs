@@ -51,6 +51,7 @@ impl From<PartsError> for FilesError {
             PartsError::Source(detail) => Self::Invalid(format!("the content could not be read: {detail}")),
             PartsError::Blob(error) => Self::Blob(error),
             PartsError::Database(error) => Self::Store(error),
+            PartsError::Refused(refused) => Self::Refused(refused),
         }
     }
 }

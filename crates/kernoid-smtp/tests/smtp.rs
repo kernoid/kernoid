@@ -13,7 +13,11 @@ use kernoid_events::EventStore;
 use kernoid_identity::{Address, CHALLENGE_LABEL, DomainName, Identity, TxtLookup};
 use kernoid_mail::{Limits, Mail, Role};
 use kernoid_smtp::{Dns, Server, Settings, Submission, dns::FOREVER};
-use kernoid_store::{BlobStore, MainKeys, TenantKeys, crypto::Key};
+use kernoid_store::{
+    BlobStore, MainKeys, TenantKeys,
+    crypto::Key,
+    scan::{Scanner, Verdict},
+};
 use mail_auth::{ResolverCache, Txt, common::parse::TxtRecordParser, dmarc::Dmarc, spf::Spf};
 use object_store::memory::InMemory;
 use sqlx::PgPool;
@@ -36,10 +40,16 @@ impl TxtLookup for FakeDns {
 struct Setup {
     identity: Identity,
     mail: Mail,
+    instance: Uuid,
     tenant: Uuid,
 }
 
 async fn setup(pool: PgPool) -> Setup {
+    setup_with(pool, None).await
+}
+
+/// With a malware scanner on the blob store (`kernoid_store::scan`).
+async fn setup_with(pool: PgPool, scanner: Option<Arc<dyn Scanner>>) -> Setup {
     let identity = Identity::new(EventStore::new(pool.clone()));
     let instance =
         identity.add_instance("Instance", &DomainName::parse("login.firma.example").unwrap(), WHO).await.unwrap();
@@ -53,8 +63,11 @@ async fn setup(pool: PgPool) -> Setup {
         .insert(format!("{CHALLENGE_LABEL}.firma.example"), vec![format!("kernoid-verification={token}")]);
     identity.verify_tenant_domain(instance, tenant, &domain, &dns, WHO).await.unwrap();
     let keys = Arc::new(TenantKeys::with_main_keys(pool.clone(), MainKeys::new(Key::random().unwrap(), Vec::new())));
-    let blobs = BlobStore::new(Arc::new(InMemory::new()), keys);
-    Setup { identity, mail: Mail::new(pool, blobs, Limits::default()), tenant }
+    let mut blobs = BlobStore::new(Arc::new(InMemory::new()), keys);
+    if let Some(scanner) = scanner {
+        blobs = blobs.with_scanner(scanner);
+    }
+    Setup { identity, mail: Mail::new(pool, blobs, Limits::default()), instance, tenant }
 }
 
 impl Setup {
@@ -595,4 +608,61 @@ async fn accounts_submit_over_tls_as_themselves(pool: PgPool) {
     assert!(client.command("RSET").await.starts_with("250"));
     setup.identity.set_group_send_as(setup.tenant, team, false, WHO).await.unwrap();
     assert_eq!(client.command("MAIL FROM:<team@firma.example>").await, "553 5.7.1 Send as one of your own addresses");
+}
+
+/// A scanner that knows the EICAR test file.
+#[derive(Debug)]
+struct FakeScanner;
+
+const EICAR: &str = r"X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*";
+
+impl Scanner for FakeScanner {
+    fn module(&self) -> &'static str {
+        "clamav"
+    }
+
+    fn max_size(&self) -> u64 {
+        1_000_000
+    }
+
+    fn refuse_unchecked(&self) -> bool {
+        true
+    }
+
+    fn scan(
+        &self,
+        content: futures_util::stream::BoxStream<'static, bytes::Bytes>,
+    ) -> futures_util::future::BoxFuture<'static, Result<Verdict, String>> {
+        use futures_util::StreamExt;
+        Box::pin(async move {
+            let all = content.collect::<Vec<_>>().await.concat();
+            let found = all.windows(EICAR.len()).any(|window| window == EICAR.as_bytes());
+            Ok(if found { Verdict::Infected("Eicar-Signature".into()) } else { Verdict::Clean })
+        })
+    }
+}
+
+#[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
+async fn malware_is_refused_before_it_is_accepted(pool: PgPool) {
+    let setup = setup_with(pool, Some(Arc::new(FakeScanner))).await;
+    let alice = setup.account("alice").await;
+    setup.identity.set_tenant_module(setup.instance, setup.tenant, "clamav", true, &["clamav"], WHO).await.unwrap();
+    let server = setup.server(Dns::offline(), None);
+    let mut client = connect(&server);
+    assert!(client.response().await.starts_with("220 "));
+    assert!(client.command("EHLO sender.example").await.starts_with("250"));
+    for (id, body, reply) in [
+        ("v1@sender.example", EICAR, "554 5.7.1 Rejected: the message contains malware (Eicar-Signature)"),
+        ("v2@sender.example", "", "250 2.0.0 Message accepted for delivery"),
+    ] {
+        assert_eq!(client.command("MAIL FROM:<bob@sender.example>").await, "250 2.1.0 OK");
+        assert_eq!(client.command("RCPT TO:<alice@firma.example>").await, "250 2.1.5 OK");
+        assert!(client.command("DATA").await.starts_with("354 "));
+        client.send(&message("Bob <bob@sender.example>", "Hi", id, &format!("X-Body: {body}\r\n"))).await;
+        assert_eq!(client.response().await, reply);
+    }
+    let inbox = setup.messages(alice, Role::Inbox).await;
+    let junk = setup.messages(alice, Role::Junk).await;
+    assert_eq!(inbox.len() + junk.len(), 1);
+    assert!(inbox.iter().chain(&junk).all(|message| !message.contains("EICAR")));
 }

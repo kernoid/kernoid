@@ -10,7 +10,11 @@ use kernoid_files::Files;
 use kernoid_identity::{Address, CHALLENGE_LABEL, DomainName, Identity, TxtLookup, role::Principal, services::Service};
 use kernoid_jmap::{Caller, FILE_VERSIONS, FILENODE, Jmap, PRINCIPALS};
 use kernoid_mail::{Limits, Mail};
-use kernoid_store::{BlobStore, MainKeys, TenantKeys, crypto::Key};
+use kernoid_store::{
+    BlobStore, MainKeys, TenantKeys,
+    crypto::Key,
+    scan::{Refused, Scanner, Verdict},
+};
 use object_store::memory::InMemory;
 use serde_json::{Value, json};
 use sqlx::PgPool;
@@ -32,10 +36,16 @@ struct Setup {
     pool: PgPool,
     identity: Identity,
     jmap: Jmap,
+    instance: Uuid,
     tenant: Uuid,
 }
 
 async fn setup(pool: PgPool) -> Setup {
+    setup_with(pool, None).await
+}
+
+/// With a malware scanner on the blob store (`kernoid_store::scan`).
+async fn setup_with(pool: PgPool, scanner: Option<Arc<dyn Scanner>>) -> Setup {
     let identity = Identity::new(EventStore::new(pool.clone()));
     let instance =
         identity.add_instance("Instance", &DomainName::parse("login.firma.example").unwrap(), WHO).await.unwrap();
@@ -49,13 +59,16 @@ async fn setup(pool: PgPool) -> Setup {
         .insert(format!("{CHALLENGE_LABEL}.firma.example"), vec![format!("kernoid-verification={token}")]);
     identity.verify_tenant_domain(instance, tenant, &domain, &dns, WHO).await.unwrap();
     let keys = Arc::new(TenantKeys::with_main_keys(pool.clone(), MainKeys::new(Key::random().unwrap(), Vec::new())));
-    let blobs = BlobStore::new(Arc::new(InMemory::new()), keys);
+    let mut blobs = BlobStore::new(Arc::new(InMemory::new()), keys);
+    if let Some(scanner) = scanner {
+        blobs = blobs.with_scanner(scanner);
+    }
     let mail = Mail::new(pool.clone(), blobs.clone(), Limits::default());
     let files = Files::new(pool.clone(), blobs, kernoid_files::Limits::default());
     let jmap = Jmap::new(mail, 20_000_000, chrono::Duration::days(5))
         .with_files(files)
         .with_identity(Identity::new(EventStore::new(pool.clone())));
-    Setup { pool, identity, jmap, tenant }
+    Setup { pool, identity, jmap, instance, tenant }
 }
 
 impl Setup {
@@ -523,4 +536,131 @@ async fn contents_are_searched_and_trashes_emptied(pool: PgPool) {
     assert_eq!(files.apply_trash_retention(100).await.unwrap(), 1);
     let (_, left) = query(json!({ "parentId": trash })).await;
     assert_eq!(left["ids"], json!([id("b")]));
+}
+
+const EICAR: &[u8] = br"X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*";
+
+/// A scanner that knows the EICAR test file, and can be away.
+#[derive(Debug, Default)]
+struct FakeScanner {
+    away: std::sync::atomic::AtomicBool,
+}
+
+impl Scanner for FakeScanner {
+    fn module(&self) -> &'static str {
+        "clamav"
+    }
+
+    fn max_size(&self) -> u64 {
+        1024
+    }
+
+    fn refuse_unchecked(&self) -> bool {
+        true
+    }
+
+    fn scan(
+        &self,
+        content: futures_util::stream::BoxStream<'static, Bytes>,
+    ) -> futures_util::future::BoxFuture<'static, Result<Verdict, String>> {
+        use futures_util::StreamExt;
+        let away = self.away.load(std::sync::atomic::Ordering::SeqCst);
+        Box::pin(async move {
+            let all: Vec<u8> = content.collect::<Vec<Bytes>>().await.concat();
+            if away {
+                return Err("not answering".into());
+            }
+            Ok(if all.windows(EICAR.len()).any(|window| window == EICAR) {
+                Verdict::Infected("Eicar-Signature".into())
+            } else {
+                Verdict::Clean
+            })
+        })
+    }
+}
+
+#[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
+async fn malware_is_refused_where_the_tenant_scans(pool: PgPool) {
+    let scanner = Arc::new(FakeScanner::default());
+    let setup = setup_with(pool, Some(scanner.clone())).await;
+    let carol = setup.caller("carol", true).await;
+    let own = carol.account.to_string();
+    let upload =
+        |content: &'static [u8]| setup.jmap.upload_bytes(&carol, &own, "text/plain", Bytes::from_static(content));
+
+    // Not switched on for the tenant: nothing is scanned.
+    upload(EICAR).await.unwrap();
+    setup.identity.set_tenant_module(setup.instance, setup.tenant, "clamav", true, &["clamav"], WHO).await.unwrap();
+
+    // Uploads, also of pieces that are clean on their own but not together.
+    let refused = upload(EICAR).await.unwrap_err();
+    assert!(
+        matches!(refused, kernoid_jmap::blob::BlobError::Refused(Refused::Infected(ref name)) if name == "Eicar-Signature")
+    );
+    let (first, second) = EICAR.split_at(20);
+    let first = setup.upload(&carol, first).await;
+    let second = setup.upload(&carol, second).await;
+    let request = json!({
+        "using": ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:blob"],
+        "methodCalls": [["Blob/upload", { "accountId": own, "create": {
+            "whole": { "data": [{ "blobId": first }, { "blobId": second }] },
+            "clean": { "data": [{ "blobId": first }, { "data:asText": "!" }] },
+        } }, "c"]],
+    });
+    let response = setup.jmap.api(&carol, request.to_string().as_bytes()).await.unwrap();
+    let answer = &response["methodResponses"][0][1];
+    assert_eq!(answer["notCreated"]["whole"]["type"], "forbidden");
+    assert!(answer["created"]["clean"]["id"].is_string());
+
+    // Writing a file directly.
+    let blob = setup.upload(&carol, b"notes").await;
+    let (_, created) = setup
+        .one(
+            &carol,
+            "FileNode/set",
+            json!({ "create": { "n": { "@type": "File", "parentId": null, "name": "notes.txt", "blobId": blob } } }),
+        )
+        .await;
+    let node = created["created"]["n"]["id"].as_str().unwrap().to_owned();
+    let written = setup
+        .jmap
+        .write_file(
+            &carol,
+            &own,
+            &node,
+            Some("text/plain"),
+            futures_util::stream::iter([Ok::<_, std::io::Error>(Bytes::from_static(EICAR))]),
+        )
+        .await
+        .unwrap_err();
+    assert!(matches!(written, kernoid_files::FilesError::Refused(Refused::Infected(_))));
+
+    // Mail before it is accepted.
+    let message = Bytes::from([&b"Subject: hi\r\n\r\n"[..], EICAR].concat());
+    let scanned = setup.jmap.mail().scan_message(&[carol.account], &[], &message).await.unwrap_err();
+    assert!(matches!(scanned, kernoid_mail::MailError::Refused(Refused::Infected(_))));
+    setup
+        .jmap
+        .mail()
+        .scan_message(&[carol.account], &[], &Bytes::from_static(b"Subject: hi\r\n\r\nhello"))
+        .await
+        .unwrap();
+
+    // Content larger than the scanner takes is kept unscanned.
+    upload(&[b'x'; 2048]).await.unwrap();
+
+    // A scanner that does not answer refuses for now, and what was stored is garbage at once (within a minute: the
+    // clocks of the database and of the test may differ a little).
+    scanner.away.store(true, std::sync::atomic::Ordering::SeqCst);
+    let refused = upload(b"anything").await.unwrap_err();
+    assert!(matches!(refused, kernoid_jmap::blob::BlobError::Refused(Refused::Unavailable)));
+    let due = sqlx::query_scalar!(
+        "SELECT count(*) FROM blob_garbage WHERE tenant_id = $1 AND key LIKE $2 AND due_at < now() + interval '1 minute'",
+        setup.tenant,
+        format!("upload/{}/%", carol.account),
+    )
+    .fetch_one(&setup.pool)
+    .await
+    .unwrap();
+    assert_eq!(due, Some(3), "the two refused uploads and the joined one");
 }

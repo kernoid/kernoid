@@ -14,6 +14,7 @@ pub mod garbage;
 mod keys;
 pub mod lock;
 pub mod parts;
+pub mod scan;
 
 pub use blob::{BlobError, BlobStore};
 pub use keys::{KeyError, MainKeys, TenantKeys, WrapStatus, rewrap, wrap_status};

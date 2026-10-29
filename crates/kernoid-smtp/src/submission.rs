@@ -285,6 +285,9 @@ impl Session {
         let has_date = message.date().is_some();
         let has_message_id = message.message_id().is_some();
         drop(message);
+        if let Err(reply) = crate::message::scan(&self.inner.mail, &[account.id], &[], &raw).await {
+            return reply;
+        }
 
         let hostname = &self.inner.settings.hostname;
         let helo = self.helo.clone().unwrap_or_default();

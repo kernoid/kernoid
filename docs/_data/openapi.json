@@ -8658,12 +8658,59 @@
         }
       }
     },
+    "/v1/tenant/modules": {
+      "get": {
+        "tags": [
+          "tenant"
+        ],
+        "summary": "The modules the installation has switched on, which the tenant may use, and whether it does (needs\n`directory.read`).",
+        "operationId": "modules",
+        "parameters": [
+          {
+            "name": "kernoid-tenant",
+            "in": "header",
+            "description": "The tenant to act on – for instance administrators; the caller's own tenant if left out.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ModuleView"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "needs directory.read",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/tenant/modules/{module}": {
       "put": {
         "tags": [
           "tenant"
         ],
-        "summary": "Switches a module on or off for the tenant (needs `tenant.manage`). The module must be compiled in; whether it\nruns is decided by the installation's configuration.",
+        "summary": "Switches a module on or off for the tenant (needs `tenant.manage`); only a module the installation has switched\non can be switched on.",
         "operationId": "set_module",
         "parameters": [
           {
@@ -10563,6 +10610,22 @@
             "type": "integer",
             "format": "int64",
             "minimum": 0
+          }
+        }
+      },
+      "ModuleView": {
+        "type": "object",
+        "required": [
+          "name",
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether the tenant uses it."
+          },
+          "name": {
+            "type": "string"
           }
         }
       },

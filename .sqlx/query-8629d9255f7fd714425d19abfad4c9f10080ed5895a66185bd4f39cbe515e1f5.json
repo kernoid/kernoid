@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(*) FROM blob_garbage WHERE tenant_id = $1 AND key LIKE $2 AND due_at < now() + interval '1 minute'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "8629d9255f7fd714425d19abfad4c9f10080ed5895a66185bd4f39cbe515e1f5"
+}
