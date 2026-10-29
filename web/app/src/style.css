@@ -126,6 +126,9 @@ textarea { width: 100%; resize: vertical; }
 .dialog label > span { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 3px; }
 .dialog label input:not([type="checkbox"]), .dialog label select { width: 100%; }
 .dialog .field { margin-bottom: 10px; }
+.dialog fieldset.choice { border: 0; padding: 0; margin: 0 0 10px; display: flex; gap: 16px; flex-wrap: wrap; }
+.dialog fieldset.choice legend { padding: 0; margin-bottom: 4px; font-size: 0.85rem; }
+.dialog fieldset.choice label.inline { margin: 0; white-space: nowrap; }
 .dialog .field > span:first-child { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 3px; }
 .dialog .field .row { display: flex; gap: 8px; align-items: center; }
 a.button { display: inline-block; padding: 6px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--raised); color: inherit; text-decoration: none; }
@@ -141,6 +144,21 @@ a.button.primary { background: var(--accent); color: var(--accent-text); border-
 .legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 0.85rem; }
 .chip { display: inline-flex; align-items: center; gap: 6px; }
 .chip i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.segmented { display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.segmented button { border: 0; border-radius: 0; background: transparent; }
+.segmented button + button { border-left: 1px solid var(--line); }
+.segmented button.active { background: var(--accent); color: var(--accent-text); }
+.timegrid { display: grid; grid-template-columns: 56px repeat(var(--days), minmax(0, 1fr)); grid-template-rows: auto auto minmax(0, 1fr); border: 1px solid var(--line); border-radius: var(--radius); min-height: 0; overflow: auto; }
+.timegrid .head, .timegrid .corner:first-child { position: sticky; top: 0; z-index: 2; background: var(--bg); }
+.timegrid .head { padding: 4px 6px; font-size: 0.85rem; color: var(--muted); border-bottom: 1px solid var(--line); border-left: 1px solid var(--line); }
+.timegrid .head.today { color: var(--accent); font-weight: 600; }
+.timegrid .corner { border-bottom: 1px solid var(--line); }
+.timegrid .allday { display: flex; flex-direction: column; gap: 2px; padding: 2px; min-height: 24px; border-bottom: 1px solid var(--line); border-left: 1px solid var(--line); min-width: 0; }
+.timegrid .hours, .timegrid .column { height: calc(24 * 44px); }
+.timegrid .hour { height: 44px; font-size: 0.75rem; color: var(--muted); text-align: right; padding-right: 6px; transform: translateY(-0.6em); }
+.timegrid .hour:first-child { transform: none; }
+.timegrid .column { position: relative; border-left: 1px solid var(--line); background: repeating-linear-gradient(to bottom, transparent 0 43px, var(--line) 43px 44px); }
+.timegrid .column .event { position: absolute; overflow: hidden; text-align: left; align-items: flex-start; }
 .month { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-template-rows: auto repeat(6, minmax(90px, 1fr)); border: 1px solid var(--line); border-radius: var(--radius); overflow: auto; min-height: 0; }
 .weekday { padding: 4px 6px; font-size: 0.8rem; color: var(--muted); border-bottom: 1px solid var(--line); min-height: 0; }
 .day { border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 4px; display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow: hidden; }

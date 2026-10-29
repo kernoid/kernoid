@@ -76,6 +76,7 @@ pub(crate) fn event_to_json(text: &str) -> Option<Map<String, Value>> {
 /// A JSCalendar object as an iCalendar object. calcard converts times and time zones only inside a `Group`, so a
 /// single event is wrapped in one.
 pub(crate) fn json_to_event(object: &Map<String, Value>) -> Result<String, String> {
+    let object = &with_override_durations(object);
     let wrapped;
     let object = if object.get("@type").and_then(Value::as_str) == Some("Group") {
         object
@@ -91,6 +92,23 @@ pub(crate) fn json_to_event(object: &Map<String, Value>) -> Result<String, Strin
     let event: JSCalendar<'_, String, String> = JSCalendar::parse(&json)?;
     let ical = event.into_icalendar().ok_or("not a calendar object")?;
     Ok(ical.to_string())
+}
+
+/// The event with its duration in every override that does not leave its instance out and has none of its own.
+/// calcard writes an override as a component of what it changes only, and an instance without `DURATION` or `DTEND`
+/// ends with its day (RFC 5545, 3.6.1) – not as the series' instances do.
+fn with_override_durations(object: &Map<String, Value>) -> Map<String, Value> {
+    let mut object = object.clone();
+    let Some(duration) = object.get("duration").cloned() else { return object };
+    if let Some(Value::Object(overrides)) = object.get_mut("recurrenceOverrides") {
+        for patch in overrides.values_mut().filter_map(Value::as_object_mut) {
+            let excluded = patch.get("excluded").and_then(Value::as_bool).unwrap_or(false);
+            if !excluded && !patch.contains_key("duration") {
+                patch.insert("duration".into(), duration.clone());
+            }
+        }
+    }
+    object
 }
 
 /// Applies a patch (RFC 8620, 5.3): keys are JSON pointers, `null` removes.

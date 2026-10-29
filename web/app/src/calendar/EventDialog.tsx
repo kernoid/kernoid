@@ -5,10 +5,28 @@ import { For, type JSX, Show, createEffect, createResource, createSignal } from 
 
 import { Failure, ok, useJmap } from "../App.js";
 import { locale, t } from "../i18n.js";
-import { type Calendar, type CalendarEvent, type EventForm, address, answer, create, event as load, localInput, me, meetingsOffered, newMeeting, remove, update } from "./model.js";
+import {
+  type Calendar,
+  type CalendarEvent,
+  type EventForm,
+  address,
+  answer,
+  create,
+  event as load,
+  localInput,
+  me,
+  meetingsOffered,
+  newMeeting,
+  remove,
+  removeInstance,
+  update,
+  updateInstance,
+} from "./model.js";
 
 export interface EventStart {
   day: Date;
+  /** `day` names a time, not only a day. */
+  timed?: boolean;
   event?: CalendarEvent;
 }
 
@@ -52,7 +70,8 @@ export function EventDialog(props: {
   const initialCalendar = instance ? calendarOf(instance) : (writable.find((calendar) => calendar.isDefault) ?? writable[0]);
   const [calendarId, setCalendarId] = createSignal(initialCalendar ? `${initialCalendar.accountId}/${initialCalendar.id}` : "");
   const defaultStart = new Date(props.start.day);
-  defaultStart.setHours(new Date().getHours() + 1, 0, 0, 0);
+  // A day: the next full hour; a time on a day (the week and day views): that time.
+  if (!props.start.timed) defaultStart.setHours(new Date().getHours() + 1, 0, 0, 0);
   const defaultEnd = new Date(defaultStart.getTime() + 3_600_000);
   const [startText, endText] = instance ? times(instance) : [localInput(defaultStart), localInput(defaultEnd)];
   const [title, setTitle] = createSignal(instance?.title ?? "");
@@ -81,15 +100,16 @@ export function EventDialog(props: {
   const [repeat, setRepeat] = createSignal<EventForm["repeat"]>((instance?.recurrenceRule?.frequency as EventForm["repeat"]) ?? "");
   const [error, setError] = createSignal<unknown>();
   const [busy, setBusy] = createSignal(false);
-  // A series is edited as a whole: its own start and end, not the instance's.
+  // An instance of a series: this one alone, or the whole series – with the series' own start and end.
+  const [scope, setScope] = createSignal<"one" | "all">("one");
+  const single = () => Boolean(instance?.baseEventId) && scope() === "one";
   createEffect(() => {
     const series = ok(base);
-    if (series && instance?.baseEventId) {
-      const [seriesStart, seriesEnd] = times(series);
-      setStart(seriesStart);
-      setEnd(seriesEnd);
-      setRepeat((series.recurrenceRule?.frequency as EventForm["repeat"]) ?? "");
-    }
+    if (!series || !instance?.baseEventId) return;
+    const [from, to] = scope() === "all" ? times(series) : [startText, endText];
+    setStart(from);
+    setEnd(to);
+    setRepeat((series.recurrenceRule?.frequency as EventForm["repeat"]) ?? "");
   });
 
   const own = props.addresses[0] ?? jmap.session.username;
@@ -133,8 +153,16 @@ export function EventDialog(props: {
   };
 
   const save = run(async () => {
-    if (instance) await update(jmap, instance.baseEventId ?? instance.id, form(), own);
+    const series = ok(base);
+    if (instance && single() && series && instance.recurrenceId) await updateInstance(jmap, series, instance.recurrenceId, form(), own);
+    else if (instance) await update(jmap, instance.baseEventId ?? instance.id, form(), own);
     else await create(jmap, form(), own);
+  });
+  const destroy = run(async () => {
+    const series = ok(base);
+    if (!instance) return;
+    if (single() && series && instance.recurrenceId) await removeInstance(jmap, series, instance.recurrenceId);
+    else await remove(jmap, instance.accountId, instance.baseEventId ?? instance.id);
   });
 
   return (
@@ -147,9 +175,17 @@ export function EventDialog(props: {
         }}
       >
         <Show when={instance?.baseEventId}>
-          <p class="muted">
-            {t("Part of a series")} – {t("Changes apply to the whole series.")}
-          </p>
+          <fieldset class="choice">
+            <legend class="muted">{t("Part of a series")}</legend>
+            <label class="inline">
+              <input type="radio" name="scope" checked={scope() === "one"} onChange={() => setScope("one")} />
+              <span>{t("This event")}</span>
+            </label>
+            <label class="inline">
+              <input type="radio" name="scope" checked={scope() === "all"} onChange={() => setScope("all")} />
+              <span>{t("All events of the series")}</span>
+            </label>
+          </fieldset>
         </Show>
         <label>
           <span>{t("Title")}</span>
@@ -191,7 +227,7 @@ export function EventDialog(props: {
         </label>
         <label>
           <span>{t("Repeat")}</span>
-          <select value={repeat()} disabled={!canEdit()} onChange={(event) => setRepeat(event.currentTarget.value as EventForm["repeat"])}>
+          <select value={repeat()} disabled={!canEdit() || single()} onChange={(event) => setRepeat(event.currentTarget.value as EventForm["repeat"])}>
             <option value="">{t("Never")}</option>
             <option value="daily">{t("Daily")}</option>
             <option value="weekly">{t("Weekly")}</option>
@@ -287,7 +323,7 @@ export function EventDialog(props: {
               type="button"
               class="danger"
               disabled={busy()}
-              onClick={() => instance && window.confirm(t("Delete this?")) && void run(() => remove(jmap, instance.accountId, instance.baseEventId ?? instance.id))()}
+              onClick={() => instance && window.confirm(single() ? t("Delete this event of the series?") : t("Delete this?")) && void destroy()}
             >
               {t("Delete")}
             </button>

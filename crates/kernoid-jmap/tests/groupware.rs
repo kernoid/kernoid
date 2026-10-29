@@ -176,3 +176,75 @@ async fn calendars_through_jmap(pool: PgPool) {
     let gone = setup.one(&alice, "CalendarEvent/set", json!({ "accountId": account, "destroy": [id] })).await;
     assert_eq!(gone["destroyed"], json!([id]));
 }
+
+#[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
+async fn single_instances_of_a_series_change_through_overrides(pool: PgPool) {
+    let setup = setup(pool).await;
+    let alice = setup.caller("alice").await;
+    let account = alice.account.to_string();
+    let calendars = setup.one(&alice, "Calendar/get", json!({ "accountId": account })).await;
+    let calendar = calendars["list"][0]["id"].as_str().unwrap().to_owned();
+    let created = setup
+        .one(
+            &alice,
+            "CalendarEvent/set",
+            json!({ "accountId": account, "create": { "s": {
+                "@type": "Event", "title": "Weekly",
+                "calendarIds": { &calendar: true },
+                "start": "2026-11-02T10:00:00", "timeZone": "Europe/Berlin", "duration": "PT1H",
+                "recurrenceRule": { "frequency": "weekly", "count": 4 }
+            } } }),
+        )
+        .await;
+    let id = created["created"]["s"]["id"].as_str().unwrap().to_owned();
+
+    // One instance moved and renamed, one left out (RFC 8984, 4.3.5).
+    let overrides = json!({
+        "2026-11-09T10:00:00": { "title": "Moved", "start": "2026-11-10T11:00:00" },
+        "2026-11-16T10:00:00": { "excluded": true },
+    });
+    let updated = setup
+        .one(
+            &alice,
+            "CalendarEvent/set",
+            json!({ "accountId": account, "update": { &id: { "recurrenceOverrides": overrides } } }),
+        )
+        .await;
+    assert_eq!(updated["notUpdated"], json!({}), "{updated}");
+    let found = setup
+        .one(
+            &alice,
+            "CalendarEvent/query",
+            json!({ "accountId": account, "expandRecurrences": true,
+                    "filter": { "after": "2026-11-01T00:00:00Z", "before": "2026-12-01T00:00:00Z" } }),
+        )
+        .await;
+    let got = setup
+        .one(
+            &alice,
+            "CalendarEvent/get",
+            json!({ "accountId": account, "ids": found["ids"],
+                    "properties": ["title", "start", "recurrenceId", "utcStart", "utcEnd"] }),
+        )
+        .await;
+    // A moved instance lasts as long as the others.
+    assert_eq!(got["list"][1]["utcStart"], "2026-11-10T10:00:00Z", "{got}");
+    assert_eq!(got["list"][1]["utcEnd"], "2026-11-10T11:00:00Z", "{got}");
+    let instances: Vec<(String, String, String)> = got["list"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|event| {
+            let text = |key: &str| event[key].as_str().unwrap_or_default().to_owned();
+            (text("title"), text("start"), text("recurrenceId"))
+        })
+        .collect();
+    let expected = [
+        ("Weekly", "2026-11-02T10:00:00", "2026-11-02T10:00:00"),
+        ("Moved", "2026-11-10T11:00:00", "2026-11-09T10:00:00"),
+        ("Weekly", "2026-11-23T10:00:00", "2026-11-23T10:00:00"),
+    ];
+    let expected: Vec<(String, String, String)> =
+        expected.iter().map(|(a, b, c)| ((*a).into(), (*b).into(), (*c).into())).collect();
+    assert_eq!(instances, expected);
+}

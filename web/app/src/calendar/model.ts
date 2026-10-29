@@ -38,6 +38,7 @@ export interface CalendarEvent {
   utcEnd?: string;
   recurrenceRule?: { frequency: string } | null;
   recurrenceId?: string;
+  recurrenceOverrides?: Record<string, Record<string, unknown>> | null;
   locations?: Record<string, { name?: string }>;
   virtualLocations?: Record<string, { uri?: string; name?: string }>;
   organizerCalendarAddress?: string;
@@ -161,6 +162,27 @@ export async function update(jmap: Jmap, id: string, form: EventForm, own: strin
   await jmap.set([CALENDARS], "CalendarEvent", form.calendar.accountId, {
     update: { [id]: { ...object(form, own), calendarIds: { [form.calendar.id]: true } } },
   }, { sendSchedulingMessages: true });
+}
+
+/** What an instance of a series may differ in from its series. */
+const OVERRIDDEN = ["title", "start", "duration", "showWithoutTime", "description", "locations", "virtualLocations"];
+
+/** Changes one instance of a series: its override in the event's `recurrenceOverrides` (RFC 8984, 4.3.5). */
+export async function updateInstance(jmap: Jmap, series: CalendarEvent, recurrenceId: string, form: EventForm, own: string): Promise<void> {
+  const whole = object(form, own);
+  const patch: Record<string, unknown> = Object.fromEntries(OVERRIDDEN.map((key) => [key, whole[key]]));
+  if (whole.timeZone !== series.timeZone) patch.timeZone = whole.timeZone;
+  await overrideInstance(jmap, series, recurrenceId, patch);
+}
+
+/** Leaves one instance of a series out. */
+export async function removeInstance(jmap: Jmap, series: CalendarEvent, recurrenceId: string): Promise<void> {
+  await overrideInstance(jmap, series, recurrenceId, { excluded: true });
+}
+
+async function overrideInstance(jmap: Jmap, series: CalendarEvent, recurrenceId: string, patch: Record<string, unknown>): Promise<void> {
+  const overrides = { ...(series.recurrenceOverrides ?? {}), [recurrenceId]: patch };
+  await jmap.set([CALENDARS], "CalendarEvent", series.accountId, { update: { [series.id]: { recurrenceOverrides: overrides } } }, { sendSchedulingMessages: true });
 }
 
 export async function remove(jmap: Jmap, accountId: string, id: string): Promise<void> {

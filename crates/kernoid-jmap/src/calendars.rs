@@ -5,7 +5,7 @@
 //!
 //! `CalendarEvent/query` with `expandRecurrences` returns one id per instance – `<event id>.<Unix start>` – that
 //! `CalendarEvent/get` answers with the instance: the event's properties, its override applied, `recurrenceId` and
-//! `baseEventId` set. Instances are read-only (OPEN: changing one instance through JMAP).
+//! `baseEventId` set. Instances are read-only: one is changed or left out through its event's `recurrenceOverrides` (RFC 8984, 4.3.5).
 
 use std::collections::HashMap;
 
@@ -123,6 +123,28 @@ fn instances(text: &str, default_tz: Tz, after: Option<i64>, before: Option<i64>
         .collect();
     out.sort_unstable();
     out
+}
+
+/// The recurrence id of the instance that starts at `start` (a local time in the event's time zone), and the
+/// override that changed it: an instance an override moved keeps the recurrence id it was moved from (RFC 8984,
+/// 4.3.5) – the key of the override whose `start` is where it is now.
+fn recurrence_of(object: &Map<String, Value>, start: &str) -> (String, Option<Map<String, Value>>) {
+    let overrides = object.get("recurrenceOverrides").and_then(Value::as_object);
+    let moved_here = overrides.and_then(|overrides| {
+        overrides.iter().find(|(_, patch)| patch.get("start").and_then(Value::as_str) == Some(start))
+    });
+    match moved_here {
+        Some((recurrence_id, patch)) => (recurrence_id.clone(), patch.as_object().cloned()),
+        None => {
+            // Not moved: its own start, unless an override moved another instance away from here.
+            let patch = overrides
+                .and_then(|overrides| overrides.get(start))
+                .and_then(Value::as_object)
+                .filter(|patch| !patch.contains_key("start"))
+                .cloned();
+            (start.to_owned(), patch)
+        }
+    }
 }
 
 fn parse_utc(value: Option<&Value>) -> Result<Option<i64>, MethodError> {
@@ -358,13 +380,7 @@ impl Context<'_> {
                         not_found.push(id);
                         continue;
                     };
-                    let recurrence_id = local(start, time_zone.as_deref());
-                    let override_patch = object
-                        .get("recurrenceOverrides")
-                        .and_then(Value::as_object)
-                        .and_then(|overrides| overrides.get(&recurrence_id))
-                        .and_then(Value::as_object)
-                        .cloned();
+                    let (recurrence_id, override_patch) = recurrence_of(&object, &local(start, time_zone.as_deref()));
                     for key in ["recurrenceRule", "recurrenceRules", "recurrenceOverrides", "excludedRecurrenceRules"] {
                         object.remove(key);
                     }

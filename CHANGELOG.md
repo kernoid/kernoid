@@ -52,6 +52,8 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   `clamav` (profile `clamav`). Tenants see and switch the modules the installation offers with
   `GET /v1/tenant/modules`, GraphQL `tenantModules`, and in the administration's settings; only modules the
   installation has switched on can be switched on.
+- The web app's calendar shows a week or a day besides a month, and changes or deletes one event of a series on its
+  own (JMAP `recurrenceOverrides`) – or, as before, the whole series.
 - Kubernetes: the operator `kernoid-operator` (in the image; `deploy/kubernetes`, docs: Operations) runs kernoid as a
   resource `Kernoid` describes – the schema migrated with a new image before the processes are replaced, one
   Deployment and Service per role, non-root pods with a read-only root filesystem.
@@ -80,6 +82,9 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 ### Fixed
 
+- An event of a series moved to another time kept its recurrence id only as the new time: JMAP showed it without
+  the changes of its override; and an override without a duration of its own lasted to the end of its day in
+  iCalendar – it now takes the series' duration.
 - The web app shows PDFs and other files in place: its viewer asks for downloads with `inline=1` – they were sent as
   attachments, which browsers saved instead of showing.
 - A download whose content cannot be read answers with a problem (500) instead of an empty, broken response.
