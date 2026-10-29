@@ -5,7 +5,7 @@
 
 import { For, type JSX, Show, createResource, createSignal } from "solid-js";
 
-import { ok } from "../App.js";
+import { emptyText, ok } from "../App.js";
 import { t } from "../i18n.js";
 import { setTenant } from "./api.js";
 import { type InstanceDetails, type QueuedView, type SamlKeyView, type SigningKeyView, type TenantSummary, api, seg } from "./api.js";
@@ -254,7 +254,7 @@ export function SamlKeys(): JSX.Element {
       <Outcome action={action} />
       <table class="nodes">
         <tbody>
-          <For each={ok(keys) ?? []} fallback={<tr><td class="muted">{t("No SAML key yet; one is made at the first SAML login.")}</td></tr>}>
+          <For each={ok(keys) ?? []} fallback={<tr><td class="muted">{emptyText(keys, t("No SAML key yet; one is made at the first SAML login."))}</td></tr>}>
             {(key) => (
               <tr>
                 <td class="name">
@@ -291,7 +291,7 @@ export function MailQueue(): JSX.Element {
       </Head>
       <table class="nodes">
         <tbody>
-          <For each={ok(queue) ?? []} fallback={<tr><td class="muted">{t("The queue is empty.")}</td></tr>}>
+          <For each={ok(queue) ?? []} fallback={<tr><td class="muted">{emptyText(queue, t("The queue is empty."))}</td></tr>}>
             {(entry) => (
               <tr>
                 <td class="name">

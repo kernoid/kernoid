@@ -25,7 +25,7 @@ export function Groups(): JSX.Element {
         </button>
       </Head>
       <Outcome action={action} />
-      <For each={[...directory.groups()].sort((a, b) => a.name.localeCompare(b.name))} fallback={<p class="muted">{t("No groups yet.")}</p>}>
+      <For each={[...directory.groups()].sort((a, b) => a.name.localeCompare(b.name))} fallback={<p class="muted">{directory.loading() ? t("Loading") : t("No groups yet.")}</p>}>
         {(group) => <Group group={group} busy={action.busy()} change={change} />}
       </For>
       <Show when={creating()}>

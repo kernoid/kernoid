@@ -115,6 +115,9 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 ### Fixed
 
+- The web app's lists said they were empty ("No links yet.") while still loading; they say "Loading" now. On a phone,
+  file rows show their actions below the name, the search box of Files has a row of its own, the administration's
+  pages are one row that scrolls, and the open section stays in sight.
 - Linking a provider to one's account needs a recent login, as adding a passkey or an app password does: a session
   taken over could otherwise add a lasting way in. So does confirming a proposed link (the login page always logs in
   for it).

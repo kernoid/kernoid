@@ -5,7 +5,7 @@
 
 import { For, type JSX, Match, Show, Switch, createMemo, createResource, createSignal } from "solid-js";
 
-import { ok } from "../App.js";
+import { emptyText, ok } from "../App.js";
 import { t } from "../i18n.js";
 import { PrincipalSelect, go, principal, useDirectory } from "./AdminView.js";
 import {
@@ -74,7 +74,7 @@ function AccountList(): JSX.Element {
       <input type="search" class="filter" placeholder={t("Search")} value={search()} onInput={(event) => setSearch(event.currentTarget.value)} />
       <table class="nodes">
         <tbody>
-          <For each={shown()} fallback={<tr><td class="muted">{t("No accounts.")}</td></tr>}>
+          <For each={shown()} fallback={<tr><td class="muted">{directory.loading() ? t("Loading") : t("No accounts.")}</td></tr>}>
             {(account) => (
               <tr>
                 <td class="name">
@@ -423,7 +423,7 @@ function Account(props: { id: string }): JSX.Element {
             <section>
               <h2>{t("Sessions")}</h2>
               <ul class="rows">
-                <For each={ok(sessions) ?? []} fallback={<li class="muted">{t("No sessions.")}</li>}>
+                <For each={ok(sessions) ?? []} fallback={<li class="muted">{emptyText(sessions, t("No sessions."))}</li>}>
                   {(entry) => (
                     <li>
                       <span class="grow">
@@ -446,7 +446,7 @@ function Account(props: { id: string }): JSX.Element {
             <section>
               <h2>{t("Applications")}</h2>
               <ul class="rows">
-                <For each={ok(consents) ?? []} fallback={<li class="muted">{t("None.")}</li>}>
+                <For each={ok(consents) ?? []} fallback={<li class="muted">{emptyText(consents, t("None."))}</li>}>
                   {(consent) => (
                     <li>
                       <span class="grow">
@@ -464,7 +464,7 @@ function Account(props: { id: string }): JSX.Element {
             <section>
               <h2>{t("Linked providers")}</h2>
               <ul class="rows">
-                <For each={ok(links) ?? []} fallback={<li class="muted">{t("None.")}</li>}>
+                <For each={ok(links) ?? []} fallback={<li class="muted">{emptyText(links, t("None."))}</li>}>
                   {(link) => (
                     <li>
                       <span class="grow">

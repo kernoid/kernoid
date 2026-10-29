@@ -5,7 +5,7 @@
 
 import { For, type JSX, Show, createResource, createSignal } from "solid-js";
 
-import { ok } from "../App.js";
+import { emptyText, ok } from "../App.js";
 import { t } from "../i18n.js";
 import { type ProviderView, type ScimTokenView, api, seg } from "./api.js";
 import { Area, Buttons, Check, Dialog, Field, Form, Head, Outcome, Secret, lines, toList, useAction, when } from "./ui.js";
@@ -31,7 +31,7 @@ export function Providers(): JSX.Element {
       <Outcome action={action} />
       <table class="nodes">
         <tbody>
-          <For each={ok(providers) ?? []} fallback={<tr><td class="muted">{t("No providers yet.")}</td></tr>}>
+          <For each={ok(providers) ?? []} fallback={<tr><td class="muted">{emptyText(providers, t("No providers yet."))}</td></tr>}>
             {(provider) => (
               <tr>
                 <td class="name">
@@ -177,7 +177,7 @@ export function Scim(): JSX.Element {
         )}
       </Show>
       <ul class="rows">
-        <For each={ok(tokens) ?? []} fallback={<li class="muted">{t("No tokens yet.")}</li>}>
+        <For each={ok(tokens) ?? []} fallback={<li class="muted">{emptyText(tokens, t("No tokens yet."))}</li>}>
           {(token) => (
             <li>
               <span class="grow">

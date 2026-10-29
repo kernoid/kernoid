@@ -7,7 +7,7 @@
 
 import { For, type JSX, Show, createMemo, createResource, createSignal, onCleanup } from "solid-js";
 
-import { Failure, changed, ok, touch, useJmap } from "../App.js";
+import { Failure, changed, emptyText, ok, touch, useJmap } from "../App.js";
 import { WebDavHelp } from "../account/Connect.js";
 import { locale, t } from "../i18n.js";
 import {
@@ -569,7 +569,7 @@ function LinkDialog(props: { account: string; node: FileNode; onClose: () => voi
         </Show>
         <table class="nodes">
           <tbody>
-            <For each={ok(list) ?? []} fallback={<tr><td class="muted">{t("No links yet.")}</td></tr>}>
+            <For each={ok(list) ?? []} fallback={<tr><td class="muted">{emptyText(list, t("No links yet."))}</td></tr>}>
               {(link: FileLink) => (
                 <tr>
                   <td class="small">
@@ -755,7 +755,7 @@ function CopyDialog(props: { account: string; node: FileNode; mayMove: boolean; 
           </For>
         </div>
         <ul class="folders">
-          <For each={ok(folders) ?? []} fallback={<li class="muted small">{t("No folders here")}</li>}>
+          <For each={ok(folders) ?? []} fallback={<li class="muted small">{emptyText(folders, t("No folders here"))}</li>}>
             {(folder) => (
               <li>
                 <button type="button" class="quiet" onClick={() => setTrail([...trail(), folder])}>

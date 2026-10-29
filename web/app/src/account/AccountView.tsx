@@ -5,7 +5,7 @@
 import { type KernoidError, LoginClient, type Session } from "@kernoid/sdk";
 import { For, type JSX, Show, createResource, createSignal } from "solid-js";
 
-import { Failure, ok } from "../App.js";
+import { Failure, emptyText, ok } from "../App.js";
 import { t } from "../i18n.js";
 import { notificationsSupported, notificationsWanted, setNotifications } from "../mail/notify.js";
 import { THEMES, type Theme, setTheme, theme } from "../theme.js";
@@ -250,7 +250,7 @@ export function AccountView(): JSX.Element {
             <section>
               <h2>{t("Passkeys")}</h2>
               <ul class="rows">
-                <For each={ok(passkeys) ?? []} fallback={<li class="muted">{t("No passkeys yet.")}</li>}>
+                <For each={ok(passkeys) ?? []} fallback={<li class="muted">{emptyText(passkeys, t("No passkeys yet."))}</li>}>
                   {(passkey) => (
                     <li>
                       <span class="grow">
@@ -281,7 +281,7 @@ export function AccountView(): JSX.Element {
               <section>
                 <h2>{t("Logging in with other services")}</h2>
                 <ul class="rows">
-                  <For each={ok(idpLinks) ?? []} fallback={<li class="muted">{t("No services linked yet.")}</li>}>
+                  <For each={ok(idpLinks) ?? []} fallback={<li class="muted">{emptyText(idpLinks, t("No services linked yet."))}</li>}>
                     {(link) => (
                       <li>
                         <span class="grow">
@@ -357,7 +357,7 @@ export function AccountView(): JSX.Element {
                 )}
               </Show>
               <ul class="rows">
-                <For each={ok(appPasswords) ?? []} fallback={<li class="muted">{t("No app passwords yet.")}</li>}>
+                <For each={ok(appPasswords) ?? []} fallback={<li class="muted">{emptyText(appPasswords, t("No app passwords yet."))}</li>}>
                   {(entry) => (
                     <li>
                       <span class="grow">
@@ -395,7 +395,7 @@ export function AccountView(): JSX.Element {
             <section>
               <h2>{t("Applications")}</h2>
               <ul class="rows">
-                <For each={ok(consents) ?? []} fallback={<li class="muted">{t("You have not allowed any application anything yet.")}</li>}>
+                <For each={ok(consents) ?? []} fallback={<li class="muted">{emptyText(consents, t("You have not allowed any application anything yet."))}</li>}>
                   {(consent) => (
                     <li>
                       <span class="grow">

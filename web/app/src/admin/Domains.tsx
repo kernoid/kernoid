@@ -4,7 +4,7 @@
 
 import { For, type JSX, Show, createResource, createSignal } from "solid-js";
 
-import { ok } from "../App.js";
+import { emptyText, ok } from "../App.js";
 import { t } from "../i18n.js";
 import { type DomainView, type RecordCheckView, type TenantView, api, seg } from "./api.js";
 import { Buttons, Dialog, Field, Form, Head, Outcome, useAction } from "./ui.js";
@@ -45,7 +45,7 @@ export function Domains(): JSX.Element {
       <Outcome action={action} />
       <table class="nodes">
         <tbody>
-          <For each={ok(tenant)?.domains ?? []} fallback={<tr><td class="muted">{t("No domains yet.")}</td></tr>}>
+          <For each={ok(tenant)?.domains ?? []} fallback={<tr><td class="muted">{emptyText(tenant, t("No domains yet."))}</td></tr>}>
             {(domain) => (
               <tr>
                 <td class="name">
@@ -82,7 +82,7 @@ export function Domains(): JSX.Element {
             {t("Check again")}
           </button>
         </div>
-        <For each={ok(dns) ?? []} fallback={<p class="muted">{t("No verified domain, or kernoid handles no mail here.")}</p>}>
+        <For each={ok(dns) ?? []} fallback={<p class="muted">{emptyText(dns, t("No verified domain, or kernoid handles no mail here."))}</p>}>
           {(entry) => (
             <>
               <div class="toolbar">

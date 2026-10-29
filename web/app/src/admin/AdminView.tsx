@@ -4,7 +4,7 @@
 // administrators, the instance, its tenants, roles, signing keys and mail queue. Pages appear as the account's
 // permissions allow; kernoid checks them again on every request. Instance administrators pick the tenant they work on.
 
-import { For, type JSX, Match, Show, Switch, createContext, createResource, createSignal, onCleanup, useContext } from "solid-js";
+import { For, type JSX, Match, Show, Switch, createContext, createEffect, createResource, createSignal, onCleanup, useContext } from "solid-js";
 
 import { ok } from "../App.js";
 import { t } from "../i18n.js";
@@ -40,6 +40,8 @@ export async function adminAccess(): Promise<Access> {
 interface Directory {
   accounts: () => AccountDetails[];
   groups: () => GroupView[];
+  /** Whether the accounts or groups are still on their way. */
+  loading: () => boolean;
   reload: () => void;
   name: (kind: string, id: string) => string;
 }
@@ -116,6 +118,7 @@ export function AdminView(): JSX.Element {
   const directory: Directory = {
     accounts: () => (ok(accounts) ?? []).filter((account) => !account.drive),
     groups: () => ok(groups) ?? [],
+    loading: () => accounts.loading || groups.loading,
     reload: () => {
       void refetchAccounts();
       void refetchGroups();
@@ -136,11 +139,17 @@ export function AdminView(): JSX.Element {
     const allowed = [...tenantPages().map(([name]) => name), ...instancePages().map(([name]) => name)];
     return allowed.includes(wanted) ? wanted : allowed[0];
   };
+  let side: HTMLElement | undefined;
+  // On a phone the pages are one row that scrolls: keep the open one in sight.
+  createEffect(() => {
+    if (!page()) return;
+    queueMicrotask(() => side?.querySelector(".active")?.scrollIntoView({ block: "nearest", inline: "nearest" }));
+  });
 
   return (
     <DirectoryContext.Provider value={directory}>
       <div class="two admin-shell">
-        <nav class="side" aria-label={t("Administration")}>
+        <nav class="side" ref={side} aria-label={t("Administration")}>
           <Show when={(ok(tenants) ?? []).length > 1}>
             <label class="tenant-pick">
               <span class="muted small">{t("Tenant")}</span>

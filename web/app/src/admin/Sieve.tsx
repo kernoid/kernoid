@@ -4,7 +4,7 @@
 
 import { For, type JSX, Show, createResource, createSignal } from "solid-js";
 
-import { ok } from "../App.js";
+import { emptyText, ok } from "../App.js";
 import { t } from "../i18n.js";
 import { api, seg } from "./api.js";
 import { Buttons, Check, Field, Form, Outcome, useAction } from "./ui.js";
@@ -34,7 +34,7 @@ export function SieveScripts(props: { base: string }): JSX.Element {
       <p class="muted">{t("What happens to mail when it arrives: one script runs at a time.")}</p>
       <Outcome action={action} />
       <ul class="rows">
-        <For each={ok(scripts) ?? []} fallback={<li class="muted">{t("No scripts.")}</li>}>
+        <For each={ok(scripts) ?? []} fallback={<li class="muted">{emptyText(scripts, t("No scripts."))}</li>}>
           {(script) => (
             <li>
               <span class="grow">

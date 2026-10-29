@@ -3,7 +3,7 @@
 // the account (#/account), and the views.
 
 import { LoginClient } from "@kernoid/sdk";
-import { ErrorBoundary, type JSX, Match, type Resource, Show, Switch, createContext, createResource, createSignal, onCleanup, useContext } from "solid-js";
+import { ErrorBoundary, type JSX, Match, type Resource, Show, Switch, createContext, createEffect, createResource, createSignal, onCleanup, useContext } from "solid-js";
 
 import { AccountView } from "./account/AccountView.js";
 import { AdminView, adminAccess } from "./admin/AdminView.js";
@@ -82,6 +82,13 @@ export function App(): JSX.Element {
     window.location.assign(next ?? "/login/account");
   };
 
+  let sectionBar: HTMLElement | undefined;
+  // On a phone the sections are a row that scrolls: keep the open one in sight.
+  createEffect(() => {
+    if (!current()) return;
+    queueMicrotask(() => sectionBar?.querySelector(".active")?.scrollIntoView({ block: "nearest", inline: "nearest" }));
+  });
+
   const link = (name: Section, label: string) => (
     <a href={`#/${name}`} classList={{ active: current() === name }}>
       {t(label)}
@@ -108,7 +115,7 @@ export function App(): JSX.Element {
                   kern<b>0</b>
                   <i>id</i>
                 </span>
-                <nav>
+                <nav ref={sectionBar}>
                   <Show when={available().includes("mail")}>
                     {link("mail", "Mail")}
                     {link("calendar", "Calendar")}
@@ -173,6 +180,11 @@ export function App(): JSX.Element {
 /** A resource's value, or nothing while it loads or after it failed – reading a failed resource would throw. */
 export function ok<T>(resource: Resource<T>): T | undefined {
   return resource.error ? undefined : resource();
+}
+
+/** The text of an empty list – or "Loading" while its resource has not answered yet. */
+export function emptyText(resource: Resource<unknown>, text: string): string {
+  return resource.loading ? t("Loading") : text;
 }
 
 /** A failure shown in place. */

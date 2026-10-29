@@ -287,7 +287,7 @@ function LinkPage(): JSX.Element {
             <Show when={info()?.mayRead}>
             <table class="nodes">
               <tbody>
-                <For each={list() ?? []} fallback={<tr><td class="muted">{t("Nothing here")}</td></tr>}>
+                <For each={list() ?? []} fallback={<tr><td class="muted">{list.loading ? t("Loading") : t("Nothing here")}</td></tr>}>
                   {(child) => (
                     <tr>
                       <td class="name">

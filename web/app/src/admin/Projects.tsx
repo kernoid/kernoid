@@ -4,7 +4,7 @@
 
 import { For, type JSX, Show, createResource, createSignal } from "solid-js";
 
-import { ok } from "../App.js";
+import { emptyText, ok } from "../App.js";
 import { t } from "../i18n.js";
 import { PrincipalSelect, go, principal, useDirectory } from "./AdminView.js";
 import { type ApplicationView, type AuthorizationView, type ProjectGrantView, type ProjectView, type TenantSummary, api, seg } from "./api.js";
@@ -33,7 +33,7 @@ function ProjectList(): JSX.Element {
       <Outcome action={action} />
       <table class="nodes">
         <tbody>
-          <For each={ok(projects) ?? []} fallback={<tr><td class="muted">{t("No projects yet.")}</td></tr>}>
+          <For each={ok(projects) ?? []} fallback={<tr><td class="muted">{emptyText(projects, t("No projects yet."))}</td></tr>}>
             {(project) => (
               <tr>
                 <td class="name">
@@ -167,7 +167,7 @@ function Project(props: { id: string }): JSX.Element {
               </button>
             </div>
             <ul class="rows">
-              <For each={ok(authorizations) ?? []} fallback={<li class="muted">{t("Nobody yet.")}</li>}>
+              <For each={ok(authorizations) ?? []} fallback={<li class="muted">{emptyText(authorizations, t("Nobody yet."))}</li>}>
                 {(entry) => (
                   <li>
                     <span class="grow">
@@ -195,7 +195,7 @@ function Project(props: { id: string }): JSX.Element {
               </button>
             </div>
             <ul class="rows">
-              <For each={ok(grants) ?? []} fallback={<li class="muted">{t("No other tenant uses it.")}</li>}>
+              <For each={ok(grants) ?? []} fallback={<li class="muted">{emptyText(grants, t("No other tenant uses it."))}</li>}>
                 {(grant) => (
                   <li>
                     <span class="grow">
@@ -289,7 +289,7 @@ export function Applications(): JSX.Element {
       <Show when={secret()}>{(made) => <Secret label={t("Client secret of {id}:", { id: made().id })} value={made().value} onDone={() => setSecret(undefined)} />}</Show>
       <table class="nodes">
         <tbody>
-          <For each={ok(applications) ?? []} fallback={<tr><td class="muted">{t("No applications yet.")}</td></tr>}>
+          <For each={ok(applications) ?? []} fallback={<tr><td class="muted">{emptyText(applications, t("No applications yet."))}</td></tr>}>
             {(app) => (
               <tr>
                 <td class="name">

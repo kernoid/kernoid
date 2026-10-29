@@ -4,7 +4,7 @@
 
 import { For, type JSX, Show, createResource, createSignal } from "solid-js";
 
-import { ok } from "../App.js";
+import { emptyText, ok } from "../App.js";
 import { t } from "../i18n.js";
 import { PrincipalSelect, principal } from "./AdminView.js";
 import { Grants } from "./Accounts.js";
@@ -33,7 +33,7 @@ export function Drives(): JSX.Element {
         </button>
       </Head>
       <Outcome action={action} />
-      <For each={ok(drives) ?? []} fallback={<p class="muted">{t("No team folders yet.")}</p>}>
+      <For each={ok(drives) ?? []} fallback={<p class="muted">{emptyText(drives, t("No team folders yet."))}</p>}>
         {(drive) => <Drive drive={drive} />}
       </For>
       <Show when={creating()}>
