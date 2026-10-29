@@ -199,6 +199,33 @@ pub(crate) async fn set_module(
     respond(state.identity.admin_set_module(&admin, &module, body.enabled, &state.modules).await, no_content)
 }
 
+#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
+pub(crate) struct TenantLanguage {
+    /// The language of the emails kernoid writes to accounts that chose none – `en` or `de`; null for English.
+    language: Option<String>,
+}
+
+/// The language of the emails kernoid writes – invitations, notices – to the tenant's accounts that chose none (needs
+/// `directory.read`).
+#[utoipa::path(get, path = "/v1/tenant/language", tag = "tenant", params(TenantHeader),
+    responses((status = 200, body = TenantLanguage)))]
+pub(crate) async fn language(State(state): State<AppState>, AdminSession(admin): AdminSession) -> Response {
+    respond(state.identity.admin_tenant_language(&admin).await, |language| {
+        Json(TenantLanguage { language }).into_response()
+    })
+}
+
+/// Sets that language: `en`, `de`, or null for English (needs `tenant.manage`).
+#[utoipa::path(put, path = "/v1/tenant/language", tag = "tenant", params(TenantHeader), request_body = TenantLanguage,
+    responses((status = 204), (status = 400, description = "a language kernoid does not write", body = Problem)))]
+pub(crate) async fn set_language(
+    State(state): State<AppState>,
+    AdminSession(admin): AdminSession,
+    Json(body): Json<TenantLanguage>,
+) -> Response {
+    respond(state.identity.admin_set_tenant_language(&admin, body.language.as_deref()).await, no_content)
+}
+
 /// The permissions of the caller for the tenant administered – for a UI to show what it may do.
 #[utoipa::path(get, path = "/v1/tenant/permissions", tag = "tenant", params(TenantHeader),
     responses((status = 200, body = PermissionsView)))]

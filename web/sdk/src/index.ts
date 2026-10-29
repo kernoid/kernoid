@@ -10,6 +10,7 @@ export {
   type AuthRequest,
   type Consent,
   type DeclineReason,
+  type EmailLanguage,
   isMultiFactor,
   type LinkProposal,
   LoginClient,

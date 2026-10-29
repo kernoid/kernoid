@@ -521,6 +521,11 @@ type MutationRoot {
 	updateProfile(displayName: String!): Boolean!
 	renameTenant(name: String!): Boolean!
 	"""
+	Sets the language of the emails kernoid writes to the tenant's accounts that chose none: `en`, `de`, or null
+	for English (needs `tenant.manage`).
+	"""
+	setTenantLanguage(language: String): Boolean!
+	"""
 	Sets whether every login to an application of the tenant needs a second factor, and how many days accounts
 	without one may still log in (`mfaGraceDays`, 0 to 365); needs `policies.manage`.
 	"""
@@ -990,6 +995,11 @@ type QueryRoot {
 	The tenant administered (needs `directory.read`).
 	"""
 	tenant: Tenant!
+	"""
+	The language of the emails kernoid writes to the tenant's accounts that chose none: `en`, `de`; null for
+	English (needs `directory.read`).
+	"""
+	tenantLanguage: String
 	"""
 	The modules the installation has switched on, which the tenant may use, and whether it does.
 	"""

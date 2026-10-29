@@ -396,7 +396,8 @@ pub async fn notify_arrivals(
         let Some(address) = address else { continue };
         let host =
             hostname.map(str::to_owned).unwrap_or_else(|| address.rsplit('@').next().unwrap_or_default().to_owned());
-        let raw = arrival_notice(&host, &address, &arrivals);
+        let language = identity.account_language(recipient).await.map(|(_, used)| used).unwrap_or_default();
+        let raw = arrival_notice(&host, &address, &arrivals, &language);
         // An empty envelope sender, as for bounces: nothing answers a notice.
         let delivery = kernoid_mail::Delivery { from: "", to: &address, junk: false };
         match mail.deliver(recipient, raw.into(), delivery).await {
@@ -410,7 +411,8 @@ pub async fn notify_arrivals(
 /// At most this many files are named in a notice; the rest are counted.
 const NOTICE_NAMES: usize = 50;
 
-fn human_size(bytes: u64) -> String {
+/// A size for people; with a decimal comma in German.
+fn human_size(bytes: u64, german: bool) -> String {
     const UNITS: [&str; 5] = ["B", "KiB", "MiB", "GiB", "TiB"];
     let mut value = bytes as f64;
     let mut unit = 0;
@@ -418,28 +420,57 @@ fn human_size(bytes: u64) -> String {
         value /= 1024.0;
         unit += 1;
     }
-    if unit == 0 { format!("{bytes} B") } else { format!("{value:.1} {}", UNITS[unit]) }
+    match unit {
+        0 => format!("{bytes} B"),
+        _ if german => format!("{value:.1} {}", UNITS[unit]).replace('.', ","),
+        _ => format!("{value:.1} {}", UNITS[unit]),
+    }
 }
 
-/// The notice: which files came in, through the link to which folder.
-fn arrival_notice(host: &str, to: &str, arrivals: &kernoid_identity::file_link::LinkArrivals) -> Vec<u8> {
+/// The notice: which files came in, through the link to which folder – in the recipient's language (`de`, else
+/// English).
+fn arrival_notice(
+    host: &str,
+    to: &str,
+    arrivals: &kernoid_identity::file_link::LinkArrivals,
+    language: &str,
+) -> Vec<u8> {
     let count = arrivals.files.len();
-    let mut text = format!(
-        "{count} {} added through your link to the folder \"{}\":\r\n\r\n",
-        if count == 1 { "file was" } else { "files were" },
-        arrivals.folder
-    );
+    let folder = &arrivals.folder;
+    let german = language == "de";
+    let (subject, opening, more, closing) = if german {
+        (
+            format!("Dateien in „{folder}“ hinzugefügt"),
+            match count {
+                1 => format!("Über Ihren Link zum Ordner „{folder}“ wurde eine Datei hinzugefügt:"),
+                _ => format!("Über Ihren Link zum Ordner „{folder}“ wurden {count} Dateien hinzugefügt:"),
+            },
+            format!("und {} weitere", count.saturating_sub(NOTICE_NAMES)),
+            "Sie liegen jetzt im Ordner. Einen Link entfernen Sie in der Web-App: Dateien, der Ordner, Link.",
+        )
+    } else {
+        (
+            format!("Files added to \"{folder}\""),
+            match count {
+                1 => format!("1 file was added through your link to the folder \"{folder}\":"),
+                _ => format!("{count} files were added through your link to the folder \"{folder}\":"),
+            },
+            format!("and {} more", count.saturating_sub(NOTICE_NAMES)),
+            "They are in the folder now. A link can be removed in the web app: Files, the folder, Link.",
+        )
+    };
+    let mut text = format!("{opening}\r\n\r\n");
     for (name, size) in arrivals.files.iter().take(NOTICE_NAMES) {
-        text.push_str(&format!("  {name} ({})\r\n", human_size(*size)));
+        text.push_str(&format!("  {name} ({})\r\n", human_size(*size, german)));
     }
     if count > NOTICE_NAMES {
-        text.push_str(&format!("  and {} more\r\n", count - NOTICE_NAMES));
+        text.push_str(&format!("  {more}\r\n"));
     }
-    text.push_str("\r\nThey are in the folder now. A link can be removed in the web app: Files, the folder, Link.\r\n");
+    text.push_str(&format!("\r\n{closing}\r\n"));
     mail_builder::MessageBuilder::new()
         .from(mail_builder::headers::address::Address::new_address(Some("kernoid"), format!("mailer-daemon@{host}")))
         .to(to)
-        .subject(format!("Files added to \"{}\"", arrivals.folder))
+        .subject(subject)
         .header("Auto-Submitted", mail_builder::headers::raw::Raw::new("auto-generated"))
         .text_body(text)
         .write_to_vec()
@@ -459,12 +490,15 @@ mod tests {
             folder: "Submissions".into(),
             files: (0..52).map(|n| (format!("file {n}.pdf"), 1536)).collect(),
         };
-        let notice = String::from_utf8(arrival_notice("mx.firma.de", "bob@firma.de", &arrivals)).unwrap();
+        let notice = String::from_utf8(arrival_notice("mx.firma.de", "bob@firma.de", &arrivals, "en")).unwrap();
         assert!(notice.contains("Subject: Files added to \"Submissions\""), "{notice}");
         assert!(notice.contains("Auto-Submitted: auto-generated"), "{notice}");
         assert!(notice.contains("52 files were added"), "{notice}");
         assert!(notice.contains("file 49.pdf (1.5 KiB)") && !notice.contains("file 50.pdf"), "{notice}");
         assert!(notice.contains("and 2 more"), "{notice}");
-        assert_eq!(human_size(10), "10 B");
+        assert_eq!(human_size(10, false), "10 B");
+        let notice = String::from_utf8(arrival_notice("mx.firma.de", "bob@firma.de", &arrivals, "de")).unwrap();
+        assert!(notice.contains("Subject: =?utf-8?"), "the German subject is encoded: {notice}");
+        assert!(notice.contains("file 49.pdf (1,5 KiB)") && notice.contains("und 2 weitere"), "{notice}");
     }
 }

@@ -14,6 +14,11 @@ import { Vacation } from "./Vacation.js";
 
 export const client = new LoginClient({ cookies: true });
 
+/** A language by its own name. */
+export function languageName(code: string): string {
+  return ({ de: "Deutsch", en: "English" } as Record<string, string>)[code] ?? code;
+}
+
 interface AppPassword {
   id: string;
   name: string;
@@ -37,6 +42,7 @@ async function relogin(): Promise<void> {
 
 export function AccountView(): JSX.Element {
   const [session, { refetch: refetchSession }] = createResource(() => client.session());
+  const [emailLanguage, { refetch: refetchLanguage }] = createResource(() => client.emailLanguage());
   const [factors, { refetch: refetchFactors }] = createResource(() => client.secondFactors());
   const [passkeys, { refetch: refetchPasskeys }] = createResource(() => client.passkeys());
   const [consents, { refetch: refetchConsents }] = createResource(() => client.consents());
@@ -113,6 +119,37 @@ export function AccountView(): JSX.Element {
                 </For>
               </div>
             </section>
+
+            <Show when={ok(emailLanguage)}>
+              {(language) => (
+                <section>
+                  <h2>{t("Language of emails from kernoid")}</h2>
+                  <p class="muted small">{t("Invitations sent for you and notices to you are written in it; the app follows your browser.")}</p>
+                  <form
+                    class="row"
+                    onSubmit={submit(async (field) => {
+                      await client.setEmailLanguage(field("language") || null);
+                      await refetchLanguage();
+                      return t("Saved.");
+                    })}
+                  >
+                    <select name="language" aria-label={t("Language of emails from kernoid")}>
+                      <option value="" selected={language().language === null}>
+                        {language().language === null ? t("As the tenant ({language})", { language: languageName(language().used) }) : t("As the tenant")}
+                      </option>
+                      <For each={language().available}>
+                        {(code) => (
+                          <option value={code} selected={language().language === code}>
+                            {languageName(code)}
+                          </option>
+                        )}
+                      </For>
+                    </select>
+                    <button type="submit" disabled={busy()}>{t("Save")}</button>
+                  </form>
+                </section>
+              )}
+            </Show>
 
             <Vacation />
 

@@ -30,6 +30,9 @@ pub enum AccountEvent {
     Added { address: Address, display_name: String, services: Vec<Service> },
     #[serde(rename = "account.renamed")]
     Renamed { display_name: String },
+    /// The language of the emails kernoid writes to the account (`language`); `None` for the tenant's.
+    #[serde(rename = "account.language_set")]
+    LanguageSet { language: Option<String> },
     #[serde(rename = "account.alias_added")]
     AliasAdded { address: Address },
     #[serde(rename = "account.alias_removed")]
@@ -171,6 +174,7 @@ impl DomainEvent for AccountEvent {
 pub struct Account {
     pub exists: bool,
     pub display_name: String,
+    pub language: Option<String>,
     pub primary: Option<Address>,
     pub aliases: BTreeSet<Address>,
     pub active: bool,
@@ -247,6 +251,7 @@ impl Aggregate for Account {
                 self.services.remove(&service);
             }
             AccountEvent::Renamed { display_name } => self.display_name = display_name,
+            AccountEvent::LanguageSet { language } => self.language = language,
             AccountEvent::AliasAdded { address } => {
                 self.aliases.insert(address);
             }
@@ -425,6 +430,11 @@ pub(crate) async fn project(connection: &mut PgConnection, events: &[Event]) -> 
             AccountEvent::ServiceRevoked { service } => set_service(connection, id, service, None).await?,
             AccountEvent::Renamed { display_name } => {
                 sqlx::query!("UPDATE accounts SET display_name = $2 WHERE id = $1", id, display_name)
+                    .execute(&mut *connection)
+                    .await?;
+            }
+            AccountEvent::LanguageSet { language } => {
+                sqlx::query!("UPDATE accounts SET language = $2 WHERE id = $1", id, language)
                     .execute(&mut *connection)
                     .await?;
             }

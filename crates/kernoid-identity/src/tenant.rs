@@ -75,6 +75,9 @@ pub enum TenantEvent {
     /// Days after which what is in the accounts' file trash goes (RFC 0005, 4); `None` keeps it.
     #[serde(rename = "tenant.files_retention_set")]
     FilesRetentionSet { trash_days: Option<u32> },
+    /// The language of the emails kernoid writes to the tenant's accounts unless they chose one (`language`).
+    #[serde(rename = "tenant.language_set")]
+    LanguageSet { language: Option<String> },
     /// How the tenant's accounts log in (RFC 0003, 2): with usernames, with their verified contact address.
     #[serde(rename = "tenant.login_policy_set")]
     LoginPolicySet { usernames: bool, email_login: bool },
@@ -113,6 +116,7 @@ pub struct Tenant {
     pub mail_retention: (Option<u32>, Option<u32>),
     /// Days in the file trash.
     pub files_retention: Option<u32>,
+    pub language: Option<String>,
     pub login_policy: LoginPolicy,
     pub registration: Registration,
     pub service_policies: BTreeMap<Service, ServicePolicy>,
@@ -191,6 +195,7 @@ impl Aggregate for Tenant {
             TenantEvent::DefaultFilesQuotaSet { bytes } => self.default_files_quota = bytes,
             TenantEvent::MailRetentionSet { trash_days, junk_days } => self.mail_retention = (trash_days, junk_days),
             TenantEvent::FilesRetentionSet { trash_days } => self.files_retention = trash_days,
+            TenantEvent::LanguageSet { language } => self.language = language,
             TenantEvent::LoginPolicySet { usernames, email_login } => {
                 self.login_policy = LoginPolicy { usernames, email_login };
             }
@@ -312,6 +317,11 @@ pub(crate) async fn project(connection: &mut PgConnection, events: &[Event]) -> 
                 )
                 .execute(&mut *connection)
                 .await?;
+            }
+            TenantEvent::LanguageSet { language } => {
+                sqlx::query!("UPDATE tenants SET language = $2 WHERE id = $1", id, language)
+                    .execute(&mut *connection)
+                    .await?;
             }
             TenantEvent::MailRetentionSet { trash_days, junk_days } => {
                 sqlx::query!(

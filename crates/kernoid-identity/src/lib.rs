@@ -24,6 +24,7 @@ pub mod file_link;
 pub mod files_quota;
 pub mod group;
 pub mod instance;
+pub mod language;
 pub mod link;
 pub mod login;
 pub mod mail_access;

@@ -625,6 +625,13 @@ impl AdminQuery {
         Ok(identity.admin_tenant(&admin).await.map_err(error)?.into())
     }
 
+    /// The language of the emails kernoid writes to the tenant's accounts that chose none: `en`, `de`; null for
+    /// English (needs `directory.read`).
+    async fn tenant_language(&self, context: &Context<'_>) -> async_graphql::Result<Option<String>> {
+        let (identity, admin) = admin(context).await?;
+        identity.admin_tenant_language(&admin).await.map_err(error)
+    }
+
     /// The modules the installation has switched on, which the tenant may use, and whether it does.
     async fn tenant_modules(&self, context: &Context<'_>) -> async_graphql::Result<Vec<TenantModule>> {
         let (identity, admin) = admin(context).await?;
@@ -941,6 +948,18 @@ impl AdminMutation {
     async fn rename_tenant(&self, context: &Context<'_>, name: String) -> async_graphql::Result<bool> {
         let (identity, admin) = admin(context).await?;
         identity.admin_rename_tenant(&admin, &name).await.map_err(error)?;
+        Ok(true)
+    }
+
+    /// Sets the language of the emails kernoid writes to the tenant's accounts that chose none: `en`, `de`, or null
+    /// for English (needs `tenant.manage`).
+    async fn set_tenant_language(
+        &self,
+        context: &Context<'_>,
+        language: Option<String>,
+    ) -> async_graphql::Result<bool> {
+        let (identity, admin) = admin(context).await?;
+        identity.admin_set_tenant_language(&admin, language.as_deref()).await.map_err(error)?;
         Ok(true)
     }
 

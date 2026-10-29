@@ -127,6 +127,15 @@ account's history). The tenant's events need `directory.read` – the built-in `
 own (`scope=instance`) `instance.read`. Logins are events too (`session.created`). Events hold no passwords, tokens or
 other secrets: those never enter them.
 
+## The language of kernoid's emails
+
+What kernoid writes itself – invitations sent for an account, notices of files added through a link – is in German or
+English: the account's own choice (on the account page, `GET`/`PUT /v1/account/language`, `kernoid account language
+<ACCOUNT> de|en|none`), else the tenant's (Administration → Settings, `GET`/`PUT /v1/tenant/language` with
+`tenant.manage` to set it, GraphQL `tenantLanguage`, `setTenantLanguage`, `kernoid tenant language <TENANT>
+de|en|none`), else English. Invitations take the sender's language, notices the recipient's. The apps choose their own
+language from the browser. Both choices are events (`account.language_set`, `tenant.language_set`).
+
 ## Bootstrapping
 
 The first administrators are set up by the operator:

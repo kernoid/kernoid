@@ -409,6 +409,11 @@ enum AccountCommand {
         account: Uuid,
         name: String,
     },
+    /// The language of the emails kernoid writes to the account: en, de; `none` for its tenant's.
+    Language {
+        account: Uuid,
+        language: String,
+    },
     /// Set the password, read from standard input (without echo on a terminal) – never from the command line.
     Password {
         account: Uuid,
@@ -663,6 +668,11 @@ enum TenantCommand {
         tenant: Uuid,
         #[arg(long, value_parser = parse_days)]
         trash_days: Days,
+    },
+    /// The language of the emails kernoid writes to accounts that chose none: en, de; `none` for English.
+    Language {
+        tenant: Uuid,
+        language: String,
     },
     /// Switch a module on or off for the tenant.
     Module {
@@ -1963,6 +1973,11 @@ async fn tenant(config: &Config, command: TenantCommand) -> anyhow::Result<()> {
         TenantCommand::FilesRetention { tenant, trash_days } => {
             identity.set_files_retention(tenant, trash_days.0, OPERATOR).await?;
         }
+        TenantCommand::Language { tenant, language } => {
+            identity
+                .set_tenant_language(tenant, Some(language.as_str()).filter(|code| *code != "none"), OPERATOR)
+                .await?;
+        }
         TenantCommand::Module { tenant, module, enabled } => {
             let known: Vec<&str> = MODULES.iter().map(|module| module.name()).collect();
             identity.set_tenant_module(instance_of(tenant).await?, tenant, &module, enabled, &known, OPERATOR).await?;
@@ -2092,6 +2107,10 @@ async fn account(config: &Config, command: AccountCommand) -> anyhow::Result<()>
             }
         }
         AccountCommand::Rename { account, name } => identity.rename_account(account, &name, OPERATOR).await?,
+        AccountCommand::Language { account, language } => {
+            let language = Some(language.as_str()).filter(|code| *code != "none");
+            identity.set_account_language(account, language, OPERATOR).await?;
+        }
         AccountCommand::Password { account } => {
             let password = read_password("New password: ")?;
             identity.set_password(account, &password, OPERATOR).await?;

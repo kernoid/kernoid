@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: CC-BY-4.0 -->
 # RFC 0003 – Accounts, logins and services
 
-- **Status:** draft, 2026-10-24; implemented (migration 0030)
+- **Status:** draft, 2026-10-24; implemented (migration 0030; the language in section 1, migration 0044, since 0.2)
 - **Scope:** what an account is apart from its mail address; how people log in (addresses, usernames, verified
   email addresses, external providers) and register; how one person's logins are linked; which services
   (mail, files) an account uses and who decides. It changes RFC 0001 (3.1, 7.7, 7.8) and RFC 0002 (2, 9.2, 11).
@@ -31,6 +31,9 @@ projects, roles and authorizations, as in kernoid (RFC 0001, 7.5).
 - **Contact address:** every person's account may have one email address of any domain to reach it by
   (`account.email_set`, with whether it is verified). A verified contact address belongs to at most one account of
   an instance. A native account's primary address is its contact address unless another is set.
+- **Language:** the emails kernoid writes itself – invitations sent for the account, notices to it – are in the
+  account's language (`account.language_set`: `de`, `en`, or none), else its tenant's (`tenant.language_set`), else
+  English. It is not the language of the apps, which follow the browser.
 
 ## 2. Logins
 

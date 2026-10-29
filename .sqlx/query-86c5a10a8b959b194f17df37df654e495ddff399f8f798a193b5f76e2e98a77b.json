@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT a.tenant_id, a.display_name,\n                      coalesce(array_agg(lower(d.address) ORDER BY d.is_primary DESC, d.address)\n                               FILTER (WHERE d.address IS NOT NULL), '{}') AS \"addresses!\"\n               FROM accounts a LEFT JOIN addresses d ON d.account_id = a.id\n               WHERE a.id = $1 AND a.active\n               GROUP BY a.id",
+  "query": "SELECT a.tenant_id, a.display_name, coalesce(a.language, t.language, 'en') AS \"language!\",\n                      coalesce(array_agg(lower(d.address) ORDER BY d.is_primary DESC, d.address)\n                               FILTER (WHERE d.address IS NOT NULL), '{}') AS \"addresses!\"\n               FROM accounts a JOIN tenants t ON t.id = a.tenant_id LEFT JOIN addresses d ON d.account_id = a.id\n               WHERE a.id = $1 AND a.active\n               GROUP BY a.id, t.language",
   "describe": {
     "columns": [
       {
@@ -27,6 +27,12 @@
       },
       {
         "ordinal": 2,
+        "name": "language!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
         "name": "addresses!",
         "type_info": "TextArray",
         "origin": "Expression"
@@ -40,8 +46,9 @@
     "nullable": [
       false,
       false,
+      null,
       null
     ]
   },
-  "hash": "e9c6ad8e862a27fb49fac4e9f587bc91353a81d834c334afa2cbf581061bb98e"
+  "hash": "86c5a10a8b959b194f17df37df654e495ddff399f8f798a193b5f76e2e98a77b"
 }

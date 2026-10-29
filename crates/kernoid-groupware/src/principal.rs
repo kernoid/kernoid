@@ -13,18 +13,21 @@ pub struct PrincipalInfo {
     pub display_name: String,
     /// The account's addresses, the primary one first, lower case.
     pub addresses: Vec<String>,
+    /// The language of the emails kernoid writes for it (`kernoid_identity::language`): its own, its tenant's, or
+    /// English.
+    pub language: String,
 }
 
 impl Groupware {
     /// An active account with mail as a calendar user.
     pub async fn principal(&self, account: Uuid) -> Result<PrincipalInfo> {
         let row = sqlx::query!(
-            r#"SELECT a.tenant_id, a.display_name,
+            r#"SELECT a.tenant_id, a.display_name, coalesce(a.language, t.language, 'en') AS "language!",
                       coalesce(array_agg(lower(d.address) ORDER BY d.is_primary DESC, d.address)
                                FILTER (WHERE d.address IS NOT NULL), '{}') AS "addresses!"
-               FROM accounts a LEFT JOIN addresses d ON d.account_id = a.id
+               FROM accounts a JOIN tenants t ON t.id = a.tenant_id LEFT JOIN addresses d ON d.account_id = a.id
                WHERE a.id = $1 AND a.active
-               GROUP BY a.id"#,
+               GROUP BY a.id, t.language"#,
             account,
         )
         .fetch_optional(self.pool())
@@ -35,6 +38,7 @@ impl Groupware {
             tenant: row.tenant_id,
             display_name: row.display_name,
             addresses: row.addresses,
+            language: row.language,
         })
     }
 

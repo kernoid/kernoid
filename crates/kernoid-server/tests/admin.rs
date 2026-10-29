@@ -678,3 +678,36 @@ async fn saml_endpoints_answer(pool: PgPool) {
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
     assert!(response.headers()["location"].to_str().unwrap().starts_with("https://login.firma.de/login/idp#error="));
 }
+
+#[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
+async fn the_language_of_kernoids_emails(pool: PgPool) {
+    let s = setup(&pool).await;
+    let alice_token = login(&s.app, "alice@firma.de").await;
+    let bob_token = login(&s.app, "bob@firma.de").await;
+    let (alice, bob) = (Call::new(&s.app, &alice_token), Call::new(&s.app, &bob_token));
+
+    // English unless chosen.
+    let (status, language) = bob.get("/v1/account/language").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(language, json!({ "language": null, "used": "en", "available": ["en", "de"] }));
+
+    // The tenant's default holds for accounts that chose none; only an administrator sets it.
+    assert_eq!(bob.status("PUT", "/v1/tenant/language", Some(json!({ "language": "de" }))).await, 403);
+    assert_eq!(alice.status("PUT", "/v1/tenant/language", Some(json!({ "language": "fr" }))).await, 400);
+    assert_eq!(alice.status("PUT", "/v1/tenant/language", Some(json!({ "language": "de" }))).await, 204);
+    assert_eq!(alice.get("/v1/tenant/language").await.1, json!({ "language": "de" }));
+    assert_eq!(bob.get("/v1/account/language").await.1["used"], "de");
+
+    // An account's own choice comes first; null follows the tenant again.
+    assert_eq!(bob.status("PUT", "/v1/account/language", Some(json!({ "language": "en" }))).await, 204);
+    assert_eq!(bob.get("/v1/account/language").await.1["used"], "en");
+    assert_eq!(bob.status("PUT", "/v1/account/language", Some(json!({ "language": null }))).await, 204);
+    assert_eq!(bob.get("/v1/account/language").await.1["used"], "de");
+    assert_eq!(Call::anonymous(&s.app).status("GET", "/v1/account/language", None).await, 401);
+
+    // GraphQL: the same for the tenant.
+    let set = alice.graphql(r#"mutation { setTenantLanguage(language: null) }"#).await;
+    assert_eq!(set["data"]["setTenantLanguage"], true, "{set}");
+    assert_eq!(alice.graphql("{ tenantLanguage }").await["data"]["tenantLanguage"], Value::Null);
+    assert_eq!(bob.get("/v1/account/language").await.1["used"], "en");
+}

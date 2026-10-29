@@ -257,12 +257,13 @@ account –, or lets them add files to a directory, or both.
 - **Notice:** what comes in is noted (`file_link_arrivals`); once nothing more has come in through a link for two
   minutes, the worker delivers one email to the link's maker – or, if an operator made it, to the store's owner – that
   names the files (up to 50, the rest counted), and removes the notes. Someone without a mailbox gets none. The email
-  has an empty envelope sender and `Auto-Submitted: auto-generated`, so nothing answers it; it is in English.
+  has an empty envelope sender and `Auto-Submitted: auto-generated`, so nothing answers it; it is in the recipient's
+  language (RFC 0003, 1).
 - A link ends when it expires, is removed, or its node is destroyed; it does not work while the owner or the tenant is
   deactivated.
 - The web app opens links on its page `link.html`: the token stays in the URL's fragment, which browsers do not send
   to the server or in `Referer`.
-- **OPEN:** limits on how much a link may add (beyond the quota); notices in other languages;
+- **OPEN:** limits on how much a link may add (beyond the quota);
   links that reveal their token again later (they would
   need it sealed instead of hashed); limits on downloads per link.
 

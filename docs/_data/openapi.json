@@ -548,6 +548,76 @@
         }
       }
     },
+    "/v1/account/language": {
+      "get": {
+        "tags": [
+          "account"
+        ],
+        "summary": "The language of the emails kernoid writes to one's own account – invitations sent for it, notices.",
+        "operationId": "language",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LanguageView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "no valid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "account"
+        ],
+        "summary": "Chooses that language; null follows the tenant's.",
+        "operationId": "set_language",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LanguageChoice"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "description": "a language kernoid does not write",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "no valid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/account/mail/access": {
       "get": {
         "tags": [
@@ -8531,6 +8601,84 @@
         }
       }
     },
+    "/v1/tenant/language": {
+      "get": {
+        "tags": [
+          "tenant"
+        ],
+        "summary": "The language of the emails kernoid writes – invitations, notices – to the tenant's accounts that chose none (needs\n`directory.read`).",
+        "operationId": "language",
+        "parameters": [
+          {
+            "name": "kernoid-tenant",
+            "in": "header",
+            "description": "The tenant to act on – for instance administrators; the caller's own tenant if left out.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantLanguage"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "tenant"
+        ],
+        "summary": "Sets that language: `en`, `de`, or null for English (needs `tenant.manage`).",
+        "operationId": "set_language",
+        "parameters": [
+          {
+            "name": "kernoid-tenant",
+            "in": "header",
+            "description": "The tenant to act on – for instance administrators; the caller's own tenant if left out.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TenantLanguage"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "description": "a language kernoid does not write",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/tenant/login-policy": {
       "get": {
         "tags": [
@@ -10490,6 +10638,45 @@
           }
         }
       },
+      "LanguageChoice": {
+        "type": "object",
+        "properties": {
+          "language": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`en`, `de`, or null for the tenant's."
+          }
+        }
+      },
+      "LanguageView": {
+        "type": "object",
+        "required": [
+          "used",
+          "available"
+        ],
+        "properties": {
+          "available": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The languages kernoid writes in."
+          },
+          "language": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The account's own choice; null for the tenant's."
+          },
+          "used": {
+            "type": "string",
+            "description": "What kernoid writes in for the account now."
+          }
+        }
+      },
       "LinkNodeView": {
         "type": "object",
         "required": [
@@ -12304,6 +12491,18 @@
               "string",
               "null"
             ]
+          }
+        }
+      },
+      "TenantLanguage": {
+        "type": "object",
+        "properties": {
+          "language": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The language of the emails kernoid writes to accounts that chose none – `en` or `de`; null for English."
           }
         }
       },

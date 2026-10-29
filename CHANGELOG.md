@@ -64,6 +64,10 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   `mayAdd` on `FileLink`; `POST /v1/links/{token}/files`; migration 0042). A name already taken gets a number;
   nothing is replaced. The web app makes them (Link → "People can") and its link page uploads with progress. Whoever
   made the link gets one email naming what came in, once nothing more has come for two minutes (migration 0043).
+- Emails kernoid writes itself – invitations, notices of files added through links – are in German or English: the
+  account's choice (account page, `/v1/account/language`, `kernoid account language`), else the tenant's
+  (Administration → Settings, `/v1/tenant/language`, GraphQL `setTenantLanguage`, `kernoid tenant language`), else
+  English (migration 0044).
 - The web app's administration saves an account's mailbox as an mbox file and imports one into it (up to 2 MiB in
   the browser; larger ones with `kernoid mail import-mbox`).
 - The web app shows an HTML email in its original layout too ("Original" beside "Readable"): served as a page of its
@@ -101,7 +105,7 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 - Take the new `deploy/compose` with the new image: the 0.1 image refuses the module settings the new compose file
   passes (`[modules.clamav]` did not exist).
-- `kernoid migrate` adds migrations 0034 to 0043 (CI's upgrade check runs them from 0.1.0 with mail and files in it).
+- `kernoid migrate` adds migrations 0034 to 0044 (CI's upgrade check runs them from 0.1.0 with mail and files in it).
 - DKIM: each domain gets an Ed25519 key beside its RSA key – publish the new TXT record `kernoid-ed1._domainkey`
   that the domain's DNS check shows; mail is signed with it once DNS has it.
 - Nothing else changes by itself: LDAP, ClamAV and Jitsi stay off until configured.

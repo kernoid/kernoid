@@ -23,18 +23,38 @@ use crate::{
 };
 
 /// The summary of the first event in an iTIP object, for the subject.
-fn title(ical: &ICalendar) -> String {
+fn title(ical: &ICalendar, language: &str) -> String {
     ical.components
         .iter()
         .filter(|component| component.component_type.is_scheduling_object())
         .find_map(|component| component.property(&ICalendarProperty::Summary))
         .and_then(|entry| entry.values.first())
         .and_then(|value| value.as_text())
-        .map_or_else(|| "(no title)".to_owned(), |text| text.chars().take(200).collect())
+        .map_or_else(
+            || if language == "de" { "(ohne Titel)" } else { "(no title)" }.to_owned(),
+            |text| text.chars().take(200).collect(),
+        )
 }
 
-/// The subject and text of the email (English; OPEN: other languages).
-fn wording(summary: &ItipSummary, title: &str, from: &str) -> (String, String) {
+/// The subject and text of the email, in the sender's language (`de`, else English).
+fn wording(summary: &ItipSummary, title: &str, from: &str, language: &str) -> (String, String) {
+    if language == "de" {
+        return match summary {
+            ItipSummary::Invite(_) => (format!("Einladung: {title}"), format!("{from} lädt Sie zu „{title}“ ein.")),
+            ItipSummary::Update { .. } => (format!("Geändert: {title}"), format!("{from} hat „{title}“ geändert.")),
+            ItipSummary::Cancel(_) => (format!("Abgesagt: {title}"), format!("{from} hat „{title}“ abgesagt.")),
+            ItipSummary::Rsvp { part_stat, .. } => {
+                let (subject, answer) = match part_stat.as_str() {
+                    "ACCEPTED" => ("Zugesagt", "zugesagt"),
+                    "DECLINED" => ("Abgelehnt", "abgelehnt"),
+                    "TENTATIVE" => ("Vorläufig zugesagt", "vorläufig zugesagt"),
+                    "DELEGATED" => ("Weitergegeben", "weitergegeben"),
+                    _ => ("Beantwortet", "beantwortet"),
+                };
+                (format!("{subject}: {title}"), format!("{from} hat „{title}“ {answer}."))
+            }
+        };
+    }
     match summary {
         ItipSummary::Invite(_) => (format!("Invitation: {title}"), format!("{from} invites you to \"{title}\".")),
         ItipSummary::Update { .. } => (format!("Updated: {title}"), format!("{from} changed \"{title}\".")),
@@ -62,8 +82,8 @@ impl Groupware {
                 continue;
             }
             let ics = message.message.to_string();
-            let title = title(&message.message);
-            let (subject, text) = wording(&message.summary, &title, &principal.display_name);
+            let title = title(&message.message, &principal.language);
+            let (subject, text) = wording(&message.summary, &title, &principal.display_name, &principal.language);
             let method = message.summary.method().to_owned();
             let raw = MessageBuilder::new()
                 .from((principal.display_name.as_str(), message.from.as_str()))
@@ -164,5 +184,27 @@ impl Groupware {
             // One iTIP object per message (RFC 6047, 2.4).
             break;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use calcard::icalendar::ICalendarParticipationStatus;
+
+    use super::*;
+
+    #[test]
+    fn the_wording_follows_the_senders_language() {
+        let invite = ItipSummary::Invite(Vec::new());
+        assert_eq!(
+            wording(&invite, "Planning", "Alice", "en"),
+            ("Invitation: Planning".to_owned(), "Alice invites you to \"Planning\".".to_owned())
+        );
+        assert_eq!(
+            wording(&invite, "Planung", "Alice", "de"),
+            ("Einladung: Planung".to_owned(), "Alice lädt Sie zu „Planung“ ein.".to_owned())
+        );
+        let declined = ItipSummary::Rsvp { part_stat: ICalendarParticipationStatus::Declined, current: Vec::new() };
+        assert_eq!(wording(&declined, "Planung", "Bob", "de").0, "Abgelehnt: Planung");
     }
 }

@@ -20,6 +20,7 @@ export function Settings(): JSX.Element {
   const [retention] = createResource(() => api<{ trash_days?: number | null; junk_days?: number | null }>("GET", "/v1/tenant/mail-retention"));
   const [modules] = createResource(() => api<{ name: string; enabled: boolean }[]>("GET", "/v1/tenant/modules"));
   const [filesRetention] = createResource(() => api<{ trash_days?: number | null }>("GET", "/v1/tenant/files-retention"));
+  const [language] = createResource(() => api<{ language?: string | null }>("GET", "/v1/tenant/language"));
   const days = (text: string) => (text ? Number.parseInt(text, 10) : null);
 
   return (
@@ -47,6 +48,27 @@ export function Settings(): JSX.Element {
             </Form>
           </section>
         )}
+      </Show>
+
+      <Show when={language.state === "ready"}>
+        <section>
+          <h2>{t("Language of emails from kernoid")}</h2>
+          <Form
+            class="stack"
+            submit={(field) => void action.run(() => api("PUT", "/v1/tenant/language", { language: field("language") || null }), t("Saved."))}
+          >
+            <Select
+              label={t("Invitations and notices, for accounts that chose none")}
+              name="language"
+              value={ok(language)?.language ?? ""}
+              options={[
+                ["", t("English (default)")],
+                ["de", "Deutsch"],
+              ]}
+            />
+            <Buttons busy={action.busy()} />
+          </Form>
+        </section>
       </Show>
 
       <Show when={ok(login)}>

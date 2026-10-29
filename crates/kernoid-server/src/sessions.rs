@@ -324,6 +324,61 @@ pub(crate) async fn change_password(
     }
 }
 
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub(crate) struct LanguageView {
+    /// The account's own choice; null for the tenant's.
+    language: Option<String>,
+    /// What kernoid writes in for the account now.
+    used: String,
+    /// The languages kernoid writes in.
+    available: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
+pub(crate) struct LanguageChoice {
+    /// `en`, `de`, or null for the tenant's.
+    language: Option<String>,
+}
+
+/// The language of the emails kernoid writes to one's own account – invitations sent for it, notices.
+#[utoipa::path(get, path = "/v1/account/language", tag = "account", responses(
+    (status = 200, body = LanguageView),
+    (status = 401, description = "no valid session", body = Problem),
+))]
+pub(crate) async fn language(
+    State(state): State<AppState>,
+    CurrentInstance(instance): CurrentInstance,
+    SessionToken(token): SessionToken,
+) -> Response {
+    match state.identity.own_language(instance.id, &token).await {
+        Ok((language, used)) => Json(LanguageView {
+            language,
+            used,
+            available: kernoid_identity::language::LANGUAGES.iter().map(|code| (*code).to_owned()).collect(),
+        })
+        .into_response(),
+        Err(error) => problem(error),
+    }
+}
+
+/// Chooses that language; null follows the tenant's.
+#[utoipa::path(put, path = "/v1/account/language", tag = "account", request_body = LanguageChoice, responses(
+    (status = 204),
+    (status = 400, description = "a language kernoid does not write", body = Problem),
+    (status = 401, description = "no valid session", body = Problem),
+))]
+pub(crate) async fn set_language(
+    State(state): State<AppState>,
+    CurrentInstance(instance): CurrentInstance,
+    SessionToken(token): SessionToken,
+    Json(body): Json<LanguageChoice>,
+) -> Response {
+    match state.identity.set_own_language(instance.id, &token, body.language.as_deref()).await {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(error) => problem(error),
+    }
+}
+
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub(crate) struct Profile {
     display_name: String,

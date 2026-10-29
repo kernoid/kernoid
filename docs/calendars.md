@@ -60,7 +60,9 @@ own ACL method is not offered – programs show the access but do not change it.
 When an account creates, changes or deletes an event it organizes – or answers one it is invited to – kernoid sends
 the invitation, update, cancellation or answer by email from the account's address (iTIP over iMIP,
 [RFC 6047](https://www.rfc-editor.org/rfc/rfc6047)): a short text, the event for calendar programs, and the same as an
-attachment `invite.ics`. Accounts of the same installation get it at once.
+attachment `invite.ics`. Accounts of the same installation get it at once. The text is in the language of the
+emails kernoid writes for the sending account – German or English, see
+[Administration]({{ '/administration/#the-language-of-kernoids-emails' | relative_url }}).
 
 Invitations that arrive by email are applied to the recipient's calendars – a new event lands in the default
 calendar, an answer updates the organizer's event, a cancellation marks the event cancelled – but only when the
@@ -68,5 +70,4 @@ sender is who the invitation says and that is shown: the message passed DMARC, o
 email stays in the mailbox either way.
 
 {: .note }
-OPEN: invitation texts in other languages than English, answers by link in the email, changing single instances of
-a recurring event through JMAP.
+OPEN: invitation texts in languages other than German and English, answers by link in the email.

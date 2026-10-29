@@ -56,6 +56,16 @@ export interface AuthRequest {
   expires_at: string;
 }
 
+/** The language of the emails kernoid writes to the account – invitations sent for it, notices. */
+export interface EmailLanguage {
+  /** The account's own choice; null follows its tenant's. */
+  language: string | null;
+  /** What kernoid writes in for it now. */
+  used: string;
+  /** The languages kernoid writes in. */
+  available: string[];
+}
+
 /** What an account agreed an application may have. */
 export interface Consent {
   application: string;
@@ -379,6 +389,15 @@ export class LoginClient {
 
   updateProfile(displayName: string): Promise<void> {
     return this.http.request("PATCH", "/v1/account", { display_name: displayName });
+  }
+
+  emailLanguage(): Promise<EmailLanguage> {
+    return this.http.request("GET", "/v1/account/language");
+  }
+
+  /** `null` follows the tenant's language. */
+  setEmailLanguage(language: string | null): Promise<void> {
+    return this.http.request("PUT", "/v1/account/language", { language });
   }
 
   /** The applications the account agreed to. */

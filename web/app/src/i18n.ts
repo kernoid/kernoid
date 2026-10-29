@@ -413,6 +413,13 @@ const de: Record<string, string> = {
   "Too many attempts – try again later.": "Zu viele Versuche – später noch einmal.",
   "The password is not right.": "Das Passwort stimmt nicht.",
   "This link has a password": "Dieser Link hat ein Passwort",
+  "Language of emails from kernoid": "Sprache der E-Mails von kernoid",
+  "Invitations sent for you and notices to you are written in it; the app follows your browser.":
+    "Darin sind Einladungen, die für Sie verschickt werden, und Hinweise an Sie geschrieben; die App folgt Ihrem Browser.",
+  "As the tenant ({language})": "Wie der Mandant ({language})",
+  "As the tenant": "Wie der Mandant",
+  "Invitations and notices, for accounts that chose none": "Einladungen und Hinweise, für Konten ohne eigene Wahl",
+  "English (default)": "Englisch (Standard)",
   "Anyone with a link can view and download what it leads to, or add files to it – without an account.":
     "Wer einen Link hat, kann ansehen und herunterladen, wohin er führt, oder Dateien hinzufügen – ohne Konto.",
   "People can": "Man kann",
