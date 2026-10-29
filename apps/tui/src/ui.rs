@@ -15,7 +15,7 @@ use kernoid_tui::jmap::{
     mail::{Conversation, format_addresses},
 };
 
-use crate::app::{self, App, FilesFocus, MailFocus, Popup, Tab};
+use crate::app::{self, App, FilesFocus, MailFocus, Pane, Popup, PopupRegion, Tab};
 
 /// Mint of the brand, for what is selected and focused.
 const ACCENT: Color = Color::Rgb(0x3D, 0xDC, 0x97);
@@ -31,6 +31,7 @@ fn highlight() -> Style {
 }
 
 pub fn draw(frame: &mut Frame, app: &mut App) {
+    app.regions = app::Regions::default();
     let [top, main, status] =
         Layout::vertical([Constraint::Length(1), Constraint::Min(3), Constraint::Length(1)]).areas(frame.area());
     draw_tabs(frame, app, top);
@@ -42,11 +43,25 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     }
     draw_status(frame, app, status);
     if let Some(popup) = app.popup.clone() {
-        draw_popup(frame, app, &popup);
+        let mut region = None;
+        draw_popup(frame, app, &popup, &mut region);
+        app.regions.popup = region;
     }
 }
 
-fn draw_tabs(frame: &mut Frame, app: &App, area: Rect) {
+/// Notes where a list was drawn and its first visible row, for clicks.
+fn reachable(app: &mut App, area: Rect, pane: Pane, offset: usize) {
+    app.regions.lists.push((area, pane, offset));
+}
+
+fn draw_tabs(frame: &mut Frame, app: &mut App, area: Rect) {
+    // Where each title lands, as Tabs draws them: a space, the title, a space, the divider.
+    let mut x = area.x;
+    for (i, tab) in Tab::ALL.iter().enumerate() {
+        let width = format!("{} {}", i + 1, tab.title()).chars().count() as u16 + 2;
+        app.regions.tabs.push((Rect::new(x, area.y, width, 1), *tab));
+        x += width + 1;
+    }
     let titles = Tab::ALL.iter().enumerate().map(|(i, tab)| format!("{} {}", i + 1, tab.title()));
     let index = Tab::ALL.iter().position(|t| *t == app.tab).unwrap_or(0);
     let user = format!("{} {} ", if app.online { "●" } else { "○" }, app.client.session.username);
@@ -123,6 +138,8 @@ fn draw_mail(frame: &mut Frame, app: &mut App, area: Rect) {
     let list =
         List::new(items).block(pane(&title, app.mail_focus == MailFocus::Mailboxes)).highlight_style(highlight());
     frame.render_stateful_widget(list, boxes, &mut app.mail.boxes);
+    let offset = app.mail.boxes.offset();
+    reachable(app, boxes, Pane::Mailboxes, offset);
 
     let reading = !app.mail.open.is_empty() && app.mail_focus == MailFocus::Reader;
     let (list_area, reader_area) = if reading {
@@ -145,9 +162,12 @@ fn draw_mail(frame: &mut Frame, app: &mut App, area: Rect) {
     }
     let list = List::new(items).block(pane(&title, app.mail_focus == MailFocus::List)).highlight_style(highlight());
     frame.render_stateful_widget(list, list_area, &mut app.mail.list);
+    let offset = app.mail.list.offset();
+    reachable(app, list_area, Pane::Emails, offset);
 
     if let Some(area) = reader_area {
         app.reader_width = area.width as usize;
+        app.regions.reader = Some(area);
         let field =
             |name: &str, value: String| Line::from(vec![Span::from(format!("{name:<8}")).fg(DIM), Span::from(value)]);
         let mut text = Text::default();
@@ -245,6 +265,8 @@ fn draw_files(frame: &mut Frame, app: &mut App, area: Rect) {
     let list =
         List::new(items).block(pane("Stores", app.files_focus == FilesFocus::Stores)).highlight_style(highlight());
     frame.render_stateful_widget(list, stores, &mut app.files.store_list);
+    let offset = app.files.store_list.offset();
+    reachable(app, stores, Pane::Stores, offset);
 
     let mut path = app.store().map(app::store_title).unwrap_or_default();
     if app.files.search.is_empty() {
@@ -294,6 +316,8 @@ fn draw_files(frame: &mut Frame, app: &mut App, area: Rect) {
         .collect();
     let list = List::new(items).block(pane(&path, app.files_focus == FilesFocus::Nodes)).highlight_style(highlight());
     frame.render_stateful_widget(list, rest, &mut app.files.list);
+    let offset = app.files.list.offset();
+    reachable(app, rest, Pane::Nodes, offset);
 }
 
 fn draw_calendar(frame: &mut Frame, app: &mut App, area: Rect) {
@@ -347,6 +371,8 @@ fn draw_calendar(frame: &mut Frame, app: &mut App, area: Rect) {
     }
     let list = List::new(items).block(pane(&title, true)).highlight_style(highlight());
     frame.render_stateful_widget(list, area, &mut app.calendar.list);
+    let offset = app.calendar.list.offset();
+    reachable(app, area, Pane::Events, offset);
 }
 
 fn draw_contacts(frame: &mut Frame, app: &mut App, area: Rect) {
@@ -358,6 +384,8 @@ fn draw_contacts(frame: &mut Frame, app: &mut App, area: Rect) {
     }
     let list = List::new(items).block(pane(&title, true)).highlight_style(highlight());
     frame.render_stateful_widget(list, left, &mut app.contacts.list);
+    let offset = app.contacts.list.offset();
+    reachable(app, left, Pane::Cards, offset);
     let mut lines = Vec::new();
     if let Some(card) = app.contacts.list.selected().and_then(|i| app.contacts.cards.get(i)) {
         lines.push(Line::from(card.full_name()).bold());
@@ -385,30 +413,40 @@ fn centered(area: Rect, width: u16, height: u16) -> Rect {
     area
 }
 
-fn list_popup(frame: &mut Frame, title: &str, items: Vec<ListItem>, selected: usize, footer: &str) {
-    let height = items.iter().map(ListItem::height).sum::<usize>() as u16 + 3;
+fn list_popup(
+    frame: &mut Frame,
+    region: &mut Option<PopupRegion>,
+    title: &str,
+    items: Vec<ListItem>,
+    selected: usize,
+    footer: &str,
+) {
+    let heights: Vec<usize> = items.iter().map(ListItem::height).collect();
+    let height = heights.iter().sum::<usize>() as u16 + 3;
     let area = centered(frame.area(), 70, height.max(5));
     frame.render_widget(Clear, area);
     let mut state = ListState::default().with_selected(Some(selected));
     let block = pane(title, true).title_bottom(Line::from(format!(" {footer} ")).fg(DIM));
     frame.render_stateful_widget(List::new(items).block(block).highlight_style(highlight()), area, &mut state);
+    *region = Some(PopupRegion { area, list: true, offset: state.offset(), heights, first: 0 });
 }
 
-fn text_popup(frame: &mut Frame, title: &str, text: Text, footer: &str) {
+fn text_popup(frame: &mut Frame, region: &mut Option<PopupRegion>, title: &str, text: Text, footer: &str) {
     let height = text.lines.len() as u16 + 2;
     let area = centered(frame.area(), 76, height.clamp(5, 30));
+    *region = Some(PopupRegion { area, ..PopupRegion::default() });
     frame.render_widget(Clear, area);
     let block = pane(title, true).title_bottom(Line::from(format!(" {footer} ")).fg(DIM));
     frame.render_widget(Paragraph::new(text).block(block).wrap(Wrap { trim: false }), area);
 }
 
-fn draw_popup(frame: &mut Frame, app: &App, popup: &Popup) {
+fn draw_popup(frame: &mut Frame, app: &App, popup: &Popup, region: &mut Option<PopupRegion>) {
     match popup {
-        Popup::Help => text_popup(frame, "Keys", Text::raw(HELP), "any key closes"),
-        Popup::Info { title, text } => text_popup(frame, title, Text::raw(text.clone()), "any key closes"),
+        Popup::Help => text_popup(frame, region, "Keys", Text::raw(HELP), "any key closes"),
+        Popup::Info { title, text } => text_popup(frame, region, title, Text::raw(text.clone()), "any key closes"),
         Popup::Move { selected, .. } => {
             let items = app.mail.mailboxes.iter().map(|m| ListItem::new(m.name.clone())).collect();
-            list_popup(frame, "Move to", items, *selected, "Enter move  Esc cancel");
+            list_popup(frame, region, "Move to", items, *selected, "Enter move  Esc cancel");
         }
         Popup::Attachments { selected } => {
             let items = app
@@ -425,7 +463,7 @@ fn draw_popup(frame: &mut Frame, app: &App, popup: &Popup) {
                     ))
                 })
                 .collect();
-            list_popup(frame, "Attachments", items, *selected, "Enter save  Esc close");
+            list_popup(frame, region, "Attachments", items, *selected, "Enter save  Esc close");
         }
         Popup::Versions { node, list, selected } => {
             let items = list
@@ -439,6 +477,7 @@ fn draw_popup(frame: &mut Frame, app: &App, popup: &Popup) {
                 .collect();
             list_popup(
                 frame,
+                region,
                 &format!("Versions of {}", node.name),
                 items,
                 *selected,
@@ -465,9 +504,15 @@ fn draw_popup(frame: &mut Frame, app: &App, popup: &Popup) {
                 lines.push(Line::default());
                 lines.push(Line::from(error.clone()).fg(Color::Red));
             }
-            text_popup(frame, "Send this message?", Text::from(lines), "s send  d keep as draft  e edit  c drop");
+            text_popup(
+                frame,
+                region,
+                "Send this message?",
+                Text::from(lines),
+                "s send  d keep as draft  e edit  c drop",
+            );
         }
-        Popup::Confirm { text, .. } => text_popup(frame, "Sure?", Text::raw(text.clone()), "y yes  n no"),
+        Popup::Confirm { text, .. } => text_popup(frame, region, "Sure?", Text::raw(text.clone()), "y yes  n no"),
         Popup::Unsaved { edit, error } => {
             let what = match edit {
                 app::Edit::Message(_) => "message",
@@ -476,7 +521,7 @@ fn draw_popup(frame: &mut Frame, app: &App, popup: &Popup) {
                 app::Edit::Vacation(_) => "vacation response",
             };
             let text = Text::from(vec![Line::from(error.clone()).fg(Color::Red)]);
-            text_popup(frame, &format!("The {what} was not saved"), text, "e edit again  c drop");
+            text_popup(frame, region, &format!("The {what} was not saved"), text, "e edit again  c drop");
         }
         Popup::Share(sharing) => {
             let mut items: Vec<ListItem> = sharing
@@ -498,7 +543,14 @@ fn draw_popup(frame: &mut Frame, app: &App, popup: &Popup) {
                 items.push(ListItem::new(Line::from("shared with nobody – a adds someone").fg(DIM)));
             }
             let title = format!("Share {}", sharing.node.name);
-            list_popup(frame, &title, items, sharing.selected, "a add  Enter level  x remove  s save  Esc cancel");
+            list_popup(
+                frame,
+                region,
+                &title,
+                items,
+                sharing.selected,
+                "a add  Enter level  x remove  s save  Esc cancel",
+            );
         }
         Popup::Links(linking) => {
             // The address of a link just made comes first – it is not shown again.
@@ -530,7 +582,10 @@ fn draw_popup(frame: &mut Frame, app: &App, popup: &Popup) {
             let offset = usize::from(linking.made.is_some());
             let title = format!("Links to {}", linking.node.name);
             let footer = format!("n new ({})  m mode  x remove  Esc close", linking.mode.name());
-            list_popup(frame, &title, items, linking.selected + offset, &footer);
+            list_popup(frame, region, &title, items, linking.selected + offset, &footer);
+            if let Some(region) = region.as_mut() {
+                region.first = offset;
+            }
         }
         Popup::Destination(destination) => {
             let mut place = app.files.stores.get(destination.store).map(app::store_title).unwrap_or_default();
@@ -550,7 +605,7 @@ fn draw_popup(frame: &mut Frame, app: &App, popup: &Popup) {
                 "Enter open  ← up  Tab store  c copy here  m move here  Esc cancel"
             };
             let title = format!("{} → {place}", destination.node.name);
-            list_popup(frame, &title, items, destination.selected, keys);
+            list_popup(frame, region, &title, items, destination.selected, keys);
         }
         Popup::Pick { found, selected, .. } => {
             let items = found
@@ -560,7 +615,7 @@ fn draw_popup(frame: &mut Frame, app: &App, popup: &Popup) {
                     ListItem::new(format!("{}{kind}  {}", p.name, p.email.as_deref().unwrap_or_default()))
                 })
                 .collect();
-            list_popup(frame, "Share with whom?", items, *selected, "Enter choose  Esc back");
+            list_popup(frame, region, "Share with whom?", items, *selected, "Enter choose  Esc back");
         }
     }
 }
@@ -569,6 +624,7 @@ const HELP: &str = "\
 Everywhere   1–4 or Tab: Mail, Files, Calendar, Contacts    g or F5: load again
              ?: this help    q or Ctrl-C: quit    Esc: back
 Lists        j/k or ↑/↓ move, Enter or l open, h or ← back, PgUp/PgDn
+Mouse        a click chooses (a second one opens), the wheel moves; Shift+drag selects text
 
 Mail         c write   / search (Esc clears)   r reply   R reply to all
              f forward   m move   d delete (to the trash; there: for good)

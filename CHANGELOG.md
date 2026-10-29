@@ -67,6 +67,8 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 - The account page lists the services one logs in with, links further ones and unlinks them
   (`/v1/account/idp-links`, `/v1/account/idp-providers`; SDK `idpLinks`, `linkableProviders`, `unlinkIdp`). The last
   way to log in is never unlinked.
+- The terminal app answers the mouse: a click chooses a tab or a row (a second one opens it), the wheel moves
+  through lists and scrolls messages.
 - The terminal app makes and removes links to files and folders – to view, to view and add, or a drop box; with an
   expiry and a password (`L`) –, edits the vacation response in the editor (`V`), searches a store's files by name
   and content (`/`), and copies and moves files and folders, also between stores (`m`).

@@ -17,7 +17,10 @@ use kernoid_tui::{
     config,
     jmap::{self, Client, push},
 };
-use ratatui::crossterm::event::{self, Event, KeyEventKind};
+use ratatui::crossterm::{
+    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyEventKind},
+    execute,
+};
 
 use crate::app::{App, Background};
 
@@ -91,13 +94,21 @@ fn run(args: Args) -> Result<(), String> {
     push::listen(client.clone(), move |event| pushed.send(Background::Push(event)).is_ok());
     let mut app = App::new(client, downloads, sender);
     let mut terminal = ratatui::try_init().map_err(|e| e.to_string())?;
+    // Clicks and the wheel (app.rs, `mouse`); while it is on, Shift and drag selects text in most terminals.
+    let mouse = |on: bool| {
+        let mut out = std::io::stdout();
+        if on { execute!(out, EnableMouseCapture) } else { execute!(out, DisableMouseCapture) }
+    };
+    mouse(true).map_err(|e| e.to_string())?;
     let result = (|| -> Result<(), String> {
         while !app.quit {
             terminal.draw(|frame| ui::draw(frame, &mut app)).map_err(|e| e.to_string())?;
             if let Some(edited) = app.edit.take() {
+                mouse(false).map_err(|e| e.to_string())?;
                 ratatui::restore();
                 let text = edit(&app.edit_text(&edited));
                 terminal = ratatui::try_init().map_err(|e| e.to_string())?;
+                mouse(true).map_err(|e| e.to_string())?;
                 terminal.clear().map_err(|e| e.to_string())?;
                 app.edited(edited, text);
                 continue;
@@ -105,15 +116,17 @@ fn run(args: Args) -> Result<(), String> {
             while let Ok(event) = receiver.try_recv() {
                 app.background(event);
             }
-            if event::poll(Duration::from_millis(150)).map_err(|e| e.to_string())?
-                && let Event::Key(key) = event::read().map_err(|e| e.to_string())?
-                && key.kind == KeyEventKind::Press
-            {
-                app.key(key);
+            if event::poll(Duration::from_millis(150)).map_err(|e| e.to_string())? {
+                match event::read().map_err(|e| e.to_string())? {
+                    Event::Key(key) if key.kind == KeyEventKind::Press => app.key(key),
+                    Event::Mouse(mouse) => app.mouse(mouse),
+                    _ => {}
+                }
             }
         }
         Ok(())
     })();
+    let _ = mouse(false);
     ratatui::restore();
     result
 }

@@ -10,7 +10,8 @@ use std::{
 
 use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, TimeZone, Timelike, Utc};
 use ratatui::{
-    crossterm::event::{KeyCode, KeyEvent, KeyModifiers},
+    crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind},
+    layout::{Position, Rect},
     widgets::ListState,
 };
 
@@ -200,6 +201,38 @@ pub struct Destination {
     pub selected: usize,
 }
 
+/// A list a click or the wheel can reach.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Pane {
+    Mailboxes,
+    Emails,
+    Stores,
+    Nodes,
+    Events,
+    Cards,
+}
+
+/// Where the last frame drew what the mouse can reach – written by the drawing, read by clicks.
+#[derive(Debug, Clone, Default)]
+pub struct Regions {
+    pub tabs: Vec<(Rect, Tab)>,
+    /// A list with its frame and the index of its first visible row.
+    pub lists: Vec<(Rect, Pane, usize)>,
+    pub reader: Option<Rect>,
+    pub popup: Option<PopupRegion>,
+}
+
+/// A popup as drawn: a list's rows (their heights, from its first visible one) or text.
+#[derive(Debug, Clone, Default)]
+pub struct PopupRegion {
+    pub area: Rect,
+    pub list: bool,
+    pub offset: usize,
+    pub heights: Vec<usize>,
+    /// Rows before the first that can be chosen (the address of a new link).
+    pub first: usize,
+}
+
 /// A window over the rest.
 #[derive(Debug, Clone)]
 pub enum Popup {
@@ -344,6 +377,8 @@ pub struct App {
     pub edit: Option<Edit>,
     /// Width of the reading pane, for HTML turned into text.
     pub reader_width: usize,
+    /// Where the last frame drew what a click can reach.
+    pub regions: Regions,
     background: Sender<Background>,
     next_transfer: u64,
 }
@@ -434,6 +469,7 @@ impl App {
             quit: false,
             edit: None,
             reader_width: 80,
+            regions: Regions::default(),
             background,
             next_transfer: 0,
         };
@@ -1846,6 +1882,149 @@ impl App {
 
     // Keys.
 
+    /// A click does what a key does: a tab switches to it, a row is chosen – and opened with a second click –, the
+    /// wheel moves through a list or scrolls the message. Popups that ask something close only by key.
+    pub fn mouse(&mut self, event: MouseEvent) {
+        let at = Position::new(event.column, event.row);
+        let delta = match event.kind {
+            MouseEventKind::ScrollDown => 1,
+            MouseEventKind::ScrollUp => -1,
+            MouseEventKind::Down(MouseButton::Left) => 0,
+            _ => return,
+        };
+        if self.input.is_some() {
+            return;
+        }
+        if let Some(popup) = self.popup.clone() {
+            self.popup_mouse(&popup, at, delta);
+            return;
+        }
+        if delta == 0
+            && let Some(&(_, tab)) = self.regions.tabs.iter().find(|(area, _)| area.contains(at))
+        {
+            let index = Tab::ALL.iter().position(|t| *t == tab).unwrap_or(0);
+            self.key(KeyEvent::from(KeyCode::Char((b'1' + index as u8) as char)));
+            return;
+        }
+        if self.regions.reader.is_some_and(|area| area.contains(at)) {
+            self.mail_focus = MailFocus::Reader;
+            self.mail.scroll =
+                if delta < 0 { self.mail.scroll.saturating_sub(3) } else { self.mail.scroll + 3 * delta as u16 };
+            return;
+        }
+        let Some(&(area, pane, offset)) = self.regions.lists.iter().find(|(area, _, _)| area.contains(at)) else {
+            return;
+        };
+        let (state, len) = self.pane_list(pane);
+        let current = state.selected();
+        let index = if delta == 0 {
+            // Inside the frame: one row per item.
+            let row = at.y.saturating_sub(area.y + 1) as usize;
+            if at.y <= area.y || at.y + 1 >= area.y + area.height || offset + row >= len {
+                self.focus(pane);
+                return;
+            }
+            offset + row
+        } else {
+            (current.unwrap_or(0) as isize + delta).clamp(0, len.saturating_sub(1) as isize) as usize
+        };
+        self.focus(pane);
+        if delta == 0 && current == Some(index) {
+            self.key(KeyEvent::from(KeyCode::Enter));
+        } else if current != Some(index) {
+            self.choose(pane, index);
+        }
+    }
+
+    fn pane_list(&self, pane: Pane) -> (&ListState, usize) {
+        match pane {
+            Pane::Mailboxes => (&self.mail.boxes, self.mail.mailboxes.len()),
+            Pane::Emails => (&self.mail.list, self.mail.emails.len()),
+            Pane::Stores => (&self.files.store_list, self.files.stores.len()),
+            Pane::Nodes => (&self.files.list, self.files.nodes.len()),
+            Pane::Events => (&self.calendar.list, self.calendar.events.len()),
+            Pane::Cards => (&self.contacts.list, self.contacts.cards.len()),
+        }
+    }
+
+    fn focus(&mut self, pane: Pane) {
+        match pane {
+            Pane::Mailboxes => self.mail_focus = MailFocus::Mailboxes,
+            // While a message is open the list stays beside it.
+            Pane::Emails if self.mail_focus != MailFocus::Reader => self.mail_focus = MailFocus::List,
+            Pane::Stores => self.files_focus = FilesFocus::Stores,
+            Pane::Nodes => self.files_focus = FilesFocus::Nodes,
+            _ => {}
+        }
+    }
+
+    /// Chooses a row as moving to it by key would.
+    fn choose(&mut self, pane: Pane, index: usize) {
+        match pane {
+            Pane::Mailboxes => {
+                select(&mut self.mail.boxes, self.mail.mailboxes.len(), index);
+                self.close_reader();
+                self.load_emails(true);
+            }
+            Pane::Emails => {
+                select(&mut self.mail.list, self.mail.emails.len(), index);
+                if index + 1 >= self.mail.emails.len() {
+                    self.load_more_emails();
+                }
+                if self.mail_focus == MailFocus::Reader {
+                    self.open_email();
+                }
+            }
+            Pane::Stores => {
+                select(&mut self.files.store_list, self.files.stores.len(), index);
+                self.files.path.clear();
+                self.files.list.select(None);
+                self.load_nodes();
+            }
+            Pane::Nodes => select(&mut self.files.list, self.files.nodes.len(), index),
+            Pane::Events => select(&mut self.calendar.list, self.calendar.events.len(), index),
+            Pane::Cards => select(&mut self.contacts.list, self.contacts.cards.len(), index),
+        }
+    }
+
+    fn popup_mouse(&mut self, popup: &Popup, at: Position, delta: isize) {
+        let Some(region) = self.regions.popup.clone() else { return };
+        if !region.list {
+            // Text to read closes with any key – and with a click; a question waits for its answer.
+            if delta == 0 && matches!(popup, Popup::Help | Popup::Info { .. }) {
+                self.key(KeyEvent::from(KeyCode::Esc));
+            }
+            return;
+        }
+        let selected = popup_selected(popup);
+        let target = if delta != 0 {
+            Some((selected as isize + delta).max(0) as usize)
+        } else if region.area.contains(at) && at.y > region.area.y {
+            // The row under the click, through the heights of the rows shown.
+            let mut y = region.area.y + 1;
+            let mut found = None;
+            for (row, height) in region.heights.iter().enumerate().skip(region.offset) {
+                if at.y < y + *height as u16 {
+                    found = row.checked_sub(region.first);
+                    break;
+                }
+                y += *height as u16;
+            }
+            found
+        } else {
+            None
+        };
+        let Some(target) = target else { return };
+        if delta == 0 && target == selected {
+            self.key(KeyEvent::from(KeyCode::Enter));
+            return;
+        }
+        let key = if target > selected { KeyCode::Down } else { KeyCode::Up };
+        for _ in 0..target.abs_diff(selected) {
+            self.key(KeyEvent::from(key));
+        }
+    }
+
     pub fn key(&mut self, key: KeyEvent) {
         if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
             self.quit = true;
@@ -2565,6 +2744,20 @@ pub fn event_when(event: &Event) -> String {
         }
         Some(end) => format!("{} – {}", start.format("%a %d %b %Y %H:%M"), end.format("%a %d %b %Y %H:%M")),
         None => start.format("%a %d %b %Y %H:%M").to_string(),
+    }
+}
+
+/// The row chosen in a popup with a list.
+fn popup_selected(popup: &Popup) -> usize {
+    match popup {
+        Popup::Move { selected, .. }
+        | Popup::Attachments { selected }
+        | Popup::Versions { selected, .. }
+        | Popup::Pick { selected, .. } => *selected,
+        Popup::Share(sharing) => sharing.selected,
+        Popup::Links(linking) => linking.selected,
+        Popup::Destination(destination) => destination.selected,
+        _ => 0,
     }
 }
 

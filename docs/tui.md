@@ -10,6 +10,10 @@ permalink: /tui/
 [web app]({{ '/app/' | relative_url }}) it is a first-party app under the MIT licence and talks to kernoid only
 through JMAP – it shares no code with the server and works against any kernoid installation.
 
+Everything works with the keyboard, and with the mouse: a click chooses a tab or a row – a second click on it opens
+it, as Enter does –, the wheel moves through a list or scrolls a message. While the app has the mouse, Shift and drag
+selects text in most terminals (to copy a link's address).
+
 | Part | What it does |
 |---|---|
 | Mail | the mailboxes of the account and of shared mailboxes it may use; conversations (threads) – or single emails, `t` switches – with full-text search; reading a whole conversation (HTML emails as plain text – nothing is loaded or run), attachments saved to disk, writing, replying, replying to all and forwarding (with the attachments) in your editor, attaching files, keeping drafts, flagging, marking read or unread, moving, deleting (to the trash; in the trash for good); the vacation response, written in your editor like a message; new mail appears by itself |

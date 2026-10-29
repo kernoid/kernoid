@@ -147,6 +147,25 @@ calendars and contacts, [0005](rfcs/0005-files.md) files. Change the RFC with th
   crates.io; an advisory that does not affect kernoid is ignored there with a reason.
 - Facts need a source; what is not settled is marked `OPEN`.
 
+## The falkOSS starter pack
+
+kernoid follows [falkoss/starterpack](https://github.com/falkoss/starterpack) (`docs/practices.md`): its own
+organisation with `.github`, `website`, `brand` (the brand kit – copies of its artwork here are CC BY-ND 4.0),
+`whitepaper` and this repository; SPDX and REUSE everywhere, the starter pack's REUSE, DCO and Jekyll workflows
+pinned by commit, CI on Linux and macOS. Where kernoid deviates, it has a reason:
+
+- **The software's shape.** Not `core`/`store`/`app`/`api`/`tui` crates but one crate per part of the system
+  (identity, mail, files, the protocols, modules) behind roles – kernoid replaces two existing servers and runs as
+  separately scaled processes. GraphQL besides REST: decided for the administration API.
+- **The apps.** The web app talks JMAP, not the REST API, so it takes no types from OpenAPI; it is Solid for now – a
+  rewrite in Svelte 5 is planned. Its build is served from a directory of the image (`http.web_app`), not embedded in
+  the binary. The terminal app is MIT in a workspace of its own (`apps/tui`), not a crate of the server: it may go
+  into app stores and must not reach server code.
+- **Files where tools need them.** The API descriptions are in `docs/` (`_data/openapi.json`, `api/`) – Jekyll cannot
+  read outside its folder – under MIT as the starter pack's `api/openapi.json` would be; Compose is in
+  `deploy/compose/` beside Kubernetes and the test VM.
+- **macOS CI** takes PostgreSQL from Homebrew, its major version pinned: macOS runners have no containers.
+
 ## Checks
 
 ```sh
