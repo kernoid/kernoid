@@ -85,12 +85,14 @@ impl Setup {
         messages
     }
 
-    /// The remote mail server: a second kernoid on a free local port; its DNS knows firma.example's DKIM key.
+    /// The remote mail server: a second kernoid on a free local port; its DNS knows firma.example's DKIM keys.
     async fn remote_server(&self) -> u16 {
         let dns = Dns::offline();
-        let (selector, record) = dkim::public_record(&self.pool, "firma.example").await.unwrap().unwrap();
-        let key: Txt = DomainKey::parse(record.as_bytes()).unwrap().into();
-        dns.txt.insert(format!("{selector}._domainkey.firma.example.").into(), key, Instant::now() + FOREVER);
+        for key in dkim::public_records(&self.pool, "firma.example").await.unwrap() {
+            let record: Txt = DomainKey::parse(key.record.as_bytes()).unwrap().into();
+            let name = format!("{}._domainkey.firma.example.", key.selector);
+            dns.txt.insert(name.into(), record, Instant::now() + FOREVER);
+        }
         let settings = Settings {
             hostname: "mx.remote.example".into(),
             max_message_size: 100_000,
@@ -175,8 +177,8 @@ fn message(subject: &str) -> String {
 #[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
 async fn mail_goes_out_signed_and_failures_bounce(pool: PgPool) {
     let setup = setup(pool).await;
-    // The worker makes a key for each verified domain, once.
-    assert_eq!(dkim::ensure_keys(&setup.pool, &setup.main).await.unwrap(), 2);
+    // The worker makes an RSA and an Ed25519 key for each verified domain, once.
+    assert_eq!(dkim::ensure_keys(&setup.pool, &setup.main).await.unwrap(), 4);
     assert_eq!(dkim::ensure_keys(&setup.pool, &setup.main).await.unwrap(), 0);
     let alice = setup.account(setup.firma, "alice@firma.example").await;
     let bob = setup.account(setup.remote, "bob@remote.example").await;
@@ -205,6 +207,79 @@ async fn mail_goes_out_signed_and_failures_bounce(pool: PgPool) {
     assert!(bounces[0].contains("Final-Recipient: rfc822; nobody@remote.example"), "{}", bounces[0]);
     assert!(bounces[0].contains("550 5.1.1"));
     assert!(setup.queued().await.is_empty());
+}
+
+/// The TXT records of the keys DNS should show for firma.example – what a lookup finds once they are published.
+async fn published(pool: &PgPool) -> HashMap<String, Vec<String>> {
+    dkim::public_records(pool, "firma.example")
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|key| (format!("{}._domainkey.firma.example", key.selector), vec![key.record]))
+        .collect()
+}
+
+#[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
+async fn new_dkim_keys_sign_once_their_records_are_published(pool: PgPool) {
+    let setup = setup(pool).await;
+    dkim::ensure_keys(&setup.pool, &setup.main).await.unwrap();
+    let keys = dkim::public_records(&setup.pool, "firma.example").await.unwrap();
+    let states: Vec<_> = keys.iter().map(|key| (key.selector.as_str(), key.state.as_str())).collect();
+    assert_eq!(states, [("kernoid1", "active"), ("kernoid-ed1", "next")]);
+    assert!(keys[1].record.starts_with("v=DKIM1; k=ed25519; p="));
+    let raw = message("Keys").into_bytes();
+    assert_eq!(dkim::sign(&setup.pool, &setup.main, "firma.example", &raw).await.unwrap().len(), 1);
+
+    // Nothing published: the Ed25519 key waits. Published: it signs too.
+    assert_eq!(dkim::activate(&setup.pool, |_| async { Vec::new() }).await.unwrap(), 0);
+    let records = published(&setup.pool).await;
+    let lookup = |name: String| {
+        let found = records.get(&name).cloned().unwrap_or_default();
+        async move { found }
+    };
+    assert_eq!(dkim::activate(&setup.pool, lookup).await.unwrap(), 1);
+    let signatures = dkim::sign(&setup.pool, &setup.main, "firma.example", &raw).await.unwrap();
+    assert_eq!(signatures.len(), 2);
+    assert!(signatures.iter().any(|header| header.contains("a=ed25519-sha256")), "{signatures:?}");
+
+    // A change of the RSA key: the new one waits under the next selector – asking again names it again – and the
+    // old one signs until the new record is out.
+    assert_eq!(
+        dkim::rotate(&setup.pool, &setup.main, "firma.example", dkim::Algorithm::Rsa).await.unwrap(),
+        "kernoid2"
+    );
+    assert_eq!(
+        dkim::rotate(&setup.pool, &setup.main, "firma.example", dkim::Algorithm::Rsa).await.unwrap(),
+        "kernoid2"
+    );
+    let signatures = dkim::sign(&setup.pool, &setup.main, "firma.example", &raw).await.unwrap();
+    assert!(signatures.iter().any(|header| header.contains("s=kernoid1;")), "{signatures:?}");
+    let records = published(&setup.pool).await;
+    let lookup = |name: String| {
+        let found = records.get(&name).cloned().unwrap_or_default();
+        async move { found }
+    };
+    assert_eq!(dkim::activate(&setup.pool, lookup).await.unwrap(), 1);
+    let selectors: Vec<_> = dkim::public_records(&setup.pool, "firma.example")
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|key| (key.selector, key.state))
+        .collect();
+    assert_eq!(selectors, [("kernoid2".to_owned(), "active".to_owned()), ("kernoid-ed1".into(), "active".into())]);
+
+    // The remote server checks both signatures.
+    let bob = setup.account(setup.remote, "bob@remote.example").await;
+    setup.account(setup.firma, "alice@firma.example").await;
+    let port = setup.remote_server().await;
+    let outbound = setup.outbound(port);
+    setup.send("alice@firma.example", &["bob@remote.example"], message("Both"), chrono::Duration::days(5)).await;
+    assert_eq!(outbound.deliver_due().await.unwrap(), 1);
+    let received = setup.inbox(bob).await;
+    assert_eq!(received.len(), 1);
+    assert!(received[0].contains("s=kernoid2;") && received[0].contains("a=ed25519-sha256"), "{}", received[0]);
+    assert!(!received[0].contains("dkim=fail"), "{}", received[0]);
+    assert!(received[0].contains("dkim=pass"), "{}", received[0]);
 }
 
 #[sqlx::test(migrator = "kernoid_store::MIGRATOR")]

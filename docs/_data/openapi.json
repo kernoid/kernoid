@@ -7756,6 +7756,68 @@
         }
       }
     },
+    "/v1/tenant/domains/{domain}/dkim-rotate": {
+      "post": {
+        "tags": [
+          "tenant"
+        ],
+        "summary": "Starts a change of a verified mail domain's DKIM key (needs `domains.manage`): a new key, signing once DNS shows\nits record; the key it replaces then stops signing. If a new key is waiting already, its selector.",
+        "operationId": "rotate_dkim",
+        "parameters": [
+          {
+            "name": "kernoid-tenant",
+            "in": "header",
+            "description": "The tenant to act on – for instance administrators; the caller's own tenant if left out.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DkimRotation"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DkimRotationView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "this installation does not handle mail, or an unknown algorithm",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/tenant/domains/{domain}/verify": {
       "post": {
         "tags": [
@@ -9182,6 +9244,30 @@
           "error": {
             "type": "string",
             "description": "`login_required`, `consent_required`, `interaction_required`, `account_selection_required` or `access_denied`."
+          }
+        }
+      },
+      "DkimRotation": {
+        "type": "object",
+        "properties": {
+          "algorithm": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`rsa` (the default) or `ed25519`."
+          }
+        }
+      },
+      "DkimRotationView": {
+        "type": "object",
+        "required": [
+          "selector"
+        ],
+        "properties": {
+          "selector": {
+            "type": "string",
+            "description": "The new key's selector: its record belongs at `<selector>._domainkey.<domain>`; `mail-dns` shows it."
           }
         }
       },

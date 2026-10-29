@@ -244,11 +244,19 @@ process stops.
 
 ### 10.3 DKIM
 
-Every verified domain of a tenant gets a DKIM key ([RFC 6376](https://www.rfc-editor.org/rfc/rfc6376)): RSA with
-2048 bits, made by the worker, sealed with the main key in `dkim_keys`, selector `kernoid1`. Mail is signed with the
-key of its `From` domain when it leaves the queue – so replies of Sieve and bounces are signed as well. The record to
-publish is part of the DNS check (10.5). **OPEN:** rotating keys, and signing
-with Ed25519 as well ([RFC 8463](https://www.rfc-editor.org/rfc/rfc8463)).
+Every verified domain of a tenant gets DKIM keys ([RFC 6376](https://www.rfc-editor.org/rfc/rfc6376)) of two
+algorithms, made by the worker and sealed with the main key in `dkim_keys`: RSA with 2048 bits (selectors
+`kernoid1`, `kernoid2`, …) and Ed25519 ([RFC 8463](https://www.rfc-editor.org/rfc/rfc8463); `kernoid-ed1`, …).
+Mail is signed with every active key of its `From` domain when it leaves the queue – so replies of Sieve and bounces
+are signed as well; receivers that do not know Ed25519 ignore that signature and check the RSA one.
+
+A key is `next`, `active` or `retired`; per domain and algorithm one may be active and one next. A domain's first RSA
+key is active at once (as before, so a domain signs from the start); every later key – the first Ed25519 key, or
+one an administrator asks for (`domains.manage`, REST, GraphQL, CLI) – is `next` until DNS shows its record: the
+worker looks every five minutes and, in one transaction, retires the active key of the algorithm and activates the
+new one. Mail is never signed with a key whose record is not out. Retired keys stay in the table (the runtime role
+cannot delete); their records may go once mail signed with them has arrived. The records to publish – of active and
+next keys – are part of the DNS check (10.5). **OPEN:** rotating on a schedule, and removing retired keys.
 
 ### 10.4 Transport security
 
@@ -272,7 +280,7 @@ For each verified domain, kernoid says what to publish and whether it is publish
 |---|---|
 | MX | `smtp.hostname` |
 | SPF (TXT on the domain) | `v=spf1 mx -all`, or `smtp.spf` if set (for a relay) |
-| DKIM (TXT at `kernoid1._domainkey.<domain>`) | the domain's public key |
+| DKIM (TXT at `<selector>._domainkey.<domain>`) | the public key of each active and next key |
 | DMARC (TXT at `_dmarc.<domain>`) | a record (kernoid suggests `v=DMARC1; p=quarantine`) |
 
 The check reads DNS when asked; it changes nothing. **OPEN:** setting the records automatically (a module, see the

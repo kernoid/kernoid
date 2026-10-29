@@ -275,6 +275,10 @@ const de: Record<string, string> = {
   "Choose …": "Auswählen …",
   Groups: "Gruppen",
   "{domain} is verified.": "{domain} ist bestätigt.",
+  "A new key waits: publish its DKIM record, listed below as missing. It signs once DNS shows it, and the old key stops.":
+    "Ein neuer Schlüssel wartet: Veröffentliche seinen DKIM-Eintrag, unten als fehlend aufgeführt. Er signiert, sobald das DNS ihn zeigt, und der alte Schlüssel hört auf.",
+  "New RSA key": "Neuer RSA-Schlüssel",
+  "New Ed25519 key": "Neuer Ed25519-Schlüssel",
   "Remove {domain}? Addresses on it stop working.": "{domain} entfernen? Adressen darauf funktionieren dann nicht mehr.",
   Domains: "Domains",
   "The domains of the tenant's addresses. A domain is used once DNS proves it is the tenant's.": "Die Domains der Adressen des Mandanten. Eine Domain gilt, sobald DNS beweist, dass sie dem Mandanten gehört.",

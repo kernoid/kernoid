@@ -683,6 +683,15 @@ enum TenantCommand {
     MailDns {
         tenant: Uuid,
     },
+    /// Starts a change of a mail domain's DKIM key: a new key, signing once DNS shows its record.
+    DkimRotate {
+        tenant: Uuid,
+        #[arg(long)]
+        domain: String,
+        /// `rsa` or `ed25519`.
+        #[arg(long, default_value = "rsa")]
+        algorithm: String,
+    },
 }
 
 /// Who holds a role: exactly one of `--account` and `--group`.
@@ -1033,7 +1042,9 @@ async fn serve(config: Config) -> anyhow::Result<()> {
         }
         match &config.smtp {
             Some(smtp) => {
-                tasks.spawn(dkim_keys(db.clone(), main_keys.clone(), shutdown.clone()));
+                let lookups =
+                    kernoid_smtp::Dns::from_system().map_err(|error| anyhow::anyhow!("DNS for DKIM: {error}"))?;
+                tasks.spawn(dkim_keys(db.clone(), main_keys.clone(), lookups, shutdown.clone()));
                 let dns =
                     kernoid_smtp::Dns::from_system().map_err(|error| anyhow::anyhow!("DNS for sending: {error}"))?;
                 let outbound = kernoid_smtp::outbound::Outbound::new(
@@ -1225,16 +1236,26 @@ async fn rotate_keys(
     }
 }
 
-/// How often the worker looks for verified domains without a DKIM key.
+/// How often the worker looks for verified domains without DKIM keys and for published records of waiting keys.
 const DKIM_EVERY: std::time::Duration = std::time::Duration::from_secs(5 * 60);
 
-async fn dkim_keys(db: kernoid_store::PgPool, main_keys: MainKeys, shutdown: CancellationToken) -> anyhow::Result<()> {
+async fn dkim_keys(
+    db: kernoid_store::PgPool,
+    main_keys: MainKeys,
+    dns: kernoid_smtp::Dns,
+    shutdown: CancellationToken,
+) -> anyhow::Result<()> {
     loop {
         // Several workers may make a key for the same domain at once; the first one stays (ON CONFLICT).
         match kernoid_smtp::dkim::ensure_keys(&db, &main_keys).await {
             Ok(0) => {}
             Ok(made) => tracing::info!(made, "DKIM keys"),
             Err(error) => tracing::warn!(%error, "making DKIM keys failed; trying again later"),
+        }
+        match kernoid_smtp::dkim::activate_published(&db, &dns).await {
+            Ok(0) => {}
+            Ok(activated) => tracing::info!(activated, "DKIM keys signing now"),
+            Err(error) => tracing::warn!(%error, "activating DKIM keys failed; trying again later"),
         }
         tokio::select! {
             () = shutdown.cancelled() => return Ok(()),
@@ -1813,6 +1834,20 @@ async fn tenant(config: &Config, command: TenantCommand) -> anyhow::Result<()> {
                 println!("{:<20} {:<8} {}", assignment.role, principal.kind(), principal.id());
             }
         }
+        TenantCommand::DkimRotate { tenant, domain, algorithm } => {
+            let checker =
+                mail_dns_checker(config).await?.context("no [smtp] in the configuration: kernoid handles no mail")?;
+            let algorithm =
+                kernoid_smtp::dkim::Algorithm::parse(&algorithm).context("the algorithm is rsa or ed25519")?;
+            let domain = self::domain(&domain)?;
+            let instance = identity.tenant_instance(tenant).await?;
+            let state = identity.tenant(instance, tenant).await?.state;
+            if !state.domains.get(&domain).is_some_and(|claim| claim.verified) {
+                anyhow::bail!("{domain} is not a verified domain of the tenant");
+            }
+            let selector = checker.rotate_dkim(domain.as_str(), algorithm).await?;
+            println!("publish {selector}._domainkey.{domain}; `kernoid tenant mail-dns` shows the record");
+        }
         TenantCommand::MailDns { tenant } => {
             let checker =
                 mail_dns_checker(config).await?.context("no [smtp] in the configuration: kernoid handles no mail")?;
@@ -1844,6 +1879,7 @@ async fn mail_dns_checker(config: &Config) -> anyhow::Result<Option<kernoid_smtp
         pool,
         hostname: smtp.hostname.trim_end_matches('.').to_lowercase(),
         spf: smtp.spf.clone(),
+        main: main_keys(config)?,
     }))
 }
 

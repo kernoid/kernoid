@@ -144,7 +144,7 @@ impl Outbound {
         Self(Arc::new(Inner { settings, mail, dns, main }))
     }
 
-    /// The message with a DKIM signature of its `From` domain prepended, if kernoid has a key for it (RFC 0002, 10.3).
+    /// The message with the DKIM signatures of its `From` domain prepended, if kernoid has keys for it (RFC 0002, 10.3).
     async fn signed(&self, raw: bytes::Bytes) -> bytes::Bytes {
         let Some(main) = &self.0.main else { return raw };
         let domain = mail_parser::MessageParser::new()
@@ -155,12 +155,12 @@ impl Outbound {
             .and_then(|address| address.rsplit_once('@').map(|(_, domain)| domain.to_lowercase()));
         let Some(domain) = domain else { return raw };
         match crate::dkim::sign(self.0.mail.pool(), main, &domain, &raw).await {
-            Ok(Some(signature)) => {
-                let mut signed = signature.into_bytes();
+            Ok(signatures) if signatures.is_empty() => raw,
+            Ok(signatures) => {
+                let mut signed = signatures.concat().into_bytes();
                 signed.extend_from_slice(&raw);
                 bytes::Bytes::from(signed)
             }
-            Ok(None) => raw,
             Err(error) => {
                 tracing::warn!(%error, %domain, "DKIM signing failed; sending unsigned");
                 raw

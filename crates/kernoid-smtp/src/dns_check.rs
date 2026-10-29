@@ -44,7 +44,7 @@ pub struct RecordCheck {
 }
 
 /// The TXT records at `name`, each joined from its strings.
-async fn txt(dns: &Dns, name: &str) -> Vec<String> {
+pub(crate) async fn txt(dns: &Dns, name: &str) -> Vec<String> {
     match dns.authenticator.resolver().txt_lookup(format!("{name}.")).await {
         Ok(lookup) => lookup
             .answers()
@@ -65,7 +65,7 @@ fn words(record: &str) -> Vec<String> {
 }
 
 /// The `p=` value of a DKIM record.
-fn dkim_key(record: &str) -> Option<String> {
+pub(crate) fn dkim_key(record: &str) -> Option<String> {
     record
         .split(';')
         .map(str::trim)
@@ -81,6 +81,8 @@ pub struct Checker {
     pub hostname: String,
     /// `smtp.spf`.
     pub spf: Option<String>,
+    /// For new DKIM keys.
+    pub main: kernoid_store::MainKeys,
 }
 
 impl std::fmt::Debug for Checker {
@@ -92,6 +94,11 @@ impl std::fmt::Debug for Checker {
 impl Checker {
     pub async fn check(&self, domain: &str) -> Vec<RecordCheck> {
         check(&self.dns, &self.pool, &self.hostname, self.spf.as_deref(), domain).await
+    }
+
+    /// Starts a change of `domain`'s DKIM key of `algorithm` (`dkim::rotate`); returns the selector to publish.
+    pub async fn rotate_dkim(&self, domain: &str, algorithm: dkim::Algorithm) -> Result<String, dkim::DkimError> {
+        dkim::rotate(&self.pool, &self.main, domain, algorithm).await
     }
 }
 
@@ -143,9 +150,11 @@ pub async fn check(dns: &Dns, pool: &PgPool, hostname: &str, spf: Option<&str>, 
         status,
     });
 
-    if let Ok(Some((selector, expected))) = dkim::public_record(pool, domain).await {
-        let name = format!("{selector}._domainkey.{domain}");
+    // Every key that signs or is about to: a `next` key signs once its record is published.
+    for key in dkim::public_records(pool, domain).await.unwrap_or_default() {
+        let name = format!("{}._domainkey.{domain}", key.selector);
         let found = txt(dns, &name).await;
+        let expected = key.record;
         let status = match found.as_slice() {
             [] => Status::Missing,
             records if records.iter().any(|record| dkim_key(record) == dkim_key(&expected)) => Status::Ok,

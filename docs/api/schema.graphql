@@ -538,6 +538,11 @@ type MutationRoot {
 	`tenants.manage`).
 	"""
 	verifyTenantDomain(domain: String!, trust: Boolean! = false): Boolean!
+	"""
+	Starts a change of a verified mail domain's DKIM key (needs `domains.manage`); `algorithm` is `rsa` (the
+	default) or `ed25519`. Returns the new key's selector; `mailDns` shows its record.
+	"""
+	rotateDkimKey(domain: String!, algorithm: String): String!
 	removeTenantDomain(domain: String!): Boolean!
 	"""
 	Creates an account (needs `accounts.manage`); returns its id.

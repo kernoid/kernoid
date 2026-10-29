@@ -28,6 +28,10 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   (shown at consent as "Read and send your email") logs a mail program in.
 - JMAP over WebSocket (RFC 8887) at `/jmap/ws`: requests and push on one connection.
 - Mailboxes shared with JMAP's `shareWith` (RFC 9670) by their owner; `myRights` says `mayShare`.
+- DKIM with Ed25519 (RFC 8463) beside RSA, and changing keys: a new key (`kernoid tenant dkim-rotate`,
+  `POST /v1/tenant/domains/{domain}/dkim-rotate`, GraphQL `rotateDkimKey`, the administration's domains page) signs
+  once DNS shows its record, and the old one stops (migration 0036). Existing domains get an Ed25519 key that signs
+  once its record (`kernoid-ed1._domainkey`, shown by the DNS check) is published.
 - `http.public_port`: instances reached on a port other than 443 or 80 name it in their issuer and links (JMAP);
   `deploy/compose` sets 8080.
 

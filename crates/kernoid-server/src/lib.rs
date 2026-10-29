@@ -228,6 +228,7 @@ fn rest() -> OpenApiRouter<AppState> {
         .routes(routes!(admin::directory::add_member, admin::directory::remove_member))
         .routes(routes!(admin::directory::add_address, admin::directory::remove_address))
         .routes(routes!(admin::tenant::mail_dns))
+        .routes(routes!(admin::tenant::rotate_dkim))
         .routes(routes!(admin::mail::add_shared_mailbox))
         .routes(routes!(admin::mail::overview))
         .routes(routes!(admin::mail::set_quota))

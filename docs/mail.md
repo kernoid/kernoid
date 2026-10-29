@@ -108,8 +108,13 @@ programs log in only over TLS (`AUTH PLAIN` or `LOGIN`).
 - Local recipients get the message at once. Everything else waits in the **queue** in PostgreSQL: a worker delivers
   it to the MX hosts of each domain, tries again after 2, 5, 15 and 30 minutes, then hourly, then every four hours,
   for `smtp.queue_days` (5), and then sends the sender a bounce. `kernoid mail queue` shows what waits.
-- **DKIM:** every verified domain gets an RSA key (selector `kernoid1`), and mail is signed with the key of its
-  `From` domain as it leaves the queue.
+- **DKIM:** every verified domain gets two keys – RSA (selector `kernoid1`) and Ed25519 (`kernoid-ed1`,
+  RFC 8463) – and mail is signed with every active key of its `From` domain as it leaves the queue. The RSA key
+  signs at once; any later key waits until DNS shows its record (the worker looks every five minutes) and then
+  signs. To change a key, `kernoid tenant dkim-rotate <TENANT> --domain <DOMAIN> [--algorithm ed25519]` (or
+  `POST /v1/tenant/domains/{domain}/dkim-rotate`, GraphQL `rotateDkimKey`, "New RSA key" in the administration)
+  makes a new one under the next selector (`kernoid2`, …); once its record is published it signs, and the old key
+  stops – its record can go a few days later.
 - **TLS on the way out:** kernoid uses `STARTTLS` whenever the other server offers it. A domain with signed TLSA
   records (DANE) or an MTA-STS policy in `enforce` mode gets its mail only over TLS with a certificate that matches.
 - **A relay:** where port 25 cannot go out, `[smtp.relay]` hands all mail for other servers to a relay, over TLS
@@ -124,7 +129,7 @@ and whether it is published:
 |---|---|---|
 | MX | the domain | `smtp.hostname` |
 | SPF | TXT on the domain | `v=spf1 mx -all`, or `smtp.spf` (for a relay, its SPF include) |
-| DKIM | TXT at `kernoid1._domainkey.<domain>` | the key kernoid made, `v=DKIM1; k=rsa; p=…` |
+| DKIM | TXT at `<selector>._domainkey.<domain>`, one per key | the keys kernoid made, `v=DKIM1; k=rsa; p=…` and `v=DKIM1; k=ed25519; p=…` |
 | DMARC | TXT at `_dmarc.<domain>` | any policy; kernoid suggests `v=DMARC1; p=quarantine` |
 
 ## JMAP

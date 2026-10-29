@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // The tenant's domains: adding one (with the TXT record that proves it), checking it, removing it – and the DNS
-// records mail needs (MX, SPF, DKIM, DMARC), with what DNS answers today.
+// records mail needs (MX, SPF, DKIM, DMARC), with what DNS answers today; a domain's DKIM keys can be changed.
 
 import { For, type JSX, Show, createResource, createSignal } from "solid-js";
 
@@ -22,6 +22,11 @@ export function Domains(): JSX.Element {
       await refetch();
       await recheck();
     }, t("{domain} is verified.", { domain }));
+  const rotate = (domain: string, algorithm: "rsa" | "ed25519") =>
+    void action.run(async () => {
+      await api("POST", `/v1/tenant/domains/${seg(domain)}/dkim-rotate`, { algorithm });
+      await recheck();
+    }, t("A new key waits: publish its DKIM record, listed below as missing. It signs once DNS shows it, and the old key stops."));
   const remove = (domain: string) => {
     if (!window.confirm(t("Remove {domain}? Addresses on it stop working.", { domain }))) return;
     void action.run(async () => {
@@ -80,7 +85,15 @@ export function Domains(): JSX.Element {
         <For each={ok(dns) ?? []} fallback={<p class="muted">{t("No verified domain, or kernoid handles no mail here.")}</p>}>
           {(entry) => (
             <>
-              <h3>{entry.domain}</h3>
+              <div class="toolbar">
+                <h3 class="grow">{entry.domain}</h3>
+                <button type="button" class="quiet" disabled={action.busy()} onClick={() => rotate(entry.domain, "rsa")}>
+                  {t("New RSA key")}
+                </button>
+                <button type="button" class="quiet" disabled={action.busy()} onClick={() => rotate(entry.domain, "ed25519")}>
+                  {t("New Ed25519 key")}
+                </button>
+              </div>
               <table class="nodes records">
                 <tbody>
                   <For each={entry.records}>

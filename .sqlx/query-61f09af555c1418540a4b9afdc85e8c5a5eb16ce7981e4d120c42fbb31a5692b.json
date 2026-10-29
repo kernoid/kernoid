@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT selector, public_key FROM dkim_keys WHERE domain = $1",
+  "query": "SELECT selector FROM dkim_keys WHERE domain = $1 AND algorithm = $2 AND state = 'next'",
   "describe": {
     "columns": [
       {
@@ -13,28 +13,17 @@
             "name": "selector"
           }
         }
-      },
-      {
-        "ordinal": 1,
-        "name": "public_key",
-        "type_info": "Bytea",
-        "origin": {
-          "Table": {
-            "table": "dkim_keys",
-            "name": "public_key"
-          }
-        }
       }
     ],
     "parameters": {
       "Left": [
+        "Text",
         "Text"
       ]
     },
     "nullable": [
-      false,
       false
     ]
   },
-  "hash": "8983fe8df376cabd8f4915cc3f3c96225c6acfc8365110af3b4a3903e862d6fc"
+  "hash": "61f09af555c1418540a4b9afdc85e8c5a5eb16ce7981e4d120c42fbb31a5692b"
 }

@@ -108,6 +108,16 @@ impl Identity {
         self.verify_tenant_domain(admin.instance(), admin.tenant(), domain, dns, &admin.creator()).await
     }
 
+    /// May the administrator change the mail keys (DKIM) of `domain`, a verified domain of the tenant?
+    pub async fn admin_mail_domain(&self, admin: &Admin, domain: &DomainName) -> Result<()> {
+        admin.require(Permission::DomainsManage)?;
+        let tenant = self.tenant(admin.instance(), admin.tenant()).await?.state;
+        match tenant.domains.get(domain) {
+            Some(claim) if claim.verified => Ok(()),
+            _ => Err(IdentityError::NotFound("the domain")),
+        }
+    }
+
     /// Marks a domain verified without DNS – for instance administrators, like `--trust` for operators.
     pub async fn admin_trust_domain(&self, admin: &Admin, domain: &DomainName) -> Result<()> {
         admin.require(Permission::TenantsManage)?;

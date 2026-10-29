@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE dkim_keys SET state = 'retired', state_since = now()\n             WHERE domain = $1 AND algorithm = $2 AND state = 'active'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d03227d5b7532489648632e7b5c2d7235ee6d45a83415c6a25322fc76053fbad"
+}

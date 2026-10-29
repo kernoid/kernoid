@@ -228,6 +228,59 @@ pub(crate) async fn verify_domain(
     respond(result, no_content)
 }
 
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
+pub(crate) struct DkimRotation {
+    /// `rsa` (the default) or `ed25519`.
+    #[serde(default)]
+    algorithm: Option<String>,
+}
+
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub(crate) struct DkimRotationView {
+    /// The new key's selector: its record belongs at `<selector>._domainkey.<domain>`; `mail-dns` shows it.
+    selector: String,
+}
+
+fn dkim_problem(error: kernoid_smtp::dkim::DkimError) -> Response {
+    tracing::warn!(%error, "changing a DKIM key failed");
+    Problem::new(StatusCode::INTERNAL_SERVER_ERROR).detail("the key could not be made").into_response()
+}
+
+/// Starts a change of a verified mail domain's DKIM key (needs `domains.manage`): a new key, signing once DNS shows
+/// its record; the key it replaces then stops signing. If a new key is waiting already, its selector.
+#[utoipa::path(post, path = "/v1/tenant/domains/{domain}/dkim-rotate", tag = "tenant", params(TenantHeader),
+    request_body = DkimRotation, responses(
+    (status = 200, body = DkimRotationView),
+    (status = 400, description = "this installation does not handle mail, or an unknown algorithm", body = Problem),
+))]
+pub(crate) async fn rotate_dkim(
+    State(state): State<AppState>,
+    AdminSession(admin): AdminSession,
+    Path(name): Path<String>,
+    body: Option<Json<DkimRotation>>,
+) -> Response {
+    let algorithm = body.and_then(|Json(body)| body.algorithm).unwrap_or_else(|| "rsa".into());
+    let checked = async {
+        let domain = domain(&name)?;
+        state.identity.admin_mail_domain(&admin, &domain).await?;
+        let Some(checker) = &state.mail_dns else {
+            return Err(IdentityError::Refused("this installation does not handle mail".into()));
+        };
+        let algorithm = kernoid_smtp::dkim::Algorithm::parse(&algorithm)
+            .ok_or_else(|| IdentityError::Refused("the algorithm is rsa or ed25519".into()))?;
+        Ok((checker.clone(), domain, algorithm))
+    }
+    .await;
+    let (checker, domain, algorithm) = match checked {
+        Ok(checked) => checked,
+        Err(error) => return crate::sessions::problem(error),
+    };
+    match checker.rotate_dkim(domain.as_str(), algorithm).await {
+        Ok(selector) => Json(DkimRotationView { selector }).into_response(),
+        Err(error) => dkim_problem(error),
+    }
+}
+
 /// Removes a mail domain – unless addresses use it (needs `domains.manage`).
 #[utoipa::path(delete, path = "/v1/tenant/domains/{domain}", tag = "tenant", params(TenantHeader),
     responses((status = 204), (status = 400, description = "addresses use it", body = Problem)))]

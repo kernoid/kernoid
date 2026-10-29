@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT d.domain, d.tenant_id FROM tenant_domains d\n         WHERE d.verified AND NOT EXISTS (SELECT 1 FROM dkim_keys k WHERE k.domain = d.domain)",
+  "query": "SELECT d.domain, d.tenant_id, a.algorithm AS \"algorithm!\" FROM tenant_domains d\n         CROSS JOIN unnest(ARRAY['rsa', 'ed25519']) AS a(algorithm)\n         WHERE d.verified\n           AND NOT EXISTS (SELECT 1 FROM dkim_keys k WHERE k.domain = d.domain AND k.algorithm = a.algorithm)",
   "describe": {
     "columns": [
       {
@@ -24,6 +24,12 @@
             "name": "tenant_id"
           }
         }
+      },
+      {
+        "ordinal": 2,
+        "name": "algorithm!",
+        "type_info": "Text",
+        "origin": "Expression"
       }
     ],
     "parameters": {
@@ -31,8 +37,9 @@
     },
     "nullable": [
       false,
-      false
+      false,
+      null
     ]
   },
-  "hash": "8c01931ea8d257ccdd3764b7c1a275d530c989f66979d50940f7aedf5a726a66"
+  "hash": "dd491fabae0dd2efeeabe27d07b7a44ea98150f043e09609a7f7617f8078ea37"
 }

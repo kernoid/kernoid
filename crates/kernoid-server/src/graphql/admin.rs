@@ -953,6 +953,28 @@ impl AdminMutation {
         Ok(true)
     }
 
+    /// Starts a change of a verified mail domain's DKIM key (needs `domains.manage`); `algorithm` is `rsa` (the
+    /// default) or `ed25519`. Returns the new key's selector; `mailDns` shows its record.
+    async fn rotate_dkim_key(
+        &self,
+        context: &Context<'_>,
+        domain: String,
+        algorithm: Option<String>,
+    ) -> async_graphql::Result<String> {
+        let (identity, admin) = admin(context).await?;
+        let domain = self::domain(&domain)?;
+        identity.admin_mail_domain(&admin, &domain).await.map_err(error)?;
+        let Some(checker) = context.data::<AppState>()?.mail_dns.as_ref() else {
+            return Err(error(IdentityError::Refused("this installation does not handle mail".into())));
+        };
+        let algorithm = kernoid_smtp::dkim::Algorithm::parse(algorithm.as_deref().unwrap_or("rsa"))
+            .ok_or_else(|| error(IdentityError::Refused("the algorithm is rsa or ed25519".into())))?;
+        checker.rotate_dkim(domain.as_str(), algorithm).await.map_err(|failure| {
+            tracing::warn!(error = %failure, "changing a DKIM key failed");
+            async_graphql::Error::new("the key could not be made")
+        })
+    }
+
     async fn remove_tenant_domain(&self, context: &Context<'_>, domain: String) -> async_graphql::Result<bool> {
         let (identity, admin) = admin(context).await?;
         identity.admin_remove_domain(&admin, &self::domain(&domain)?).await.map_err(error)?;

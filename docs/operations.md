@@ -17,7 +17,7 @@ Every process runs the same binary; the configuration key `roles` decides what i
   delivering back-channel logout notifications, rotating signing keys, ordering certificates (ACME), removing objects
   of deleted mail from object storage and old rows of the mail journal, emptying Trash and Junk after the tenants'
   retention and indexing older emails for search (every 10 minutes), making DKIM keys for new
-  domains, delivering the queue of outgoing mail, and the jobs of modules.
+  domains and letting new keys sign once DNS shows them, delivering the queue of outgoing mail, and the jobs of modules.
 
 - `smtp` – the MX on port 25 and submission on ports 587 and 465, when `[smtp]` is configured (see
   [Mail]({{ '/mail/' | relative_url }})). Several `smtp` processes can run side by side; each delivers what it
@@ -35,7 +35,7 @@ one or more `worker` processes. **Several workers share the work without doing i
 | back-channel logout | each notification is leased for a minute (`FOR UPDATE SKIP LOCKED`) by the worker that sends it |
 | signing key rotation, ACME, mail housekeeping | a PostgreSQL advisory lock: one worker does the round, the others skip it |
 | the queue of outgoing mail | each worker leases the due recipients of one domain (`FOR UPDATE SKIP LOCKED`) for ten minutes |
-| DKIM keys | the first key made for a domain stays (`ON CONFLICT DO NOTHING`) |
+| DKIM keys | one active and one waiting key per domain and algorithm (unique indexes): the first key made stays (`ON CONFLICT DO NOTHING`); a key becomes active in one transaction that retires the one before |
 
 A second worker is for availability more than for load: if one stops, the other carries on.
 
