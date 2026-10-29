@@ -58,6 +58,9 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 - JMAP `FileNode/copy` (RFC 8620, 5.4): nodes – a directory with what it holds – copied from another store the
   caller reads, a file's copy sharing its content; `onSuccessDestroyOriginal` moves them. The web app copies and
   moves files and folders between one's own files, team folders and what others share.
+- The terminal app keeps every address, phone number and organisation of a contact, with their labels (`(work)`,
+  `(private)`, for phones also `(mobile)` …) – one line each in the editor; before, it showed the first and saving
+  kept only that.
 - The web app shows new mail as a notification of the browser while it is open in the background (switched on in
   the account page, kept per browser).
 - The web app on a phone: the page no longer runs wider than the screen – the sections scroll in a row of their own,

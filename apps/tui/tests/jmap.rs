@@ -552,13 +552,25 @@ fn contacts_made_changed_and_removed() {
     let books = contacts::address_books(&client).unwrap();
     let names: Vec<_> = books.iter().map(|b| (b.name.as_str(), b.writable())).collect();
     assert_eq!(names, [("Contacts", true), ("Work", false)]);
-    let form = contacts::CardForm { name: "Dora".into(), email: "dora@x.example".into(), ..Default::default() };
+    let form = contacts::CardForm {
+        name: "Dora".into(),
+        emails: vec![
+            contacts::Labelled { value: "dora@x.example".into(), labels: vec!["work".into()] },
+            contacts::Labelled { value: "dora@home.example".into(), labels: Vec::new() },
+        ],
+        phones: vec![contacts::Labelled { value: "+49 170 1".into(), labels: vec!["mobile".into()] }],
+        ..Default::default()
+    };
     contacts::create(&client, &books[0], &form).unwrap();
     let created = &server.api_requests().pop().unwrap().calls()[0].1["create"]["c"];
     assert_eq!(created["@type"], "Card");
     assert_eq!(created["addressBookIds"], json!({ "b1": true }));
     assert_eq!(created["emails"]["e1"]["address"], "dora@x.example");
-    assert_eq!(created["phones"], Value::Null);
+    assert_eq!(created["emails"]["e1"]["contexts"], json!({ "work": true }));
+    assert_eq!(created["emails"]["e2"]["contexts"], Value::Null);
+    assert_eq!(created["phones"]["p1"]["features"], json!({ "mobile": true }));
+    assert_eq!(created["phones"]["p1"]["contexts"], Value::Null);
+    assert_eq!(created["organizations"], Value::Null);
     contacts::update(&client, &books[0], "k2", &form).unwrap();
     assert_eq!(server.api_requests().pop().unwrap().calls()[0].1["update"]["k2"]["name"], json!({ "full": "Dora" }));
     contacts::destroy(&client, "A", "k2").unwrap();

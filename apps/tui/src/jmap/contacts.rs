@@ -28,11 +28,19 @@ pub struct Name {
 #[derive(Debug, Clone, Deserialize)]
 pub struct EmailEntry {
     pub address: String,
+    /// `work`, `private` (RFC 9553, 1.5.1).
+    #[serde(default)]
+    pub contexts: Option<BTreeMap<String, bool>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Phone {
     pub number: String,
+    #[serde(default)]
+    pub contexts: Option<BTreeMap<String, bool>>,
+    /// `mobile`, `voice`, `fax`, `text` … (RFC 9553, 2.3.3).
+    #[serde(default)]
+    pub features: Option<BTreeMap<String, bool>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -180,13 +188,68 @@ pub fn address_books(client: &Client) -> Result<Vec<AddressBook>> {
     Ok(out)
 }
 
-/// A card as the user writes it: one of each, as the web app has it.
+/// The contexts a value may have (RFC 9553, 1.5.1); for phones, other labels are its features.
+pub const CONTEXTS: [&str; 2] = ["work", "private"];
+/// The features of a phone (RFC 9553, 2.3.3).
+pub const FEATURES: [&str; 7] = ["mobile", "voice", "text", "video", "fax", "pager", "textphone"];
+
+/// A value with its labels – contexts, and for a phone its features: `alice@x.example (work)`.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Labelled {
+    pub value: String,
+    pub labels: Vec<String>,
+}
+
+impl Labelled {
+    fn of(value: &str, maps: &[&Option<BTreeMap<String, bool>>]) -> Self {
+        let labels = maps
+            .iter()
+            .flat_map(|map| map.iter().flat_map(|map| map.iter()))
+            .filter(|(_, on)| **on)
+            .map(|(label, _)| label.clone())
+            .collect();
+        Self { value: value.to_owned(), labels }
+    }
+
+    /// As the editor shows it.
+    pub fn render(&self) -> String {
+        if self.labels.is_empty() { self.value.clone() } else { format!("{} ({})", self.value, self.labels.join(", ")) }
+    }
+
+    /// From the editor; `allowed` are the labels it may have.
+    pub fn parse(text: &str, allowed: &[&str]) -> std::result::Result<Self, String> {
+        let text = text.trim();
+        let (value, labels) = match text.strip_suffix(')').and_then(|rest| rest.rsplit_once('(')) {
+            Some((value, labels)) => {
+                (value.trim(), labels.split(',').map(|label| label.trim().to_lowercase()).collect())
+            }
+            None => (text, Vec::new()),
+        };
+        let labels: Vec<String> = labels.into_iter().filter(|label: &String| !label.is_empty()).collect();
+        if let Some(unknown) = labels.iter().find(|label| !allowed.contains(&label.as_str())) {
+            return Err(format!("unknown label {unknown} – one of {}", allowed.join(", ")));
+        }
+        Ok(Self { value: value.to_owned(), labels })
+    }
+
+    fn set(&self, among: &[&str]) -> Value {
+        let on: Map<String, Value> = self
+            .labels
+            .iter()
+            .filter(|label| among.contains(&label.as_str()))
+            .map(|label| (label.clone(), json!(true)))
+            .collect();
+        if on.is_empty() { Value::Null } else { Value::Object(on) }
+    }
+}
+
+/// A card as the user writes it: every address, phone number and organisation, with their labels.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct CardForm {
     pub name: String,
-    pub email: String,
-    pub phone: String,
-    pub organization: String,
+    pub emails: Vec<Labelled>,
+    pub phones: Vec<Labelled>,
+    pub organizations: Vec<String>,
     pub note: String,
 }
 
@@ -194,23 +257,59 @@ impl CardForm {
     pub fn of(card: &Card) -> Self {
         Self {
             name: card.full_name(),
-            email: card.emails().into_iter().next().unwrap_or_default(),
-            phone: card.phones().into_iter().next().unwrap_or_default(),
-            organization: card.organization().unwrap_or_default(),
+            emails: card
+                .emails
+                .iter()
+                .flat_map(|map| map.values())
+                .map(|entry| Labelled::of(&entry.address, &[&entry.contexts]))
+                .collect(),
+            phones: card
+                .phones
+                .iter()
+                .flat_map(|map| map.values())
+                .map(|phone| Labelled::of(&phone.number, &[&phone.contexts, &phone.features]))
+                .collect(),
+            organizations: card
+                .organizations
+                .iter()
+                .flat_map(|map| map.values())
+                .filter_map(|organization| organization.name.clone())
+                .collect(),
             note: card.notes().join("\n"),
         }
     }
 
     /// The JSContact properties (without `addressBookIds`); empty fields remove what was.
     pub fn object(&self) -> Value {
-        let or_null = |empty: bool, value: Value| if empty { Value::Null } else { value };
+        let map = |prefix: &str, values: Vec<Value>| -> Value {
+            if values.is_empty() {
+                return Value::Null;
+            }
+            Value::Object(
+                values.into_iter().enumerate().map(|(n, value)| (format!("{prefix}{}", n + 1), value)).collect(),
+            )
+        };
+        let emails = self
+            .emails
+            .iter()
+            .map(|email| json!({ "@type": "EmailAddress", "address": email.value, "contexts": email.set(&CONTEXTS) }))
+            .collect();
+        let phones = self
+            .phones
+            .iter()
+            .map(|phone| {
+                json!({ "@type": "Phone", "number": phone.value, "contexts": phone.set(&CONTEXTS),
+                        "features": phone.set(&FEATURES) })
+            })
+            .collect();
+        let organizations =
+            self.organizations.iter().map(|name| json!({ "@type": "Organization", "name": name })).collect();
         json!({
             "name": { "full": self.name },
-            "emails": or_null(self.email.is_empty(), json!({ "e1": { "@type": "EmailAddress", "address": self.email } })),
-            "phones": or_null(self.phone.is_empty(), json!({ "p1": { "@type": "Phone", "number": self.phone } })),
-            "organizations": or_null(self.organization.is_empty(),
-                json!({ "o1": { "@type": "Organization", "name": self.organization } })),
-            "notes": or_null(self.note.is_empty(), json!({ "n1": { "@type": "Note", "note": self.note } })),
+            "emails": map("e", emails),
+            "phones": map("p", phones),
+            "organizations": map("o", organizations),
+            "notes": if self.note.is_empty() { Value::Null } else { json!({ "n1": { "@type": "Note", "note": self.note } }) },
         })
     }
 }

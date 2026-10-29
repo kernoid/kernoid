@@ -15,10 +15,9 @@ through JMAP – it shares no code with the server and works against any kernoid
 | Mail | the mailboxes of the account and of shared mailboxes it may use; conversations (threads) – or single emails, `t` switches – with full-text search; reading a whole conversation (HTML emails as plain text – nothing is loaded or run), attachments saved to disk, writing, replying, replying to all and forwarding (with the attachments) in your editor, attaching files, keeping drafts, flagging, marking read or unread, moving, deleting (to the trash; in the trash for good); new mail appears by itself |
 | Files | the account's own files, the tenant's drives and what others share; folders, downloads and uploads of any size with progress (a file of the same name gets the upload as new content, the old one stays as a version), a file's versions – saving an earlier one, or restoring it –, details, sharing folders with people and groups (read, edit, or edit and share – as in the web app), new folders, renaming, deleting (to the trash) |
 | Calendar | the account's calendars and those shared with it, two weeks at a time; repeating events as their instances, all-day events, place, participants with their answers, description; making, changing and deleting events – participants are invited by email; one event of a series on its own, or the whole series –, answering invitations (accept, maybe, decline); events the organizer called off are shown cancelled |
-| Contacts | the cards of the account's address books with search; name, organisation, addresses, phone numbers, notes; making, changing and deleting contacts; writing an email to a contact |
+| Contacts | the cards of the account's address books with search; name, organisations, addresses and phone numbers – as many as a card has, with labels such as `(work)` or `(mobile)` –, notes; making, changing and deleting contacts; writing an email to a contact |
 
-Not yet (`OPEN`): more than one address, phone number or organisation per contact (the editor shows
-the first; saving keeps only those), `.ics` and `.vcf` files, finding the server through DNS on Windows (there is no
+Not yet (`OPEN`): `.ics` and `.vcf` files, finding the server through DNS on Windows (there is no
 `/etc/resolv.conf`; give `--server`).
 
 **Logging in with OpenID Connect** stays `OPEN` on purpose. A terminal app would use the device authorization grant

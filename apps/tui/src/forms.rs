@@ -6,7 +6,7 @@ use chrono::{NaiveDate, NaiveDateTime};
 
 use crate::jmap::{
     calendars::{EventForm, FREQUENCIES},
-    contacts::CardForm,
+    contacts::{CONTEXTS, CardForm, FEATURES, Labelled},
 };
 
 /// The header lines and the text after the first blank line; `#` lines left out.
@@ -112,13 +112,19 @@ pub fn parse_event(text: &str, form: &EventForm) -> Result<(EventForm, String), 
 pub fn render_card(form: &CardForm, book: &str, books: &[String]) -> String {
     let mut out = String::new();
     out.push_str(&format!("Name: {}\n", form.name));
-    out.push_str(&format!("Email: {}\n", form.email));
-    out.push_str(&format!("Phone: {}\n", form.phone));
-    out.push_str(&format!("Organization: {}\n", form.organization));
+    // One line per value – an empty one to fill in where there is none; more lines, more values.
+    let lines = |name: &str, values: Vec<String>| -> String {
+        let values = if values.is_empty() { vec![String::new()] } else { values };
+        values.iter().map(|value| format!("{name}: {value}\n")).collect()
+    };
+    out.push_str(&lines("Email", form.emails.iter().map(Labelled::render).collect()));
+    out.push_str(&lines("Phone", form.phones.iter().map(Labelled::render).collect()));
+    out.push_str(&lines("Organization", form.organizations.clone()));
     out.push_str(&format!("Address book: {book}\n"));
     if books.len() > 1 {
         out.push_str(&format!("# Address books: {}\n", books.join(", ")));
     }
+    out.push_str("# Labels in brackets: (work), (private); for phones also mobile, voice, text, video, fax, pager.\n");
     out.push_str("# A note follows the blank line.\n\n");
     out.push_str(&form.note);
     if !form.note.is_empty() {
@@ -135,18 +141,22 @@ pub fn parse_card(text: &str) -> Result<(CardForm, String), String> {
     for (name, value) in fields {
         match name.as_str() {
             "name" => out.name = value,
-            "email" => out.email = value,
-            "phone" => out.phone = value,
-            "organization" | "organisation" => out.organization = value,
+            _ if value.is_empty() && ["email", "phone", "organization", "organisation"].contains(&name.as_str()) => {}
+            "email" => out.emails.push(Labelled::parse(&value, &CONTEXTS)?),
+            "phone" => {
+                let allowed: Vec<&str> = CONTEXTS.iter().chain(FEATURES.iter()).copied().collect();
+                out.phones.push(Labelled::parse(&value, &allowed)?);
+            }
+            "organization" | "organisation" => out.organizations.push(value),
             "address book" => book = value,
             other => return Err(format!("unknown header: {other}")),
         }
     }
-    if out.name.trim().is_empty() && out.email.trim().is_empty() {
+    if out.name.trim().is_empty() && out.emails.is_empty() {
         return Err("the contact needs a name or an address".into());
     }
-    if !out.email.is_empty() && !out.email.contains('@') {
-        return Err(format!("not an address: {}", out.email));
+    if let Some(wrong) = out.emails.iter().find(|email| !email.value.contains('@')) {
+        return Err(format!("not an address: {}", wrong.value));
     }
     out.note = body;
     Ok((out, book))
@@ -210,7 +220,19 @@ mod tests {
         let text = render_card(&form, "Contacts", &books);
         let (parsed, book) = parse_card(&text.replace("Email: \n", "Email: bob@x.example\n")).unwrap();
         assert_eq!(book, "Contacts");
-        assert_eq!(parsed.email, "bob@x.example");
+        assert_eq!(parsed.emails, [Labelled { value: "bob@x.example".into(), labels: Vec::new() }]);
+        // Several of each, with labels; a label that does not fit is refused.
+        let many = text
+            .replace("Email: \n", "Email: bob@x.example (work)\nEmail: bob@home.example (private)\n")
+            .replace("Phone: \n", "Phone: +49 170 1 (mobile, work)\nPhone: +49 30 2\n")
+            .replace("Organization: \n", "Organization: falkOSS\nOrganization: kernoid\n");
+        let (parsed, _) = parse_card(&many).unwrap();
+        assert_eq!(parsed.emails[1], Labelled { value: "bob@home.example".into(), labels: vec!["private".into()] });
+        assert_eq!(parsed.phones[0].labels, ["mobile", "work"]);
+        assert_eq!(parsed.organizations, ["falkOSS", "kernoid"]);
+        let again = render_card(&parsed, "Contacts", &books);
+        assert!(again.contains("Phone: +49 170 1 (mobile, work)\nPhone: +49 30 2\n"), "{again}");
+        assert!(parse_card(&many.replace("(work)", "(office)")).is_err());
         assert_eq!(parsed.note, "line 1\nline 2");
         assert!(parse_card("Name: \nEmail: \n\n").is_err());
         assert!(parse_card("Name: X\nEmail: nope\n\n").is_err());
