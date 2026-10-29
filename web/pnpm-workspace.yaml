@@ -5,8 +5,10 @@ packages:
   - app
 # Only versions published at least two weeks ago (in minutes).
 minimumReleaseAge: 20160
-# The smallest version that fixes a security advisory is taken at once (GHSA-f86p-h4j2-7qgj, GHSA-9wx9-5pv9-3349).
-minimumReleaseAgeExclude:
-  - seroval@1.6.11
-overrides:
-  seroval: 1.6.11
+# Advisories pnpm audit does not count, each with its reason:
+# - GHSA-gcqx-w48m-w2h4 (low, no fixed version): deepmerge's mergeObject() lets a merged object carry a prototype.
+#   Only @sveltejs/vite-plugin-svelte uses it, merging the build's own configuration – nothing from users reaches it,
+#   and none of it is in what kernoid serves.
+auditConfig:
+  ignoreGhsas:
+    - GHSA-gcqx-w48m-w2h4
