@@ -42,6 +42,8 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 - Searching inside text files (JMAP `body` and `text`, the web app's new search box in Files), and emptying the file
   trash after a tenant's number of days (`kernoid tenant files-retention`, `/v1/tenant/files-retention`, GraphQL,
   the administration's settings; migration 0039).
+- WebDAV `COPY` and `MOVE` between stores – one's own files, drives, what others share – where the rights allow;
+  before, file managers got 502 and copied themselves.
 - SAML single logout in the HTTP-POST binding, and at OpenID Connect `end_session`: an application's logout of a
   session from a SAML provider logs out at the provider too, then returns to the application.
 - `http.public_port`: instances reached on a port other than 443 or 80 name it in their issuer and links (JMAP);

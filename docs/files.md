@@ -124,7 +124,9 @@ The web app shows these settings, per system, under "Connect a file manager" in 
 share. Downloads – over JMAP and WebDAV, mail attachments too – carry `X-Content-Type-Options: nosniff` and a
 sandboxing Content-Security-Policy, so an HTML or SVG file opened in the browser cannot run scripts on the instance's
 origin (PDFs only may be framed by the web app, for its viewer). Uploads and downloads stream, locks keep two programs
-from writing the same file, and a file written again keeps its earlier content as a version.
+from writing the same file, and a file written again keeps its earlier content as a version. Files and folders can be
+copied and moved between stores – from one's own files into a drive, say – where the rights allow: reading there,
+adding here, and for moving deleting there.
 
 ## Limits and quota
 
@@ -138,4 +140,4 @@ from writing the same file, and a file written again keeps its earlier content a
 
 {: .note }
 OPEN: links that let people add files, uploads that resume after the page is closed, searching inside PDFs and office
-documents, symbolic links, moving between stores over WebDAV.
+documents, symbolic links, moving between stores in the web app.

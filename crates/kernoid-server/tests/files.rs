@@ -287,6 +287,26 @@ async fn drives_are_administered_and_reached_over_webdav(pool: PgPool) {
         text(&app, dav("GET", "/webdav/falkOSS/Board/copy.txt", "bob@firma.de", &[], "")).await.0,
         StatusCode::NOT_FOUND
     );
+
+    // Between stores: Bob copies a file of his own into the drive, and moves it back under another name.
+    let put = dav("PUT", "/webdav/bob@firma.de/mine.txt", "bob@firma.de", &[("content-type", "text/plain")], "mine");
+    assert_eq!(text(&app, put).await.0, StatusCode::CREATED);
+    let into_drive = format!("http://{HOST}/webdav/falkOSS/mine.txt");
+    let copied = dav("COPY", "/webdav/bob@firma.de/mine.txt", "bob@firma.de", &[("destination", &into_drive)], "");
+    assert_eq!(text(&app, copied).await.0, StatusCode::CREATED);
+    assert_eq!(text(&app, dav("GET", "/webdav/falkOSS/mine.txt", "alice@firma.de", &[], "")).await.2, "mine");
+    let back = format!("http://{HOST}/webdav/bob@firma.de/back.txt");
+    let moved = dav("MOVE", "/webdav/falkOSS/mine.txt", "bob@firma.de", &[("destination", &back)], "");
+    assert_eq!(text(&app, moved).await.0, StatusCode::CREATED);
+    assert_eq!(
+        text(&app, dav("GET", "/webdav/falkOSS/mine.txt", "bob@firma.de", &[], "")).await.0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(text(&app, dav("GET", "/webdav/bob@firma.de/back.txt", "bob@firma.de", &[], "")).await.2, "mine");
+    // Alice does not reach Bob's store: she cannot put anything there.
+    let to_bob = format!("http://{HOST}/webdav/bob@firma.de/hers.txt");
+    let refused = dav("COPY", "/webdav/falkOSS/minutes.txt", "alice@firma.de", &[("destination", &to_bob)], "");
+    assert_eq!(text(&app, refused).await.0, StatusCode::BAD_GATEWAY);
 }
 
 #[sqlx::test(migrator = "kernoid_store::MIGRATOR")]

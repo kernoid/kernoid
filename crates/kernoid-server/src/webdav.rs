@@ -440,28 +440,38 @@ async fn dispatch(
             let node = resolve(&view, below)?.ok_or(StatusCode::FORBIDDEN)?;
             let target = headers.destination.and_then(destination).ok_or(StatusCode::BAD_REQUEST)?;
             let (target_store, target_below) = target.split_first().ok_or(StatusCode::FORBIDDEN)?;
-            // Between stores is not supported (OPEN): the client copies itself.
-            if target_store != store_name {
-                return Err(StatusCode::BAD_GATEWAY.into());
-            }
+            // Into another store the caller reaches – a drive, a store shared with them – as well as within this one.
+            let other = stores.iter().find(|other| &other.name == target_store).ok_or(StatusCode::BAD_GATEWAY)?;
+            let across = other.owner != store.owner;
+            let other_view = if across { Some(files.view(other.access.clone()).await?) } else { None };
+            let target_view = other_view.as_ref().unwrap_or(&view);
             let (parent_names, name) =
                 target_below.split_last().map(|(name, parent)| (parent, name)).ok_or(StatusCode::FORBIDDEN)?;
-            let parent = resolve(&view, parent_names).map_err(|_| StatusCode::CONFLICT)?;
-            let existing = resolve(&view, target_below).ok().flatten();
+            let parent = resolve(target_view, parent_names).map_err(|_| StatusCode::CONFLICT)?;
+            let existing = resolve(target_view, target_below).ok().flatten();
             if existing.is_some() && headers.overwrite_fail {
                 return Err(StatusCode::PRECONDITION_FAILED.into());
             }
             if let Some(existing) = existing {
-                files.check_unlocked(&store.access, existing.id, true, &tokens).await?;
+                files.check_unlocked(&other.access, existing.id, true, &tokens).await?;
             }
             let options = SetOptions { on_exists: OnExists::Replace, remove_children: true, ..SetOptions::default() };
             let parent_id = parent.map(|parent| parent.id);
             if method.as_str() == "MOVE" {
                 files.check_unlocked(&store.access, node.id, true, &tokens).await?;
+            }
+            if method.as_str() == "MOVE" && !across {
                 let update = NodeUpdate { parent: Some(parent_id), name: Some(name.clone()), ..NodeUpdate::default() };
                 files.update(&store.access, node.id, update, &options).await?;
             } else {
-                copy(&files, &store.access, &view, node, parent_id, name.clone(), &options, 0).await?;
+                // A move between stores is a copy there and a delete here: it needs the right to delete first.
+                if method.as_str() == "MOVE" && !view.rights(node.id).contains(kernoid_files::Rights::DELETE) {
+                    return Err(StatusCode::FORBIDDEN.into());
+                }
+                copy(&files, &other.access, &view, node, parent_id, name.clone(), &options, 0).await?;
+                if method.as_str() == "MOVE" {
+                    files.destroy(&store.access, node.id, true).await?;
+                }
             }
             Ok(if existing.is_some() { StatusCode::NO_CONTENT } else { StatusCode::CREATED }.into_response())
         }
@@ -554,7 +564,8 @@ fn lock_response(
     response
 }
 
-/// Copies a node – a directory with what it holds – below `parent` as `name`; a file's copy shares its content.
+/// Copies a node of `view` – a directory with what it holds – below `parent` of the store `access` names, as `name`:
+/// the same store or another of the tenant. A file's copy shares its content. Only what the user may read is copied.
 #[allow(clippy::too_many_arguments, reason = "one step of a recursive copy")]
 fn copy<'a>(
     files: &'a Files,
@@ -569,6 +580,9 @@ fn copy<'a>(
     Box::pin(async move {
         if depth > kernoid_files::MAX_DEPTH {
             return Err(FilesError::Invalid("too deep".into()));
+        }
+        if !view.readable(node.id) {
+            return Err(FilesError::Forbidden("reading what is copied".into()));
         }
         let new = match (node.node_type, node.content) {
             (NodeType::File, Some(content)) => {

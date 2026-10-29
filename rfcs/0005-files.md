@@ -170,7 +170,9 @@ the draft means to replace, but what many programs speak today. Logging in is as
   (an owner's address, a drive's name). Below a store, paths are the nodes' names.
 - **Methods:** `OPTIONS`, `PROPFIND` (depth 0 and 1; `infinity` answers like 1), `GET` and `HEAD` (with ranges),
   `PUT` (streaming; an existing file gets new content, the old becomes a version), `DELETE`, `MKCOL`, `COPY`, `MOVE`
-  (within a store; between stores **OPEN**), `PROPPATCH` (accepted, not kept – Windows sets times and attributes),
+  (within a store, and into any other store the caller reaches – what they may read is copied, sharing the content's
+  parts, and counts against the target's quota; a move between stores needs `mayDelete` and deletes after copying),
+  `PROPPATCH` (accepted, not kept – Windows sets times and attributes),
   `LOCK` and `UNLOCK`.
 - **Properties:** `displayname`, `resourcetype`, `getcontentlength`, `getcontenttype`, `getetag` (the content id;
   for a directory its last change), `getlastmodified`, `creationdate`, `supportedlock`, `lockdiscovery`, and for a
