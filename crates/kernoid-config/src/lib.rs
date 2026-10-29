@@ -40,6 +40,49 @@ pub struct Config {
     pub smtp: Option<Smtp>,
     /// Mail clients over IMAP and POP3 (RFC 0002, 11.2, 11.3); without this table, no process listens for them.
     pub imap: Option<Imap>,
+    /// The directory over LDAP for software that reads one (RFC 0003, 8); without this table, no process listens.
+    pub ldap: Option<Ldap>,
+}
+
+/// LDAP: a directory of each tenant's people and groups, to read – only with certificates, since binding needs TLS.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Ldap {
+    /// LDAP with `StartTLS`.
+    #[serde(default = "default_ldap_listen")]
+    pub listen: SocketAddr,
+    /// LDAP with TLS from the start (LDAPS).
+    #[serde(default = "default_ldaps_listen")]
+    pub tls_listen: SocketAddr,
+    /// Sessions at once per listener; more connections wait.
+    #[serde(default = "default_max_connections_ldap")]
+    pub max_connections: usize,
+    /// How long a session may say nothing, in seconds.
+    #[serde(default = "default_ldap_timeout")]
+    pub timeout_seconds: u64,
+    /// The most entries one search returns.
+    #[serde(default = "default_ldap_max_entries")]
+    pub max_entries: usize,
+}
+
+fn default_ldap_listen() -> SocketAddr {
+    SocketAddr::from(([0, 0, 0, 0], 389))
+}
+
+fn default_ldaps_listen() -> SocketAddr {
+    SocketAddr::from(([0, 0, 0, 0], 636))
+}
+
+fn default_max_connections_ldap() -> usize {
+    1000
+}
+
+fn default_ldap_timeout() -> u64 {
+    300
+}
+
+fn default_ldap_max_entries() -> usize {
+    5000
 }
 
 /// IMAP for mail clients, and POP3 if asked for; both only with certificates, since logging in needs TLS.
@@ -299,11 +342,13 @@ pub enum Role {
     Smtp,
     /// Mail clients: IMAP and POP3, when `[imap]` is configured.
     Imap,
+    /// The directory over LDAP, when `[ldap]` is configured.
+    Ldap,
 }
 
 impl Role {
     /// Every role except `All`.
-    pub const EACH: &[Role] = &[Role::Api, Role::Worker, Role::Smtp, Role::Imap];
+    pub const EACH: &[Role] = &[Role::Api, Role::Worker, Role::Smtp, Role::Imap, Role::Ldap];
 }
 
 #[derive(Debug, Clone, Deserialize)]

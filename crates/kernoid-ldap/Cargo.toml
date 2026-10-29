@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+[package]
+name = "kernoid-ldap"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+futures-util = { version = "0.3.34", default-features = false, features = ["sink"] }
+kernoid-config = { version = "0.1.0", path = "../kernoid-config" }
+kernoid-identity = { version = "0.1.0", path = "../kernoid-identity" }
+# `strict` reads the attributes a search asks for; without it, ldap3_proto drops them.
+ldap3_proto = { version = "0.8.1", default-features = false, features = ["strict"] }
+rustls = { version = "0.23.46", default-features = false, features = ["aws-lc-rs", "std", "tls12"] }
+tokio = { version = "1.54.1", features = ["net", "io-util", "time", "sync", "rt", "macros"] }
+tokio-rustls = { version = "0.26.6", default-features = false }
+tokio-util = { version = "0.7.20", features = ["codec"] }
+tracing = "0.1.44"
+uuid = "1.28.0"
+
+[dev-dependencies]
+kernoid-events = { path = "../kernoid-events" }
+rcgen = { version = "0.14.10", default-features = false, features = ["aws_lc_rs", "pem"] }
+sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres", "macros", "migrate"] }
+kernoid-store = { path = "../kernoid-store" }
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros"] }

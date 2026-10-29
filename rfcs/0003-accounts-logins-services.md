@@ -108,3 +108,31 @@ What an account uses: `mail` (a mailbox, RFC 0002) and `files` (a file store, RF
 - **OPEN:** removing an account (and its mail store and files) – deactivating is what there is.
 - **OPEN:** phone numbers as logins.
 - **OPEN:** custom profile data per tenant (ZITADEL's user schemas) – metadata for now.
+
+## 8. The directory over LDAP
+
+Older software reads its users from a directory over LDAP – wikis, ticket systems, printers, network gear. kernoid
+serves each tenant's people and groups as such a directory (LDAPv3, [RFC 4511](https://www.rfc-editor.org/rfc/rfc4511)),
+read only: the directory is kept with kernoid's API, SCIM and the web app, never over LDAP.
+
+- **Process role `ldap`**, listening when `[ldap]` is set: LDAP with `StartTLS` (389) and LDAPS (636), with the
+  certificates of the mail protocols. Messages are parsed and written by
+  [ldap3_proto](https://crates.io/crates/ldap3_proto) (MPL-2.0, from Kanidm); the server is kernoid's own.
+- **The tree:** one per tenant, `o=<tenant id>` – stable whatever the tenant's names and domains –, with
+  `ou=people` and `ou=groups`. A person is an active account of the kind `person` (no shared mailboxes, no drives) at
+  `uid=<login>,ou=people,o=<tenant>` – the login of section 2 –, an `inetOrgPerson` with `uid`, `cn` and
+  `displayName` (the display name), `sn` and `givenName` (its last word and the rest), `mail` (every address, the
+  primary first), `memberOf` and the operational `entryUUID` (the account's id). A group is a `groupOfNames` at
+  `cn=<name>,ou=groups,o=<tenant>` with `cn`, `mail`, `member` and `entryUUID`.
+- **Binding:** simple binds only, over TLS only (`confidentialityRequired` otherwise), with the account's DN or its
+  login name, and an app password – or its password if it needs no second factor, as for mail programs (section 4;
+  `program_login` without a service: any account). Failures count like failed logins. Anonymous binds see the root
+  DSE and nothing else; a bind with a name and no password is refused (RFC 4513, 5.1.2).
+- **Searching:** a bound account reads its own tenant's tree – another tenant's does not exist for it. Scopes base,
+  one level, subtree and children; filters with and, or, not, equality, presence, substrings, ordering (values
+  compare without case); the attributes asked for, `*`, `+` and `1.1`; at most `ldap.max_entries` entries
+  (`sizeLimitExceeded` beyond). Simple paged results (RFC 2696) are answered with every entry on the first page.
+  Extended operations: StartTLS and Who am I? (RFC 4532).
+- **OPEN:** which accounts may read the directory – today every account of the tenant reads all of it, as it can
+  find its people with JMAP's principals; a service account for software that searches before binding as the user;
+  `posixAccount` attributes; a cache of the tree for large tenants (every search reads it from PostgreSQL).

@@ -39,7 +39,7 @@ main_key = "…"   # 64 hex characters: openssl rand -hex 32
 
 | Key | Default | Meaning |
 |---|---|---|
-| `roles` | `["all"]` | what this process does: `api` (HTTP), `worker` (background work), `smtp` (the MX and submission), `imap` (IMAP and POP3), `all` |
+| `roles` | `["all"]` | what this process does: `api` (HTTP), `worker` (background work), `smtp` (the MX and submission), `imap` (IMAP and POP3), `ldap` (the directory), `all` |
 | `http.listen` | `0.0.0.0:8080` | address and port to listen on |
 | `http.tls.certificate`, `http.tls.key` | – | PEM files; with them kernoid serves HTTPS itself (TLS 1.2 and 1.3, HTTP/2) |
 | `http.trusted_proxies` | `[]` | addresses or networks whose `Forwarded` / `X-Forwarded-*` headers are believed |
@@ -96,6 +96,11 @@ main_key = "…"   # 64 hex characters: openssl rand -hex 32
 | `imap.pop3_listen`, `imap.pop3_tls_listen` | – | POP3 with `STLS` and with TLS from the start, e.g. `0.0.0.0:110` and `0.0.0.0:995`; off unless set |
 | `imap.max_connections` | `5000` | sessions at once per listener; more connections wait |
 | `imap.timeout_seconds` | `1800` | a session that says nothing this long – `IDLE` included – is logged out |
+| `ldap.listen` | `0.0.0.0:389` | the directory is served when `[ldap]` is set (process role `ldap`, [Directory]({{ '/directory/' | relative_url }})): LDAP with `StartTLS`; only with certificates |
+| `ldap.tls_listen` | `0.0.0.0:636` | LDAPS |
+| `ldap.max_connections` | `1000` | sessions at once per listener |
+| `ldap.timeout_seconds` | `300` | a session that says nothing this long is closed |
+| `ldap.max_entries` | `5000` | the most entries one search returns |
 | `log.filter` | – | e.g. `info,kernoid=debug` (syntax of `tracing_subscriber::EnvFilter`) |
 | `log.format` | `text` | `text` or `json` |
 | `log.otlp_endpoint` | – | send traces to an OpenTelemetry collector over OTLP/HTTP, e.g. `http://otel-collector:4318/v1/traces` |
@@ -112,5 +117,5 @@ KERNOID__ENCRYPTION__MAIN_KEY=…
 KERNOID__HTTP__TRUSTED_PROXIES='["172.16.0.0/12"]'
 ```
 
-The modules compiled in and their settings are listed under [Modules](modules.md). A table `[modules.<name>]` for a
+The modules compiled in and their settings are listed under [Modules]({{ '/modules/' | relative_url }}). A table `[modules.<name>]` for a
 module that does not exist is an error, and so is a setting a module does not know.

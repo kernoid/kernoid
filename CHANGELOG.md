@@ -52,6 +52,10 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   `clamav` (profile `clamav`). Tenants see and switch the modules the installation offers with
   `GET /v1/tenant/modules`, GraphQL `tenantModules`, and in the administration's settings; only modules the
   installation has switched on can be switched on.
+- The directory over LDAP (docs: Directory, RFC 0003, 8): each tenant's people and groups at `o=<tenant id>`, read
+  only, for software that reads users from a directory – `inetOrgPerson` and `groupOfNames` with `mail`, `member` and
+  `memberOf`. Binds over LDAPS or StartTLS with the login name or DN and an app password (or the password without a
+  second factor); a new process role `ldap` and the table `[ldap]`.
 - The module `jitsi` (docs: Modules): video meetings in a Jitsi Meet with JWT authentication. A calendar event in the
   web app gets a meeting with one button; its link goes into the event (`virtualLocations`, iCalendar `CONFERENCE`)
   and its description, and sends whoever opens it on to Jitsi with a token kernoid signed for that room – the

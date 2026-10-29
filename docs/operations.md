@@ -25,6 +25,8 @@ Every process runs the same binary; the configuration key `roles` decides what i
   accepts itself.
 - `imap` – IMAP on ports 143 and 993, and POP3 if configured, when `[imap]` is configured and kernoid has
   certificates. `IDLE` hears of changes made by any process through PostgreSQL; run as many as the clients need.
+- `ldap` – the directory on ports 389 and 636, when `[ldap]` is configured and kernoid has certificates
+  ([Directory]({{ '/directory/' | relative_url }})); it only reads, so run as many as needed.
 
 `all` (the default) runs all of them in one process. For more load, run several `api` processes behind a load balancer and
 one or more `worker` processes. **Several workers share the work without doing it twice:**

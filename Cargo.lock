@@ -2422,6 +2422,7 @@ dependencies = [
  "kernoid-imap",
  "kernoid-jitsi",
  "kernoid-jmap",
+ "kernoid-ldap",
  "kernoid-mail",
  "kernoid-module",
  "kernoid-oidc",
@@ -2658,6 +2659,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "kernoid-ldap"
+version = "0.1.0"
+dependencies = [
+ "futures-util",
+ "kernoid-config",
+ "kernoid-events",
+ "kernoid-identity",
+ "kernoid-store",
+ "ldap3_proto",
+ "rcgen",
+ "rustls",
+ "sqlx",
+ "tokio",
+ "tokio-rustls",
+ "tokio-util",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "kernoid-mail"
 version = "0.1.0"
 dependencies = [
@@ -2863,6 +2884,33 @@ name = "lazy_static"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "20870f649af7073d53e38067b2a84312175d56ea15217e1b15bc83506ec50afb"
+
+[[package]]
+name = "ldap3_lber"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf85b08fb467260c0f8f305b30e819cf3e9584f0f50f2879fbec9bc58f639504"
+dependencies = [
+ "bytes",
+ "nom",
+]
+
+[[package]]
+name = "ldap3_proto"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "105256b138a7ed84ac1ae375870eae23be5f8fed16ca172ae5f1c1aa37bd4242"
+dependencies = [
+ "base64 0.22.1",
+ "bytes",
+ "ldap3_lber",
+ "nom",
+ "peg",
+ "thiserror 2.0.21",
+ "tokio-util",
+ "tracing",
+ "uuid",
+]
 
 [[package]]
 name = "left-right"
@@ -3486,6 +3534,33 @@ name = "pastey"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2ee67f1008b1ba2321834326597b8e186293b049a023cdef258527550b9935b4"
+
+[[package]]
+name = "peg"
+version = "0.8.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0aad070be5b63aa72103f2fcdd70a83adbd5e90112ce5b574171ff1c65501773"
+dependencies = [
+ "peg-macros",
+ "peg-runtime",
+]
+
+[[package]]
+name = "peg-macros"
+version = "0.8.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ddd8ef6825cae95355031ae26a99b616a2a21f22ba2de0197c43dfb05acbe7ee"
+dependencies = [
+ "peg-runtime",
+ "proc-macro2",
+ "quote",
+]
+
+[[package]]
+name = "peg-runtime"
+version = "0.8.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7011d97b484a5ebdc4b1fdb3b12d5e4bbbea56e9d22b688f2e79e04b65a7d8a6"
 
 [[package]]
 name = "pem"

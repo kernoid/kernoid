@@ -185,7 +185,7 @@ impl Identity {
     }
 
     /// A login of a program like [`Identity::mail_login`], for an account with any of `services` – JMAP takes
-    /// accounts with mail or files (RFC 0005, 8). With the `instance` a request reached (HTTP: JMAP, WebDAV, DAV),
+    /// accounts with mail or files (RFC 0005, 8); no services: any account (an LDAP bind). With the `instance` a request reached (HTTP: JMAP, WebDAV, DAV),
     /// the login name is found as at the login page – an address, or a username or contact address where the tenant
     /// allows them (RFC 0003, 2); without one (IMAP, POP3, SMTP), only an address finds the account: usernames and
     /// contact addresses are unique per instance only.
@@ -216,8 +216,9 @@ impl Identity {
                 r#"SELECT t.instance_id, a.id, a.tenant_id
                    FROM accounts a JOIN tenants t ON t.id = a.tenant_id
                    WHERE a.id = $1
-                     AND EXISTS (SELECT 1 FROM account_services s
-                                 WHERE s.account_id = a.id AND s.service = ANY($2) AND s.state = 'on')"#,
+                     AND (cardinality($2::text[]) = 0
+                          OR EXISTS (SELECT 1 FROM account_services s
+                                     WHERE s.account_id = a.id AND s.service = ANY($2) AND s.state = 'on'))"#,
                 account,
                 &services,
             )

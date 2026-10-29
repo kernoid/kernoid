@@ -892,9 +892,10 @@ async fn serve(config: Config) -> anyhow::Result<()> {
     let mut tasks = tokio::task::JoinSet::new();
     let receives_mail = config.has_role(Role::Smtp) && config.smtp.is_some();
     let serves_clients = config.has_role(Role::Imap) && config.imap.is_some();
+    let serves_directory = config.has_role(Role::Ldap) && config.ldap.is_some();
     // Certificates from ACME serve HTTPS and STARTTLS alike.
     let certificates = match &config.http.acme {
-        Some(_) if config.has_role(Role::Api) || receives_mail || serves_clients => {
+        Some(_) if config.has_role(Role::Api) || receives_mail || serves_clients || serves_directory => {
             let fallback = match &config.http.tls {
                 Some(tls) => Some(Arc::new(kernoid_server::acme::static_certificate(&tls.certificate, &tls.key)?)),
                 None => None,
@@ -917,7 +918,7 @@ async fn serve(config: Config) -> anyhow::Result<()> {
     // JMAP's push stream and IMAP's IDLE hear of changes through one connection per process.
     // Certificates of the mail protocols from files (`mail.tls`, e.g. Caddy's), read again when they change.
     let mail_certificates = match &config.mail.tls {
-        Some(tls) if receives_mail || serves_clients => {
+        Some(tls) if receives_mail || serves_clients || serves_directory => {
             let files = Arc::new(
                 kernoid_server::certificate_files::FileCertificates::load(&tls.certificate, &tls.key)
                     .context("reading mail.tls")?,
@@ -1059,6 +1060,35 @@ async fn serve(config: Config) -> anyhow::Result<()> {
                 None => tracing::warn!("no certificates (http.tls or http.acme): no IMAP, since logging in needs TLS"),
             },
             None => tracing::info!("no [imap] in the configuration: not serving mail clients"),
+        }
+    }
+    if config.has_role(Role::Ldap) {
+        match &config.ldap {
+            Some(ldap) => match kernoid_server::mail_tls(&config.http, certificates.clone(), mail_certificates.clone())
+                .context("TLS for LDAP")?
+            {
+                Some(tls) => {
+                    for (listen, implicit_tls) in [(ldap.listen, false), (ldap.tls_listen, true)] {
+                        let server = kernoid_ldap::Server::new(
+                            kernoid_ldap::Settings::from_config(ldap),
+                            Identity::with_secrets(events.clone(), main_keys.clone()),
+                            tls.clone(),
+                            implicit_tls,
+                        );
+                        let listener = tokio::net::TcpListener::bind(listen)
+                            .await
+                            .with_context(|| format!("listening for LDAP on {listen}"))?;
+                        tracing::info!(address = %listen, implicit_tls, "directory listening");
+                        let (max_connections, stop) = (ldap.max_connections, shutdown.clone());
+                        tasks.spawn(async move {
+                            server.serve(listener, max_connections, stop).await;
+                            Ok(())
+                        });
+                    }
+                }
+                None => tracing::warn!("no certificates (http.tls or http.acme): no LDAP, since binding needs TLS"),
+            },
+            None => tracing::info!("no [ldap] in the configuration: not serving the directory"),
         }
     }
     if let Some(listen) = config.http.metrics_listen {

@@ -17,6 +17,7 @@ pub mod app_password;
 pub mod audit;
 pub mod collection_access;
 pub mod consent;
+pub mod directory;
 mod dns;
 mod domain;
 pub mod file_link;

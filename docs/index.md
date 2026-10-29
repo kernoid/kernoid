@@ -25,12 +25,14 @@ links, LDAP, a Kubernetes operator, the first modules) and an external security 
 | [Concepts]({{ '/concepts/' | relative_url }}) | installation, instance, tenant; accounts, groups, projects, applications; events |
 | [Administration]({{ '/administration/' | relative_url }}) | permissions and roles, roles of a tenant's own, instance administrators, projects |
 | [Identity providers and SCIM]({{ '/federation/' | relative_url }}) | logging in with Entra ID, Google, Okta, Keycloak, ADFS (OpenID Connect, SAML); provisioning with SCIM |
+| [Directory (LDAP)]({{ '/directory/' | relative_url }}) | each tenant's people and groups for software that reads a directory |
 | [Login and OpenID Connect]({{ '/login/' | relative_url }}) | sessions, second factors and policies; connecting an application |
 | [TypeScript SDK]({{ '/sdk/' | relative_url }}) | logging in to a web app with kernoid; building a login UI |
 | [Mail]({{ '/mail/' | relative_url }}) | receiving and sending, JMAP, IMAP and POP3, sharing, quotas |
 | [Calendars and contacts]({{ '/calendars/' | relative_url }}) | CalDAV, CardDAV, JMAP, sharing, invitations |
 | [Files]({{ '/files/' | relative_url }}) | the file store, JMAP for files, quotas |
 | [Web app]({{ '/app/' | relative_url }}) | mail, calendar, contacts and files in the browser |
+| [Modules]({{ '/modules/' | relative_url }}) | virus scanning (ClamAV) and video meetings (Jitsi), switched on per tenant |
 | [API]({{ '/api/' | relative_url }}) | REST and GraphQL: authentication, errors, every operation |
 | [CLI reference]({{ '/cli/' | relative_url }}) | every `kernoid` command |
 | [Configuration]({{ '/configuration/' | relative_url }}) | every setting, as TOML key and environment variable |
