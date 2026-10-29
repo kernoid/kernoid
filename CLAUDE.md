@@ -58,7 +58,8 @@ functions with tests (`resources.rs`), and the loop that applies them server-sid
 workspace of its own**, like the terminal app: kube's dependencies and the mail libraries need versions of the same
 crates that do not go together (smallvec), and the server need not carry the Kubernetes client. The image builds it
 beside `kernoid` (`/usr/local/bin/kernoid-operator`). `deploy/kubernetes/crd.json` comes from `kernoid-operator crd`,
-and CI checks it is current. Dependencies are exact and at least two weeks old
+and CI checks it is current – the Helm chart `deploy/helm/kernoid-operator` carries a copy in `crds/`, which CI
+compares too, and lints the chart. Dependencies are exact and at least two weeks old
 (`apps/tui/scripts/check-age.py --dir=operator`).
 
 The documentation site lives in `docs/` (GitHub Pages, Jekyll with Just the Docs); `docs/_data/openapi.json` and

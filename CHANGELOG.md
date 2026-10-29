@@ -67,6 +67,9 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 - The account page lists the services one logs in with, links further ones and unlinks them
   (`/v1/account/idp-links`, `/v1/account/idp-providers`; SDK `idpLinks`, `linkableProviders`, `unlinkIdp`). The last
   way to log in is never unlinked.
+- A Helm chart for the Kubernetes operator (`deploy/helm/kernoid-operator`): the CustomResourceDefinition and the
+  operator, for every namespace or one (a Role instead of the ClusterRole); CI lints it and checks its
+  CustomResourceDefinition.
 - Emails kernoid writes itself – invitations, notices of files added through links – are in German or English: the
   account's choice (account page, `/v1/account/language`, `kernoid account language`), else the tenant's
   (Administration → Settings, `/v1/tenant/language`, GraphQL `setTenantLanguage`, `kernoid tenant language`), else

@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# The operator runs from kernoid's image, which carries both binaries.
+image:
+  repository: ghcr.io/kernoid/kernoid
+  # The chart's appVersion unless set; keep it at the release the Kernoid resources run.
+  tag: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+# Only the Kernoid resources of this namespace – the operator then gets a Role there instead of a ClusterRole. All
+# namespaces when empty.
+watchNamespace: ""
+
+# text or json
+logFormat: json
+
+resources:
+  requests: { cpu: 10m, memory: 32Mi }
+  limits: { memory: 128Mi }
+
+podAnnotations: {}
+podLabels: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+priorityClassName: ""

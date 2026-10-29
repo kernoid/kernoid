@@ -77,7 +77,7 @@ jobs:
       - run: cargo build --locked --release
 
   # The Kubernetes operator: a workspace of its own (operator/); its CustomResourceDefinition must be the one in
-  # deploy/kubernetes.
+  # deploy/kubernetes and in the Helm chart, which must lint (with the runner's Helm).
   operator:
     runs-on: ubuntu-latest
     defaults:
@@ -94,7 +94,13 @@ jobs:
       - run: cargo clippy --locked --all-targets
       - run: cargo test --locked
       - name: The CustomResourceDefinition is current
-        run: cargo run --locked -q -- crd | diff - ../deploy/kubernetes/crd.json
+        run: |
+          cargo run --locked -q -- crd | diff - ../deploy/kubernetes/crd.json
+          diff ../deploy/kubernetes/crd.json ../deploy/helm/kernoid-operator/crds/kernoids.kernoid.dev.json
+      - name: The Helm chart
+        run: |
+          helm lint ../deploy/helm/kernoid-operator
+          helm lint ../deploy/helm/kernoid-operator --set watchNamespace=mail
 
   web:
     runs-on: ubuntu-latest

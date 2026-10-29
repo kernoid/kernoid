@@ -53,6 +53,8 @@ needs PostgreSQL and S3-compatible object storage from elsewhere, like every ins
 
 ```sh
 kubectl apply -f deploy/kubernetes/crd.json -f deploy/kubernetes/operator.yaml
+# or, with Helm, from a checkout:
+#   helm install kernoid-operator deploy/helm/kernoid-operator -n kernoid-system --create-namespace
 kubectl create namespace kernoid
 kubectl -n kernoid create secret generic kernoid --from-literal=database-url=… --from-literal=migrate-url=… \
   --from-literal=main-key=$(openssl rand -hex 32) --from-literal=s3-access-key-id=… --from-literal=s3-secret-access-key=…
@@ -79,8 +81,17 @@ Every pod runs as non-root with a read-only root filesystem and no capabilities;
 open their ports below 1024 through the namespaced sysctl `net.ipv4.ip_unprivileged_port_start`.
 
 The operator reads `Kernoid` resources and changes only Deployments, Services and Jobs (`operator.yaml`'s
-ClusterRole); it never reads Secrets. `--namespace` limits it to one namespace. **OPEN:** a Helm chart, an ingress or
-Gateway route made by the operator, scaling by load.
+ClusterRole); it never reads Secrets. `--namespace` limits it to one namespace.
+
+The **Helm chart** `deploy/helm/kernoid-operator` installs the same: the CustomResourceDefinition and the operator in
+the release's namespace. Its values: `image.repository` and `image.tag` (the chart's version unless set),
+`watchNamespace` (one namespace – the operator then gets a Role there instead of the ClusterRole), `logFormat`,
+`resources`, `nodeSelector`, `tolerations`, `affinity`, `podAnnotations`, `podLabels`, `priorityClassName`,
+`imagePullSecrets`. Helm installs a CustomResourceDefinition once and never upgrades it: after upgrading the chart,
+apply `deploy/kubernetes/crd.json` of the new release.
+
+**OPEN:** the chart in a chart repository (it is installed from a checkout for now), an ingress or Gateway route made
+by the operator, scaling by load.
 
 ## TLS and reverse proxies
 

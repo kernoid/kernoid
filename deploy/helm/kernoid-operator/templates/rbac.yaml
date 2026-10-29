@@ -1,0 +1,49 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# What the operator does: reads Kernoid resources and writes their status; makes, changes and removes the
+# Deployments, Services and migration Jobs they own. Nothing else – no Secrets: those reach kernoid's own pods by
+# reference. Watching one namespace, it gets a Role there; otherwise a ClusterRole.
+{{- $kind := ternary "Role" "ClusterRole" (ne .Values.watchNamespace "") }}
+{{- $name := include "kernoid-operator.fullname" . }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: {{ $kind }}
+metadata:
+  name: {{ $name }}
+  {{- with .Values.watchNamespace }}
+  namespace: {{ . }}
+  {{- end }}
+  labels:
+    {{- include "kernoid-operator.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["kernoid.dev"]
+    resources: ["kernoids"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["kernoid.dev"]
+    resources: ["kernoids/status"]
+    verbs: ["get", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch", "create", "patch", "delete"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch", "create", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: {{ $kind }}Binding
+metadata:
+  name: {{ $name }}
+  {{- with .Values.watchNamespace }}
+  namespace: {{ . }}
+  {{- end }}
+  labels:
+    {{- include "kernoid-operator.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: {{ $kind }}
+  name: {{ $name }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $name }}
+    namespace: {{ .Release.Namespace }}

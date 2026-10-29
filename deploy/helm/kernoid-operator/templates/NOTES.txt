@@ -1,0 +1,12 @@
+{{- /*
+SPDX-License-Identifier: AGPL-3.0-or-later
+*/ -}}
+The kernoid operator runs in {{ .Release.Namespace }} and watches Kernoid resources in {{ .Values.watchNamespace | default "every namespace" }}.
+
+Describe an installation as a Kernoid resource – an example:
+  https://github.com/kernoid/kernoid/blob/main/deploy/kubernetes/example.yaml
+
+  kubectl get kernoids --all-namespaces
+
+Helm installs the CustomResourceDefinition once and never upgrades it; after upgrading the chart, apply the new one:
+  kubectl apply --server-side -f https://raw.githubusercontent.com/kernoid/kernoid/v{{ .Chart.AppVersion }}/deploy/kubernetes/crd.json
