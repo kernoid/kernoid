@@ -3159,6 +3159,13 @@ export interface components {
             /** @description The one-time code from `/idp#link=…`. */
             login: string;
         };
+        IdpLinkView: {
+            /** Format: date-time */
+            created_at: string;
+            identity_provider: string;
+            /** @description The account's `sub` at the provider. */
+            subject: string;
+        };
         ImportedView: {
             /** @description Objects not stored: their UID and why. */
             refused: [
@@ -3262,6 +3269,18 @@ export interface components {
         MailDnsView: {
             domain: string;
             records: components["schemas"]["RecordCheckView"][];
+        };
+        MailGrantView: {
+            grantee_id: string;
+            /** @description `account` or `group`. */
+            grantee_kind: string;
+            /** @description The account's address, or `$` and the group's name. */
+            grantee_name: string;
+            /** @description Null: the whole store. */
+            mailbox?: string | null;
+            /** @description IMAP ACL rights (RFC 4314), e.g. `lrs`. */
+            rights: string;
+            send_as: boolean;
         };
         MailOverviewView: {
             /**
@@ -3771,6 +3790,14 @@ export interface components {
         TenantLanguage: {
             /** @description The language of the emails kernoid writes to accounts that chose none – `en` or `de`; null for English. */
             language?: string | null;
+        };
+        TenantPolicy: {
+            /**
+             * Format: int32
+             * @description 0 to 365; left out, it stays as it is.
+             */
+            mfa_grace_days?: number | null;
+            mfa_required: boolean;
         };
         TenantSummary: {
             active: boolean;
@@ -4455,7 +4482,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["GrantView"][];
+                    "application/json": components["schemas"]["MailGrantView"][];
                 };
             };
             /** @description no valid session */
@@ -5547,7 +5574,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["LinkView"][];
+                    "application/json": components["schemas"]["IdpLinkView"][];
                 };
             };
         };
@@ -5635,7 +5662,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["GrantView"][];
+                    "application/json": components["schemas"]["MailGrantView"][];
                 };
             };
             404: {
@@ -10187,7 +10214,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["Policy"];
+                "application/json": components["schemas"]["TenantPolicy"];
             };
         };
         responses: {

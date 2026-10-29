@@ -13,7 +13,7 @@
   import ContactsView from "./contacts/ContactsView.svelte";
   import FilesView from "./files/FilesView.svelte";
   import AccountView from "./account/AccountView.svelte";
-  import Pending from "./pending/Pending.svelte";
+  import AdminView from "./admin/AdminView.svelte";
   import { THEMES, setTheme, theme } from "./theme.svelte.js";
 
   type Section = "mail" | "calendar" | "contacts" | "files" | "account" | "admin";
@@ -108,7 +108,7 @@
       {:else if current === "account"}
         <AccountView />
       {:else}
-        <Pending name={current} />
+        <AdminView />
       {/if}
     {/key}
     {#snippet failed(error, reset)}

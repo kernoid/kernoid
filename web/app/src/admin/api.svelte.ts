@@ -3,6 +3,10 @@
 // instance administrator working on another tenant – the tenant in `kernoid-tenant`. Errors are kernoid's problem
 // details (RFC 9457).
 
+import createClient from "openapi-fetch";
+
+import type { components, paths } from "./api-types.js";
+
 /** The tenant an instance administrator works on; none for one's own. */
 const chosen = $state<{ tenant: string | undefined }>({ tenant: undefined });
 
@@ -23,11 +27,39 @@ export class AdminError extends Error {
   }
 }
 
-export async function api<T = unknown>(method: string, path: string, body?: unknown): Promise<T> {
-  const response = await send(method, path, body === undefined ? undefined : { type: "application/json", content: JSON.stringify(body) });
-  if (response.status === 204) return undefined as T;
-  const text = await response.text();
-  return (text ? JSON.parse(text) : undefined) as T;
+/** kernoid's problem details as an error. */
+function failure(status: number, problem: unknown): AdminError {
+  const details = (problem ?? {}) as { title?: string; detail?: string };
+  return new AdminError(status, details.detail ?? details.title ?? `${status}`);
+}
+
+/** Sends a browser that is no longer logged in to the login, and back here after. */
+function relogin(response: Response): void {
+  if (response.status === 401) {
+    window.location.assign(`/login/account?next=${encodeURIComponent(window.location.pathname + window.location.hash)}`);
+  }
+}
+
+/** The API, typed after its OpenAPI document (`pnpm api` writes api-types.ts). */
+export const admin = createClient<paths>({ credentials: "same-origin" });
+admin.use({
+  onRequest({ request }) {
+    request.headers.set("kernoid-csrf", "1");
+    const target = tenant();
+    if (target) request.headers.set("kernoid-tenant", target);
+    return request;
+  },
+  onResponse({ response }) {
+    relogin(response);
+    return undefined;
+  },
+});
+
+/** The answer of a request, or its problem as an `AdminError`. */
+export async function need<T>(request: Promise<{ data?: T; error?: unknown; response: Response }>): Promise<T> {
+  const { data, error, response } = await request;
+  if (!response.ok) throw failure(response.status, error);
+  return data as T;
 }
 
 /** A request with a body of another type than JSON, or for an answer that is not JSON (mbox); the response. */
@@ -39,241 +71,46 @@ export async function send(method: string, path: string, body?: { type: string; 
   const init: RequestInit = { method, headers, credentials: "same-origin" };
   if (body) init.body = body.content;
   const response = await fetch(path, init);
-  if (response.status === 401) {
-    window.location.assign(`/login/account?next=${encodeURIComponent(window.location.pathname + window.location.hash)}`);
-  }
+  relogin(response);
   if (!response.ok) {
-    let message = `${response.status}`;
+    let problem: unknown;
     try {
-      const problem = (await response.json()) as { title?: string; detail?: string };
-      message = problem.detail ?? problem.title ?? message;
+      problem = await response.json();
     } catch {
       // No problem details: the status says it.
     }
-    throw new AdminError(response.status, message);
+    throw failure(response.status, problem);
   }
   return response;
 }
 
-/** A path segment. */
-export const seg = (value: string) => encodeURIComponent(value);
-
-// What the API returns (docs/_data/openapi.json).
-
-export interface DomainView {
-  domain: string;
-  verified: boolean;
-  record?: { kind: string; name: string; value: string } | null;
-}
-export interface TenantView {
-  id: string;
-  instance: string;
-  name: string;
-  active: boolean;
-  domains: DomainView[];
-  mfa_required: boolean;
-  mfa_grace_days: number;
-  modules: string[];
-}
-export interface AccountDetails {
-  id: string;
-  tenant: string;
-  address: string;
-  display_name: string;
-  active: boolean;
-  native: boolean;
-  shared: boolean;
-  /** A team folder: listed under Team folders, not with the accounts. */
-  drive: boolean;
-}
-export interface ServiceView {
-  service: string;
-  state: string;
-}
-export interface SessionSummaryView {
-  id: string;
-  checks: string[];
-  created_at: string;
-  expires_at: string;
-  client_address?: string | null;
-  user_agent?: string | null;
-}
-export interface ConsentView {
-  application: string;
-  application_name: string;
-  granted_at: string;
-  scopes: string[];
-}
-export interface LinkView {
-  identity_provider: string;
-  subject: string;
-  created_at: string;
-}
-export interface MailOverviewView {
-  quota?: number | null;
-  effective_quota?: number | null;
-  used_bytes: number;
-  shared: boolean;
-  mailboxes: { id: string; name: string; role?: string | null; total_emails: number; unread_emails: number }[];
-}
-export interface FilesOverviewView {
-  quota?: number | null;
-  effective_quota?: number | null;
-  used_bytes: number;
-}
-export interface GrantView {
-  grantee_kind: string;
-  grantee_id: string;
-  grantee_name?: string;
-  rights: string;
-  mailbox?: string | null;
-  node?: string | null;
-  send_as?: boolean;
-}
-export interface GroupView {
-  id: string;
-  name: string;
-  addresses: string[];
-  members: string[];
-  /** The members may send from the group's addresses. */
-  members_send_as: boolean;
-}
-export interface DriveView {
-  id: string;
-  name: string;
-  active: boolean;
-}
-export interface RoleView {
-  name: string;
-  builtin: boolean;
-  permissions: string[];
-  tenant_permissions?: string[];
-}
-export interface AssignmentView {
-  role: string;
-  principal_kind: string;
-  principal_id: string;
-}
-export interface RolesView {
-  roles: RoleView[];
-  assignments: AssignmentView[];
-}
-export interface ServicePolicyView {
-  service?: string;
-  assign: string;
-  approval: boolean;
-}
-export interface ProjectView {
-  id: string;
-  name: string;
-  role_assertion: boolean;
-  role_check: boolean;
-  roles: { key: string; display_name: string; group?: string | null }[];
-}
-export interface AuthorizationView {
-  role: string;
-  principal_kind: string;
-  principal_id: string;
-  tenant: string;
-}
-export interface ProjectGrantView {
-  project: string;
-  project_name: string;
-  tenant: string;
-  tenant_name: string;
-  owner: string;
-  roles: string[];
-}
-export interface ApplicationView {
-  id: string;
-  name: string;
-  kind: string;
-  active: boolean;
-  project?: string | null;
-  redirect_uris: string[];
-  post_logout_redirect_uris: string[];
-  mfa_required: boolean;
-  options: {
-    access_token_format?: string;
-    consent_required?: boolean;
-    offline_access?: boolean;
-    backchannel_logout_uri?: string | null;
-    frontchannel_logout_uri?: string | null;
-  };
-}
-export interface SamlView {
-  sso_url: string;
-  slo_url?: string | null;
-  certificates: string[];
-  sign_requests?: boolean;
-  email_attribute?: string | null;
-  name_attribute?: string | null;
-}
-export interface ProviderView {
-  id: string;
-  name: string;
-  kind: string;
-  active: boolean;
-  issuer: string;
-  client_id: string;
-  has_secret: boolean;
-  scopes: string[];
-  domains: string[];
-  auto_create: boolean;
-  auto_link: boolean;
-  register: boolean;
-  sync_profile: boolean;
-  instance_wide: boolean;
-  redirect_uri: string;
-  sp_entity_id?: string | null;
-  saml?: SamlView | null;
-}
-export interface ScimTokenView {
-  id: string;
-  name: string;
-  created_at: string;
-  last_used_at?: string | null;
-}
-export interface InstanceDetails {
-  id: string;
-  name: string;
-  domains: string[];
-  primary_domain: string;
-  login_ui_url?: string | null;
-  passkey_rp_id: string;
-}
-export interface TenantSummary {
-  id: string;
-  name: string;
-  active: boolean;
-}
-export interface SigningKeyView {
-  kid: string;
-  algorithm: string;
-  state: string;
-  state_since: string;
-  created_at: string;
-}
-export interface SamlKeyView {
-  id: string;
-  state: string;
-  state_since: string;
-  created_at: string;
-  fingerprint: string;
-}
-export interface QueuedView {
-  message: string;
-  address: string;
-  status: string;
-  attempts: number;
-  next_attempt_at: string;
-  last_error?: string | null;
-}
-export interface RecordCheckView {
-  kind: string;
-  name: string;
-  record_type: string;
-  expected: string;
-  found: string[];
-  status: string;
-}
+/** What the API takes and returns. */
+export type Schema<Name extends keyof components["schemas"]> = components["schemas"][Name];
+export type DomainView = Schema<"DomainView">;
+export type TenantView = Schema<"TenantView">;
+export type AccountDetails = Schema<"AccountDetails">;
+export type ServiceView = Schema<"ServiceView">;
+export type SessionSummaryView = Schema<"SessionSummaryView">;
+export type ConsentView = Schema<"ConsentView">;
+export type MailOverviewView = Schema<"MailOverviewView">;
+export type FilesOverviewView = Schema<"FilesOverviewView">;
+/** A project granted to another tenant. */
+export type GrantView = Schema<"GrantView">;
+export type GroupView = Schema<"GroupView">;
+export type DriveView = Schema<"DriveView">;
+export type RoleView = Schema<"RoleView">;
+export type AssignmentView = Schema<"AssignmentView">;
+export type RolesView = Schema<"RolesView">;
+export type ServicePolicyView = Schema<"ServicePolicyView">;
+export type ProjectView = Schema<"ProjectView">;
+export type AuthorizationView = Schema<"AuthorizationView">;
+export type ApplicationView = Schema<"ApplicationView">;
+export type SamlView = Schema<"SamlView">;
+export type ProviderView = Schema<"ProviderView">;
+export type ScimTokenView = Schema<"ScimTokenView">;
+export type InstanceDetails = Schema<"InstanceDetails">;
+export type TenantSummary = Schema<"TenantSummary">;
+export type SigningKeyView = Schema<"SigningKeyView">;
+export type SamlKeyView = Schema<"SamlKeyView">;
+export type QueuedView = Schema<"QueuedView">;
+export type RecordCheckView = Schema<"RecordCheckView">;
