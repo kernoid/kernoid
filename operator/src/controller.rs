@@ -4,7 +4,7 @@
 //! 1. The schema is migrated with the spec's image before anything runs it: a Job `kernoid migrate` per image. Until
 //!    it succeeded, the processes keep the image they have – the first time, none run.
 //! 2. Then each role runs as a Deployment of the migrated image, with a Service for its ports; a role without
-//!    replicas is removed.
+//!    replicas is removed. If the spec asks for one, an Ingress leads its hosts to the `api` role.
 //! 3. The status says which image the schema was migrated with, and whether every role is ready.
 //!
 //! Everything is applied server-side under the field manager `kernoid-operator`; what belongs to a `Kernoid` goes
@@ -13,7 +13,7 @@
 use std::{sync::Arc, time::Duration};
 
 use futures_util::StreamExt;
-use k8s_openapi::api::{apps::v1::Deployment, batch::v1::Job, core::v1::Service};
+use k8s_openapi::api::{apps::v1::Deployment, batch::v1::Job, core::v1::Service, networking::v1::Ingress};
 use kube::{
     Api, Client, ResourceExt,
     api::{DeleteParams, Patch, PatchParams},
@@ -45,25 +45,19 @@ struct Context {
 
 /// Watches every `Kernoid` – in one namespace, or in all – until the process is stopped.
 pub async fn run(client: Client, namespace: Option<String>) {
-    let api = |client: &Client| -> (Api<Kernoid>, Api<Deployment>, Api<Job>, Api<Service>) {
-        match &namespace {
-            Some(namespace) => (
-                Api::namespaced(client.clone(), namespace),
-                Api::namespaced(client.clone(), namespace),
-                Api::namespaced(client.clone(), namespace),
-                Api::namespaced(client.clone(), namespace),
-            ),
-            None => {
-                (Api::all(client.clone()), Api::all(client.clone()), Api::all(client.clone()), Api::all(client.clone()))
-            }
-        }
-    };
-    let (kernoids, deployments, jobs, services) = api(&client);
+    let (kernoids, deployments, jobs, services, ingresses) = (
+        scoped::<Kernoid>(&client, &namespace),
+        scoped::<Deployment>(&client, &namespace),
+        scoped::<Job>(&client, &namespace),
+        scoped::<Service>(&client, &namespace),
+        scoped::<Ingress>(&client, &namespace),
+    );
     let labels = watcher::Config::default().labels("app.kubernetes.io/managed-by=kernoid-operator");
     Controller::new(kernoids, watcher::Config::default())
         .owns(deployments, labels.clone())
         .owns(jobs, labels.clone())
-        .owns(services, labels)
+        .owns(services, labels.clone())
+        .owns(ingresses, labels)
         .shutdown_on_signal()
         .run(reconcile, error_policy, Arc::new(Context { client }))
         .for_each(|result| async move {
@@ -73,6 +67,18 @@ pub async fn run(client: Client, namespace: Option<String>) {
             }
         })
         .await;
+}
+
+/// The objects of one namespace, or of all.
+fn scoped<K>(client: &Client, namespace: &Option<String>) -> Api<K>
+where
+    K: kube::Resource<Scope = kube::core::NamespaceResourceScope>,
+    <K as kube::Resource>::DynamicType: Default,
+{
+    match namespace {
+        Some(namespace) => Api::namespaced(client.clone(), namespace),
+        None => Api::all(client.clone()),
+    }
 }
 
 fn error_policy(_: Arc<Kernoid>, error: &Error, _: Arc<Context>) -> Action {
@@ -109,6 +115,7 @@ async fn reconcile(kernoid: Arc<Kernoid>, context: Arc<Context>) -> Result<Actio
     let jobs: Api<Job> = Api::namespaced(client.clone(), &namespace);
     let deployments: Api<Deployment> = Api::namespaced(client.clone(), &namespace);
     let services: Api<Service> = Api::namespaced(client.clone(), &namespace);
+    let ingresses: Api<Ingress> = Api::namespaced(client.clone(), &namespace);
     let apply = PatchParams::apply(MANAGER).force();
     let wanted = kernoid.spec.image.clone();
     let mut status = kernoid.status.clone().unwrap_or_default();
@@ -159,6 +166,15 @@ async fn reconcile(kernoid: Arc<Kernoid>, context: Arc<Context>) -> Result<Actio
                 not_ready.push(role);
             }
         }
+    }
+
+    // The way in from outside, once the api role runs the migrated image.
+    let ingress_name = resources::deployment_name(&kernoid, "api");
+    match resources::ingress(&kernoid).filter(|_| status.migrated_image.is_some()) {
+        Some(ingress) => {
+            ingresses.patch(&ingress_name, &apply, &Patch::Apply(&ingress)).await?;
+        }
+        None => remove(&ingresses, &ingress_name).await?,
     }
 
     // 3. The status.

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # What the operator does: reads Kernoid resources and writes their status; makes, changes and removes the
-# Deployments, Services and migration Jobs they own. Nothing else – no Secrets: those reach kernoid's own pods by
+# Deployments, Services, Ingresses and migration Jobs they own. Nothing else – no Secrets: those reach kernoid's own pods by
 # reference. Watching one namespace, it gets a Role there; otherwise a ClusterRole.
 {{- $kind := ternary "Role" "ClusterRole" (ne .Values.watchNamespace "") }}
 {{- $name := include "kernoid-operator.fullname" . }}
@@ -28,6 +28,9 @@ rules:
     verbs: ["get", "list", "watch", "create", "patch", "delete"]
   - apiGroups: ["batch"]
     resources: ["jobs"]
+    verbs: ["get", "list", "watch", "create", "patch", "delete"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
     verbs: ["get", "list", "watch", "create", "patch", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1

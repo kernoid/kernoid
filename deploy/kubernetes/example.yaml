@@ -48,3 +48,12 @@ spec:
     worker: { replicas: 1 }
     # smtp: { replicas: 2, serviceType: LoadBalancer }
     # imap: { replicas: 1, serviceType: LoadBalancer }
+  # The web from outside: an Ingress to the api role for the instances' domains, its certificate e.g. from
+  # cert-manager. Uploads stream files of any size: lift the controller's body limit.
+  # ingress:
+  #   hosts: [login.example.org]
+  #   className: nginx
+  #   tlsSecret: kernoid-tls
+  #   annotations:
+  #     cert-manager.io/cluster-issuer: letsencrypt
+  #     nginx.ingress.kubernetes.io/proxy-body-size: "0"

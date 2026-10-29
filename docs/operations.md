@@ -65,15 +65,20 @@ kubectl -n kernoid get kernoid                      # IMAGE, READY
 
 A `Kernoid` names the **image**, kernoid's settings as **environment variables** for every process (`env`, the same
 `KERNOID__…` as for a container; secrets with `valueFrom.secretKeyRef`), variables only for the migration
-(`migrateEnv`: `KERNOID__DATABASE__MIGRATE_URL`), volumes (e.g. the certificate of the mail protocols) and the
-**replicas of each role**: `api` and `worker` one each unless set, `smtp`, `imap` and `ldap` none. From it the
-operator makes:
+(`migrateEnv`: `KERNOID__DATABASE__MIGRATE_URL`), volumes (e.g. the certificate of the mail protocols), the
+**replicas of each role** – `api` and `worker` one each unless set, `smtp`, `imap` and `ldap` none – and, if wanted,
+an **ingress** for the web (`hosts`, `className`, `tlsSecret`, `annotations`). From it the operator makes:
 
 | Object | What |
 |---|---|
 | Job `<name>-migrate-<hash>` | `kernoid migrate` with the image – once per image |
 | Deployment `<name>-<role>` | the role's processes, only that role (`KERNOID__ROLES`), with the migrated image; `api` ready by `/readyz`, the others when they listen |
 | Service `<name>-<role>` | the role's ports (not for `worker`); `serviceType: LoadBalancer` for mail from outside, which keeps the client's address (`externalTrafficPolicy: Local`) |
+| Ingress `<name>-api` | with `ingress`: each host to the `api` Service, TLS from `tlsSecret`, the annotations for the controller – once the schema is migrated; removed with `ingress` or with the `api` role |
+
+Behind an ingress, kernoid must believe the controller's forwarded headers – its addresses in
+`KERNOID__HTTP__TRUSTED_PROXIES` – and the controller must let uploads of any size through (with ingress-nginx
+`nginx.ingress.kubernetes.io/proxy-body-size: "0"`).
 
 **Upgrading** is changing `image`: the operator migrates the schema with the new image first – the running
 processes keep their image meanwhile – and replaces the processes only once the migration succeeded, one pod at a
@@ -81,7 +86,7 @@ time. A failed migration leaves everything as it was; the condition `Migrated` n
 Every pod runs as non-root with a read-only root filesystem and no capabilities; the mail and directory roles may
 open their ports below 1024 through the namespaced sysctl `net.ipv4.ip_unprivileged_port_start`.
 
-The operator reads `Kernoid` resources and changes only Deployments, Services and Jobs (`operator.yaml`'s
+The operator reads `Kernoid` resources and changes only Deployments, Services, Ingresses and Jobs (`operator.yaml`'s
 ClusterRole); it never reads Secrets. `--namespace` limits it to one namespace.
 
 The **Helm chart** `deploy/helm/kernoid-operator` installs the same: the CustomResourceDefinition and the operator in
@@ -95,7 +100,7 @@ Each release pushes the chart as `oci://ghcr.io/kernoid/charts/kernoid-operator`
 `chart`, which also checks that the chart's version is the tag's); between releases it is installed from a checkout
 (`deploy/helm/kernoid-operator`).
 
-**OPEN:** an ingress or Gateway route made by the operator, scaling by load.
+**OPEN:** a Gateway API route made by the operator, scaling by load.
 
 ## TLS and reverse proxies
 

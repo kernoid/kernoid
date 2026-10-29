@@ -44,6 +44,28 @@ pub struct KernoidSpec {
     pub volume_mounts: Vec<VolumeMount>,
     #[serde(default)]
     pub roles: Roles,
+    /// An Ingress to the `api` role's Service, for the instances' domains; none unless set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ingress: Option<Ingress>,
+}
+
+/// The HTTP of the `api` role from outside: an Ingress the operator keeps. The ingress controller's addresses belong
+/// in `KERNOID__HTTP__TRUSTED_PROXIES`, so that kernoid believes the client address it forwards.
+#[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Ingress {
+    /// The hosts: each instance's domain, and the domains of their login UIs.
+    pub hosts: Vec<String>,
+    /// The IngressClass; the cluster's default unless set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub class_name: Option<String>,
+    /// A Secret of type `kubernetes.io/tls` for the hosts – e.g. one cert-manager fills (its annotations go in
+    /// `annotations`); plain HTTP to the controller unless set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tls_secret: Option<String>,
+    /// Annotations for the controller – e.g. no limit on the body size, since uploads stream files of any size.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub annotations: BTreeMap<String, String>,
 }
 
 /// How many processes of each role run (docs: Operations). A role with no replicas runs nowhere.

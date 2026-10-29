@@ -173,6 +173,40 @@
                     },
                     "type": "array"
                   },
+                  "ingress": {
+                    "description": "An Ingress to the `api` role's Service, for the instances' domains; none unless set.",
+                    "nullable": true,
+                    "properties": {
+                      "annotations": {
+                        "additionalProperties": {
+                          "type": "string"
+                        },
+                        "description": "Annotations for the controller – e.g. no limit on the body size, since uploads stream files of any size.",
+                        "type": "object"
+                      },
+                      "className": {
+                        "description": "The IngressClass; the cluster's default unless set.",
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "hosts": {
+                        "description": "The hosts: each instance's domain, and the domains of their login UIs.",
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "tlsSecret": {
+                        "description": "A Secret of type `kubernetes.io/tls` for the hosts – e.g. one cert-manager fills (its annotations go in\n`annotations`); plain HTTP to the controller unless set.",
+                        "nullable": true,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "hosts"
+                    ],
+                    "type": "object"
+                  },
                   "migrateEnv": {
                     "default": [],
                     "description": "More variables only for the migration: `KERNOID__DATABASE__MIGRATE_URL`, the schema owner's connection.",

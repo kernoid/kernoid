@@ -67,6 +67,8 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 - The account page lists the services one logs in with, links further ones and unlinks them
   (`/v1/account/idp-links`, `/v1/account/idp-providers`; SDK `idpLinks`, `linkableProviders`, `unlinkIdp`). The last
   way to log in is never unlinked.
+- The Kubernetes operator makes an Ingress to the `api` role when the `Kernoid` asks for one (`ingress`: hosts,
+  class, TLS Secret, annotations); its ClusterRole may now manage Ingresses.
 - A Helm chart for the Kubernetes operator (`deploy/helm/kernoid-operator`): the CustomResourceDefinition and the
   operator, for every namespace or one (a Role instead of the ClusterRole); CI lints it and checks its
   CustomResourceDefinition, and pushes it with each release to `oci://ghcr.io/kernoid/charts/kernoid-operator`.

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! What a `Kernoid` becomes in Kubernetes – pure functions, so that they can be tested without a cluster: the Job
-//! that migrates the schema with an image, and for each role with replicas a Deployment and (but for `worker`) a
-//! Service. Every object belongs to the `Kernoid` (owner reference) and goes when it goes.
+//! that migrates the schema with an image, for each role with replicas a Deployment and (but for `worker`) a
+//! Service, and, if asked for, an Ingress to the `api` role. Every object belongs to the `Kernoid` (owner reference)
+//! and goes when it goes.
 
 use std::collections::BTreeMap;
 
@@ -13,6 +14,10 @@ use k8s_openapi::{
             Capabilities, Container, ContainerPort, EnvVar, HTTPGetAction, PodSecurityContext, PodSpec,
             PodTemplateSpec, Probe, SeccompProfile, SecurityContext, Service, ServicePort, ServiceSpec, Sysctl,
             TCPSocketAction,
+        },
+        networking::v1::{
+            HTTPIngressPath, HTTPIngressRuleValue, Ingress, IngressBackend, IngressRule, IngressServiceBackend,
+            IngressSpec, IngressTLS, ServiceBackendPort,
         },
     },
     apimachinery::pkg::{
@@ -259,6 +264,51 @@ pub fn service(kernoid: &Kernoid, role_name: &str) -> Option<Service> {
     })
 }
 
+/// The Ingress to the `api` role's Service, if the spec asks for one and `api` runs.
+pub fn ingress(kernoid: &Kernoid) -> Option<Ingress> {
+    let wanted = kernoid.spec.ingress.as_ref().filter(|ingress| !ingress.hosts.is_empty())?;
+    if role(kernoid, "api").replicas <= 0 {
+        return None;
+    }
+    let service = deployment_name(kernoid, "api");
+    let mut metadata = meta(kernoid, service.clone(), "api");
+    metadata.annotations = (!wanted.annotations.is_empty()).then(|| wanted.annotations.clone());
+    let backend = IngressBackend {
+        service: Some(IngressServiceBackend {
+            name: service,
+            port: Some(ServiceBackendPort { name: Some("http".into()), number: None }),
+        }),
+        resource: None,
+    };
+    Some(Ingress {
+        metadata,
+        spec: Some(IngressSpec {
+            ingress_class_name: wanted.class_name.clone(),
+            rules: Some(
+                wanted
+                    .hosts
+                    .iter()
+                    .map(|host| IngressRule {
+                        host: Some(host.clone()),
+                        http: Some(HTTPIngressRuleValue {
+                            paths: vec![HTTPIngressPath {
+                                path: Some("/".into()),
+                                path_type: "Prefix".into(),
+                                backend: backend.clone(),
+                            }],
+                        }),
+                    })
+                    .collect(),
+            ),
+            tls: wanted.tls_secret.as_ref().map(|secret| {
+                vec![IngressTLS { hosts: Some(wanted.hosts.clone()), secret_name: Some(secret.clone()) }]
+            }),
+            ..IngressSpec::default()
+        }),
+        ..Ingress::default()
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use crate::crd::KernoidSpec;
@@ -341,5 +391,32 @@ mod tests {
         assert_eq!(ports, [25, 587, 465]);
         let api = service(&kernoid, "api").unwrap().spec.unwrap();
         assert_eq!((api.type_.as_deref(), api.external_traffic_policy), (Some("ClusterIP"), None));
+    }
+
+    #[test]
+    fn an_ingress_leads_the_hosts_to_the_api_role() {
+        let mut kernoid = kernoid();
+        assert!(ingress(&kernoid).is_none(), "only when asked for");
+        kernoid.spec.ingress = Some(crate::crd::Ingress {
+            hosts: vec!["login.example.org".into(), "mail.example.org".into()],
+            class_name: Some("nginx".into()),
+            tls_secret: Some("kernoid-tls".into()),
+            annotations: BTreeMap::from([("nginx.ingress.kubernetes.io/proxy-body-size".into(), "0".into())]),
+        });
+        let made = ingress(&kernoid).unwrap();
+        assert_eq!(made.metadata.name.as_deref(), Some("mail-api"));
+        assert_eq!(made.metadata.owner_references.unwrap()[0].kind, "Kernoid");
+        assert!(made.metadata.annotations.unwrap().contains_key("nginx.ingress.kubernetes.io/proxy-body-size"));
+        let spec = made.spec.unwrap();
+        assert_eq!(spec.ingress_class_name.as_deref(), Some("nginx"));
+        let rules = spec.rules.unwrap();
+        assert_eq!(rules.len(), 2);
+        let path = &rules[1].http.as_ref().unwrap().paths[0];
+        let backend = path.backend.service.as_ref().unwrap();
+        assert_eq!((backend.name.as_str(), backend.port.as_ref().unwrap().name.as_deref()), ("mail-api", Some("http")));
+        assert_eq!(spec.tls.unwrap()[0].secret_name.as_deref(), Some("kernoid-tls"));
+
+        kernoid.spec.roles.api.replicas = 0;
+        assert!(ingress(&kernoid).is_none(), "nothing to lead to");
     }
 }
