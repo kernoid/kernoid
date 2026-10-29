@@ -114,6 +114,17 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 - `http.public_port`: instances reached on a port other than 443 or 80 name it in their issuer and links (JMAP);
   `deploy/compose` sets 8080.
 
+### Changed
+
+- The web app and the login UI are written in Svelte 5 (they were Solid and plain TypeScript); they look and behave
+  as before. The administration's requests are typed from the OpenAPI document.
+- kernoid carries the login UI and the web app in its binary. `http.login_ui` and `http.web_app` have no default any
+  more: set, they name a directory with a build to serve instead (development); the image no longer has
+  `/usr/share/kernoid/login` and `/usr/share/kernoid/app`.
+- OpenAPI: the mail grant, an account's linked identity provider and the tenant's login policy are the schemas
+  `MailGrantView`, `IdpLinkView` and `TenantPolicy` – they had the names of other schemas, so the document described
+  them wrong.
+
 ### Upgrading from 0.1
 
 - Take the new `deploy/compose` with the new image: the 0.1 image refuses the module settings the new compose file
@@ -121,10 +132,13 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 - `kernoid migrate` adds migrations 0034 to 0044 (CI's upgrade check runs them from 0.1.0 with mail and files in it).
 - DKIM: each domain gets an Ed25519 key beside its RSA key – publish the new TXT record `kernoid-ed1._domainkey`
   that the domain's DNS check shows; mail is signed with it once DNS has it.
+- A configuration that set `http.login_ui` or `http.web_app` to the image's old paths must drop them: those
+  directories are gone, and the built-in login UI and web app serve instead.
 - Nothing else changes by itself: LDAP, ClamAV and Jitsi stay off until configured.
 
 ### Fixed
 
+- A new screen of the login page puts the focus on its first field; it went to the heading.
 - The web app's lists said they were empty ("No links yet.") while still loading; they say "Loading" now. On a phone,
   file rows show their actions below the name, the search box of Files has a row of its own, the administration's
   pages are one row that scrolls, and the open section stays in sight.
