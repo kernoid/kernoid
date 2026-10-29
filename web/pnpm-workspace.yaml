@@ -5,3 +5,8 @@ packages:
   - app
 # Only versions published at least two weeks ago (in minutes).
 minimumReleaseAge: 20160
+# The smallest version that fixes a security advisory is taken at once (GHSA-f86p-h4j2-7qgj, GHSA-9wx9-5pv9-3349).
+minimumReleaseAgeExclude:
+  - seroval@1.6.11
+overrides:
+  seroval: 1.6.11
