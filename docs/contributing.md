@@ -32,13 +32,15 @@ cargo sqlx prepare --workspace -- --all-targets
 
 The web part (`web/`: SDK, login UI and web app, MIT) needs Node 26 or later and pnpm (the version in `web/package.json`,
 `packageManager`). pnpm installs only versions published at least two weeks ago (`minimumReleaseAge`) and runs no
-install scripts of dependencies. To try them, point `http.login_ui` at `web/login/dist` and `http.web_app` at
-`web/app/dist`, and open `/app/` on an instance's domain.
+install scripts of dependencies. A release build of kernoid embeds `web/login/dist` and `web/app/dist` as they are when
+it is compiled; a debug build reads them from there at run time. To try changes without building kernoid again, point
+`http.login_ui` at `web/login/dist` and `http.web_app` at `web/app/dist`, and open `/app/` on an instance's domain.
 
 ```sh
 cd web
 pnpm install
 pnpm run check && pnpm test && pnpm run build    # web/login/dist and web/app/dist
+pnpm --filter @kernoid/app run api               # after changing the API: the administration's types
 ```
 
 After changing the API, regenerate the files this site serves:

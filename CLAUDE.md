@@ -32,9 +32,11 @@ can run on its own.
 | `kernoid` | all | CLI (`serve`, `migrate`, `openapi`, `graphql-schema`, `keys`, `instance`, `tenant`, `account`, `project`, `app`, `signing-key`, `acme`, `mail`, `collections`, `files`), logging and OTLP traces, roles `api`, `worker` (every worker job safe in several processes), `smtp`, `imap` and `ldap`, one shutdown for all tasks; `MODULES` lists the compiled-in modules |
 
 `web/` (pnpm workspace, MIT; Node 26, TypeScript 7) holds the TypeScript SDK (`web/sdk`, `@kernoid/sdk`, no runtime
-dependencies), the login UI (`web/login`, Vite, no framework) and the web app (`web/app`, Solid, JMAP only: mail,
-calendar, contacts, files); kernoid serves the builds at `/login` (`http.login_ui`) and `/app` (`http.web_app`, `login_ui.rs`),
-the image builds them in a Node stage. They talk to the server only through the API – never import
+dependencies), the login UI (`web/login`) and the web app (`web/app`: mail, calendar, contacts and files over JMAP; the
+account and the administration over the REST API, typed from `docs/_data/openapi.json` with openapi-typescript and
+openapi-fetch – `pnpm --filter @kernoid/app run api`, checked in CI), both Vite + Svelte 5 without SvelteKit. kernoid
+embeds the builds (rust-embed, `login_ui.rs`) and serves them at `/login` and `/app`; `http.login_ui`/`http.web_app`
+name a directory to serve instead (development). The image builds them in a Node stage before the binary. They talk to the server only through the API – never import
 server code, and keep dependencies exact (`package.json` without ranges, `pnpm-lock.yaml`), at least two weeks old
 (`minimumReleaseAge` in `pnpm-workspace.yaml`), without install scripts of dependencies (pnpm's default).
 
@@ -157,9 +159,8 @@ pinned by commit, CI on Linux and macOS. Where kernoid deviates, it has a reason
 - **The software's shape.** Not `core`/`store`/`app`/`api`/`tui` crates but one crate per part of the system
   (identity, mail, files, the protocols, modules) behind roles – kernoid replaces two existing servers and runs as
   separately scaled processes. GraphQL besides REST: decided for the administration API.
-- **The apps.** The web app talks JMAP, not the REST API, so it takes no types from OpenAPI; it is Solid for now – a
-  rewrite in Svelte 5 is planned. Its build is served from a directory of the image (`http.web_app`), not embedded in
-  the binary. The terminal app is MIT in a workspace of its own (`apps/tui`), not a crate of the server: it may go
+- **The apps.** The web app talks JMAP for mail, calendar, contacts and files – only its administration takes types
+  from OpenAPI. The terminal app is MIT in a workspace of its own (`apps/tui`), not a crate of the server: it may go
   into app stores and must not reach server code.
 - **Files where tools need them.** The API descriptions are in `docs/` (`_data/openapi.json`, `api/`) – Jekyll cannot
   read outside its folder – under MIT as the starter pack's `api/openapi.json` would be; Compose is in

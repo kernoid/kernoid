@@ -44,8 +44,8 @@ main_key = "…"   # 64 hex characters: openssl rand -hex 32
 | `http.tls.certificate`, `http.tls.key` | – | PEM files; with them kernoid serves HTTPS itself (TLS 1.2 and 1.3, HTTP/2) |
 | `http.trusted_proxies` | `[]` | addresses or networks whose `Forwarded` / `X-Forwarded-*` headers are believed |
 | `http.metrics_listen` | – | serve Prometheus metrics at `/metrics` on this address – an internal one, it is not protected |
-| `http.login_ui` | `/usr/share/kernoid/login` | the built login UI, served at `/login`; the container image has it there |
-| `http.web_app` | `/usr/share/kernoid/app` | the built web app (mail, calendar, contacts), served at `/app`; the container image has it there |
+| `http.login_ui` | – | the login UI is built into kernoid and served at `/login`; for development, a directory with a build of it (`web/login/dist`) to serve instead |
+| `http.web_app` | – | the same for the web app (mail, calendar, contacts, files, account, administration) at `/app` (`web/app/dist`) |
 | `http.public_scheme` | `https` | how instances are reached from outside; `http` only for trying kernoid out. Issuer and links are built from it and the instance's primary domain |
 | `http.public_port` | – | the port instances are reached on from outside, if not the scheme's own – e.g. `8080` when trying kernoid out; issuer and links (OpenID Connect, JMAP) name it |
 | `database.url` | required | connection URL of the runtime role |

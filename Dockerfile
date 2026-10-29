@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # One image for every role; the configuration decides what a container does. It carries the Kubernetes operator too.
 
-# The login UI (web/, MIT): built here, served by kernoid from /usr/share/kernoid/login. Install scripts of
+# The login UI and the web app (web/, MIT): built first, then built into the binary (rust-embed). Install scripts of
 # dependencies do not run.
 FROM docker.io/library/node:26.11.1-trixie-slim AS web
 RUN npm install --global --ignore-scripts --no-audit --no-fund pnpm@12.12.0
@@ -19,6 +19,8 @@ WORKDIR /src
 # OpenSSL for webauthn-rs (passkeys); the runtime image brings libssl.
 RUN apt-get update && apt-get install -y --no-install-recommends pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
 COPY . .
+COPY --from=web /web/login/dist web/login/dist
+COPY --from=web /web/app/dist web/app/dist
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/target \
     cargo build --release --locked --bin kernoid && cp target/release/kernoid /kernoid
@@ -31,8 +33,6 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 FROM gcr.io/distroless/cc-debian13:nonroot@sha256:83b9b50586253821cf63ffcec87d3d94265a093ad30da232039af962dd8f4edf
 COPY --from=build /kernoid /usr/local/bin/kernoid
 COPY --from=build /kernoid-operator /usr/local/bin/kernoid-operator
-COPY --from=web /web/login/dist /usr/share/kernoid/login
-COPY --from=web /web/app/dist /usr/share/kernoid/app
 EXPOSE 8080 2525
 ENTRYPOINT ["/usr/local/bin/kernoid"]
 CMD ["serve"]

@@ -19,10 +19,11 @@ in here, and someone who is not is sent to the login and back (`/login/account?n
 | Administration | for administrators only, as their permissions allow (kernoid checks them on every request): the tenant's settings (name, second factor, logins, registration, services, quotas, retention), domains with the DNS records mail needs, accounts (people, external accounts, shared mailboxes – with addresses, logins, password, second factors, services, quotas, access to mail and files, Sieve filters, mailboxes saved as and filled from mbox files (up to 2 MiB; larger ones with the CLI), sessions, applications, linked providers), groups, team folders and who may use them, roles, projects and applications, identity providers, SCIM tokens; for instance administrators also the instance, its tenants (and working on any of them), instance roles, signing keys and the mail queue. Creating instances, the main key and ACME stay with the operator's [CLI]({{ '/cli/' | relative_url }}) |
 | Account | name, appearance (light, dark or as the system – also for the login), the language of emails from kernoid, the vacation response, notifications of new mail, password, second factors, services to log in with (providers linked and to link), recovery codes, app passwords and the settings for mail programs, calendars and file managers, applications, sessions (see [Login]({{ '/login/' | relative_url }})) |
 
-The app talks to kernoid only through JMAP ([Mail]({{ '/mail/' | relative_url }}),
-[Calendars and contacts]({{ '/calendars/' | relative_url }}), [Files]({{ '/files/' | relative_url }})), in German or English as the browser prefers. It is
-free software under the MIT licence (`web/app`), built with [Solid](https://www.solidjs.com) and TypeScript, and can be
-installed as an app from the browser.
+The app talks to kernoid through JMAP ([Mail]({{ '/mail/' | relative_url }}),
+[Calendars and contacts]({{ '/calendars/' | relative_url }}), [Files]({{ '/files/' | relative_url }})) – the account
+and the administration through the [REST API]({{ '/api/' | relative_url }}) –, in German or English as the browser
+prefers. It is free software under the MIT licence (`web/app`), built with [Svelte](https://svelte.dev) and
+TypeScript, built into kernoid, and can be installed as an app from the browser.
 
 {: .note }
 OPEN: notifications while the app is closed (Web Push), previews of office documents (an

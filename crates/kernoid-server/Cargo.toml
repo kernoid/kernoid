@@ -44,6 +44,7 @@ serde_json = "1.0.154"
 sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres", "macros", "chrono"] }
 thiserror = "2.0.21"
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "signal", "net", "sync"] }
+rust-embed = { version = "=8.13.0", features = ["mime-guess"] }
 tower-http = { version = "0.6.11", features = ["request-id", "trace", "propagate-header", "timeout", "limit", "catch-panic", "util", "fs", "cors"] }
 tracing = "0.1.44"
 url = "2.5.8"

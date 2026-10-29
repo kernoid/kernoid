@@ -221,7 +221,7 @@ fn login_ui() -> std::path::PathBuf {
 #[tokio::test]
 async fn the_login_ui_is_served_with_strict_headers() {
     let directory = login_ui();
-    let app = router(state(), Router::new(), &Http { login_ui: directory.clone(), ..Http::default() });
+    let app = router(state(), Router::new(), &Http { login_ui: Some(directory.clone()), ..Http::default() });
     for path in ["/login", "/login/", "/login?authRequest=ar1.x", "/login/account"] {
         let response = app.clone().oneshot(Request::get(path).body(Body::empty()).unwrap()).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK, "{path}");
@@ -241,9 +241,12 @@ async fn the_login_ui_is_served_with_strict_headers() {
 
 #[tokio::test]
 async fn a_missing_login_ui_is_a_problem() {
-    let (status, _, body) = get("/login/account").await;
-    assert_eq!(status, StatusCode::NOT_FOUND);
-    assert!(body.contains("the login UI is not installed"), "{body}");
+    let nowhere = std::env::temp_dir().join(format!("kernoid-no-login-ui-{}", uuid::Uuid::new_v4()));
+    let app = router(state(), Router::new(), &Http { login_ui: Some(nowhere), ..Http::default() });
+    let response = app.oneshot(Request::get("/login/account").body(Body::empty()).unwrap()).await.unwrap();
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    assert!(String::from_utf8_lossy(&body).contains("the login UI is not installed"));
 }
 
 #[tokio::test]

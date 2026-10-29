@@ -113,6 +113,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: npm install --global --ignore-scripts --no-audit --no-fund pnpm@12.12.0
       - run: pnpm install --frozen-lockfile
+      - name: The administration's API types match docs/_data/openapi.json
+        run: |
+          cp app/src/admin/api-types.ts /tmp/api-types.ts
+          pnpm --filter @kernoid/app run api
+          diff /tmp/api-types.ts app/src/admin/api-types.ts
       - run: pnpm run check
       - run: pnpm test
       - run: pnpm run build

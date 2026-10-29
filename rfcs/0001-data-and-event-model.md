@@ -394,8 +394,7 @@ As in ZITADEL, a project is "the vessel that holds your Applications and Roles"
 
 ### 7.6 Login UI and SDK (implemented)
 
-- **The login UI** (`web/login`) is a TypeScript PWA, served by kernoid at `/login` from `http.login_ui` and built
-  into the container image. It answers auth requests (`/login?authRequest=…`): log in with address and password or a
+- **The login UI** (`web/login`) is a TypeScript PWA (Svelte), built into kernoid and served at `/login`. It answers auth requests (`/login?authRequest=…`): log in with address and password or a
   passkey, ask for a second factor or have one set up when it is required, honour `prompt` and `max_age`, offer
   another account, decline. `/login/account` is the account page: name, password, TOTP, passkeys, recovery codes,
   sessions.

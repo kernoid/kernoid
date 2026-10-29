@@ -373,21 +373,11 @@ pub struct Http {
     /// The port instances are reached on from outside, if not the scheme's own (443, 80) – for trying kernoid out on
     /// a port such as 8080. Issuer and links name it.
     pub public_port: Option<u16>,
-    /// The built login UI (`web/login`), served at `/login`; the container image has it at the default path.
-    #[serde(default = "default_login_ui")]
-    pub login_ui: std::path::PathBuf,
-    /// The web app – mail, calendar, contacts – served at `/app`.
-    #[serde(default = "default_web_app")]
-    pub web_app: std::path::PathBuf,
-}
-
-/// Where the web app's files are (`web/app/dist`); kernoid serves them at `/app`.
-fn default_web_app() -> std::path::PathBuf {
-    "/usr/share/kernoid/app".into()
-}
-
-fn default_login_ui() -> std::path::PathBuf {
-    "/usr/share/kernoid/login".into()
+    /// The login UI (`web/login`) is built into the binary and served at `/login`; for development, a directory with
+    /// a build of it (`web/login/dist`) to serve instead.
+    pub login_ui: Option<std::path::PathBuf>,
+    /// The same for the web app (`web/app`) at `/app`.
+    pub web_app: Option<std::path::PathBuf>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
@@ -421,8 +411,8 @@ impl Default for Http {
             metrics_listen: None,
             public_scheme: PublicScheme::Https,
             public_port: None,
-            login_ui: default_login_ui(),
-            web_app: default_web_app(),
+            login_ui: None,
+            web_app: None,
         }
     }
 }
