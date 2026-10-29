@@ -101,21 +101,38 @@ pub struct Input {
 
 #[derive(Debug, Clone)]
 pub enum Destroy {
-    Emails { ids: Vec<String> },
-    Node { id: String, name: String },
-    Event { account: String, id: String, title: String },
-    Card { account: String, id: String, name: String },
+    Emails {
+        ids: Vec<String>,
+    },
+    Node {
+        id: String,
+        name: String,
+    },
+    /// An event – or, with `instance`, one instance of a series (`o`), the series being `y`.
+    Event {
+        account: String,
+        id: String,
+        title: String,
+        instance: Option<String>,
+    },
+    Card {
+        account: String,
+        id: String,
+        name: String,
+    },
 }
 
 /// What is open in the user's editor.
 #[derive(Debug, Clone)]
 pub enum Edit {
     Message(Message),
-    /// An event in the calendar of that index; `id` (account, event) when it exists already.
+    /// An event in the calendar of that index; `id` (account, event) when it exists already; `instance` the recurrence
+    /// id of the one instance of the series changed alone.
     Event {
         form: EventForm,
         calendar: usize,
         id: Option<(String, String)>,
+        instance: Option<String>,
     },
     /// A contact in the address book of that index; `id` (account, card) when it exists already.
     Card {
@@ -707,14 +724,16 @@ impl App {
                 };
                 self.popup = Some(popup);
             }
-            Edit::Event { form, calendar, id } => {
+            Edit::Event { form, calendar, id, instance } => {
                 let parsed = text.and_then(|text| forms::parse_event(&text, &form));
                 match parsed.and_then(|(new, name)| {
                     let index = self.calendar_named(&name, calendar)?;
                     Ok((new, index))
                 }) {
-                    Ok((new, index)) => self.save_event(new, index, id),
-                    Err(error) => self.popup = Some(Popup::Unsaved { edit: Edit::Event { form, calendar, id }, error }),
+                    Ok((new, index)) => self.save_event(new, index, id, instance),
+                    Err(error) => {
+                        self.popup = Some(Popup::Unsaved { edit: Edit::Event { form, calendar, id, instance }, error })
+                    }
                 }
             }
             Edit::Card { form, book, id } => {
@@ -1152,7 +1171,7 @@ impl App {
             answers: Vec::new(),
             was: None,
         };
-        self.edit = Some(Edit::Event { form, calendar: index, id: None });
+        self.edit = Some(Edit::Event { form, calendar: index, id: None, instance: None });
     }
 
     /// The event an instance is of, as stored, with the index of its calendar.
@@ -1182,19 +1201,44 @@ impl App {
             self.fail("this event cannot be edited here");
             return;
         };
-        self.edit = Some(Edit::Event { form, calendar: index, id: Some((event.account.clone(), event.id.clone())) });
+        let id = Some((event.account.clone(), event.id.clone()));
+        self.edit = Some(Edit::Event { form, calendar: index, id, instance: None });
     }
 
-    fn save_event(&mut self, form: EventForm, index: usize, id: Option<(String, String)>) {
+    /// Changes the selected instance of a series alone.
+    fn edit_instance(&mut self) {
+        let own = self.own_addresses();
+        let Some(instance) = self.selected_event().cloned() else { return };
+        let (Some(_), Some(recurrence_id)) = (&instance.base_event_id, instance.recurrence_id.clone()) else {
+            self.fail("not part of a series – change it with e");
+            return;
+        };
+        let Some((series, index)) = self.stored_event() else { return };
+        if !self.calendar.calendars[index].writable() || !series.organized_by(&own) {
+            self.fail("only the organizer changes it, in a calendar that may be written");
+            return;
+        }
+        let Some(mut form) = EventForm::of(&instance, &own) else {
+            self.fail("this event cannot be edited here");
+            return;
+        };
+        // An instance does not repeat; the series does.
+        form.repeat = None;
+        let id = Some((series.account.clone(), series.id.clone()));
+        self.edit = Some(Edit::Event { form, calendar: index, id, instance: Some(recurrence_id) });
+    }
+
+    fn save_event(&mut self, form: EventForm, index: usize, id: Option<(String, String)>, instance: Option<String>) {
         let own = self.own_addresses().into_iter().next().unwrap_or_default();
         let Some(calendar) = self.calendar.calendars.get(index).cloned() else { return };
-        let result = match &id {
-            Some((account, event)) if *account == calendar.account => {
-                calendars::update(&self.client, &calendar, event, &form, &own).map(|()| "event changed")
-            }
-            Some(_) => Err(jmap::Error::Protocol("an event moves only between calendars of one account".into())),
-            None => calendars::create(&self.client, &calendar, &form, &own).map(|_| "event made"),
+        let result = match (&id, &instance) {
+            (Some((account, event)), Some(recurrence_id)) => calendars::event(&self.client, account, event)
+                .and_then(|series| series.ok_or_else(|| jmap::Error::Protocol("the series is gone".into())))
+                .and_then(|series| calendars::update_instance(&self.client, &series, recurrence_id, &form, &own))
+                .map(|()| "this event of the series changed"),
+            _ => self.save_whole_event(&calendar, &form, &id, &own),
         };
+
         match result {
             Ok(done) => {
                 let invited = if form.participants.is_empty() {
@@ -1206,9 +1250,28 @@ impl App {
                 self.load_events();
             }
             Err(error) => {
-                self.popup =
-                    Some(Popup::Unsaved { edit: Edit::Event { form, calendar: index, id }, error: error.to_string() })
+                self.popup = Some(Popup::Unsaved {
+                    edit: Edit::Event { form, calendar: index, id, instance },
+                    error: error.to_string(),
+                })
             }
+        }
+    }
+
+    /// Makes an event, or changes one – all instances of a series.
+    fn save_whole_event(
+        &self,
+        calendar: &Calendar,
+        form: &EventForm,
+        id: &Option<(String, String)>,
+        own: &str,
+    ) -> jmap::Result<&'static str> {
+        match id {
+            Some((account, event)) if *account == calendar.account => {
+                calendars::update(&self.client, calendar, event, form, own).map(|()| "event changed")
+            }
+            Some(_) => Err(jmap::Error::Protocol("an event moves only between calendars of one account".into())),
+            None => calendars::create(&self.client, calendar, form, own).map(|_| "event made"),
         }
     }
 
@@ -1217,7 +1280,10 @@ impl App {
         let Some(instance) = self.selected_event().cloned() else { return };
         let title = instance.title.clone().unwrap_or_else(|| "(no title)".into());
         let repeats = self.stored_event().is_some_and(|(event, _)| event.recurrence_rule.is_some());
-        let text = if repeats {
+        let one = instance.recurrence_id.clone().filter(|_| repeats && instance.base_event_id.is_some());
+        let text = if one.is_some() {
+            format!("Delete {title}: this one (o), all of the series (y), or not (n)?")
+        } else if repeats {
             format!("Delete {title} – all its instances – for good? (y/n)")
         } else {
             format!("Delete {title} for good? (y/n)")
@@ -1228,7 +1294,12 @@ impl App {
             format!("{text}\nYou are invited: the organizer is not told; decline with x for that.")
         };
         self.popup = Some(Popup::Confirm {
-            what: Destroy::Event { account: instance.account.clone(), id: instance.event_id().to_owned(), title },
+            what: Destroy::Event {
+                account: instance.account.clone(),
+                id: instance.event_id().to_owned(),
+                title,
+                instance: one,
+            },
             text,
         });
     }
@@ -1755,6 +1826,18 @@ impl App {
                 }
             },
             Popup::Confirm { what, text } => match key.code {
+                KeyCode::Char('o') if matches!(what, Destroy::Event { instance: Some(_), .. }) => {
+                    let Destroy::Event { account, id, title, instance: Some(recurrence_id) } = what else { return };
+                    let removed = self.attempt(|app| {
+                        let series = calendars::event(&app.client, &account, &id)?
+                            .ok_or_else(|| jmap::Error::Protocol("the series is gone".into()))?;
+                        calendars::destroy_instance(&app.client, &series, &recurrence_id)
+                    });
+                    if removed.is_some() {
+                        self.info(format!("{title}: this event of the series deleted"));
+                        self.load_events();
+                    }
+                }
                 KeyCode::Char('y') | KeyCode::Char('j') => match what {
                     Destroy::Emails { ids } => {
                         let Some(account) = self.mail_account().map(str::to_owned) else { return };
@@ -1763,7 +1846,7 @@ impl App {
                             self.after_email_left(&ids);
                         }
                     }
-                    Destroy::Event { account, id, title } => {
+                    Destroy::Event { account, id, title, .. } => {
                         if self.attempt(|app| calendars::destroy(&app.client, &account, &id)).is_some() {
                             self.info(format!("{title} deleted"));
                             self.load_events();
@@ -1945,6 +2028,7 @@ impl App {
             KeyCode::Enter => self.event_info(),
             KeyCode::Char('n') => self.new_event(),
             KeyCode::Char('e') => self.edit_event(),
+            KeyCode::Char('E') => self.edit_instance(),
             KeyCode::Char('D') | KeyCode::Delete => self.delete_event(),
             KeyCode::Char('a') => self.answer_event("accepted"),
             KeyCode::Char('m') => self.answer_event("tentative"),

@@ -509,6 +509,43 @@ fn events_made_changed_answered_and_removed() {
 }
 
 #[test]
+fn one_instance_of_a_series_changed_and_left_out() {
+    let server = server();
+    let client = connect(&server);
+    let mut series: calendars::Event = serde_json::from_value(json!({
+        "id": "ev7", "title": "Weekly", "start": "2026-11-02T10:00:00", "timeZone": "Europe/Berlin",
+        "duration": "PT1H", "recurrenceRule": { "frequency": "weekly" },
+        "recurrenceOverrides": { "2026-11-16T10:00:00": { "excluded": true } },
+    }))
+    .unwrap();
+    series.account = "A".into();
+    let at = |s: &str| chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M").unwrap();
+    let form = calendars::EventForm {
+        title: "Moved".into(),
+        all_day: false,
+        start: at("2026-11-10 11:00"),
+        end: at("2026-11-10 12:00"),
+        time_zone: Some("Europe/Berlin".into()),
+        location: String::new(),
+        description: String::new(),
+        participants: Vec::new(),
+        repeat: None,
+        answers: Vec::new(),
+        was: None,
+    };
+    calendars::update_instance(&client, &series, "2026-11-09T10:00:00", &form, "alice@firma.example").unwrap();
+    let calls = server.api_requests().pop().unwrap().calls();
+    let overrides = &calls[0].1["update"]["ev7"]["recurrenceOverrides"];
+    assert_eq!(overrides["2026-11-16T10:00:00"], json!({ "excluded": true }), "earlier overrides stay");
+    let moved = &overrides["2026-11-09T10:00:00"];
+    assert_eq!((moved["title"].as_str(), moved["start"].as_str()), (Some("Moved"), Some("2026-11-10T11:00:00")));
+    assert!(moved.get("recurrenceRule").is_none() && moved.get("timeZone").is_none(), "{moved}");
+    calendars::destroy_instance(&client, &series, "2026-11-23T10:00:00").unwrap();
+    let calls = server.api_requests().pop().unwrap().calls();
+    assert_eq!(calls[0].1["update"]["ev7"]["recurrenceOverrides"]["2026-11-23T10:00:00"], json!({ "excluded": true }));
+}
+
+#[test]
 fn contacts_made_changed_and_removed() {
     let server = server();
     let client = connect(&server);

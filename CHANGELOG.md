@@ -53,7 +53,8 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   `GET /v1/tenant/modules`, GraphQL `tenantModules`, and in the administration's settings; only modules the
   installation has switched on can be switched on.
 - The web app's calendar shows a week or a day besides a month, and changes or deletes one event of a series on its
-  own (JMAP `recurrenceOverrides`) – or, as before, the whole series.
+  own (JMAP `recurrenceOverrides`) – or, as before, the whole series. The terminal app does the same (`E`, and `o`
+  when deleting).
 - Kubernetes: the operator `kernoid-operator` (in the image; `deploy/kubernetes`, docs: Operations) runs kernoid as a
   resource `Kernoid` describes – the schema migrated with a new image before the processes are replaced, one
   Deployment and Service per role, non-root pods with a read-only root filesystem.

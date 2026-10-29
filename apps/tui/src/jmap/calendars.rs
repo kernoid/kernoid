@@ -70,6 +70,12 @@ pub struct Event {
     /// For an instance of a recurring event: the event it is of – changes go there.
     #[serde(default)]
     pub base_event_id: Option<String>,
+    /// For an instance: which one of its event's it is – where it would start but for an override.
+    #[serde(default)]
+    pub recurrence_id: Option<String>,
+    /// For a recurring event: its instances changed or left out, by recurrence id (RFC 8984, 4.3.5).
+    #[serde(default)]
+    pub recurrence_overrides: Option<serde_json::Map<String, Value>>,
     #[serde(default)]
     pub organizer_calendar_address: Option<String>,
     /// `confirmed`, `tentative` or `cancelled` – an invitation the organizer called off stays, cancelled.
@@ -435,6 +441,39 @@ pub fn update(client: &Client, calendar: &Calendar, id: &str, form: &EventForm, 
     object["calendarIds"] = json!({ calendar.id.as_str(): true });
     let change = json!({ "update": { id: object } });
     client.set(&[CALENDARS], "CalendarEvent", &calendar.account, change, json!({ SCHEDULE: true }))?;
+    Ok(())
+}
+
+/// What an instance of a series may differ in from its series.
+const OVERRIDDEN: [&str; 6] = ["title", "start", "duration", "showWithoutTime", "description", "locations"];
+
+/// Changes one instance of `series`: its override in the event's `recurrenceOverrides`.
+pub fn update_instance(
+    client: &Client,
+    series: &Event,
+    recurrence_id: &str,
+    form: &EventForm,
+    own: &str,
+) -> Result<()> {
+    let whole = form.object(own);
+    let mut patch: serde_json::Map<String, Value> =
+        OVERRIDDEN.iter().map(|key| ((*key).to_owned(), whole[*key].clone())).collect();
+    if whole["timeZone"] != json!(series.time_zone) {
+        patch.insert("timeZone".into(), whole["timeZone"].clone());
+    }
+    override_instance(client, series, recurrence_id, Value::Object(patch))
+}
+
+/// Leaves one instance of `series` out.
+pub fn destroy_instance(client: &Client, series: &Event, recurrence_id: &str) -> Result<()> {
+    override_instance(client, series, recurrence_id, json!({ "excluded": true }))
+}
+
+fn override_instance(client: &Client, series: &Event, recurrence_id: &str, patch: Value) -> Result<()> {
+    let mut overrides = series.recurrence_overrides.clone().unwrap_or_default();
+    overrides.insert(recurrence_id.to_owned(), patch);
+    let change = json!({ "update": { series.id.as_str(): { "recurrenceOverrides": overrides } } });
+    client.set(&[CALENDARS], "CalendarEvent", &series.account, change, json!({ SCHEDULE: true }))?;
     Ok(())
 }
 

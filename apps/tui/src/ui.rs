@@ -96,7 +96,9 @@ fn hint(app: &App) -> &'static str {
         Tab::Files => {
             "Enter open  ← up  d download  u upload  v versions  i info  S share  n folder  R rename  D delete"
         }
-        Tab::Calendar => "Enter details  n new  e edit  D delete  a accept  m maybe  x decline  [ ] week  t today",
+        Tab::Calendar => {
+            "Enter details  n new  e edit  E edit this one  D delete  a accept  m maybe  x decline  [ ] week  t today"
+        }
         Tab::Contacts => "/ search  n new  e edit  D delete  c write to  ? help",
     }
 }
@@ -518,6 +520,6 @@ Files        Enter open folder / versions of a file   ← or Backspace up
              S share a folder (a add, Enter level, x remove, s save)
 
 Calendar     [ ] or ←/→ a week back/on   t today   Enter details
-             n new   e edit   D delete   a accept   m maybe   x decline
+             n new   e edit   E edit one of a series   D delete   a accept   m maybe   x decline
 Contacts     / search   n new   e or Enter edit   D delete   c write to
 Events and contacts are written in the editor like messages.";
