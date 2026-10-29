@@ -228,6 +228,11 @@ impl Identity {
         self.add_group(admin.tenant(), name, &admin.creator()).await
     }
 
+    pub async fn admin_set_group_send_as(&self, admin: &Admin, group: Uuid, send_as: bool) -> Result<()> {
+        admin.require(Permission::GroupsManage)?;
+        self.set_group_send_as(admin.tenant(), group, send_as, &admin.creator()).await
+    }
+
     pub async fn admin_rename_group(&self, admin: &Admin, group: Uuid, name: &str) -> Result<()> {
         admin.require(Permission::GroupsManage)?;
         self.rename_group(admin.tenant(), group, name, &admin.creator()).await

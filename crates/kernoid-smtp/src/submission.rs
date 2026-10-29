@@ -45,13 +45,15 @@ fn decode(line: &[u8]) -> Option<String> {
     String::from_utf8(bytes).ok()
 }
 
-/// Whether `account` may send as `address`: one of its own, or of an account it may send as (RFC 0002, 12.2).
+/// Whether `account` may send as `address`: one of its own, of an account it may send as (RFC 0002, 12.2), or of a
+/// group that lets its members send as it (9.2).
 async fn is_own(mail: &kernoid_mail::Mail, account: uuid::Uuid, address: &str) -> bool {
     match mail.resolve_recipient(address).await {
         Ok(Recipient::Account { account: owner, .. }) if owner == account => true,
         Ok(Recipient::Account { account: owner, .. }) => {
             mail.access(account, owner).await.is_ok_and(|access| access.send_as)
         }
+        Ok(Recipient::Group { group, .. }) => mail.may_send_as_group(account, group).await.unwrap_or(false),
         _ => false,
     }
 }

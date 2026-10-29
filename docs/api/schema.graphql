@@ -255,6 +255,10 @@ type Group {
 	Addresses mail to the group arrives at; it goes to every member.
 	"""
 	addresses: [String!]!
+	"""
+	The members may send from these addresses.
+	"""
+	membersSendAs: Boolean!
 }
 
 type IdentityProviderObject {
@@ -559,6 +563,10 @@ type MutationRoot {
 	"""
 	addGroup(name: String!): String!
 	renameGroup(id: String!, name: String!): Boolean!
+	"""
+	Lets the group's members send from its addresses, or stops it (needs `groups.manage`).
+	"""
+	setGroupSendAs(id: String!, enabled: Boolean!): Boolean!
 	"""
 	Removes a group; refused while it holds roles.
 	"""

@@ -4568,6 +4568,59 @@
         }
       }
     },
+    "/v1/groups/{id}/send-as": {
+      "put": {
+        "tags": [
+          "groups"
+        ],
+        "summary": "Lets the group's members send from its addresses, or stops it (needs `groups.manage`).",
+        "operationId": "set_send_as",
+        "parameters": [
+          {
+            "name": "kernoid-tenant",
+            "in": "header",
+            "description": "The tenant to act on – for instance administrators; the caller's own tenant if left out.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Switch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/identity-providers": {
       "get": {
         "tags": [
@@ -9503,7 +9556,8 @@
           "id",
           "name",
           "members",
-          "addresses"
+          "addresses",
+          "members_send_as"
         ],
         "properties": {
           "addresses": {
@@ -9522,6 +9576,10 @@
               "type": "string"
             },
             "description": "Account ids."
+          },
+          "members_send_as": {
+            "type": "boolean",
+            "description": "The members may send from these addresses."
           },
           "name": {
             "type": "string"

@@ -29,6 +29,8 @@ pub(crate) struct GroupView {
     members: Vec<String>,
     /// Addresses mail to the group arrives at; it goes to every member.
     addresses: Vec<String>,
+    /// The members may send from these addresses.
+    members_send_as: bool,
 }
 
 impl From<GroupInfo> for GroupView {
@@ -38,6 +40,7 @@ impl From<GroupInfo> for GroupView {
             name: group.name,
             members: group.members.iter().map(Uuid::to_string).collect(),
             addresses: group.addresses,
+            members_send_as: group.members_send_as,
         }
     }
 }
@@ -113,6 +116,20 @@ pub(crate) async fn rename_group(
     Json(body): Json<GroupName>,
 ) -> Response {
     let result = async { state.identity.admin_rename_group(&admin, id(&group, "the group")?, &body.name).await }.await;
+    respond(result, no_content)
+}
+
+/// Lets the group's members send from its addresses, or stops it (needs `groups.manage`).
+#[utoipa::path(put, path = "/v1/groups/{id}/send-as", tag = "groups", params(TenantHeader), request_body = super::tenant::Switch,
+    responses((status = 204), (status = 404, body = Problem)))]
+pub(crate) async fn set_send_as(
+    State(state): State<AppState>,
+    AdminSession(admin): AdminSession,
+    Path(group): Path<String>,
+    Json(body): Json<super::tenant::Switch>,
+) -> Response {
+    let result =
+        async { state.identity.admin_set_group_send_as(&admin, id(&group, "the group")?, body.enabled).await }.await;
     respond(result, no_content)
 }
 

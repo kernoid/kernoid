@@ -119,6 +119,17 @@ function Group(props: { group: GroupView; busy: boolean; change: (work: () => Pr
               {t("Add")}
             </button>
           </Form>
+          <Show when={props.group.addresses.length > 0}>
+            <label class="inline">
+              <input
+                type="checkbox"
+                checked={props.group.members_send_as}
+                disabled={props.busy}
+                onChange={(event) => void props.change(() => api("PUT", `${base}/send-as`, { enabled: event.currentTarget.checked }))}
+              />
+              <span>{t("Members may send as the group")}</span>
+            </label>
+          </Show>
         </div>
       </div>
     </section>

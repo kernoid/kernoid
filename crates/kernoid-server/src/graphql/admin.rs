@@ -231,6 +231,8 @@ pub struct Group {
     members: Vec<String>,
     /// Addresses mail to the group arrives at; it goes to every member.
     addresses: Vec<String>,
+    /// The members may send from these addresses.
+    members_send_as: bool,
 }
 
 impl From<GroupInfo> for Group {
@@ -240,6 +242,7 @@ impl From<GroupInfo> for Group {
             name: group.name,
             members: group.members.iter().map(Uuid::to_string).collect(),
             addresses: group.addresses,
+            members_send_as: group.members_send_as,
         }
     }
 }
@@ -1059,6 +1062,13 @@ impl AdminMutation {
     async fn rename_group(&self, context: &Context<'_>, id: String, name: String) -> async_graphql::Result<bool> {
         let (identity, admin) = admin(context).await?;
         identity.admin_rename_group(&admin, uuid(&id, "the group")?, &name).await.map_err(error)?;
+        Ok(true)
+    }
+
+    /// Lets the group's members send from its addresses, or stops it (needs `groups.manage`).
+    async fn set_group_send_as(&self, context: &Context<'_>, id: String, enabled: bool) -> async_graphql::Result<bool> {
+        let (identity, admin) = admin(context).await?;
+        identity.admin_set_group_send_as(&admin, uuid(&id, "the group")?, enabled).await.map_err(error)?;
         Ok(true)
     }
 

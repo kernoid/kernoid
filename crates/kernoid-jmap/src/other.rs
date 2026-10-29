@@ -88,13 +88,22 @@ impl Context<'_> {
     }
 
     /// One identity per address of the account, with its display name; read-only for now. Others have them only
-    /// with send as (RFC 0002, 12.2).
+    /// with send as (RFC 0002, 12.2). In one's own store also the addresses of groups one may send as (9.2), with
+    /// the group's name.
     async fn identities(&self, access: &Access) -> Result<Vec<(String, String, String)>, MethodError> {
         if !access.send_as {
             return Ok(Vec::new());
         }
-        let (name, addresses) = self.jmap.mail().account_addresses(access.owner).await?;
-        Ok(addresses.into_iter().map(|address| (identity_id(&address), name.clone(), address)).collect())
+        let mail = self.jmap.mail();
+        let (name, addresses) = mail.account_addresses(access.owner).await?;
+        let mut identities: Vec<_> =
+            addresses.into_iter().map(|address| (identity_id(&address), name.clone(), address)).collect();
+        if access.owned {
+            for (group, address) in mail.group_sender_addresses(access.owner).await? {
+                identities.push((identity_id(&address), group, address));
+            }
+        }
+        Ok(identities)
     }
 
     pub async fn identity_get(&self, args: Map<String, Value>) -> MethodResult {

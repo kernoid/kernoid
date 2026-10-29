@@ -16,6 +16,9 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 - Programs over HTTP – JMAP, WebDAV, CalDAV and CardDAV – log in with a username or verified contact address too,
   where the tenant allows them, as at the login page; IMAP, POP3 and SMTP still take addresses only (usernames are
   unique per instance, and those protocols do not name one).
+- Sending as a group: a group may let its members send from its addresses (`PUT /v1/groups/{id}/send-as`, GraphQL
+  `setGroupSendAs`, a switch in the administration); they appear among the members' JMAP identities, and submission
+  accepts them.
 - `http.public_port`: instances reached on a port other than 443 or 80 name it in their issuer and links (JMAP);
   `deploy/compose` sets 8080.
 

@@ -173,6 +173,32 @@ impl Mail {
         Ok((display_name, addresses))
     }
 
+    /// The addresses of groups whose members may send as the group (RFC 0002, 9.2) and that have `account` as a
+    /// member: the group's name and an address of it.
+    pub async fn group_sender_addresses(&self, account: Uuid) -> Result<Vec<(String, String)>> {
+        let rows = sqlx::query!(
+            "SELECT g.name, ad.address FROM group_members m
+             JOIN groups g ON g.id = m.group_id JOIN addresses ad ON ad.group_id = g.id
+             WHERE m.account_id = $1 AND g.members_send_as ORDER BY ad.address",
+            account,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows.into_iter().map(|row| (row.name, row.address)).collect())
+    }
+
+    /// Whether `account` may send from the addresses of `group`: it is a member, and the group lets its members.
+    pub async fn may_send_as_group(&self, account: Uuid, group: Uuid) -> Result<bool> {
+        Ok(sqlx::query_scalar!(
+            r#"SELECT EXISTS (SELECT 1 FROM group_members m JOIN groups g ON g.id = m.group_id
+                              WHERE m.group_id = $1 AND m.account_id = $2 AND g.members_send_as) AS "may!""#,
+            group,
+            account,
+        )
+        .fetch_one(&self.pool)
+        .await?)
+    }
+
     /// The tenant of the account's mail store.
     pub async fn account_tenant(&self, account: Uuid) -> Result<Uuid> {
         let mut tx = self.pool.begin().await?;

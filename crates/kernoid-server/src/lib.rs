@@ -223,6 +223,7 @@ fn rest() -> OpenApiRouter<AppState> {
         .routes(routes!(consents::revoke))
         .routes(routes!(admin::directory::groups, admin::directory::add_group))
         .routes(routes!(admin::directory::rename_group, admin::directory::remove_group))
+        .routes(routes!(admin::directory::set_send_as))
         .routes(routes!(admin::directory::add_member, admin::directory::remove_member))
         .routes(routes!(admin::directory::add_address, admin::directory::remove_address))
         .routes(routes!(admin::tenant::mail_dns))

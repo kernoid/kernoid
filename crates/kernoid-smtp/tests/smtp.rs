@@ -546,4 +546,17 @@ async fn accounts_submit_over_tls_as_themselves(pool: PgPool) {
     assert_eq!(client.command("MAIL FROM:<info@firma.example>").await, "553 5.7.1 Send as one of your own addresses");
     setup.identity.set_mail_access(info, alice_principal, None, "lr", true, WHO).await.unwrap();
     assert_eq!(client.command("MAIL FROM:<info@firma.example>").await, "250 2.1.0 OK");
+    assert!(client.command("RSET").await.starts_with("250"));
+
+    // A group's address: for its members, once the group lets them.
+    let team = setup.identity.add_group(setup.tenant, "Team", WHO).await.unwrap();
+    let team_address = Address::parse("team@firma.example").unwrap();
+    setup.identity.add_group_address(setup.tenant, team, &team_address, WHO).await.unwrap();
+    setup.identity.set_group_send_as(setup.tenant, team, true, WHO).await.unwrap();
+    assert_eq!(client.command("MAIL FROM:<team@firma.example>").await, "553 5.7.1 Send as one of your own addresses");
+    setup.identity.add_group_member(setup.tenant, team, alice, WHO).await.unwrap();
+    assert_eq!(client.command("MAIL FROM:<team@firma.example>").await, "250 2.1.0 OK");
+    assert!(client.command("RSET").await.starts_with("250"));
+    setup.identity.set_group_send_as(setup.tenant, team, false, WHO).await.unwrap();
+    assert_eq!(client.command("MAIL FROM:<team@firma.example>").await, "553 5.7.1 Send as one of your own addresses");
 }

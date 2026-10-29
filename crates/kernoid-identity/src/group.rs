@@ -35,6 +35,9 @@ pub enum GroupEvent {
     AddressAdded { address: Address },
     #[serde(rename = "group.address_removed")]
     AddressRemoved { address: Address },
+    /// Whether the members may send from the group's addresses.
+    #[serde(rename = "group.send_as_set")]
+    SendAsSet { send_as: bool },
 }
 
 impl DomainEvent for GroupEvent {}
@@ -46,6 +49,7 @@ pub struct Group {
     pub members: BTreeSet<Uuid>,
     pub external_id: Option<String>,
     pub addresses: BTreeSet<Address>,
+    pub members_send_as: bool,
 }
 
 impl Aggregate for Group {
@@ -70,6 +74,7 @@ impl Aggregate for Group {
             GroupEvent::AddressRemoved { address } => {
                 self.addresses.remove(&address);
             }
+            GroupEvent::SendAsSet { send_as } => self.members_send_as = send_as,
         }
     }
 }
@@ -126,6 +131,11 @@ async fn project(connection: &mut PgConnection, events: &[Event]) -> std::result
                     .execute(&mut *connection)
                     .await?;
             }
+            GroupEvent::SendAsSet { send_as } => {
+                sqlx::query!("UPDATE groups SET members_send_as = $2 WHERE id = $1", id, send_as)
+                    .execute(&mut *connection)
+                    .await?;
+            }
         }
     }
     Ok(())
@@ -139,6 +149,8 @@ pub struct GroupInfo {
     pub members: Vec<Uuid>,
     /// Addresses mail to the group arrives at.
     pub addresses: Vec<String>,
+    /// The members may send from these addresses.
+    pub members_send_as: bool,
 }
 
 fn command_error(error: CommandError<IdentityError>) -> IdentityError {
@@ -307,9 +319,19 @@ impl Identity {
         .await
     }
 
+    /// Lets the members send from the group's addresses, or stops it.
+    pub async fn set_group_send_as(&self, tenant: Uuid, group: Uuid, send_as: bool, creator: &str) -> Result<()> {
+        self.group_of(tenant, group).await?;
+        self.group_command(tenant, group, creator, |state| {
+            existing(state)?;
+            Ok(if state.members_send_as == send_as { Vec::new() } else { vec![GroupEvent::SendAsSet { send_as }] })
+        })
+        .await
+    }
+
     pub async fn groups(&self, tenant: Uuid) -> Result<Vec<GroupInfo>> {
         let rows = sqlx::query!(
-            r#"SELECT g.id, g.tenant_id, g.name,
+            r#"SELECT g.id, g.tenant_id, g.name, g.members_send_as,
                       coalesce(array_agg(m.account_id ORDER BY m.account_id) FILTER (WHERE m.account_id IS NOT NULL), '{}')
                           AS "members!: Vec<Uuid>",
                       array(SELECT ad.address FROM addresses ad WHERE ad.group_id = g.id ORDER BY ad.address)
@@ -330,6 +352,7 @@ impl Identity {
                 name: row.name,
                 members: row.members,
                 addresses: row.addresses,
+                members_send_as: row.members_send_as,
             })
             .collect())
     }

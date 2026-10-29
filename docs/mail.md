@@ -33,7 +33,9 @@ incoming mail.
 | a group's address | every active member of the group, each once |
 
 Groups get addresses with `PUT /v1/groups/{id}/addresses/{address}` (needs `groups.manage`); an address belongs to one
-account or one group in the whole installation.
+account or one group in the whole installation. With `PUT /v1/groups/{id}/send-as` (`{"enabled": true}`, or the switch
+under Administration → Groups) the members may also **send as the group**: its addresses appear among their identities
+in JMAP and submission accepts them – mail programs set them as the sender themselves.
 
 The client's address must reach kernoid unchanged – every check depends on it. Behind a TCP load balancer that hides
 it, kernoid cannot check SPF or iprev (the PROXY protocol is not supported yet).
@@ -176,7 +178,7 @@ kernoid mail access <ACCOUNT>
   `SETACL`), JMAP as further accounts in the session. Submission accepts the owner's addresses with send as.
 - **People share their own mail** with colleagues: IMAP `SETACL` on their own mailboxes, or the API
   (`PUT /v1/account/mail/access`). Only administrators grant send as and access to shared mailboxes.
-- Not yet: per-user subscriptions to shared folders, JMAP Sharing (RFC 9670), sending as a group.
+- Not yet: per-user subscriptions to shared folders, JMAP Sharing (RFC 9670).
 
 ## Search
 

@@ -124,6 +124,8 @@ export interface GroupView {
   name: string;
   addresses: string[];
   members: string[];
+  /** The members may send from the group's addresses. */
+  members_send_as: boolean;
 }
 export interface DriveView {
   id: string;

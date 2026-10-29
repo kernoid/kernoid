@@ -219,7 +219,8 @@ With [mail-auth](https://crates.io/crates/mail-auth) (Apache-2.0 OR MIT, by Stal
   factor a login in the browser asks for. Failed attempts count like failed logins (RFC 0001, 7). **OPEN:**
   `OAUTHBEARER` with kernoid's access tokens – with the protocols.
 - **Senders:** `MAIL FROM` and every address in `From` must be addresses of the account, or of an account it may
-  send as (12.2). **OPEN:** sending as a group, and limits on how much an account sends.
+  send as (12.2), or of a group whose members may send as it (`group.send_as_set`, 9.2). **OPEN:** limits on how much
+  an account sends.
 - kernoid adds `Received`, and `Message-ID` and `Date` if they are missing, and delivers: to local recipients at
   once, as in 9.4 but without the spam filter; to everyone else through the queue, which signs with DKIM (10.3).
 

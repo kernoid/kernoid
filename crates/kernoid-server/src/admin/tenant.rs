@@ -96,7 +96,7 @@ pub(crate) struct Policy {
 
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub(crate) struct Switch {
-    enabled: bool,
+    pub(crate) enabled: bool,
 }
 
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
