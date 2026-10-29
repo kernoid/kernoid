@@ -30,7 +30,10 @@ pub const CONTACTS: &str = "urn:ietf:params:jmap:contacts";
 pub const FILENODE: &str = "urn:ietf:params:jmap:filenode";
 /// kernoid's extension for the versions of a file (`FileVersion/get`).
 pub const FILE_VERSIONS: &str = "https://kernoid.dev/jmap/file-versions";
+/// kernoid's extension for links to files for people without an account (`FileLink/*`).
+pub const FILE_LINKS: &str = "https://kernoid.dev/jmap/file-links";
 pub const PRINCIPALS: &str = "urn:ietf:params:jmap:principals";
+pub const VACATION: &str = "urn:ietf:params:jmap:vacationresponse";
 
 /// What went wrong talking to the server.
 #[derive(Debug)]

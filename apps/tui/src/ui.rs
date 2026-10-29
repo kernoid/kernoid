@@ -11,7 +11,7 @@ use ratatui::{
 };
 
 use kernoid_tui::jmap::{
-    files::StoreKind,
+    files::{LinkMode, StoreKind},
     mail::{Conversation, format_addresses},
 };
 
@@ -62,7 +62,7 @@ fn draw_status(frame: &mut Frame, app: &App, area: Rect) {
     if let Some(input) = &app.input {
         let line = Line::from(vec![
             Span::from(format!("{}: ", input.label)).fg(ACCENT),
-            Span::from(input.text.clone()),
+            Span::from(if input.secret { "•".repeat(input.text.chars().count()) } else { input.text.clone() }),
             "█".into(),
         ]);
         frame.render_widget(Paragraph::new(line), area);
@@ -461,6 +461,7 @@ fn draw_popup(frame: &mut Frame, app: &App, popup: &Popup) {
                 app::Edit::Message(_) => "message",
                 app::Edit::Event { .. } => "event",
                 app::Edit::Card { .. } => "contact",
+                app::Edit::Vacation(_) => "vacation response",
             };
             let text = Text::from(vec![Line::from(error.clone()).fg(Color::Red)]);
             text_popup(frame, &format!("The {what} was not saved"), text, "e edit again  c drop");
@@ -487,6 +488,32 @@ fn draw_popup(frame: &mut Frame, app: &App, popup: &Popup) {
             let title = format!("Share {}", sharing.node.name);
             list_popup(frame, &title, items, sharing.selected, "a add  Enter level  x remove  s save  Esc cancel");
         }
+        Popup::Links(linking) => {
+            // The address of a link just made comes first – it is not shown again.
+            let mut items: Vec<ListItem> = linking
+                .made
+                .iter()
+                .map(|url| ListItem::new(vec![Line::from("new link:").fg(DIM), Line::from(url.clone()).fg(ACCENT)]))
+                .collect();
+            for link in &linking.list {
+                let until = match &link.expires {
+                    Some(date) => format!("until {}", date.get(..10).unwrap_or(date)),
+                    None => "no expiry".into(),
+                };
+                let password = if link.has_password { " · password" } else { "" };
+                items.push(ListItem::new(Line::from(vec![
+                    Span::from(format!("{:<30} ", LinkMode::of(link).name())).fg(ACCENT),
+                    Span::from(format!("{until}{password}")),
+                ])));
+            }
+            if linking.list.is_empty() {
+                items.push(ListItem::new(Line::from("no links yet – n makes one").fg(DIM)));
+            }
+            let offset = usize::from(linking.made.is_some());
+            let title = format!("Links to {}", linking.node.name);
+            let footer = format!("n new ({})  m mode  x remove  Esc close", linking.mode.name());
+            list_popup(frame, &title, items, linking.selected + offset, &footer);
+        }
         Popup::Pick { found, selected, .. } => {
             let items = found
                 .iter()
@@ -508,7 +535,7 @@ Lists        j/k or ↑/↓ move, Enter or l open, h or ← back, PgUp/PgDn
 Mail         c write   / search (Esc clears)   r reply   R reply to all
              f forward   m move   d delete (to the trash; there: for good)
              u read/unread   s flag   t conversations or single emails
-             a next account (in the mailboxes)
+             a next account (in the mailboxes)   V vacation response
 Reading      Space/PgDn scroll   n/p next/previous   A attachments
 Writing      in $VISUAL or $EDITOR; header lines, a blank line, the text.
              Attach: <path> adds a file; remove an Attached: line to drop one.
@@ -518,6 +545,8 @@ Files        Enter open folder / versions of a file   ← or Backspace up
              v versions (Enter save, r restore)   i details and sharing
              n new folder   R rename   D delete (to the trash)
              S share a folder (a add, Enter level, x remove, s save)
+             L links for people without an account (n new, m view /
+               view and add / only add – a drop box –, x remove)
 
 Calendar     [ ] or ←/→ a week back/on   t today   Enter details
              n new   e edit   E edit one of a series   D delete   a accept   m maybe   x decline

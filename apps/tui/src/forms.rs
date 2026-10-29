@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: MIT
-//! Events and contacts written in the user's editor, like messages (`compose`): header lines, a blank line, then the
-//! text – the description of an event, the note of a contact. Lines starting with `#` are hints and are ignored.
+//! Events, contacts and the vacation response written in the user's editor, like messages (`compose`): header
+//! lines, a blank line, then the text – the description of an event, the note of a contact, the reply. Lines starting
+//! with `#` are hints and are ignored.
 
 use chrono::{NaiveDate, NaiveDateTime};
 
 use crate::jmap::{
     calendars::{EventForm, FREQUENCIES},
     contacts::{CONTEXTS, CardForm, FEATURES, Labelled},
+    mail::Vacation,
 };
 
 /// The header lines and the text after the first blank line; `#` lines left out.
@@ -108,6 +110,48 @@ pub fn parse_event(text: &str, form: &EventForm) -> Result<(EventForm, String), 
     Ok((out, calendar))
 }
 
+/// The text the editor opens with for the vacation response.
+pub fn render_vacation(vacation: &Vacation) -> String {
+    let at =
+        |time: Option<NaiveDateTime>| time.map(|time| time.format("%Y-%m-%d %H:%M").to_string()).unwrap_or_default();
+    let mut out = String::new();
+    out.push_str(&format!("On: {}\n", if vacation.on { "yes" } else { "no" }));
+    out.push_str(&format!("From: {}\n", at(vacation.from)));
+    out.push_str(&format!("Until: {}\n", at(vacation.until)));
+    out.push_str(&format!("Subject: {}\n", vacation.subject));
+    out.push_str("# From and Until may stay empty: at once, until switched off. It answers each sender once a week,\n");
+    out.push_str("# not mailing lists or automatic mail. The reply follows the blank line.\n\n");
+    out.push_str(&vacation.text);
+    if !vacation.text.is_empty() {
+        out.push('\n');
+    }
+    out
+}
+
+pub fn parse_vacation(text: &str) -> Result<Vacation, String> {
+    let (fields, body) = split(text)?;
+    let mut out = Vacation { text: body, ..Vacation::default() };
+    let optional = |value: &str| if value.trim().is_empty() { Ok(None) } else { time(value).map(Some) };
+    for (name, value) in fields {
+        match name.as_str() {
+            "on" => out.on = yes(&value)?,
+            "from" => out.from = optional(&value)?,
+            "until" => out.until = optional(&value)?,
+            "subject" => out.subject = value,
+            other => return Err(format!("unknown header: {other}")),
+        }
+    }
+    if let (Some(from), Some(until)) = (out.from, out.until)
+        && until <= from
+    {
+        return Err("Until is before From".into());
+    }
+    if out.on && out.text.trim().is_empty() {
+        return Err("the reply has no text".into());
+    }
+    Ok(out)
+}
+
 /// The text the editor opens with for a contact in `book`.
 pub fn render_card(form: &CardForm, book: &str, books: &[String]) -> String {
     let mut out = String::new();
@@ -165,6 +209,22 @@ pub fn parse_card(text: &str) -> Result<(CardForm, String), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_vacation_response_round_trips() {
+        let at = |text: &str| NaiveDateTime::parse_from_str(text, "%Y-%m-%d %H:%M").unwrap();
+        let vacation = Vacation {
+            on: true,
+            from: Some(at("2026-11-02 08:00")),
+            until: None,
+            subject: "Away".into(),
+            text: "Back on Monday.\nAlice".into(),
+        };
+        assert_eq!(parse_vacation(&render_vacation(&vacation)).unwrap(), vacation);
+        assert!(parse_vacation("On: yes\n\n").unwrap_err().contains("no text"));
+        assert!(parse_vacation("On: no\nFrom: 2026-11-02\nUntil: 2026-11-01\n\n").unwrap_err().contains("before"));
+        assert!(parse_vacation("On: no\nColour: red\n\n").is_err());
+    }
 
     fn form() -> EventForm {
         let at = |s: &str| NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M").unwrap();

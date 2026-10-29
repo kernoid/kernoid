@@ -21,8 +21,8 @@ use kernoid_tui::{
         self, Client, MAIL,
         calendars::{self, Calendar, Event, EventForm},
         contacts::{self, AddressBook, Card, CardForm},
-        files::{self, FileNode, Level, Principal, Store, Version},
-        mail::{self, Conversation, Email, EmailSummary, Identity, Mailbox},
+        files::{self, FileLink, FileNode, Level, LinkMode, Principal, Store, Version},
+        mail::{self, Conversation, Email, EmailSummary, Identity, Mailbox, Vacation},
         push::Push,
         transfer,
     },
@@ -91,6 +91,13 @@ pub enum Prompt {
     },
     /// Find people or groups to share with.
     SharePrincipal(Sharing),
+    /// Until when a new link works: a date, or nothing.
+    LinkExpiry(Linking),
+    /// The password of a new link, or nothing; `expires` from the step before.
+    LinkPassword {
+        linking: Linking,
+        expires: Option<String>,
+    },
     /// Write the event to the `.ics` file typed.
     ExportEvent {
         account: String,
@@ -109,6 +116,8 @@ pub struct Input {
     pub prompt: Prompt,
     pub label: String,
     pub text: String,
+    /// Shown as dots: a password.
+    pub secret: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -152,6 +161,8 @@ pub enum Edit {
         book: usize,
         id: Option<(String, String)>,
     },
+    /// The vacation response.
+    Vacation(Vacation),
 }
 
 /// With whom a directory is being shared, before it is saved.
@@ -160,6 +171,18 @@ pub struct Sharing {
     pub node: FileNode,
     pub entries: Vec<(Principal, Level)>,
     pub selected: usize,
+}
+
+/// The links to a file or folder, and the mode of the next one.
+#[derive(Debug, Clone)]
+pub struct Linking {
+    pub account: String,
+    pub node: FileNode,
+    pub list: Vec<FileLink>,
+    pub selected: usize,
+    pub mode: LinkMode,
+    /// The address of the link just made – shown this once.
+    pub made: Option<String>,
 }
 
 /// A window over the rest.
@@ -197,6 +220,8 @@ pub enum Popup {
     },
     /// With whom a directory is shared: add, change the level, remove, save.
     Share(Sharing),
+    /// The links to a file or folder: make one (in a mode), remove one.
+    Links(Linking),
     /// People and groups found for sharing: choose one.
     Pick {
         sharing: Sharing,
@@ -741,6 +766,7 @@ impl App {
                 let name = self.contacts.books.get(*book).map(book_name).unwrap_or_default();
                 forms::render_card(form, &name, &names)
             }
+            Edit::Vacation(vacation) => forms::render_vacation(vacation),
         }
     }
 
@@ -773,6 +799,26 @@ impl App {
                     Err(error) => self.popup = Some(Popup::Unsaved { edit: Edit::Card { form, book, id }, error }),
                 }
             }
+            Edit::Vacation(vacation) => match text.and_then(|text| forms::parse_vacation(&text)) {
+                Ok(new) => match mail::set_vacation(&self.client, &new) {
+                    Ok(()) => {
+                        self.info(if new.on { "the vacation response is on" } else { "the vacation response is off" })
+                    }
+                    Err(error) => {
+                        self.popup = Some(Popup::Unsaved { edit: Edit::Vacation(new), error: error.to_string() })
+                    }
+                },
+                Err(error) => self.popup = Some(Popup::Unsaved { edit: Edit::Vacation(vacation), error }),
+            },
+        }
+    }
+
+    /// Opens the vacation response in the editor.
+    fn edit_vacation(&mut self) {
+        match self.attempt(|app| mail::vacation(&app.client)) {
+            Some(Some(vacation)) => self.edit = Some(Edit::Vacation(vacation)),
+            Some(None) => self.fail("this server has no vacation response for you"),
+            None => {}
         }
     }
 
@@ -1550,6 +1596,33 @@ impl App {
         self.popup = Some(Popup::Share(Sharing { node, entries, selected: 0 }));
     }
 
+    /// Opens the links to the selected file or folder.
+    fn link_node(&mut self) {
+        let (Some(store), Some(node)) = (self.store().cloned(), self.selected_node().cloned()) else { return };
+        if !files::links_available(&self.client) {
+            self.fail("this server makes no links");
+            return;
+        }
+        if node.role.is_some() {
+            self.fail("the trash has no links");
+            return;
+        }
+        let may = store.kind == files::StoreKind::Own || node.my_rights.is_some_and(|r| r.may_share);
+        if !may {
+            self.fail("you may not share this");
+            return;
+        }
+        let Some(list) = self.attempt(|app| files::links(&app.client, &store.id, &node.id)) else { return };
+        self.popup = Some(Popup::Links(Linking {
+            account: store.id,
+            node,
+            list,
+            selected: 0,
+            mode: LinkMode::View,
+            made: None,
+        }));
+    }
+
     fn find_people(&mut self, mut sharing: Sharing, text: &str) {
         let Some(found) = self.attempt(|app| files::find_principals(&app.client, text)) else {
             self.popup = Some(Popup::Share(sharing));
@@ -1696,7 +1769,11 @@ impl App {
     }
 
     fn prompt(&mut self, prompt: Prompt, label: &str, text: String) {
-        self.input = Some(Input { prompt, label: label.to_owned(), text });
+        self.input = Some(Input { prompt, label: label.to_owned(), text, secret: false });
+    }
+
+    fn prompt_secret(&mut self, prompt: Prompt, label: &str) {
+        self.input = Some(Input { prompt, label: label.to_owned(), text: String::new(), secret: true });
     }
 
     fn input_key(&mut self, key: KeyEvent) {
@@ -1765,6 +1842,30 @@ impl App {
                         self.files.list.select(Some(index));
                     }
                 }
+            }
+            Prompt::LinkExpiry(linking) => match link_expiry(&text) {
+                Ok(expires) => {
+                    self.prompt_secret(Prompt::LinkPassword { linking, expires }, "Password for the link (empty: none)")
+                }
+                Err(error) => {
+                    self.fail(&error);
+                    self.popup = Some(Popup::Links(linking));
+                }
+            },
+            Prompt::LinkPassword { mut linking, expires } => {
+                // Not trimmed: a password is taken as typed.
+                let password = Some(input.text.as_str()).filter(|password| !password.is_empty());
+                let (account, node, mode) = (linking.account.clone(), linking.node.id.clone(), linking.mode);
+                if let Some(url) = self
+                    .attempt(|app| files::create_link(&app.client, &account, &node, mode, expires.as_deref(), password))
+                {
+                    linking.made = Some(url);
+                    if let Some(list) = self.attempt(|app| files::links(&app.client, &account, &node)) {
+                        linking.list = list;
+                    }
+                    self.info("link made – copy its address now; it is not shown again");
+                }
+                self.popup = Some(Popup::Links(linking));
             }
             Prompt::SharePrincipal(sharing) => {
                 if text.is_empty() {
@@ -1915,6 +2016,36 @@ impl App {
                     self.popup = Some(Popup::Share(sharing));
                 }
             },
+            Popup::Links(mut linking) => match key.code {
+                KeyCode::Char('m') => {
+                    linking.mode = linking.mode.next(linking.node.is_directory());
+                    self.popup = Some(Popup::Links(linking));
+                }
+                KeyCode::Char('n') | KeyCode::Char('a') | KeyCode::Char('+') => {
+                    linking.made = None;
+                    self.prompt(
+                        Prompt::LinkExpiry(linking),
+                        "Valid until (YYYY-MM-DD, empty: no expiry)",
+                        String::new(),
+                    )
+                }
+                KeyCode::Char('x') | KeyCode::Char('-') | KeyCode::Delete => {
+                    if let Some(link) = linking.list.get(linking.selected).cloned() {
+                        let account = linking.account.clone();
+                        if self.attempt(|app| files::remove_link(&app.client, &account, &link.id)).is_some() {
+                            linking.list.remove(linking.selected);
+                            linking.selected = linking.selected.min(linking.list.len().saturating_sub(1));
+                            self.info("link removed – its address no longer works");
+                        }
+                    }
+                    self.popup = Some(Popup::Links(linking));
+                }
+                KeyCode::Esc | KeyCode::Char('q') => {}
+                _ => {
+                    linking.selected = moved(linking.selected, linking.list.len());
+                    self.popup = Some(Popup::Links(linking));
+                }
+            },
             Popup::Pick { mut sharing, found, selected } => match key.code {
                 KeyCode::Enter => {
                     if let Some(principal) = found.get(selected) {
@@ -1981,6 +2112,7 @@ impl App {
         let down = matches!(key.code, KeyCode::Down | KeyCode::Char('j'));
         match (self.mail_focus, key.code) {
             (_, KeyCode::Char('c')) => self.write(Kind::New),
+            (_, KeyCode::Char('V')) => self.edit_vacation(),
             (_, KeyCode::Char('/')) => self.prompt(Prompt::SearchMail, "Search", self.mail.search.clone()),
             (_, KeyCode::Char('a')) if self.mail.accounts.len() > 1 && self.mail_focus == MailFocus::Mailboxes => {
                 let next = (self.mail.account + 1) % self.mail.accounts.len();
@@ -2107,6 +2239,7 @@ impl App {
             (FilesFocus::Nodes, KeyCode::Char('v')) => self.show_versions(),
             (FilesFocus::Nodes, KeyCode::Char('i')) => self.node_info(),
             (FilesFocus::Nodes, KeyCode::Char('S')) => self.share_node(),
+            (FilesFocus::Nodes, KeyCode::Char('L')) => self.link_node(),
             (_, KeyCode::Char('u')) => self.prompt(Prompt::Upload, "Upload file", String::new()),
             (_, KeyCode::Char('n')) => self.prompt(Prompt::NewFolder, "New folder", String::new()),
             (FilesFocus::Nodes, KeyCode::Char('R')) => {
@@ -2264,9 +2397,33 @@ pub fn event_when(event: &Event) -> String {
     }
 }
 
+/// A date typed for a link's expiry: the end of that day here, as a UTCDate; nothing for none.
+fn link_expiry(text: &str) -> Result<Option<String>, String> {
+    if text.is_empty() {
+        return Ok(None);
+    }
+    let day = NaiveDate::parse_from_str(text, "%Y-%m-%d").map_err(|_| format!("not a date: {text} (YYYY-MM-DD)"))?;
+    let end = day.and_hms_opt(23, 59, 59).and_then(|end| Local.from_local_datetime(&end).earliest());
+    let end = end.ok_or_else(|| format!("not a time here: {text}"))?;
+    if end <= Local::now() {
+        return Err("the day has passed".into());
+    }
+    Ok(Some(end.with_timezone(&Utc).format("%Y-%m-%dT%H:%M:%SZ").to_string()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_link_expires_at_the_end_of_the_day_typed() {
+        assert_eq!(link_expiry(""), Ok(None));
+        let expires = link_expiry("2099-12-31").unwrap().unwrap();
+        assert!(expires.starts_with("2099-12-31T") || expires.starts_with("2100-01-01T"), "{expires}");
+        assert!(expires.ends_with('Z'));
+        assert!(link_expiry("2001-01-01").is_err());
+        assert!(link_expiry("tomorrow").is_err());
+    }
 
     #[test]
     fn names_and_sizes() {

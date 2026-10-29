@@ -1,13 +1,67 @@
 // SPDX-License-Identifier: MIT
-//! Mail over JMAP (RFC 8621): mailboxes, the emails of one, one email to read, keywords, moving, deleting, and
-//! sending through the Drafts mailbox (RFC 8621, 7.5).
+//! Mail over JMAP (RFC 8621): mailboxes, the emails of one, one email to read, keywords, moving, deleting,
+//! sending through the Drafts mailbox (RFC 8621, 7.5), and the vacation response (RFC 8621, 8).
 
 use std::collections::BTreeMap;
 
+use chrono::{DateTime, Local, NaiveDateTime, TimeZone, Utc};
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
-use super::{Client, Error, MAIL, Result, SUBMISSION, ids_of, set_error};
+use super::{Client, Error, MAIL, Result, SUBMISSION, VACATION, ids_of, set_error};
+
+/// The vacation response of the user's account (RFC 8621, 8), its times here.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Vacation {
+    pub on: bool,
+    /// From when it answers; at once if not set.
+    pub from: Option<NaiveDateTime>,
+    /// Until when; until it is switched off if not set.
+    pub until: Option<NaiveDateTime>,
+    pub subject: String,
+    pub text: String,
+}
+
+fn local(utc: Option<&str>) -> Option<NaiveDateTime> {
+    let utc = DateTime::parse_from_rfc3339(utc?).ok()?;
+    Some(utc.with_timezone(&Local).naive_local())
+}
+
+fn utc(local: Option<NaiveDateTime>) -> Option<String> {
+    let at = Local.from_local_datetime(&local?).earliest()?;
+    Some(at.with_timezone(&Utc).format("%Y-%m-%dT%H:%M:%SZ").to_string())
+}
+
+/// The vacation response; none if the server has none for the user.
+pub fn vacation(client: &Client) -> Result<Option<Vacation>> {
+    let Ok(account) = client.primary(VACATION) else { return Ok(None) };
+    let result =
+        client.call(&[VACATION], "VacationResponse/get", json!({ "accountId": account, "ids": ["singleton"] }))?;
+    let Some(found) = result.get("list").and_then(Value::as_array).and_then(|list| list.first()) else {
+        return Ok(Some(Vacation::default()));
+    };
+    let text = |name: &str| found.get(name).and_then(Value::as_str).unwrap_or_default().to_owned();
+    Ok(Some(Vacation {
+        on: found.get("isEnabled").and_then(Value::as_bool).unwrap_or(false),
+        from: local(found.get("fromDate").and_then(Value::as_str)),
+        until: local(found.get("toDate").and_then(Value::as_str)),
+        subject: text("subject"),
+        text: text("textBody"),
+    }))
+}
+
+pub fn set_vacation(client: &Client, vacation: &Vacation) -> Result<()> {
+    let account = client.primary(VACATION)?;
+    let update = json!({ "update": { "singleton": {
+        "isEnabled": vacation.on,
+        "fromDate": utc(vacation.from),
+        "toDate": utc(vacation.until),
+        "subject": (!vacation.subject.is_empty()).then_some(&vacation.subject),
+        "textBody": (!vacation.text.is_empty()).then_some(&vacation.text),
+    } } });
+    client.set(&[VACATION], "VacationResponse", &account, update, json!({}))?;
+    Ok(())
+}
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]

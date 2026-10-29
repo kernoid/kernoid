@@ -21,10 +21,12 @@ fn session() -> Value {
         "urn:ietf:params:jmap:mail": {}, "urn:ietf:params:jmap:submission": {},
         "urn:ietf:params:jmap:filenode": {}, "urn:ietf:params:jmap:calendars": {},
         "urn:ietf:params:jmap:contacts": {}, "urn:ietf:params:jmap:principals": {},
+        "urn:ietf:params:jmap:vacationresponse": {},
     });
     // The URLs name the instance's public host, as kernoid builds them; the client keeps to the origin it used.
     json!({
-        "capabilities": { "urn:ietf:params:jmap:core": {} },
+        "capabilities": { "urn:ietf:params:jmap:core": {},
+            "https://kernoid.dev/jmap/file-links": { "urlTemplate": "https://login.firma.example/app/link.html#{token}" } },
         "accounts": {
             "A": { "name": "alice@firma.example", "isPersonal": true, "isReadOnly": false, "accountCapabilities": all },
             "D": { "name": "Team", "isPersonal": false, "isReadOnly": false, "kernoid:drive": true,
@@ -36,6 +38,7 @@ fn session() -> Value {
             "urn:ietf:params:jmap:mail": "A", "urn:ietf:params:jmap:submission": "A",
             "urn:ietf:params:jmap:filenode": "A", "urn:ietf:params:jmap:calendars": "A",
             "urn:ietf:params:jmap:contacts": "A", "urn:ietf:params:jmap:principals": "A",
+            "urn:ietf:params:jmap:vacationresponse": "A",
         },
         "username": "alice@firma.example",
         "apiUrl": "http://login.firma.example/jmap/api",
@@ -136,6 +139,20 @@ fn method(name: &str, arguments: &Value) -> Value {
         "ContactCard/set" | "CalendarEvent/set" => {
             json!({ "accountId": account, "newState": "2", "updated": {}, "destroyed": [] })
         }
+        "VacationResponse/get" => json!({ "accountId": account, "list": [
+            { "id": "singleton", "isEnabled": true, "fromDate": "2026-11-02T07:00:00Z", "toDate": null,
+              "subject": "Away", "textBody": "Back on Monday.", "htmlBody": null },
+        ] }),
+        "VacationResponse/set" => json!({ "accountId": account, "updated": { "singleton": null } }),
+        "FileLink/get" => json!({ "accountId": account, "list": [
+            { "id": "l1", "nodeId": "n2", "expires": null, "hasPassword": false, "mayRead": false, "mayAdd": true,
+              "created": "2026-10-29T10:00:00Z" },
+            // From before links could add: no mayRead, no mayAdd.
+            { "id": "l2", "nodeId": "n2", "expires": "2099-01-01T00:00:00Z", "hasPassword": true },
+        ] }),
+        "FileLink/set" if arguments.get("create").is_some() => json!({ "accountId": account,
+            "created": { "l": { "id": "l3", "token": "T0K3N" } } }),
+        "FileLink/set" => json!({ "accountId": account, "destroyed": arguments["destroy"].clone() }),
         "Principal/query" => json!({ "accountId": account, "ids": ["p2"] }),
         "Principal/get" => {
             json!({ "accountId": account, "list": [{ "id": "p2", "type": "individual", "name": "Bob", "email": "bob@firma.example" }] })
@@ -468,6 +485,53 @@ fn sharing_a_directory() {
     files::share(&client, "A", "n2", &[]).unwrap();
     assert_eq!(server.api_requests().pop().unwrap().calls()[0].1["update"]["n2"]["shareWith"], json!({}));
     assert_eq!(files::Level::of(&files::Level::Edit.rights()), files::Level::Edit);
+}
+
+#[test]
+fn the_vacation_response_read_and_set() {
+    let server = server();
+    let client = connect(&server);
+    let mut vacation = mail::vacation(&client).unwrap().unwrap();
+    assert_eq!((vacation.on, vacation.subject.as_str(), vacation.until), (true, "Away", None));
+    // 07:00 UTC, in the local time of whoever runs the test – and back.
+    vacation.on = false;
+    vacation.subject.clear();
+    mail::set_vacation(&client, &vacation).unwrap();
+    let update = &server.api_requests().pop().unwrap().calls()[0].1["update"]["singleton"];
+    assert_eq!(update["isEnabled"], false);
+    assert_eq!(update["fromDate"], "2026-11-02T07:00:00Z");
+    assert_eq!((update["toDate"].clone(), update["subject"].clone()), (json!(null), json!(null)));
+    assert_eq!(update["textBody"], "Back on Monday.");
+}
+
+#[test]
+fn links_listed_made_and_removed() {
+    let server = server();
+    let client = connect(&server);
+    assert!(files::links_available(&client));
+    let list = files::links(&client, "A", "n2").unwrap();
+    assert_eq!(
+        list.iter().map(files::LinkMode::of).collect::<Vec<_>>(),
+        [files::LinkMode::Drop, files::LinkMode::View]
+    );
+    assert!(list[1].has_password);
+    let calls = server.api_requests().pop().unwrap().calls();
+    assert_eq!((calls[0].0.as_str(), calls[0].1["nodeId"].clone()), ("FileLink/get", json!("n2")));
+
+    // A drop box with an expiry and a password; its address from the session's template, as the server names it.
+    let url = files::create_link(&client, "A", "n2", files::LinkMode::Drop, Some("2099-12-31T22:59:59Z"), Some("pw"))
+        .unwrap();
+    assert_eq!(url, "https://login.firma.example/app/link.html#T0K3N");
+    let created = &server.api_requests().pop().unwrap().calls()[0].1["create"]["l"];
+    assert_eq!(
+        (created["mayRead"].clone(), created["mayAdd"].clone(), created["password"].clone()),
+        (json!(false), json!(true), json!("pw"))
+    );
+    assert_eq!(created["expires"], "2099-12-31T22:59:59Z");
+
+    files::remove_link(&client, "A", "l1").unwrap();
+    assert_eq!(server.api_requests().pop().unwrap().calls()[0].1["destroy"], json!(["l1"]));
+    assert_eq!(files::LinkMode::Drop.next(false), files::LinkMode::View, "a file has only the one");
 }
 
 #[test]

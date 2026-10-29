@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: MIT
 //! Files over JMAP (draft-ietf-jmap-filenode-19): the stores the user reaches – their own, those shared with them,
-//! the tenant's drives –, directories and files with the rights on them, downloads, uploads, and kernoid's versions
-//! of a file (`https://kernoid.dev/jmap/file-versions`).
+//! the tenant's drives –, directories and files with the rights on them, downloads, uploads, kernoid's versions of a
+//! file (`https://kernoid.dev/jmap/file-versions`) and its links for people without an account
+//! (`https://kernoid.dev/jmap/file-links`).
 
 use std::{collections::BTreeMap, path::Path};
 
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use super::{Client, Error, FILE_VERSIONS, FILENODE, PRINCIPALS, Result, ids_of};
+use super::{Client, Error, FILE_LINKS, FILE_VERSIONS, FILENODE, PRINCIPALS, Result, ids_of};
 
 const USING: [&str; 3] = [FILENODE, FILE_VERSIONS, PRINCIPALS];
 const PROPERTIES: [&str; 9] =
@@ -383,6 +384,115 @@ pub fn principals(client: &Client, ids: &[&str]) -> Result<Vec<Principal>> {
     let account = client.primary(PRINCIPALS)?;
     let result = client.call(&USING, "Principal/get", json!({ "accountId": account, "ids": ids }))?;
     list(Some(&result))
+}
+
+/// A link to a file or folder for people without an account; its address is known only when it is made.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileLink {
+    pub id: String,
+    pub node_id: String,
+    #[serde(default)]
+    pub expires: Option<String>,
+    #[serde(default)]
+    pub has_password: bool,
+    #[serde(default = "yes")]
+    pub may_read: bool,
+    #[serde(default)]
+    pub may_add: bool,
+    #[serde(default)]
+    pub created: Option<String>,
+}
+
+fn yes() -> bool {
+    true
+}
+
+/// What a link lets people do: view, view and add files, or only add them (a drop box) – the last two for folders.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LinkMode {
+    View,
+    Add,
+    Drop,
+}
+
+impl LinkMode {
+    pub fn of(link: &FileLink) -> Self {
+        match (link.may_read, link.may_add) {
+            (_, false) => LinkMode::View,
+            (true, true) => LinkMode::Add,
+            (false, true) => LinkMode::Drop,
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            LinkMode::View => "view and download",
+            LinkMode::Add => "view, download and add files",
+            LinkMode::Drop => "only add files (drop box)",
+        }
+    }
+
+    /// The next mode; for a file there is only one.
+    pub fn next(self, folder: bool) -> Self {
+        match self {
+            _ if !folder => LinkMode::View,
+            LinkMode::View => LinkMode::Add,
+            LinkMode::Add => LinkMode::Drop,
+            LinkMode::Drop => LinkMode::View,
+        }
+    }
+}
+
+/// Whether the server makes links at all.
+pub fn links_available(client: &Client) -> bool {
+    client.session.capabilities.contains_key(FILE_LINKS)
+}
+
+/// The links to a node.
+pub fn links(client: &Client, account: &str, node: &str) -> Result<Vec<FileLink>> {
+    let result =
+        client.call(&[FILENODE, FILE_LINKS], "FileLink/get", json!({ "accountId": account, "nodeId": node }))?;
+    list(Some(&result))
+}
+
+/// Makes a link, with an expiry (a UTCDate) and a password if given; answers its address – the only time it can be
+/// known.
+pub fn create_link(
+    client: &Client,
+    account: &str,
+    node: &str,
+    mode: LinkMode,
+    expires: Option<&str>,
+    password: Option<&str>,
+) -> Result<String> {
+    let link = json!({
+        "nodeId": node,
+        "mayRead": mode != LinkMode::Drop,
+        "mayAdd": mode != LinkMode::View,
+        "expires": expires,
+        "password": password,
+    });
+    let result =
+        client.set(&[FILENODE, FILE_LINKS], "FileLink", account, json!({ "create": { "l": link } }), json!({}))?;
+    let token = result
+        .pointer("/created/l/token")
+        .and_then(Value::as_str)
+        .ok_or_else(|| Error::Protocol("the link was made without a token".into()))?;
+    let template = client
+        .session
+        .capabilities
+        .get(FILE_LINKS)
+        .and_then(|capability| capability.get("urlTemplate"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| Error::Protocol("the server names no address for links".into()))?;
+    // The address goes to other people, as the server names it; the app does not open it.
+    Ok(template.replace("{token}", token))
+}
+
+pub fn remove_link(client: &Client, account: &str, id: &str) -> Result<()> {
+    client.set(&[FILENODE, FILE_LINKS], "FileLink", account, json!({ "destroy": [id] }), json!({}))?;
+    Ok(())
 }
 
 #[cfg(test)]
