@@ -47,6 +47,19 @@ pub struct FileLinkInfo {
     pub created_at: DateTime<Utc>,
 }
 
+/// What came in through one link since its last notice, for whoever is told: the link's maker, or the store's owner.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LinkArrivals {
+    pub link: Uuid,
+    pub owner: Uuid,
+    /// The account that made the link (`account:<id>`); none if an operator did.
+    pub maker: Option<Uuid>,
+    /// The name of the directory the link names.
+    pub folder: String,
+    /// Names and sizes, in the order they came.
+    pub files: Vec<(String, u64)>,
+}
+
 /// A link that is valid now: where it leads, and whether it needs its password.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OpenLink {
@@ -298,6 +311,63 @@ impl Identity {
         .await
         .map_err(store_error)?;
         Ok(found.is_some())
+    }
+
+    /// Notes a file added through `link`, for the notice to its maker.
+    pub async fn record_file_link_arrival(&self, link: Uuid, name: &str, size: u64) -> Result<()> {
+        sqlx::query!(
+            "INSERT INTO file_link_arrivals (id, link_id, name, size) VALUES ($1, $2, $3, $4)",
+            Uuid::now_v7(),
+            link,
+            name,
+            i64::try_from(size).unwrap_or(i64::MAX),
+        )
+        .execute(self.pool())
+        .await
+        .map_err(store_error)?;
+        Ok(())
+    }
+
+    /// Takes what came in through links nothing has come in through for `quiet` – one notice for a batch of files,
+    /// not one each. What is taken is gone: a notice that cannot be delivered is not tried again.
+    pub async fn take_file_link_arrivals(&self, quiet: Duration) -> Result<Vec<LinkArrivals>> {
+        let mut rows = sqlx::query!(
+            "DELETE FROM file_link_arrivals
+             WHERE link_id IN (SELECT link_id FROM file_link_arrivals GROUP BY link_id
+                               HAVING max(added_at) <= now() - make_interval(secs => $1))
+             RETURNING link_id, name, size, added_at",
+            quiet.as_secs_f64(),
+        )
+        .fetch_all(self.pool())
+        .await
+        .map_err(store_error)?;
+        rows.sort_by_key(|row| row.added_at);
+        let links: Vec<Uuid> = rows.iter().map(|row| row.link_id).collect();
+        let found = sqlx::query!(
+            "SELECT l.id, l.owner_id, l.created_by, n.name FROM file_links l JOIN file_nodes n ON n.id = l.node_id
+             WHERE l.id = ANY($1)",
+            &links,
+        )
+        .fetch_all(self.pool())
+        .await
+        .map_err(store_error)?;
+        let mut out: Vec<LinkArrivals> = found
+            .into_iter()
+            .map(|link| LinkArrivals {
+                link: link.id,
+                owner: link.owner_id,
+                maker: link.created_by.strip_prefix("account:").and_then(|id| Uuid::parse_str(id).ok()),
+                folder: link.name,
+                files: Vec::new(),
+            })
+            .collect();
+        for row in rows {
+            if let Some(arrivals) = out.iter_mut().find(|arrivals| arrivals.link == row.link_id) {
+                arrivals.files.push((row.name, u64::try_from(row.size).unwrap_or_default()));
+            }
+        }
+        out.sort_by_key(|arrivals| arrivals.link);
+        Ok(out)
     }
 
     /// Removes expired access tokens of links; returns how many.

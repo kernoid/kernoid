@@ -77,6 +77,7 @@ can"), or with kernoid's JMAP extension `https://kernoid.dev/jmap/file-links` (`
 - Files are added with `POST /v1/links/<token>/files?name=<name>` (the content as the body; `parent` for a folder
   below, where the link reads too). A name already taken gets a number – nothing is ever replaced through a link. What
   comes in belongs to the owner and counts against the owner's quota; set an expiry or a password on a link that adds.
+  Whoever made the link gets an email naming what came in, once nothing more has come for two minutes.
 - Removing the link, or the file or folder, ends it at once; so does deactivating the owner or the tenant.
 - Every link is in the audit log of its owner (`account.file_link_added`, `account.file_link_removed`).
 
@@ -146,4 +147,4 @@ adding here, and for moving deleting there.
 
 {: .note }
 OPEN: uploads that resume after the page is closed, searching inside PDFs and office documents, symbolic links; a
-limit on what a link may add beyond the quota, and a notice when something comes in.
+limit on what a link may add beyond the quota.

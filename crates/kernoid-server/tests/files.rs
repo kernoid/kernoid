@@ -29,6 +29,12 @@ const PASSWORD: &str = "correct horse battery staple";
 
 /// Alice administers the tenant Firma, Bob is an ordinary account of it; both have files.
 async fn setup(pool: &PgPool) -> (Router, Uuid, Uuid) {
+    let (app, alice, bob, _) = setup_with_mail(pool).await;
+    (app, alice, bob)
+}
+
+/// The same, with the mail store – for what the worker does.
+async fn setup_with_mail(pool: &PgPool) -> (Router, Uuid, Uuid, kernoid_mail::Mail) {
     let events = EventStore::new(pool.clone());
     let main = MainKeys::new(Key::random().unwrap(), Vec::new());
     let identity = Identity::with_secrets(events.clone(), main.clone());
@@ -53,11 +59,11 @@ async fn setup(pool: &PgPool) -> (Router, Uuid, Uuid) {
     let oidc = kernoid_oidc::Oidc::new(events, main, "https");
     let mail = kernoid_mail::Mail::new(pool.clone(), blobs.clone(), kernoid_mail::Limits::default());
     let files = kernoid_files::Files::new(pool.clone(), blobs.clone(), kernoid_files::Limits::default());
-    let jmap = kernoid_jmap::Jmap::new(mail, 1_000_000, chrono::Duration::days(5))
+    let jmap = kernoid_jmap::Jmap::new(mail.clone(), 1_000_000, chrono::Duration::days(5))
         .with_files(files)
         .with_identity(Identity::new(EventStore::new(pool.clone())));
     let state = AppState::new(pool.clone(), blobs, identity, oidc).with_jmap(jmap, kernoid_mail::MailEvents::default());
-    (router(state, Router::new(), &Http::default()), accounts[0], accounts[1])
+    (router(state, Router::new(), &Http::default()), accounts[0], accounts[1], mail)
 }
 
 struct Call<'a> {
@@ -433,7 +439,7 @@ async fn links_open_files_to_anyone_who_has_them(pool: PgPool) {
 
 #[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
 async fn links_let_people_add_files(pool: PgPool) {
-    let (app, _alice_id, bob_id) = setup(&pool).await;
+    let (app, _alice_id, bob_id, mail) = setup_with_mail(&pool).await;
     let bob = login(&app, "bob@firma.de").await;
     let anyone = Call { app: &app, token: String::new() };
     let using =
@@ -530,4 +536,20 @@ async fn links_let_people_add_files(pool: PgPool) {
         list.iter().map(|link| (link["mayRead"].as_bool().unwrap(), link["mayAdd"].as_bool().unwrap())).collect();
     rights.sort();
     assert_eq!(rights, [(false, true), (true, false), (true, true)]);
+
+    // The worker tells Bob – who made the links – in one email what came in, once the links are quiet.
+    let identity = Identity::new(EventStore::new(pool.clone()));
+    let notify = |quiet| {
+        let (identity, mail) = (identity.clone(), mail.clone());
+        async move { kernoid_server::file_links::notify_arrivals(&identity, &mail, None, quiet).await.unwrap() }
+    };
+    assert_eq!(notify(std::time::Duration::from_secs(3600)).await, 0, "not quiet long enough");
+    assert_eq!(notify(std::time::Duration::ZERO).await, 1);
+    assert_eq!(notify(std::time::Duration::ZERO).await, 0, "told once");
+    let inbox = mail.mailboxes(bob_id).await.unwrap().into_iter().find(|mailbox| mailbox.name == "Inbox").unwrap();
+    let entries = mail.mailbox_entries(bob_id, inbox.id).await.unwrap();
+    let ids: Vec<Uuid> = entries.iter().map(|entry| entry.email).collect();
+    let emails = mail.emails(bob_id, &ids).await.unwrap();
+    assert_eq!(emails.len(), 1);
+    assert_eq!(emails[0].subject.as_deref(), Some("Files added to \"Submissions\""));
 }

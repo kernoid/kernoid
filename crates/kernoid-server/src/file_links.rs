@@ -363,7 +363,108 @@ pub(crate) async fn add(
     }
     .await;
     match added {
-        Ok(written) => (StatusCode::CREATED, Json(node_view(&written.node, &link))).into_response(),
+        Ok(written) => {
+            let size = written.node.size.unwrap_or_default();
+            if let Err(error) = state.identity.record_file_link_arrival(link.id, &written.node.name, size).await {
+                tracing::warn!(%error, "a file added through a link was not noted for its notice");
+            }
+            (StatusCode::CREATED, Json(node_view(&written.node, &link))).into_response()
+        }
         Err(error) => crate::jmap::write_problem(error),
+    }
+}
+
+/// How long nothing must have come in through a link before its maker is told – so that a batch of files is one notice.
+pub const NOTICE_AFTER_QUIET: std::time::Duration = std::time::Duration::from_secs(2 * 60);
+
+/// Tells the makers of links – or the stores' owners – by mail what came in through links quiet for `quiet` (the
+/// worker, every minute, with [`NOTICE_AFTER_QUIET`]). Someone without a mailbox is not told. `hostname` is the MX's name for the sender; otherwise the
+/// recipient's domain. Returns how many notices were delivered.
+pub async fn notify_arrivals(
+    identity: &kernoid_identity::Identity,
+    mail: &kernoid_mail::Mail,
+    hostname: Option<&str>,
+    quiet: std::time::Duration,
+) -> Result<usize, kernoid_identity::IdentityError> {
+    let mut delivered = 0;
+    for arrivals in identity.take_file_link_arrivals(quiet).await? {
+        let recipient = arrivals.maker.unwrap_or(arrivals.owner);
+        let address = match identity.account_addresses(recipient).await {
+            Ok(addresses) => addresses.into_iter().find(|(_, primary)| *primary).map(|(address, _)| address),
+            Err(_) => None,
+        };
+        let Some(address) = address else { continue };
+        let host =
+            hostname.map(str::to_owned).unwrap_or_else(|| address.rsplit('@').next().unwrap_or_default().to_owned());
+        let raw = arrival_notice(&host, &address, &arrivals);
+        // An empty envelope sender, as for bounces: nothing answers a notice.
+        let delivery = kernoid_mail::Delivery { from: "", to: &address, junk: false };
+        match mail.deliver(recipient, raw.into(), delivery).await {
+            Ok(_) => delivered += 1,
+            Err(error) => tracing::warn!(%error, link = %arrivals.link, "a notice of files added through a link"),
+        }
+    }
+    Ok(delivered)
+}
+
+/// At most this many files are named in a notice; the rest are counted.
+const NOTICE_NAMES: usize = 50;
+
+fn human_size(bytes: u64) -> String {
+    const UNITS: [&str; 5] = ["B", "KiB", "MiB", "GiB", "TiB"];
+    let mut value = bytes as f64;
+    let mut unit = 0;
+    while value >= 1024.0 && unit < UNITS.len() - 1 {
+        value /= 1024.0;
+        unit += 1;
+    }
+    if unit == 0 { format!("{bytes} B") } else { format!("{value:.1} {}", UNITS[unit]) }
+}
+
+/// The notice: which files came in, through the link to which folder.
+fn arrival_notice(host: &str, to: &str, arrivals: &kernoid_identity::file_link::LinkArrivals) -> Vec<u8> {
+    let count = arrivals.files.len();
+    let mut text = format!(
+        "{count} {} added through your link to the folder \"{}\":\r\n\r\n",
+        if count == 1 { "file was" } else { "files were" },
+        arrivals.folder
+    );
+    for (name, size) in arrivals.files.iter().take(NOTICE_NAMES) {
+        text.push_str(&format!("  {name} ({})\r\n", human_size(*size)));
+    }
+    if count > NOTICE_NAMES {
+        text.push_str(&format!("  and {} more\r\n", count - NOTICE_NAMES));
+    }
+    text.push_str("\r\nThey are in the folder now. A link can be removed in the web app: Files, the folder, Link.\r\n");
+    mail_builder::MessageBuilder::new()
+        .from(mail_builder::headers::address::Address::new_address(Some("kernoid"), format!("mailer-daemon@{host}")))
+        .to(to)
+        .subject(format!("Files added to \"{}\"", arrivals.folder))
+        .header("Auto-Submitted", mail_builder::headers::raw::Raw::new("auto-generated"))
+        .text_body(text)
+        .write_to_vec()
+        .expect("writing to memory")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_notice_names_the_files_and_counts_the_rest() {
+        let arrivals = kernoid_identity::file_link::LinkArrivals {
+            link: Uuid::nil(),
+            owner: Uuid::nil(),
+            maker: None,
+            folder: "Submissions".into(),
+            files: (0..52).map(|n| (format!("file {n}.pdf"), 1536)).collect(),
+        };
+        let notice = String::from_utf8(arrival_notice("mx.firma.de", "bob@firma.de", &arrivals)).unwrap();
+        assert!(notice.contains("Subject: Files added to \"Submissions\""), "{notice}");
+        assert!(notice.contains("Auto-Submitted: auto-generated"), "{notice}");
+        assert!(notice.contains("52 files were added"), "{notice}");
+        assert!(notice.contains("file 49.pdf (1.5 KiB)") && !notice.contains("file 50.pdf"), "{notice}");
+        assert!(notice.contains("and 2 more"), "{notice}");
+        assert_eq!(human_size(10), "10 B");
     }
 }

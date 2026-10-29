@@ -14,7 +14,7 @@ mod cookie;
 mod cors;
 mod dav;
 mod federation;
-mod file_links;
+pub mod file_links;
 mod files_admin;
 mod forwarded;
 mod graphql;

@@ -1129,6 +1129,12 @@ async fn serve(config: Config) -> anyhow::Result<()> {
             }
             None => tracing::info!("no [smtp] in the configuration: not sending mail"),
         }
+        tasks.spawn(link_notices(
+            Identity::new(events.clone()),
+            mail_store(db.clone(), blobs.clone(), &config),
+            config.smtp.as_ref().map(|smtp| smtp.hostname.clone()),
+            shutdown.clone(),
+        ));
         tasks.spawn(mail_housekeeping(
             mail_store(db.clone(), blobs.clone(), &config),
             file_store(db.clone(), blobs.clone(), &config),
@@ -1354,6 +1360,34 @@ fn file_store(db: kernoid_store::PgPool, blobs: BlobStore, config: &Config) -> k
     let limits =
         kernoid_files::Limits { max_file_size: config.files.max_file_size, versions_kept: config.files.versions_kept };
     kernoid_files::Files::new(db, blobs, limits)
+}
+
+/// Tells the makers of links what came in through them (`kernoid_server::file_links`), every minute. With several
+/// workers, each does it – what one takes, the others do not see.
+async fn link_notices(
+    identity: Identity,
+    mail: kernoid_mail::Mail,
+    hostname: Option<String>,
+    shutdown: CancellationToken,
+) -> anyhow::Result<()> {
+    loop {
+        match kernoid_server::file_links::notify_arrivals(
+            &identity,
+            &mail,
+            hostname.as_deref(),
+            kernoid_server::file_links::NOTICE_AFTER_QUIET,
+        )
+        .await
+        {
+            Ok(0) => {}
+            Ok(sent) => tracing::info!(sent, "notices of files added through links"),
+            Err(error) => tracing::warn!(%error, "notices of files added through links failed; trying again later"),
+        }
+        tokio::select! {
+            () = shutdown.cancelled() => return Ok(()),
+            () = tokio::time::sleep(std::time::Duration::from_secs(60)) => {}
+        }
+    }
 }
 
 async fn mail_housekeeping(

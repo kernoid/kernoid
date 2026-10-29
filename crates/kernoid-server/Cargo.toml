@@ -33,6 +33,7 @@ kernoid-module = { version = "0.1.0", path = "../kernoid-module" }
 kernoid-oidc = { version = "0.1.0", path = "../kernoid-oidc" }
 kernoid-smtp = { version = "0.1.0", path = "../kernoid-smtp" }
 kernoid-store = { version = "0.1.0", path = "../kernoid-store" }
+mail-builder = "1.0.0"
 metrics = "0.24.6"
 percent-encoding = "2.3.2"
 metrics-exporter-prometheus = { version = "0.18.3", default-features = false }

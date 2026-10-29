@@ -2,7 +2,7 @@
 # RFC 0005 – Files
 
 - **Status:** draft, 2026-10-28; implemented: all sections (`kernoid-files`, migration 0032; `kernoid-jmap`;
-  `kernoid-server`'s `webdav`); links (11.3, migrations 0038 and 0042) since 0.2.
+  `kernoid-server`'s `webdav`); links (11.3, migrations 0038, 0042 and 0043) since 0.2.
 - **Scope:** how files and directories are stored (sections 1–7), how programs reach them (JMAP: 8, WebDAV: 9, the
   web app: 10), how they are counted (13), shared (11) and kept by the tenant rather than a person (drives, 12).
 
@@ -254,11 +254,15 @@ account –, or lets them add files to a directory, or both.
   A name already taken gets a number (`report (2).pdf`); nothing is replaced, renamed or removed through a link. The
   file belongs to the store's owner and counts against its quota (section 13); the malware scanner sees it as every
   upload. Like opening, adding causes no events – files are data (section 1).
+- **Notice:** what comes in is noted (`file_link_arrivals`); once nothing more has come in through a link for two
+  minutes, the worker delivers one email to the link's maker – or, if an operator made it, to the store's owner – that
+  names the files (up to 50, the rest counted), and removes the notes. Someone without a mailbox gets none. The email
+  has an empty envelope sender and `Auto-Submitted: auto-generated`, so nothing answers it; it is in English.
 - A link ends when it expires, is removed, or its node is destroyed; it does not work while the owner or the tenant is
   deactivated.
 - The web app opens links on its page `link.html`: the token stays in the URL's fragment, which browsers do not send
   to the server or in `Referer`.
-- **OPEN:** limits on how much a link may add (beyond the quota) and a notice to the owner when something comes in;
+- **OPEN:** limits on how much a link may add (beyond the quota); notices in other languages;
   links that reveal their token again later (they would
   need it sealed instead of hashed); limits on downloads per link.
 
