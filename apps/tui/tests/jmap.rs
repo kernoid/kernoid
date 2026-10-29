@@ -546,6 +546,28 @@ fn one_instance_of_a_series_changed_and_left_out() {
 }
 
 #[test]
+fn files_imported_into_a_calendar_and_an_address_book() {
+    use kernoid_tui::jmap::transfer;
+    let server = server();
+    let client = connect(&server);
+    let list = calendars::calendars(&client).unwrap();
+    let calendar = list.iter().find(|c| c.account == "A").unwrap();
+    let ics = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//t//EN\r\nBEGIN:VEVENT\r\nUID:a@x\r\nDTSTART:20261103T100000Z\r\nSUMMARY:Plans\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+    calendars::import(&client, calendar, transfer::events_from_ics(ics).unwrap()).unwrap();
+    let calls = server.api_requests().pop().unwrap().calls();
+    assert_eq!(calls[0].1["sendSchedulingMessages"], false, "importing is not inviting");
+    let created = &calls[0].1["create"]["i0"];
+    assert_eq!((created["title"].as_str(), created["calendarIds"].clone()), (Some("Plans"), json!({ "c-A": true })));
+
+    let books = contacts::address_books(&client).unwrap();
+    let vcf = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Dora\r\nEND:VCARD\r\n";
+    contacts::import(&client, &books[0], transfer::cards_from_vcf(vcf).unwrap()).unwrap();
+    let created = &server.api_requests().pop().unwrap().calls()[0].1["create"]["i0"];
+    assert_eq!(created["name"]["full"], "Dora");
+    assert_eq!(created["addressBookIds"], json!({ "b1": true }));
+}
+
+#[test]
 fn contacts_made_changed_and_removed() {
     let server = server();
     let client = connect(&server);

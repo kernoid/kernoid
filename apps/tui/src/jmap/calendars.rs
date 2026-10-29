@@ -444,6 +444,57 @@ pub fn update(client: &Client, calendar: &Calendar, id: &str, form: &EventForm, 
     Ok(())
 }
 
+/// An event as stored – every property –, for writing it to a file.
+pub fn raw_event(client: &Client, account: &str, id: &str) -> Result<serde_json::Map<String, Value>> {
+    let result = client.call(&[CALENDARS], "CalendarEvent/get", json!({ "accountId": account, "ids": [id] }))?;
+    match result.pointer("/list/0") {
+        Some(Value::Object(event)) => Ok(event.clone()),
+        _ => Err(Error::Protocol("the event is gone".into())),
+    }
+}
+
+/// Makes the events read from a file in `calendar`, sending no invitations – importing is not inviting; how many
+/// were made, and why the others were not.
+pub fn import(
+    client: &Client,
+    calendar: &Calendar,
+    events: Vec<serde_json::Map<String, Value>>,
+) -> Result<(usize, Vec<String>)> {
+    let create: serde_json::Map<String, Value> = events
+        .into_iter()
+        .enumerate()
+        .map(|(n, mut event)| {
+            event.insert("calendarIds".into(), json!({ calendar.id.as_str(): true }));
+            (format!("i{n}"), Value::Object(event))
+        })
+        .collect();
+    let result = client.call(
+        &[CALENDARS],
+        "CalendarEvent/set",
+        json!({ "accountId": calendar.account, "create": create, SCHEDULE: false }),
+    )?;
+    Ok(made_and_refused(&result))
+}
+
+/// How many a `*/set` made, and the descriptions of what it did not.
+pub(crate) fn made_and_refused(result: &Value) -> (usize, Vec<String>) {
+    let made = result.get("created").and_then(Value::as_object).map_or(0, serde_json::Map::len);
+    let refused = result
+        .get("notCreated")
+        .and_then(Value::as_object)
+        .map(|failed| {
+            failed
+                .values()
+                .map(|error| {
+                    let kind = error["type"].as_str().unwrap_or("refused");
+                    error["description"].as_str().map_or_else(|| kind.to_owned(), |text| format!("{kind}: {text}"))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    (made, refused)
+}
+
 /// What an instance of a series may differ in from its series.
 const OVERRIDDEN: [&str; 6] = ["title", "start", "duration", "showWithoutTime", "description", "locations"];
 

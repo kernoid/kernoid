@@ -24,6 +24,7 @@ use kernoid_tui::{
         files::{self, FileNode, Level, Principal, Store, Version},
         mail::{self, Conversation, Email, EmailSummary, Identity, Mailbox},
         push::Push,
+        transfer,
     },
 };
 
@@ -90,6 +91,17 @@ pub enum Prompt {
     },
     /// Find people or groups to share with.
     SharePrincipal(Sharing),
+    /// Write the event to the `.ics` file typed.
+    ExportEvent {
+        account: String,
+        id: String,
+    },
+    /// Read the `.ics` file typed into the first calendar the user may write.
+    ImportEvents,
+    /// Write the contacts listed to the `.vcf` file typed.
+    ExportCards,
+    /// Read the `.vcf` file typed into the first address book the user may write.
+    ImportCards,
 }
 
 #[derive(Debug, Clone)]
@@ -331,6 +343,24 @@ pub fn sanitize(name: &str) -> String {
 }
 
 /// `~/x` as the home directory's `x`.
+/// A file name from a title: what file systems refuse taken out.
+fn file_name(title: &str, extension: &str) -> String {
+    let name: String = title.chars().map(|c| if c.is_alphanumeric() || " -_.".contains(c) { c } else { '_' }).collect();
+    let name = name.trim();
+    format!("{}.{extension}", if name.is_empty() { "export" } else { name })
+}
+
+/// Writes a new file – one that is there already stays as it is.
+fn write_new(path: &std::path::Path, text: &str) -> Result<(), String> {
+    use std::io::Write;
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .map_err(|error| format!("{}: {error}", path.display()))?;
+    file.write_all(text.as_bytes()).map_err(|error| format!("{}: {error}", path.display()))
+}
+
 pub fn expand(path: &str) -> PathBuf {
     match (path.strip_prefix("~/"), std::env::var_os("HOME")) {
         (Some(rest), Some(home)) => PathBuf::from(home).join(rest),
@@ -1367,6 +1397,76 @@ impl App {
             .ok_or_else(|| format!("no address book {name} that you may write"))
     }
 
+    fn export_event(&mut self, account: &str, id: &str, path: PathBuf) {
+        let Some(event) = self.attempt(|app| calendars::raw_event(&app.client, account, id)) else { return };
+        match transfer::ics_from_events(&[event]).and_then(|text| write_new(&path, &text)) {
+            Ok(()) => self.info(format!("saved as {}", path.display())),
+            Err(error) => self.fail(error),
+        }
+    }
+
+    fn import_events(&mut self, path: PathBuf) {
+        let Some(calendar) = self.calendar.calendars.iter().find(|c| c.writable()).cloned() else {
+            self.fail("no calendar you may write");
+            return;
+        };
+        let events = match std::fs::read_to_string(&path)
+            .map_err(|error| error.to_string())
+            .and_then(|text| transfer::events_from_ics(&text))
+        {
+            Ok(events) => events,
+            Err(error) => return self.fail(format!("{}: {error}", path.display())),
+        };
+        if let Some((made, refused)) = self.attempt(|app| calendars::import(&app.client, &calendar, events)) {
+            self.report_import(made, &refused, &calendar_name(&calendar));
+            self.load_events();
+        }
+    }
+
+    fn export_cards(&mut self, path: PathBuf) {
+        let mut cards = Vec::new();
+        let mut accounts: Vec<String> = self.contacts.cards.iter().map(|card| card.account.clone()).collect();
+        accounts.dedup();
+        for account in accounts {
+            let ids: Vec<String> =
+                self.contacts.cards.iter().filter(|card| card.account == account).map(|card| card.id.clone()).collect();
+            let Some(found) = self.attempt(|app| contacts::raw_cards(&app.client, &account, &ids)) else { return };
+            cards.extend(found);
+        }
+        if cards.is_empty() {
+            return self.fail("no contacts listed");
+        }
+        match transfer::vcf_from_cards(&cards).and_then(|text| write_new(&path, &text)) {
+            Ok(()) => self.info(format!("{} contacts saved as {}", cards.len(), path.display())),
+            Err(error) => self.fail(error),
+        }
+    }
+
+    fn import_cards(&mut self, path: PathBuf) {
+        let Some(book) = self.contacts.books.iter().find(|b| b.writable()).cloned() else {
+            self.fail("no address book you may write");
+            return;
+        };
+        let cards = match std::fs::read_to_string(&path)
+            .map_err(|error| error.to_string())
+            .and_then(|text| transfer::cards_from_vcf(&text))
+        {
+            Ok(cards) => cards,
+            Err(error) => return self.fail(format!("{}: {error}", path.display())),
+        };
+        if let Some((made, refused)) = self.attempt(|app| contacts::import(&app.client, &book, cards)) {
+            self.report_import(made, &refused, &book_name(&book));
+            self.load_cards();
+        }
+    }
+
+    fn report_import(&mut self, made: usize, refused: &[String], into: &str) {
+        match refused.first() {
+            None => self.info(format!("{made} imported into {into}")),
+            Some(first) => self.fail(format!("{made} imported into {into}, {} not: {first}", refused.len())),
+        }
+    }
+
     fn new_card(&mut self) {
         let Some(index) = self.contacts.books.iter().position(AddressBook::writable) else {
             self.fail("no address book you may write");
@@ -1651,6 +1751,10 @@ impl App {
                 self.download(account, blob, name, kind, path);
             }
             Prompt::Upload if !text.is_empty() => self.upload(expand(&text)),
+            Prompt::ExportEvent { account, id } if !text.is_empty() => self.export_event(&account, &id, expand(&text)),
+            Prompt::ImportEvents if !text.is_empty() => self.import_events(expand(&text)),
+            Prompt::ExportCards if !text.is_empty() => self.export_cards(expand(&text)),
+            Prompt::ImportCards if !text.is_empty() => self.import_cards(expand(&text)),
             Prompt::NewFolder if !text.is_empty() => {
                 let Some(store) = self.store().map(|s| s.id.clone()) else { return };
                 let parent = self.files.path.last().map(|n| n.id.clone());
@@ -2033,6 +2137,13 @@ impl App {
             KeyCode::Char('a') => self.answer_event("accepted"),
             KeyCode::Char('m') => self.answer_event("tentative"),
             KeyCode::Char('x') => self.answer_event("declined"),
+            KeyCode::Char('X') => {
+                let Some(event) = self.selected_event().cloned() else { return };
+                let name = file_name(event.title.as_deref().unwrap_or("event"), "ics");
+                let prompt = Prompt::ExportEvent { account: event.account.clone(), id: event.event_id().to_owned() };
+                self.prompt(prompt, "Save the event as", format!("~/{name}"));
+            }
+            KeyCode::Char('I') => self.prompt(Prompt::ImportEvents, "Import the events of", "~/".into()),
             _ => {}
         }
     }
@@ -2057,6 +2168,10 @@ impl App {
                 }
             }
             KeyCode::Char('n') => self.new_card(),
+            KeyCode::Char('X') => {
+                self.prompt(Prompt::ExportCards, "Save the contacts listed as", "~/contacts.vcf".into())
+            }
+            KeyCode::Char('I') => self.prompt(Prompt::ImportCards, "Import the contacts of", "~/".into()),
             KeyCode::Char('e') | KeyCode::Enter => self.edit_card(),
             KeyCode::Char('D') | KeyCode::Delete => {
                 if let Some(card) = self.selected_card().cloned() {

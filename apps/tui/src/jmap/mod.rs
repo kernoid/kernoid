@@ -9,6 +9,7 @@ pub mod files;
 pub mod mail;
 pub mod push;
 pub mod srv;
+pub mod transfer;
 
 use std::{collections::BTreeMap, fmt, io::Read, time::Duration};
 

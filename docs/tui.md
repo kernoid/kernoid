@@ -14,10 +14,10 @@ through JMAP – it shares no code with the server and works against any kernoid
 |---|---|
 | Mail | the mailboxes of the account and of shared mailboxes it may use; conversations (threads) – or single emails, `t` switches – with full-text search; reading a whole conversation (HTML emails as plain text – nothing is loaded or run), attachments saved to disk, writing, replying, replying to all and forwarding (with the attachments) in your editor, attaching files, keeping drafts, flagging, marking read or unread, moving, deleting (to the trash; in the trash for good); new mail appears by itself |
 | Files | the account's own files, the tenant's drives and what others share; folders, downloads and uploads of any size with progress (a file of the same name gets the upload as new content, the old one stays as a version), a file's versions – saving an earlier one, or restoring it –, details, sharing folders with people and groups (read, edit, or edit and share – as in the web app), new folders, renaming, deleting (to the trash) |
-| Calendar | the account's calendars and those shared with it, two weeks at a time; repeating events as their instances, all-day events, place, participants with their answers, description; making, changing and deleting events – participants are invited by email; one event of a series on its own, or the whole series –, answering invitations (accept, maybe, decline); events the organizer called off are shown cancelled |
-| Contacts | the cards of the account's address books with search; name, organisations, addresses and phone numbers – as many as a card has, with labels such as `(work)` or `(mobile)` –, notes; making, changing and deleting contacts; writing an email to a contact |
+| Calendar | the account's calendars and those shared with it, two weeks at a time; repeating events as their instances, all-day events, place, participants with their answers, description; making, changing and deleting events – participants are invited by email; one event of a series on its own, or the whole series –, answering invitations (accept, maybe, decline); events the organizer called off are shown cancelled; an event saved as an `.ics` file, the events of one imported |
+| Contacts | the cards of the account's address books with search; name, organisations, addresses and phone numbers – as many as a card has, with labels such as `(work)` or `(mobile)` –, notes; making, changing and deleting contacts; writing an email to a contact; the contacts listed saved as a `.vcf` file, the contacts of one imported |
 
-Not yet (`OPEN`): `.ics` and `.vcf` files, finding the server through DNS on Windows (there is no
+Not yet (`OPEN`): finding the server through DNS on Windows (there is no
 `/etc/resolv.conf`; give `--server`).
 
 **Logging in with OpenID Connect** stays `OPEN` on purpose. A terminal app would use the device authorization grant
@@ -96,8 +96,8 @@ downloads = "/Users/alice/Downloads/kernoid"   # default: the download directory
 | Reading | `Space`/`PgDn` scroll · `n`/`p` next/previous · `A` attachments (`Enter` saves) · `Esc` back |
 | Files | `Enter` open a folder, or a file's versions · `←`/`Backspace` up · `d` download · `u` upload · `v` versions (`Enter` save, `r` restore) · `i` details · `S` share a folder · `n` new folder · `R` rename · `D` delete |
 | Sharing | `a` add a person or group (by name or address) · `Enter` next level · `x` remove · `s` save · `Esc` cancel |
-| Calendar | `[`/`]` or `←`/`→` a week back or on · `t` today · `Enter` details · `n` new · `e` edit (a series: all of it) · `E` edit this one of a series · `D` delete (a series: `o` this one, `y` all) · `a` accept · `m` maybe · `x` decline |
-| Contacts | `/` search · `n` new · `e` or `Enter` edit · `D` delete · `c` write to the contact |
+| Calendar | `[`/`]` or `←`/`→` a week back or on · `t` today · `Enter` details · `n` new · `e` edit (a series: all of it) · `E` edit this one of a series · `D` delete (a series: `o` this one, `y` all) · `a` accept · `m` maybe · `x` decline · `X` save as `.ics` · `I` import an `.ics` file |
+| Contacts | `/` search · `n` new · `e` or `Enter` edit · `D` delete · `c` write to the contact · `X` save the contacts listed as `.vcf` · `I` import a `.vcf` file |
 
 Downloads ask where to save, starting with the download directory; a name that is taken there gets a number. A file
 is written as `<name>.part` and renamed once complete.
@@ -166,5 +166,6 @@ a note after the blank line. Something the server did not take, or that could no
 | Files | JMAP for files ([draft-ietf-jmap-filenode-19](https://datatracker.ietf.org/doc/draft-ietf-jmap-filenode/)): `FileNode` with `shareWith`; kernoid's `FileVersion/get` (`https://kernoid.dev/jmap/file-versions`); principals (RFC 9670) to find people and groups |
 | Calendars | JMAP for Calendars (draft-ietf-jmap-calendars): `Calendar`, `CalendarEvent/query` with `expandRecurrences`, `CalendarEvent/set` with `sendSchedulingMessages` (invitations, answers, cancellations through iTIP) |
 | Contacts | JMAP for Contacts (RFC 9610): `AddressBook`, `ContactCard` (`/set` too) |
+| Files of events and contacts | iCalendar and vCard read and written by calcard, the library kernoid stores them with; imported into the first calendar or address book you may write, without invitations; a file that is there already is not written over |
 | Finding the server | SRV records `_jmap._tcp` (RFC 8620, 2.2), DNS messages through hickory-proto |
 | Push | the event source of RFC 8620, 7.3 – the app opens it again after a break (the dot next to the address shows whether it is open) |

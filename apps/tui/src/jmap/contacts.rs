@@ -331,6 +331,30 @@ pub fn update(client: &Client, book: &AddressBook, id: &str, form: &CardForm) ->
     Ok(())
 }
 
+/// Cards as stored – every property –, for writing them to a file.
+pub fn raw_cards(client: &Client, account: &str, ids: &[String]) -> Result<Vec<Map<String, Value>>> {
+    let result = client.call(&[CONTACTS], "ContactCard/get", json!({ "accountId": account, "ids": ids }))?;
+    Ok(result
+        .get("list")
+        .and_then(Value::as_array)
+        .map(|list| list.iter().filter_map(|card| card.as_object().cloned()).collect())
+        .unwrap_or_default())
+}
+
+/// Makes the cards read from a file in `book`; how many were made, and why the others were not.
+pub fn import(client: &Client, book: &AddressBook, cards: Vec<Map<String, Value>>) -> Result<(usize, Vec<String>)> {
+    let create: Map<String, Value> = cards
+        .into_iter()
+        .enumerate()
+        .map(|(n, mut card)| {
+            card.insert("addressBookIds".into(), json!({ book.id.as_str(): true }));
+            (format!("i{n}"), Value::Object(card))
+        })
+        .collect();
+    let result = client.call(&[CONTACTS], "ContactCard/set", json!({ "accountId": book.account, "create": create }))?;
+    Ok(super::calendars::made_and_refused(&result))
+}
+
 pub fn destroy(client: &Client, account: &str, id: &str) -> Result<()> {
     client.set(&[CONTACTS], "ContactCard", account, json!({ "destroy": [id] }), json!({}))?;
     Ok(())

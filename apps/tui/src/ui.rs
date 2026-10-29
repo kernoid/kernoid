@@ -99,7 +99,7 @@ fn hint(app: &App) -> &'static str {
         Tab::Calendar => {
             "Enter details  n new  e edit  E edit this one  D delete  a accept  m maybe  x decline  [ ] week  t today"
         }
-        Tab::Contacts => "/ search  n new  e edit  D delete  c write to  ? help",
+        Tab::Contacts => "/ search  n new  e edit  D delete  c write to  X save .vcf  I import  ? help",
     }
 }
 
