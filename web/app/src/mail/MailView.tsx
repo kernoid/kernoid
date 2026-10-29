@@ -13,6 +13,7 @@ import {
   type EmailSummary,
   type Mailbox,
   bodyHtml,
+  originalPath,
   bodyText,
   destroy,
   email,
@@ -49,6 +50,14 @@ function sender(summary: EmailSummary): string {
   return from ? from.name || from.email : "";
 }
 
+function storedOriginal(): boolean {
+  try {
+    return localStorage.getItem("kernoid.mail.original") === "on";
+  } catch {
+    return false;
+  }
+}
+
 export function MailView(): JSX.Element {
   const jmap = useJmap();
   const [boxes, { refetch: refetchBoxes }] = createResource(() => [changed("Mailbox"), changed("Email")], () => mailboxes(jmap));
@@ -56,6 +65,16 @@ export function MailView(): JSX.Element {
   const [search, setSearch] = createSignal("");
   const [query, setQuery] = createSignal("");
   const [open, setOpen] = createSignal<string>();
+  // HTML emails readable (cleaned) or as their sender laid them out; kept per browser.
+  const [original, setOriginalSignal] = createSignal(storedOriginal());
+  const setOriginal = (on: boolean) => {
+    setOriginalSignal(on);
+    try {
+      localStorage.setItem("kernoid.mail.original", on ? "on" : "off");
+    } catch {
+      // Not kept: readable next time.
+    }
+  };
   const [composing, setComposing] = createSignal<ComposeStart>();
   const [error, setError] = createSignal<unknown>();
 
@@ -283,7 +302,38 @@ export function MailView(): JSX.Element {
                 <dd class="muted">{new Date(current().sentAt ?? current().receivedAt).toLocaleString(locale)}</dd>
               </dl>
               <Show when={bodyHtml(current())} keyed fallback={<pre class="body">{bodyText(current())}</pre>}>
-                {(html) => <div class="body html" ref={(element) => queueMicrotask(() => showHtml(element, html))} />}
+                {(html) => (
+                  <>
+                    <Show when={originalPath(jmap, current())}>
+                      <div class="segmented view-switch" role="group" aria-label={t("View")}>
+                        <button type="button" classList={{ active: !original() }} aria-pressed={!original()} onClick={() => setOriginal(false)}>
+                          {t("Readable")}
+                        </button>
+                        <button type="button" classList={{ active: original() }} aria-pressed={original()} onClick={() => setOriginal(true)}>
+                          {t("Original")}
+                        </button>
+                      </div>
+                    </Show>
+                    <Show
+                      when={original() && originalPath(jmap, current())}
+                      keyed
+                      fallback={<div class="body html" ref={(element) => queueMicrotask(() => showHtml(element, html))} />}
+                    >
+                      {(path) => (
+                        <>
+                          <iframe
+                            class="body original"
+                            src={path}
+                            title={current().subject ?? t("(no subject)")}
+                            sandbox="allow-popups allow-popups-to-escape-sandbox"
+                            referrerpolicy="no-referrer"
+                          />
+                          <p class="muted small">{t("Images from elsewhere are not loaded, so the sender does not learn that you read it.")}</p>
+                        </>
+                      )}
+                    </Show>
+                  </>
+                )}
               </Show>
               <Show when={current().attachments.length > 0}>
                 <h3>{t("Attachments")}</h3>

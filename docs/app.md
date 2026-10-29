@@ -12,7 +12,7 @@ in here, and someone who is not is sent to the login and back (`/login/account?n
 
 | Part | What it does |
 |---|---|
-| Mail | mailboxes, the emails of each with search, reading – HTML emails as cleaned rich text, without scripts, styles, forms or remote images (no tracking) –, writing with attachments, replying, forwarding, flagging, moving, deleting, downloading attachments; new mail appears without reloading – and, if switched on in the account, as a notification of the browser while the app is open in the background |
+| Mail | mailboxes, the emails of each with search, reading – HTML emails as cleaned rich text, or in their original layout in a sandbox; either way without scripts, forms or remote images (no tracking) –, writing with attachments, replying, forwarding, flagging, moving, deleting, downloading attachments; new mail appears without reloading – and, if switched on in the account, as a notification of the browser while the app is open in the background |
 | Calendar | the account's calendars and those shared with it, a month, a week or a day at a time; events with time or all day, repeating, a place, a video meeting, a description and participants – who are invited by email, and whose answers show; one event of a series changed or deleted on its own, or the whole series; invitations are answered here |
 | Contacts | the address books' contacts with search; name, email, phone, organization and a note |
 | Files | the account's own files, the tenant's drives and what others share, on the side; uploading with progress (also by dragging files onto the page – a file of the same name gets new content, the old one stays as a version), downloading, new folders, renaming, copying and moving to another store (own files, team folders, what others share), the trash, sharing folders with people and groups, links for people without an account (with expiry and password; the page they open shows, plays and downloads), a file's versions with restoring; images, audio, video, PDFs and text shown in place (other files are downloaded); how to connect a file manager over WebDAV; an account with files and no mail sees only this |
@@ -25,5 +25,5 @@ free software under the MIT licence (`web/app`), built with [Solid](https://www.
 installed as an app from the browser.
 
 {: .note }
-OPEN: the emails' own styles (an isolated view), notifications while the app is closed (Web Push), previews of office documents (an
+OPEN: notifications while the app is closed (Web Push), previews of office documents (an
 office suite is planned as a module); in the administration Sieve scripts, import and export.

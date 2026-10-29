@@ -239,3 +239,76 @@ where
         }
     }
 }
+
+#[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
+async fn an_email_is_viewed_as_laid_out_in_a_sandbox(pool: PgPool) {
+    let (app, app_password) = app(&pool).await;
+    let auth = basic("alice@firma.de", &app_password);
+    let (_, _, body) = send(&app, get("/jmap/session", Some(&auth))).await;
+    let account = serde_json::from_str::<Value>(&body).unwrap()["primaryAccounts"]["urn:ietf:params:jmap:mail"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let raw = "From: news@example.org\r\nTo: alice@firma.de\r\nSubject: News\r\nMIME-Version: 1.0\r\n\
+        Content-Type: multipart/related; boundary=b\r\n\r\n--b\r\nContent-Type: text/html; charset=utf-8\r\n\r\n\
+        <style>p{color:red}</style><p>Hi <img src=\"cid:logo@x\"></p><script>alert(1)</script>\r\n\
+        --b\r\nContent-Type: image/png\r\nContent-ID: <logo@x>\r\nContent-Transfer-Encoding: base64\r\n\r\niVBORw0KGgo=\r\n--b--\r\n";
+    let upload = Request::post(format!("/jmap/upload/{account}/"))
+        .header("host", HOST)
+        .header(header::AUTHORIZATION, &auth)
+        .header("content-type", "message/rfc822")
+        .body(Body::from(raw))
+        .unwrap();
+    let (_, _, body) = send(&app, upload).await;
+    let blob = serde_json::from_str::<Value>(&body).unwrap()["blobId"].as_str().unwrap().to_owned();
+    let using = json!(["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"]);
+    let query = json!({ "using": using,
+        "methodCalls": [["Mailbox/query", { "accountId": account, "filter": { "role": "inbox" } }, "m"]] });
+    let api = |body: Value| {
+        Request::post("/jmap/api")
+            .header("host", HOST)
+            .header(header::AUTHORIZATION, &auth)
+            .header("content-type", "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap()
+    };
+    let (_, _, body) = send(&app, api(query)).await;
+    let inbox = serde_json::from_str::<Value>(&body).unwrap()["methodResponses"][0][1]["ids"][0].clone();
+    let import = json!({ "using": using, "methodCalls": [["Email/import", { "accountId": account,
+        "emails": { "e": { "blobId": blob, "mailboxIds": { inbox.as_str().unwrap(): true } } } }, "i"]] });
+    let (_, _, body) = send(&app, api(import)).await;
+    let imported: Value = serde_json::from_str(&body).unwrap();
+    let email =
+        imported["methodResponses"][0][1]["created"]["e"]["id"].as_str().unwrap_or_else(|| panic!("{body}")).to_owned();
+    let get_email = json!({ "using": using, "methodCalls": [["Email/get", { "accountId": account, "ids": [email],
+        "properties": ["htmlBody"] }, "g"]] });
+    let (_, _, body) = send(&app, api(get_email)).await;
+    let part =
+        serde_json::from_str::<Value>(&body).unwrap()["methodResponses"][0][1]["list"][0]["htmlBody"][0]["blobId"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+
+    let (status, headers, page) = send(&app, get(&format!("/jmap/view/{account}/{part}"), Some(&auth))).await;
+    assert_eq!(status, StatusCode::OK, "{page}");
+    let policy = headers[header::CONTENT_SECURITY_POLICY].to_str().unwrap();
+    for directive in
+        ["sandbox allow-popups", "default-src 'none'", "img-src data:", "form-action 'none'", "frame-ancestors 'self'"]
+    {
+        assert!(policy.contains(directive), "{directive} in {policy}");
+    }
+    assert!(!policy.contains("allow-scripts") && !policy.contains("allow-same-origin"), "{policy}");
+    assert_eq!(headers[header::CONTENT_TYPE], "text/html; charset=utf-8");
+    assert_eq!(headers[header::X_CONTENT_TYPE_OPTIONS], "nosniff");
+    assert!(
+        page.contains("<style>p{color:red}</style>") && page.contains("src=\"data:image/png;base64,iVBORw0KGgo=\""),
+        "{page}"
+    );
+
+    // Only a reader of the email; only an HTML part.
+    let (status, _, _) = send(&app, get(&format!("/jmap/view/{account}/{part}"), None)).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    let image = part.rsplit_once('-').map(|(email, _)| format!("{email}-2")).unwrap();
+    let (status, _, _) = send(&app, get(&format!("/jmap/view/{account}/{image}"), Some(&auth))).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}

@@ -110,6 +110,13 @@ export function bodyHtml(email: Email): string | undefined {
     .join("");
 }
 
+/** Where an email's HTML is shown as its sender laid it out – a page of its own, sandboxed by the server (`/jmap/view`). */
+export function originalPath(jmap: Jmap, email: Email): string | undefined {
+  const part = email.htmlBody.find((entry) => entry.type === "text/html" && entry.blobId);
+  if (!part?.blobId) return undefined;
+  return `/jmap/view/${encodeURIComponent(jmap.account(MAIL))}/${encodeURIComponent(part.blobId)}`;
+}
+
 /** The text of an email: its text parts, or its HTML parts as text. */
 export function bodyText(email: Email): string {
   const text = email.textBody.map((part) => (part.partId ? email.bodyValues[part.partId]?.value : undefined)).filter((value) => value !== undefined);

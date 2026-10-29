@@ -226,6 +226,38 @@ const DOWNLOAD_POLICY: &str = "sandbox; default-src 'none'; img-src 'self' data:
 /// The PDF viewers of browsers are plugins: `default-src 'none'` (and so `object-src`) would block them.
 const PDF_POLICY: &str = "frame-ancestors 'self'";
 
+/// An email shown as its sender laid it out (`/jmap/view`): its own styles, embedded images – nothing else. No scripts,
+/// forms or plugins (sandbox), nothing loaded from elsewhere – no remote images, so no tracking –, framed only by the
+/// web app; links open outside the frame.
+const VIEW_POLICY: &str = "sandbox allow-popups allow-popups-to-escape-sandbox; default-src 'none'; \
+    style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'; \
+    frame-ancestors 'self'";
+
+/// The HTML part of an email as a page of its own, for the web app's original view.
+pub(crate) async fn view(
+    State(state): State<AppState>,
+    JmapCaller(caller, _): JmapCaller,
+    Path((account, blob)): Path<(String, String)>,
+) -> Response {
+    let jmap = match jmap(&state) {
+        Ok(jmap) => jmap,
+        Err(response) => return response,
+    };
+    match jmap.email_view(&caller, &account, &blob).await {
+        Ok(html) => {
+            let mut response = html.into_response();
+            let headers = response.headers_mut();
+            headers.insert(header::CONTENT_TYPE, HeaderValue::from_static("text/html; charset=utf-8"));
+            headers.insert(header::CONTENT_SECURITY_POLICY, HeaderValue::from_static(VIEW_POLICY));
+            headers.insert(header::X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
+            headers.insert(header::REFERRER_POLICY, HeaderValue::from_static("no-referrer"));
+            headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
+            response
+        }
+        Err(error) => blob_problem(error),
+    }
+}
+
 /// The response for a download – once its first part could be read: content that cannot be read (an object missing in
 /// storage, a key that does not open it) is a problem with a status, not a connection that breaks off empty.
 pub(crate) async fn download_response(download: kernoid_jmap::Download, ranged: bool) -> Response {

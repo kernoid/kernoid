@@ -191,6 +191,9 @@ a.button.primary { background: var(--accent); color: var(--accent-text); border-
   .event .time { display: none; }
 }
 .body.html { white-space: normal; }
+.view-switch { margin: 8px 0; }
+/* The email's own page: white like a letter, whatever the app's theme – its colours are the sender's. */
+iframe.body.original { display: block; width: 100%; min-height: 60vh; border: 1px solid var(--line); border-radius: var(--radius); background: #fff; }
 .files { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
 .file input { display: none; }
 .file span { display: inline-block; cursor: pointer; padding: 6px 10px; border: 1px dashed var(--line); border-radius: var(--radius); color: var(--muted); }

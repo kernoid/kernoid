@@ -4,7 +4,7 @@
 
 use bytes::Bytes;
 use futures_util::{Stream, stream};
-use mail_parser::{MessageParser, PartType};
+use mail_parser::{MessageParser, MimeHeaders, PartType};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -85,6 +85,42 @@ pub(crate) fn part_content(raw: &[u8], index: usize) -> Option<Bytes> {
             Bytes::from(raw.get(part.offset_body as usize..part.offset_end as usize)?.to_vec())
         }
     })
+}
+
+/// The largest embedded image an email's view takes, and all of them together.
+const MAX_EMBEDDED: usize = 5 * 1024 * 1024;
+const MAX_EMBEDDED_ALL: usize = 20 * 1024 * 1024;
+
+/// An email's HTML part as a page of its own, for the original view: its text, the images it embeds (`cid:`) as
+/// `data:` URLs, links opening outside the frame. The server sends it with a policy that runs nothing, sends nothing
+/// and loads nothing from elsewhere – a sandbox without scripts or forms.
+fn email_view(raw: &[u8], index: usize) -> Option<String> {
+    use base64::Engine;
+    let message = MessageParser::new().parse(raw)?;
+    let PartType::Html(html) = &message.parts.get(index)?.body else { return None };
+    let mut html = html.to_string();
+    let mut budget = MAX_EMBEDDED_ALL;
+    for part in &message.parts {
+        let (Some(id), PartType::Binary(bytes) | PartType::InlineBinary(bytes)) = (part.content_id(), &part.body)
+        else {
+            continue;
+        };
+        let kind = part.content_type().map(|kind| match kind.subtype() {
+            Some(sub) => format!("{}/{sub}", kind.ctype()),
+            None => kind.ctype().to_owned(),
+        });
+        let Some(kind) = kind.filter(|kind| kind.starts_with("image/")) else { continue };
+        if bytes.len() > MAX_EMBEDDED || bytes.len() > budget {
+            continue;
+        }
+        let reference = format!("cid:{}", id.trim_start_matches('<').trim_end_matches('>'));
+        if html.contains(&reference) {
+            budget -= bytes.len();
+            let data = format!("data:{kind};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes));
+            html = html.replace(&reference, &data);
+        }
+    }
+    Some(format!("<meta charset=\"utf-8\"><base target=\"_blank\">{html}"))
 }
 
 /// A blob to send, as it is read: from byte `start` to `end` (exclusive) of `size`.
@@ -261,6 +297,16 @@ impl Jmap {
         self.upload(caller, account, kind, stream::iter([Ok::<_, std::convert::Infallible>(content)])).await
     }
 
+    /// The HTML part `blob` of an email the caller may read, as a page of its own (`email_view`).
+    pub async fn email_view(&self, caller: &Caller, account: &str, blob: &str) -> Result<String, BlobError> {
+        // Whether the caller may read it, as for a download.
+        self.download(caller, account, blob, Some((0, Some(0)))).await?;
+        let Some(BlobId::Part(id, index)) = BlobId::parse(blob) else { return Err(BlobError::NotFound) };
+        let owner = Uuid::parse_str(account).map_err(|_| BlobError::NotFound)?;
+        let raw = self.mail().raw_email(owner, id).await.map_err(|_| BlobError::NotFound)?;
+        email_view(&raw, index).ok_or(BlobError::NotFound)
+    }
+
     /// The raw content of a blob the caller may use as a message (`Email/import`, `Email/parse`).
     pub(crate) async fn blob_bytes(&self, access: &Access, blob: &str) -> Option<Bytes> {
         let account = access.owner;
@@ -287,6 +333,22 @@ impl Jmap {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_html_part_with_its_embedded_images() {
+        let raw = "From: a@x.example\r\nTo: b@x.example\r\nSubject: News\r\nMIME-Version: 1.0\r\n\
+            Content-Type: multipart/related; boundary=b\r\n\r\n--b\r\nContent-Type: text/html; charset=utf-8\r\n\r\n\
+            <p style=\"color:red\">Grüße <img src=\"cid:logo@x\"> <img src=\"https://tracker.example/p.gif\"></p>\r\n\
+            --b\r\nContent-Type: image/png\r\nContent-ID: <logo@x>\r\nContent-Transfer-Encoding: base64\r\n\r\n\
+            iVBORw0KGgo=\r\n--b--\r\n";
+        let view = email_view(raw.as_bytes(), 1).unwrap();
+        assert!(view.starts_with("<meta charset=\"utf-8\"><base target=\"_blank\">"), "{view}");
+        assert!(view.contains("style=\"color:red\">Grüße"), "{view}");
+        assert!(view.contains("src=\"data:image/png;base64,iVBORw0KGgo=\""), "{view}");
+        // Remote images stay as they are: the page's policy does not load them.
+        assert!(view.contains("https://tracker.example/p.gif"));
+        assert_eq!(email_view(raw.as_bytes(), 2), None, "not an HTML part");
+    }
 
     #[test]
     fn blob_ids_round_trip() {

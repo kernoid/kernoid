@@ -392,6 +392,7 @@ pub fn router(state: AppState, modules: Router, http: &Http) -> Router {
         .route("/jmap/session", get(jmap::session))
         .route("/jmap/api", post(jmap::api))
         .route("/jmap/download/{account}/{blob}/{name}", get(jmap::download))
+        .route("/jmap/view/{account}/{blob}", get(jmap::view))
         .route("/jmap/eventsource", get(jmap::event_source))
         .route("/jmap/ws", get(jmap_ws::upgrade))
         .layer(axum::extract::DefaultBodyLimit::max(MAIL_BODY_LIMIT))
