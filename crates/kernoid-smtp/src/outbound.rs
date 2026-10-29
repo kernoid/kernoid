@@ -588,7 +588,8 @@ impl Outbound {
                 })
                 .await?;
             }
-            Recipient::Group { .. } | Recipient::Disabled | Recipient::Unknown => {
+            // A bounce of a bounce to an SRS address is not sent on: bounces are never bounced.
+            Recipient::Group { .. } | Recipient::Disabled | Recipient::Unknown | Recipient::Forwarded { .. } => {
                 tracing::info!(%sender, "a bounce has no one to go to");
             }
         }

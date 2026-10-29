@@ -300,7 +300,8 @@ impl Context<'_> {
                     local.extend(members.into_iter().map(|member| (member, recipient.clone())))
                 }
                 Recipient::NotLocal => remote.push(recipient.clone()),
-                Recipient::Disabled | Recipient::Unknown => {
+                // An SRS address takes bounces from other servers only.
+                Recipient::Disabled | Recipient::Unknown | Recipient::Forwarded { .. } => {
                     return Err(json!({ "type": "invalidRecipients", "invalidRecipients": [recipient] }));
                 }
             }

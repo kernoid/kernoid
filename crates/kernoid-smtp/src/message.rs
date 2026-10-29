@@ -146,6 +146,13 @@ impl Session {
                 }
             }
         }
+        // Bounces to SRS addresses go on to the original sender (RFC 0002, 10.6).
+        for (to, tenant) in self.rcpts.iter().filter_map(|rcpt| rcpt.bounce_to.as_ref()) {
+            if let Err(error) = self.inner.mail.forward_bounce(*tenant, to, full.clone()).await {
+                tracing::warn!(%error, "sending a bounce on to the original sender");
+                temporary += 1;
+            }
+        }
         // Retrying is safe: the recipients that have it skip it as a duplicate (RFC 0002, 9.4).
         if temporary > 0 {
             "451 4.3.0 Temporary failure, try again later".into()

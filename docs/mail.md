@@ -69,8 +69,10 @@ answers `451`/`452` for the whole message.
 
 An account's active [Sieve](https://www.rfc-editor.org/rfc/rfc5228) script decides where its mail goes. kernoid
 carries out `keep`, `fileinto` (also `:create`, with `/` between the names of nested mailboxes), `discard` and flags;
-`redirect` and `vacation` go out through the queue – a redirect with the account as the envelope sender, a vacation
-reply at most once per sender within its `:days`. `reject` and `notify` are skipped, and the message is kept.
+`redirect` and `vacation` go out through the queue – a redirect keeps the original sender, rewritten with
+[SRS](https://en.wikipedia.org/wiki/Sender_Rewriting_Scheme) into an address of the account's domain (so SPF holds
+at the next server, and a bounce goes back to the original sender for 21 days; only bounces – mail with an empty
+sender – are taken at such an address); a vacation reply at most once per sender within its `:days`. `reject` and `notify` are skipped, and the message is kept.
 
 ```sh
 kernoid mail sieve put <ACCOUNT> lists lists.sieve --activate

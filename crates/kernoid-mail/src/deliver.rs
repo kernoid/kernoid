@@ -33,6 +33,12 @@ pub enum Recipient {
     Disabled,
     /// A domain kernoid serves, but nobody has the address.
     Unknown,
+    /// An SRS address of a message kernoid forwarded (RFC 0002, 10.6): a bounce to it goes on to the original
+    /// sender, through the queue of `tenant`.
+    Forwarded {
+        to: String,
+        tenant: Uuid,
+    },
     /// Not a domain of kernoid's: it does not relay.
     NotLocal,
 }
@@ -116,7 +122,15 @@ impl Mail {
         .await?;
         let Some(row) = row else {
             let domain = address.rsplit_once('@').map(|(_, domain)| domain).unwrap_or_default();
-            return Ok(if self.serves_domain(domain).await? { Recipient::Unknown } else { Recipient::NotLocal });
+            if let Some(tenant) = self.domain_tenant(domain).await? {
+                if address.starts_with("srs0=")
+                    && let Some(to) = crate::srs::reverse(&self.srs_secret().await?, &address, crate::srs::today())
+                {
+                    return Ok(Recipient::Forwarded { to, tenant });
+                }
+                return Ok(Recipient::Unknown);
+            }
+            return Ok(Recipient::NotLocal);
         };
         if !row.tenant_active {
             return Ok(Recipient::Disabled);
@@ -146,6 +160,48 @@ impl Mail {
             }
             (None, None) => Ok(Recipient::Unknown),
         }
+    }
+
+    /// The tenant whose verified domain `domain` (lower case, ASCII) is, if any.
+    async fn domain_tenant(&self, domain: &str) -> Result<Option<Uuid>> {
+        Ok(sqlx::query_scalar!("SELECT tenant_id FROM tenant_domains WHERE domain = $1 AND verified", domain)
+            .fetch_optional(&self.pool)
+            .await?)
+    }
+
+    /// The installation's SRS secret (RFC 0002, 10.6), made at its first use.
+    pub(crate) async fn srs_secret(&self) -> Result<Vec<u8>> {
+        if let Some(secret) = sqlx::query_scalar!("SELECT secret FROM srs_secret").fetch_optional(&self.pool).await? {
+            return Ok(secret);
+        }
+        let mut secret = [0u8; 32];
+        getrandom::fill(&mut secret).expect("the system's random source");
+        sqlx::query!("INSERT INTO srs_secret (secret) VALUES ($1) ON CONFLICT (id) DO NOTHING", &secret[..])
+            .execute(&self.pool)
+            .await?;
+        // Another process may have made it first: theirs counts.
+        Ok(sqlx::query_scalar!("SELECT secret FROM srs_secret").fetch_one(&self.pool).await?)
+    }
+
+    /// The SRS address under which kernoid forwards mail of `sender` from `domain` today; `None` if `sender` is no
+    /// address.
+    pub async fn srs_forward(&self, sender: &str, domain: &str) -> Result<Option<String>> {
+        Ok(crate::srs::forward(&self.srs_secret().await?, sender, domain, crate::srs::today()))
+    }
+
+    /// A bounce to an SRS address, sent on to the original sender (RFC 0002, 10.6) – with an empty sender, as
+    /// bounces go.
+    pub async fn forward_bounce(&self, tenant: Uuid, to: &str, raw: Bytes) -> Result<Uuid> {
+        let recipients = [to.to_lowercase()];
+        self.enqueue(crate::Outgoing {
+            tenant,
+            account: None,
+            from: "",
+            recipients: &recipients,
+            raw,
+            lifetime: self.limits.queue_lifetime,
+        })
+        .await
     }
 
     /// Whether `domain` (lower case, ASCII) is a verified domain of a tenant: mail for it is kernoid's.
@@ -245,8 +301,9 @@ impl Mail {
         Ok(Delivered::Stored(self.import_email(account, raw, email).await?))
     }
 
-    /// Queues what a script sends (RFC 0002, 10.6): a redirect with the account as the envelope sender, a vacation
-    /// reply with an empty one – once per sender in its `:days`.
+    /// Queues what a script sends (RFC 0002, 10.6): a redirect with the original sender rewritten by SRS into an
+    /// address of the account's domain (an empty sender stays empty), a vacation reply with an empty one – once per
+    /// sender in its `:days`.
     async fn script_send(
         &self,
         account: Uuid,
@@ -275,9 +332,15 @@ impl Mail {
             .fetch_one(&self.pool)
             .await?;
         let own = without_subaddress(delivery.to);
+        let own_domain = own.rsplit_once('@').map(|(_, domain)| domain).unwrap_or_default();
+        let rewritten = if delivery.from.is_empty() {
+            String::new()
+        } else {
+            self.srs_forward(delivery.from, own_domain).await?.unwrap_or_else(|| own.clone())
+        };
         let (from, message) = match (&send.message, send.vacation) {
             (Some(reply), true) => ("", Bytes::from(reply.clone())),
-            _ => (own.as_str(), raw.clone()),
+            _ => (rewritten.as_str(), raw.clone()),
         };
         let recipients = [send.to.to_lowercase()];
         self.enqueue(crate::Outgoing {

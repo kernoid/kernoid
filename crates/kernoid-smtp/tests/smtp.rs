@@ -144,6 +144,42 @@ fn txt<T: TxtRecordParser + Into<Txt>>(dns: &Dns, name: &str, record: &str) {
     dns.txt.insert(name.into(), value, Instant::now() + FOREVER);
 }
 
+/// Bounces to the SRS address of forwarded mail go on to the original sender; nothing else may use it.
+#[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
+async fn bounces_to_srs_addresses_reach_the_original_sender(pool: PgPool) {
+    let setup = setup(pool.clone()).await;
+    setup.account("alice").await;
+    let srs = setup.mail.srs_forward("carol@other.example", "firma.example").await.unwrap().unwrap();
+    let server = setup.server(Dns::offline(), None);
+    let mut client = connect(&server);
+    assert!(client.response().await.starts_with("220 "));
+    assert!(client.command("EHLO mx.other.example").await.starts_with("250"));
+
+    assert_eq!(client.command("MAIL FROM:<spammer@sender.example>").await, "250 2.1.0 OK");
+    assert_eq!(client.command(&format!("RCPT TO:<{srs}>")).await, "550 5.7.1 Only bounces go to this address");
+    assert!(client.command("RSET").await.starts_with("250"));
+    assert_eq!(client.command("MAIL FROM:<>").await, "250 2.1.0 OK");
+    let forged = srs.replace("=other.example=", "=evil.example=");
+    assert_eq!(client.command(&format!("RCPT TO:<{forged}>")).await, "550 5.1.1 Mailbox does not exist");
+    assert_eq!(client.command(&format!("RCPT TO:<{srs}>")).await, "250 2.1.5 OK");
+    assert!(client.command("DATA").await.starts_with("354 "));
+    client
+        .send(&message("Mail Delivery <postmaster@elsewhere.example>", "Undelivered", "b1@elsewhere.example", ""))
+        .await;
+    assert_eq!(client.response().await, "250 2.0.0 Message accepted for delivery");
+
+    let queued = sqlx::query!(
+        "SELECT r.address, m.envelope_from FROM outbound_recipients r JOIN outbound_messages m ON m.id = r.message_id"
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        queued.iter().map(|row| (row.address.as_str(), row.envelope_from.as_str())).collect::<Vec<_>>(),
+        [("carol@other.example", "")]
+    );
+}
+
 #[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
 async fn mail_is_received_checked_and_stored(pool: PgPool) {
     let setup = setup(pool).await;

@@ -19,6 +19,9 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 - Sending as a group: a group may let its members send from its addresses (`PUT /v1/groups/{id}/send-as`, GraphQL
   `setGroupSendAs`, a switch in the administration); they appear among the members' JMAP identities, and submission
   accepts them.
+- SRS for forwarded mail: a Sieve `redirect` keeps the original sender, rewritten into an address of the account's
+  domain; bounces to it go on to the original sender (migration 0035, the secret in `srs_secret`). Before, the
+  forwarding account was the sender and bounces ended with it.
 - `http.public_port`: instances reached on a port other than 443 or 80 name it in their issuer and links (JMAP);
   `deploy/compose` sets 8080.
 

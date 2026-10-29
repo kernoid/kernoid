@@ -16,6 +16,7 @@ bytes = "1.12.1"
 chrono = { version = "0.4.45", features = ["serde"] }
 futures-util = { version = "0.3.34", default-features = false }
 getrandom = "0.4.3"
+hmac = "0.13.0"
 kernoid-store = { version = "0.1.0", path = "../kernoid-store" }
 mail-parser = { version = "0.11.9", features = ["full_encoding"] }
 sieve-rs = "1.0.2"

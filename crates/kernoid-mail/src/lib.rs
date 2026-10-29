@@ -18,6 +18,7 @@ mod outbox;
 mod parse;
 mod scripts;
 mod search;
+pub mod srs;
 mod store;
 mod thread;
 mod uploads;

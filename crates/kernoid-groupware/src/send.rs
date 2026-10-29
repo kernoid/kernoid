@@ -107,7 +107,8 @@ impl Groupware {
                         }
                     }
                     Recipient::NotLocal => remote.push(to),
-                    Recipient::Disabled | Recipient::Unknown => {}
+                    // An SRS address takes bounces only.
+                    Recipient::Disabled | Recipient::Unknown | Recipient::Forwarded { .. } => {}
                 }
             }
             if !remote.is_empty() {

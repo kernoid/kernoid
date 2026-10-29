@@ -55,6 +55,8 @@ pub(crate) struct Rcpt {
     pub accounts: Vec<Uuid>,
     /// For another server (submission only): it goes through the queue.
     pub remote: bool,
+    /// An SRS address (RFC 0002, 10.6): the bounce goes on to this original sender, through this tenant's queue.
+    pub bounce_to: Option<(String, Uuid)>,
 }
 
 pub(crate) struct Session {
@@ -462,6 +464,17 @@ impl Session {
                 }
             },
             Ok(Recipient::Group { members, .. }) => members,
+            // Only bounces go back to the original sender of forwarded mail – nobody else may use kernoid to send
+            // mail on this way.
+            Ok(Recipient::Forwarded { to, tenant }) => {
+                if self.mail_from.as_ref().is_some_and(|from| !from.address.is_empty()) {
+                    self.reply("550 5.7.1 Only bounces go to this address");
+                    return;
+                }
+                self.rcpts.push(Rcpt { address, accounts: Vec::new(), remote: false, bounce_to: Some((to, tenant)) });
+                self.reply("250 2.1.5 OK");
+                return;
+            }
             Ok(Recipient::Disabled) => {
                 self.reply("550 5.2.1 Mailbox disabled");
                 return;
@@ -480,7 +493,7 @@ impl Session {
                 return;
             }
         };
-        self.rcpts.push(Rcpt { address, accounts, remote: false });
+        self.rcpts.push(Rcpt { address, accounts, remote: false, bounce_to: None });
         self.reply("250 2.1.5 OK");
     }
 

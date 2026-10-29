@@ -453,10 +453,19 @@ async fn scripts_redirect_and_answer_through_the_queue(pool: PgPool) {
     }
     assert_eq!(queued().await, [("carol@other.example".to_owned(), String::new())]);
 
-    // A redirect sends the message on, with the account (without its subaddress) as envelope sender, and keeps no copy.
+    // A redirect sends the message on and keeps no copy – with the original sender rewritten by SRS into an address
+    // of the account's domain, which takes the bounce back to that sender.
     mail.put_sieve_script(alice, "forward", r#"redirect "alice@elsewhere.example";"#, true).await.unwrap();
     assert_eq!(mail.deliver(alice, incoming("r1"), delivery).await.unwrap(), kernoid_mail::Delivered::Discarded);
-    assert_eq!(queued().await[1], ("alice@elsewhere.example".to_owned(), "alice@firma.example".to_owned()));
+    let (to, srs) = queued().await[1].clone();
+    assert_eq!(to, "alice@elsewhere.example");
+    assert!(srs.starts_with("SRS0=") && srs.ends_with("=other.example=carol@firma.example"), "{srs}");
+    match mail.resolve_recipient(&srs.to_lowercase()).await.unwrap() {
+        kernoid_mail::Recipient::Forwarded { to, .. } => assert_eq!(to, "carol@other.example"),
+        other => panic!("{other:?}"),
+    }
+    let forged = srs.replace("=other.example=", "=evil.example=").to_lowercase();
+    assert!(matches!(mail.resolve_recipient(&forged).await.unwrap(), kernoid_mail::Recipient::Unknown));
 }
 
 #[sqlx::test(migrator = "kernoid_store::MIGRATOR")]

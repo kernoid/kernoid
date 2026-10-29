@@ -206,7 +206,8 @@ impl Session {
                 self.reply("550 5.2.1 Mailbox disabled");
                 return;
             }
-            Ok(Recipient::Unknown) => {
+            // An SRS address takes bounces from other servers only.
+            Ok(Recipient::Unknown | Recipient::Forwarded { .. }) => {
                 self.reply("550 5.1.1 Mailbox does not exist");
                 return;
             }
@@ -216,7 +217,7 @@ impl Session {
                 return;
             }
         };
-        self.rcpts.push(Rcpt { address, accounts, remote });
+        self.rcpts.push(Rcpt { address, accounts, remote, bounce_to: None });
         self.reply("250 2.1.5 OK");
     }
 

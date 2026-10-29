@@ -279,8 +279,11 @@ The check reads DNS when asked; it changes nothing. **OPEN:** setting the record
 
 ### 10.6 Sieve that sends
 
-With the queue, the Sieve actions of 9.4 that need sending work: `redirect` sends the message on with the account
-as the envelope sender (so that SPF holds at the next server; **OPEN:** SRS), `vacation`
+With the queue, the Sieve actions of 9.4 that need sending work: `redirect` sends the message on with the original
+sender rewritten by SRS into an address of the account's domain (`SRS0=<hash>=<day>=<domain>=<local>@…`, the hash an
+HMAC-SHA256 in base32 with the installation's secret in `srs_secret`, good for 21 days) – so that SPF holds at the
+next server and bounces find the original sender: the MX takes such an address only from an empty sender and
+sends the bounce on through the queue; an empty sender stays empty. `vacation`
 ([RFC 5230](https://www.rfc-editor.org/rfc/rfc5230)) answers each sender at most once in `:days` (seven by default)
 and never to mailing lists, automatic mail or an empty sender (sieve-rs builds the reply; whom it went to is kept in
 `sieve_vacation_sent`). **OPEN:** `reject` and `notify`, and the `duplicate` test (RFC 7352), which sees nothing
