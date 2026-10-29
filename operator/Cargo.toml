@@ -37,3 +37,8 @@ thiserror = "=2.0.21"
 tokio = { version = "=1.53.3", features = ["rt-multi-thread", "macros", "signal"] }
 tracing = "=0.1.44"
 tracing-subscriber = { version = "=0.3.23", features = ["env-filter", "json"] }
+
+# Debug builds keep file and line for backtraces, not the full debug information: the build directory stays a
+# fraction of the size (the full one grew to hundreds of GB).
+[profile.dev]
+debug = "line-tables-only"

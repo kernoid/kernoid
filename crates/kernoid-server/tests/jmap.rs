@@ -47,6 +47,15 @@ async fn app(pool: &PgPool) -> (Router, String) {
     // Changes reach the push streams as in the server: through PostgreSQL's notifications.
     let events = kernoid_mail::MailEvents::default();
     tokio::spawn(events.clone().listen(pool.clone(), tokio_util::sync::CancellationToken::new()));
+    // Listening starts in the background: wait until a notification comes through, so that no change is missed.
+    let mut heard = events.subscribe();
+    let probe = uuid::Uuid::nil().to_string();
+    loop {
+        sqlx::query!("SELECT pg_notify('kernoid_mail', $1)", probe).execute(pool).await.unwrap();
+        if tokio::time::timeout(std::time::Duration::from_millis(200), heard.recv()).await.is_ok() {
+            break;
+        }
+    }
     let state = AppState::new(pool.clone(), blobs, identity, oidc).with_jmap(jmap, events);
     (router(state, Router::new(), &Http::default()), app_password)
 }
