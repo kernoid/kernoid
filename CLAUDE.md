@@ -55,7 +55,8 @@ a member could depend on `kernoid-*` by a path without anyone noticing – apart
 all. Its requirements are minimum versions, as a library's; its `Cargo.lock` pins them (at least two weeks old,
 `apps/tui/scripts/check-age.py --dir=apps/client`). It logs in with HTTP Basic (an address and an app password) and
 sends the credentials only to the origin it logged in to. It is on crates.io with `kernoid-e2e` and `kernoid-sync`, released
-with kernoid in the same version (`cargo publish` in `apps/e2e`, then `apps/client`, then `apps/sync`); the apps of
+with kernoid in the same version – CI's job `crates` publishes them on a version tag through crates.io's trusted
+publishing (environment `crates-io`); the apps of
 `kernoid/apps` take it from there.
 
 `apps/sync` (MIT) is `kernoid-sync`, the file sync of kernoid's apps on the SDK: one round (`Folder::sync`) reads the
