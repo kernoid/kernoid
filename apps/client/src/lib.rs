@@ -11,6 +11,7 @@ pub mod files;
 pub mod mail;
 pub mod oidc;
 pub mod push;
+pub mod reply;
 pub mod srv;
 pub mod transfer;
 

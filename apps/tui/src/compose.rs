@@ -4,16 +4,10 @@
 
 use std::path::PathBuf;
 
-use crate::jmap::mail::{Attachment, Draft, Email, EmailAddress, Identity, format_addresses, parse_addresses};
+use crate::jmap::mail::{Draft, Email, EmailAddress, Identity, format_addresses, parse_addresses};
 
-/// How a message refers to another.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Kind {
-    New,
-    Reply,
-    ReplyAll,
-    Forward,
-}
+/// How a message refers to another – the SDK's.
+pub use crate::jmap::reply::{Kind, identity_for};
 
 /// A message being written, as the editor shows it; files named in `Attach:` lines are uploaded when it is sent.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -23,41 +17,8 @@ pub struct Message {
     pub files: Vec<PathBuf>,
 }
 
-/// `Re: ` or `Fwd: ` before a subject, unless it is there already.
-fn prefixed(prefix: &str, subject: &str) -> String {
-    let subject = subject.trim();
-    if subject.to_lowercase().starts_with(&prefix.to_lowercase()) {
-        subject.to_owned()
-    } else {
-        format!("{prefix}{subject}")
-    }
-}
-
-fn quote(text: &str) -> String {
-    text.lines()
-        .map(|line| if line.is_empty() { ">".to_owned() } else { format!("> {line}") })
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
-fn mine(address: &EmailAddress, identities: &[Identity]) -> bool {
-    identities.iter().any(|identity| identity.email.eq_ignore_ascii_case(&address.email))
-}
-
-/// The identity to write from: the one the original was sent to, or the first.
-pub fn identity_for<'a>(original: Option<&Email>, identities: &'a [Identity]) -> Option<&'a Identity> {
-    let addressed = original.into_iter().flat_map(|email| {
-        email.summary.to.iter().flatten().chain(email.cc.iter().flatten()).cloned().collect::<Vec<_>>()
-    });
-    for address in addressed {
-        if let Some(identity) = identities.iter().find(|i| i.email.eq_ignore_ascii_case(&address.email)) {
-            return Some(identity);
-        }
-    }
-    identities.first()
-}
-
-/// A new message, a reply or a forward of `original`, from `identity`; `text` is the original's text.
+/// A new message, a reply or a forward of `original`, from `identity`; `text` is the original's text. What a reply or
+/// a forward holds is the SDK's (`reply::start`, in English).
 pub fn start(
     kind: Kind,
     original: Option<(&Email, &str)>,
@@ -73,60 +34,7 @@ pub fn start(
             .to_string()
         })
         .unwrap_or_default();
-    let mut draft = Draft::default();
-    let Some((email, text)) = original.filter(|_| kind != Kind::New) else {
-        return Message { from, draft, files: Vec::new() };
-    };
-    let subject = email.summary.subject.clone().unwrap_or_default();
-    let sender = email.summary.from.clone().unwrap_or_default();
-    let date = email.sent_at.clone().unwrap_or_else(|| email.summary.received_at.clone());
-    // As people read it, in local time: `Wed, 28 Oct 2026 19:24`.
-    let date = chrono::DateTime::parse_from_rfc3339(&date)
-        .map(|time| time.with_timezone(&chrono::Local).format("%a, %d %b %Y %H:%M").to_string())
-        .unwrap_or(date);
-    match kind {
-        Kind::Reply | Kind::ReplyAll => {
-            let reply_to = email.reply_to.clone().filter(|list| !list.is_empty()).unwrap_or_else(|| sender.clone());
-            draft.to = reply_to;
-            if kind == Kind::ReplyAll {
-                let mut cc: Vec<EmailAddress> = Vec::new();
-                for address in email.summary.to.iter().flatten().chain(email.cc.iter().flatten()) {
-                    let known = draft.to.iter().chain(cc.iter()).any(|a| a.email.eq_ignore_ascii_case(&address.email));
-                    if !known && !mine(address, identities) {
-                        cc.push(address.clone());
-                    }
-                }
-                draft.cc = cc;
-            }
-            draft.subject = prefixed("Re: ", &subject);
-            let who = format_addresses(&sender);
-            draft.body = format!("\n\nOn {date}, {who} wrote:\n{}\n", quote(text));
-            draft.in_reply_to = email.message_id.clone().unwrap_or_default();
-            draft.references = email.references.clone().unwrap_or_default();
-            draft.references.extend(draft.in_reply_to.iter().cloned());
-        }
-        Kind::Forward => {
-            draft.subject = prefixed("Fwd: ", &subject);
-            draft.body = format!(
-                "\n\n---------- Forwarded message ----------\nFrom: {}\nDate: {date}\nSubject: {subject}\nTo: {}\n\n{text}\n",
-                format_addresses(&sender),
-                format_addresses(email.summary.to.as_deref().unwrap_or_default()),
-            );
-            draft.attachments = email
-                .attachments
-                .iter()
-                .filter_map(|part| {
-                    Some(Attachment {
-                        blob_id: part.blob_id.clone()?,
-                        kind: part.kind.clone(),
-                        name: part.name.clone().unwrap_or_else(|| "attachment".into()),
-                        size: part.size,
-                    })
-                })
-                .collect();
-        }
-        Kind::New => {}
-    }
+    let draft = crate::jmap::reply::start(kind, original, identities, &crate::jmap::reply::Phrases::default());
     Message { from, draft, files: Vec::new() }
 }
 
@@ -304,6 +212,5 @@ mod tests {
         assert_eq!(chosen(&parsed.from, &ids).map(|i| i.id.as_str()), Some("i1"));
         assert!(parse("To: nobody\n\nx", &message).is_err());
         assert!(parse("X-Other: 1\n\nx", &message).is_err());
-        assert_eq!(prefixed("Re: ", "RE: x"), "RE: x");
     }
 }
