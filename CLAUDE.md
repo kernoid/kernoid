@@ -82,7 +82,7 @@ Design decisions are written down as RFCs in `rfcs/` (CC BY 4.0); [0001](rfcs/00
 instances, tenants, aggregates, events, consistency, keys, login and APIs, [0002](rfcs/0002-mail-data-model.md) the
 mail store, [0003](rfcs/0003-accounts-logins-services.md) accounts, logins and services, [0004](rfcs/0004-calendars-and-contacts.md)
 calendars and contacts, [0005](rfcs/0005-files.md) files, [0006](rfcs/0006-end-to-end-encryption.md) post-quantum
-and end-to-end encryption. Change the RFC with the code.
+and end-to-end encryption, [0007](rfcs/0007-push-notifications.md) push notifications. Change the RFC with the code.
 
 ## Rules
 

@@ -376,7 +376,7 @@ stores shared with it (section 12).
   does JMAP over WebSocket ([RFC 8887](https://www.rfc-editor.org/rfc/rfc8887), `/jmap/ws`, since 0.2), which also
   carries requests. Every change to an account's mail notifies PostgreSQL's channel `kernoid_mail` (`NOTIFY`) in its
   transaction, so that any process serving the stream hears of it – no further service. **OPEN:** push
-  subscriptions to a URL (`PushSubscription`, RFC 8620, 7.2).
+  subscriptions to a URL (`PushSubscription`, RFC 8620, 7.2) – designed in RFC 0007.
 - **VacationResponse** (RFC 8621, 8, since 0.2) reads and changes the account's vacation response (9.1).
 - **Original view:** `/jmap/view/{account}/{blob}` serves an HTML email as its sender laid it out, as a page of its
   own in a sandbox – its styles and embedded images, no scripts, no forms, nothing loaded from elsewhere.
