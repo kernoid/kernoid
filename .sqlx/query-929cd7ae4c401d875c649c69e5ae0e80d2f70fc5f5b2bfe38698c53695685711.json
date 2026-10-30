@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, media_type, size FROM file_contents WHERE body_search IS NULL ORDER BY id LIMIT $1",
+  "query": "SELECT c.id, c.media_type, c.size, n.vault_id IS NOT NULL AS \"sealed!\"\n               FROM file_contents c JOIN file_nodes n ON n.id = c.node_id\n               WHERE c.body_search IS NULL ORDER BY c.id LIMIT $1",
   "describe": {
     "columns": [
       {
@@ -35,6 +35,12 @@
             "name": "size"
           }
         }
+      },
+      {
+        "ordinal": 3,
+        "name": "sealed!",
+        "type_info": "Bool",
+        "origin": "Expression"
       }
     ],
     "parameters": {
@@ -45,8 +51,9 @@
     "nullable": [
       false,
       false,
-      false
+      false,
+      null
     ]
   },
-  "hash": "8b0804171f2249a38daca02979b07d598ac5785a3a21b9db6951cc77dad98386"
+  "hash": "929cd7ae4c401d875c649c69e5ae0e80d2f70fc5f5b2bfe38698c53695685711"
 }

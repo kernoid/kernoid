@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT t.e2e_vaults FROM file_accounts f JOIN tenants t ON t.id = f.tenant_id WHERE f.account_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "e2e_vaults",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tenants",
+            "name": "e2e_vaults"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b961e0e09e494c1249fa3ac4f8a330e347844c009bef91eaa5e11c0e5d940261"
+}

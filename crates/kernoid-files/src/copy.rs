@@ -50,12 +50,14 @@ fn copy<'a>(
         if !from.readable(node.id) {
             return Err(FilesError::Forbidden("reading what is copied".into()));
         }
-        let new = match (node.node_type, node.content) {
+        let mut new = match (node.node_type, node.content) {
             (NodeType::File, Some(content)) => {
                 NewNode::file(parent, name, files.existing(content).await?, node.media_type.clone())
             }
             _ => NewNode::directory(parent, name),
         };
+        // A copy inside the vault keeps its encrypted name; out of it, the creation refuses it (RFC 0006, 6).
+        new.encrypted_name = node.encrypted_name.clone();
         let created = files.create(to, new, options).await?.node;
         if node.node_type == NodeType::Directory {
             for child in children(from, Some(node.id)) {

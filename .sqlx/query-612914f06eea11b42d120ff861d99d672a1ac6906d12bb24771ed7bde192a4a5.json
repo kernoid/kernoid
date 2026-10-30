@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE file_nodes SET parent_id = $3, name = $4, content_id = coalesce($5, content_id),\n                    size = coalesce($6, size), media_type = coalesce($7, media_type),\n                    executable = coalesce($8, executable), modified = coalesce($9, modified),\n                    accessed = coalesce($10, accessed), is_subscribed = coalesce($11, is_subscribed),\n                    encrypted_name = coalesce($12, encrypted_name), changed = now()\n             WHERE id = $1 AND account_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Uuid",
+        "Int8",
+        "Text",
+        "Bool",
+        "Timestamptz",
+        "Timestamptz",
+        "Bool",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "612914f06eea11b42d120ff861d99d672a1ac6906d12bb24771ed7bde192a4a5"
+}

@@ -3,7 +3,8 @@
 
 - **Status:** draft, 2026-10-30; implemented: section 2 (post-quantum TLS), 4 (keys: `apps/e2e`, `kernoid-identity`'s
   `openpgp`, migration 0048; WKD and Autocrypt), 5.1–5.2 on the server (`kernoid-mail`'s `e2e`), 8 (policy, recovery
-  key) and the JMAP extension; the apps' side of 5 and sections 6, 7 and 9 are next.
+  key) and the JMAP extension; the web app's side of 5 and 8; section 6 (vaults: `kernoid-files`' `vault`, migration
+  0049, the web app). Sections 7 and 9 are next.
 - **Scope:** what kernoid encrypts so that quantum computers cannot read it later (sections 2–3), and how mail, files,
   calendars and contacts can be encrypted so that only their owners can read them – not the operator, not kernoid
   (sections 4–9).
@@ -197,11 +198,21 @@ directory, not of the account; it cannot be switched later: making a new vault a
   member gets a copy, and a new member's copy waits for a member's app.
 - **Content** is an OpenPGP message encrypted to the vault key, stored in parts like any content (and sealed with the
   tenant's key as well). Versions are encrypted the same way.
-- **Names** are encrypted too: the node's `name` is its id, the real name an OpenPGP message in the property
-  `kernoid:encryptedName`.
+- **Names** are encrypted too: the node's `name` is an id the client chooses (`k-<uuid>`, unique among siblings), the
+  real name an OpenPGP message in the property `kernoid:encryptedName` – also the vault's own name.
+- A vault does not lie in another; nothing moves or is copied into, out of or between vaults – except into the Trash
+  and back, which deleting needs. A copy within a vault keeps the encrypted name.
+- `required` (8.1) for vaults means nothing new may lie outside one.
+- JMAP: `kernoid:vault` (the vault a node lies in, its own id on the root), `kernoid:vaultKey` (the public key, on the
+  root), `kernoid:encryptedName`; `kernoid:newVault` (`publicKey`, `sealed` – the secret key wrapped for the creator)
+  on a new directory; `VaultKey/get` (`ids`: the caller's wrapped key, or null, and the accounts that have one) and
+  `VaultKey/set` (`update` with `members/<account id>`: a wrapped key, or null). Giving a key to another account needs
+  the right to share.
 - **What it costs:** WebDAV does not show vaults; neither content search nor the malware scan sees inside; links
-  (RFC 0005, 11.3) to a file in a vault carry the file's session key in the fragment of the URL (`#…`), which browsers
-  never send to the server.
+  (RFC 0005, 11.3) to a file in a vault are to carry the file's session key in the fragment of the URL (`#…`), which
+  browsers never send to the server – **OPEN**, as are groups as members (each member's copy needs a member's app),
+  a new vault key when a member leaves (what they had, they keep), and files encrypted in pieces (the web app
+  encrypts a file in one piece).
 
 ## 7. Calendars and address books
 

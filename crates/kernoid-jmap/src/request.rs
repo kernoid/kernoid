@@ -367,6 +367,8 @@ impl Jmap {
             "FileNode/query" => context.file_query(args).await,
             "FileNode/queryChanges" => Err(MethodError::new("cannotCalculateChanges", "query again")),
             "FileVersion/get" => context.file_versions(args).await,
+            "VaultKey/get" => context.vault_key_get(args).await,
+            "VaultKey/set" => context.vault_key_set(args).await,
             "Blob/upload" => context.blob_upload(args).await,
             "Blob/get" => context.blob_get(args).await,
             "Blob/lookup" => context.blob_lookup(args).await,

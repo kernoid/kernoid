@@ -47,6 +47,9 @@ pub(crate) const SORT_PROPERTIES: [&str; 7] = ["name", "size", "mediaType", "cre
 const DIRECTORY_PROPERTIES: [&str; 4] = ["role", "isSubscribed", "myRights", "shareWith"];
 const FILE_PROPERTIES: [&str; 4] = ["blobId", "size", "mediaType", "executable"];
 const COMMON_PROPERTIES: [&str; 8] = ["@type", "id", "parentId", "name", "created", "modified", "accessed", "changed"];
+/// kernoid's own (RFC 0006, 6): the vault a node lies in, the vault's public key (on its root), the encrypted name;
+/// `kernoid:newVault` (`publicKey`, `sealed`) makes a new directory a vault.
+const VAULT_PROPERTIES: [&str; 4] = ["kernoid:vault", "kernoid:vaultKey", "kernoid:encryptedName", "kernoid:newVault"];
 /// What `FileNode/get` shows of a node the user can discover but not read (draft, section 5).
 const VISIBLE_UNREADABLE: [&str; 7] = ["@type", "id", "name", "parentId", "myRights", "isSubscribed", "shareWith"];
 
@@ -149,6 +152,15 @@ fn node_object(node: &NodeInfo, view: &View, shares: &Shares, properties: Option
     put("modified", utc(node.modified));
     put("accessed", utc(node.accessed));
     put("changed", utc(node.changed));
+    if node.vault.is_some() {
+        let b64 = |bytes: &Option<Vec<u8>>| {
+            use base64::Engine;
+            bytes.as_deref().map_or(Value::Null, |b| json!(base64::engine::general_purpose::STANDARD.encode(b)))
+        };
+        put("kernoid:vault", json!(node.vault.map(|vault| vault.to_string())));
+        put("kernoid:vaultKey", b64(&node.vault_key));
+        put("kernoid:encryptedName", b64(&node.encrypted_name));
+    }
     match node.node_type {
         NodeType::Directory => {
             put("role", json!(node.role.map(|role| role.as_str())));
@@ -648,6 +660,85 @@ impl Context<'_> {
 
     /// kernoid's `FileVersion/get` (RFC 0005, 6): the contents of one file, the current one first, then the earlier
     /// ones, newest first; a version is restored by `FileNode/set` giving the file its `blobId`.
+    /// `VaultKey/get` (RFC 0006, 6): for each vault asked for (`ids`, required), the caller's wrapped key (`sealed`,
+    /// base64, null until a member gave it) and the accounts that have one (`members`).
+    pub async fn vault_key_get(&self, args: Map<String, Value>) -> MethodResult {
+        use base64::Engine;
+        let (owner, files, access) = self.file_store(&args).await?;
+        let ids = crate::mailbox::ids(&args)?.ok_or_else(|| MethodError::invalid("ids is required"))?;
+        let (mut list, mut not_found) = (Vec::new(), Vec::new());
+        for id in ids {
+            let Some(vault) = self.id(&id) else {
+                not_found.push(Value::String(id));
+                continue;
+            };
+            let sealed = files.vault_key(&access, vault).await;
+            let members = files.vault_members(&access, vault).await;
+            match (sealed, members) {
+                (Ok(sealed), Ok(members)) => list.push(json!({
+                    "id": id,
+                    "sealed": sealed.map(|s| base64::engine::general_purpose::STANDARD.encode(s)),
+                    "members": members.iter().map(Uuid::to_string).collect::<Vec<_>>(),
+                })),
+                (Err(FilesError::NotFound(_) | FilesError::Forbidden(_)), _)
+                | (_, Err(FilesError::NotFound(_) | FilesError::Forbidden(_))) => not_found.push(Value::String(id)),
+                (Err(error), _) | (_, Err(error)) => return Err(error.into()),
+            }
+        }
+        Ok(vec![(
+            "VaultKey/get".into(),
+            json!({ "accountId": owner.to_string(), "list": list, "notFound": not_found }),
+        )])
+    }
+
+    /// `VaultKey/set`: `update` of a vault with `members/<account id>` set to a wrapped key (base64) or null – a
+    /// member who may share gives the vault's key to another account, or takes it away.
+    pub async fn vault_key_set(&self, args: Map<String, Value>) -> MethodResult {
+        use base64::Engine;
+        let (owner, files, access) = self.file_store(&args).await?;
+        let (mut updated, mut not_updated) = (Map::new(), Map::new());
+        if let Some(Value::Object(update)) = args.get("update") {
+            for (id, patch) in update {
+                let result = async {
+                    let vault = self.id(id).ok_or_else(|| json!({ "type": "notFound" }))?;
+                    let patch = patch.as_object().ok_or_else(|| invalid_properties("a patch object"))?;
+                    for (key, value) in patch {
+                        let account = key
+                            .strip_prefix("members/")
+                            .and_then(|account| Uuid::parse_str(account).ok())
+                            .ok_or_else(|| invalid_properties(format!("{key} cannot be set")))?;
+                        let outcome = match value {
+                            Value::Null => files.remove_vault_key(&access, vault, account).await,
+                            Value::String(sealed) => {
+                                let sealed = base64::engine::general_purpose::STANDARD
+                                    .decode(sealed)
+                                    .map_err(|_| invalid_properties("a wrapped key is base64"))?;
+                                files.set_vault_key(&access, vault, account, &sealed).await
+                            }
+                            _ => return Err(invalid_properties("a wrapped key or null")),
+                        };
+                        outcome.map_err(|error| set_error(&error))?;
+                    }
+                    Ok::<_, Value>(())
+                }
+                .await;
+                match result {
+                    Ok(()) => {
+                        updated.insert(id.clone(), Value::Null);
+                    }
+                    Err(error) => {
+                        not_updated.insert(id.clone(), error);
+                    }
+                }
+            }
+        }
+        let or_null = |map: Map<String, Value>| if map.is_empty() { Value::Null } else { Value::Object(map) };
+        Ok(vec![(
+            "VaultKey/set".into(),
+            json!({ "accountId": owner.to_string(), "updated": or_null(updated), "notUpdated": or_null(not_updated) }),
+        )])
+    }
+
     pub async fn file_versions(&self, args: Map<String, Value>) -> MethodResult {
         let (owner, files, access) = self.file_store(&args).await?;
         let node = args
@@ -1231,11 +1322,14 @@ impl Context<'_> {
         for (key, value) in object {
             let known = COMMON_PROPERTIES.contains(&key.as_str())
                 || DIRECTORY_PROPERTIES.contains(&key.as_str())
-                || FILE_PROPERTIES.contains(&key.as_str());
+                || FILE_PROPERTIES.contains(&key.as_str())
+                || VAULT_PROPERTIES.contains(&key.as_str());
             if !known || (other_type.contains(&key.as_str()) && !value.is_null()) {
                 return Err(set(invalid_properties(format!("{key} is not a property of this node"))));
             }
-            if matches!(key.as_str(), "id" | "changed" | "role" | "myRights") && !value.is_null() {
+            if matches!(key.as_str(), "id" | "changed" | "role" | "myRights" | "kernoid:vault" | "kernoid:vaultKey")
+                && !value.is_null()
+            {
                 return Err(set(invalid_properties(format!("{key} is set by the server"))));
             }
         }
@@ -1251,6 +1345,14 @@ impl Context<'_> {
         new.modified = date("modified")?;
         new.accessed = date("accessed")?;
         new.is_subscribed = object.get("isSubscribed").and_then(Value::as_bool).unwrap_or(true);
+        new.encrypted_name = base64_property(object, "kernoid:encryptedName")?;
+        if let Some(vault) = object.get("kernoid:newVault").filter(|value| !value.is_null()) {
+            let vault = vault.as_object().ok_or_else(|| set(invalid_properties("kernoid:newVault is an object")))?;
+            new.vault = Some(kernoid_files::NewVault {
+                public_key: base64_property(vault, "publicKey")?.ok_or_else(|| set(invalid_properties("publicKey")))?,
+                sealed: base64_property(vault, "sealed")?.ok_or_else(|| set(invalid_properties("sealed")))?,
+            });
+        }
         if node_type == NodeType::File {
             new.content = Some(self.content(access, object).await?);
             new.media_type = object.get("mediaType").and_then(Value::as_str).map(str::to_owned);
@@ -1304,10 +1406,24 @@ impl Context<'_> {
                 "modified" => update.modified = Some(date(value)?),
                 "accessed" => update.accessed = Some(date(value)?),
                 "isSubscribed" => update.is_subscribed = Some(value.as_bool().unwrap_or(true)),
+                "kernoid:encryptedName" => update.encrypted_name = base64_property(patch, "kernoid:encryptedName")?,
                 other => return Err(set(invalid_properties(format!("{other} cannot be changed")))),
             }
         }
         files.update(access, id, update, options).await.map_err(store_error)
+    }
+}
+
+/// A base64 property of an object: `None` if missing or null.
+fn base64_property(object: &Map<String, Value>, key: &str) -> Result<Option<Vec<u8>>, CreateError> {
+    use base64::Engine;
+    match object.get(key) {
+        None | Some(Value::Null) => Ok(None),
+        Some(value) => value
+            .as_str()
+            .and_then(|text| base64::engine::general_purpose::STANDARD.decode(text).ok())
+            .map(Some)
+            .ok_or_else(|| set(invalid_properties(format!("{key} is base64")))),
     }
 }
 

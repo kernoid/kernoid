@@ -176,13 +176,14 @@ async fn stores(state: &AppState, caller: &Caller) -> Result<(Files, Vec<Store>)
     Ok((files, stores))
 }
 
-/// The node at `names` below the top of a store's view: `None` for the top itself.
+/// The node at `names` below the top of a store's view: `None` for the top itself. Vaults are not there: what is in
+/// them only kernoid's apps can read (RFC 0006, 6).
 fn resolve<'a>(view: &'a View, names: &[String]) -> std::result::Result<Option<&'a NodeInfo>, StatusCode> {
     let mut parent: Option<&NodeInfo> = None;
     for name in names {
         let next = view
             .nodes()
-            .find(|node| node.parent == parent.map(|parent| parent.id) && &node.name == name)
+            .find(|node| node.parent == parent.map(|parent| parent.id) && &node.name == name && node.vault.is_none())
             .ok_or(StatusCode::NOT_FOUND)?;
         parent = Some(next);
     }
@@ -190,7 +191,7 @@ fn resolve<'a>(view: &'a View, names: &[String]) -> std::result::Result<Option<&
 }
 
 fn children(view: &View, parent: Option<Uuid>) -> Vec<&NodeInfo> {
-    kernoid_files::copy::children(view, parent)
+    kernoid_files::copy::children(view, parent).into_iter().filter(|node| node.vault.is_none()).collect()
 }
 
 /// The names from the top of the store down to a node.

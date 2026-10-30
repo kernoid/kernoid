@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, parent_id, node_type, name, role, content_id, size, media_type, executable,\n                    created, modified, accessed, changed, is_subscribed\n             FROM file_nodes WHERE account_id = $1 ORDER BY id",
+  "query": "SELECT id, parent_id, node_type, name, role, content_id, size, media_type, executable,\n                    created, modified, accessed, changed, is_subscribed, vault_id, vault_key, encrypted_name\n             FROM file_nodes WHERE account_id = $1 ORDER BY id",
   "describe": {
     "columns": [
       {
@@ -156,6 +156,39 @@
             "name": "is_subscribed"
           }
         }
+      },
+      {
+        "ordinal": 14,
+        "name": "vault_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "file_nodes",
+            "name": "vault_id"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "vault_key",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "file_nodes",
+            "name": "vault_key"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "encrypted_name",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "file_nodes",
+            "name": "encrypted_name"
+          }
+        }
       }
     ],
     "parameters": {
@@ -177,8 +210,11 @@
       false,
       false,
       false,
-      false
+      false,
+      true,
+      true,
+      true
     ]
   },
-  "hash": "8762614b8511f53e04567c5c3bdc8c4381d3ec05e11ad4183ccb6b81f892734d"
+  "hash": "5023ca28b6cc3e815d6cfe3b2134b201073cbfa880e8663f40bae61f92cf8e2e"
 }

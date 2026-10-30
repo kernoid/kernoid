@@ -78,6 +78,11 @@ pub struct NodeInfo {
     pub accessed: DateTime<Utc>,
     pub changed: DateTime<Utc>,
     pub is_subscribed: bool,
+    /// The vault it lies in (RFC 0006, 6) – its own id for a vault's root –, the vault's public key (on the root), and
+    /// its real name, encrypted to the vault.
+    pub vault: Option<Uuid>,
+    pub vault_key: Option<Vec<u8>>,
+    pub encrypted_name: Option<Vec<u8>>,
 }
 
 impl NodeInfo {
@@ -99,6 +104,9 @@ impl NodeInfo {
             accessed: now,
             changed: now,
             is_subscribed: true,
+            vault: None,
+            vault_key: None,
+            encrypted_name: None,
         }
     }
 }
@@ -116,6 +124,18 @@ pub struct NewNode {
     pub modified: Option<DateTime<Utc>>,
     pub accessed: Option<DateTime<Utc>>,
     pub is_subscribed: bool,
+    /// A directory made a vault (RFC 0006, 6): the vault's public key, and its secret key encrypted to the creator.
+    pub vault: Option<NewVault>,
+    /// Inside a vault: the real name, encrypted to it (`name` is then an id the client chose).
+    pub encrypted_name: Option<Vec<u8>>,
+}
+
+/// What makes a new directory a vault.
+#[derive(Debug, Clone)]
+pub struct NewVault {
+    pub public_key: Vec<u8>,
+    /// The vault's secret key, encrypted to the creator's key.
+    pub sealed: Vec<u8>,
 }
 
 impl NewNode {
@@ -131,6 +151,8 @@ impl NewNode {
             modified: None,
             accessed: None,
             is_subscribed: true,
+            vault: None,
+            encrypted_name: None,
         }
     }
 
@@ -150,6 +172,8 @@ pub struct NodeUpdate {
     pub modified: Option<DateTime<Utc>>,
     pub accessed: Option<DateTime<Utc>>,
     pub is_subscribed: Option<bool>,
+    /// Inside a vault: the real name, encrypted anew with a rename.
+    pub encrypted_name: Option<Vec<u8>>,
 }
 
 /// What happens when a name is taken among the siblings (JMAP `onExists`).
@@ -240,15 +264,70 @@ macro_rules! node_info {
             accessed: row.accessed,
             changed: row.changed,
             is_subscribed: row.is_subscribed,
+            vault: row.vault_id,
+            vault_key: row.vault_key,
+            encrypted_name: row.encrypted_name,
         }
     }};
+}
+
+/// The vault a node lies in, if any.
+async fn vault_of(connection: &mut PgConnection, account: Uuid, node: Option<Uuid>) -> Result<Option<Uuid>> {
+    let Some(node) = node else { return Ok(None) };
+    Ok(sqlx::query_scalar!("SELECT vault_id FROM file_nodes WHERE id = $1 AND account_id = $2", node, account)
+        .fetch_optional(connection)
+        .await?
+        .flatten())
+}
+
+/// The tenant's rule for vaults (RFC 0006, 8.1): `allowed`, `required` or `forbidden`.
+async fn vault_rule(connection: &mut PgConnection, account: Uuid) -> Result<String> {
+    Ok(sqlx::query_scalar!(
+        "SELECT t.e2e_vaults FROM file_accounts f JOIN tenants t ON t.id = f.tenant_id WHERE f.account_id = $1",
+        account,
+    )
+    .fetch_optional(connection)
+    .await?
+    .unwrap_or_else(|| "allowed".to_owned()))
+}
+
+/// Checks where a node may be in respect of vaults, and returns the vault it lies in: a new vault only outside one and
+/// where the tenant allows it; inside a vault only with an encrypted name, outside only without; outside any vault only
+/// where the tenant does not require vaults.
+async fn placed_in_vault(
+    connection: &mut PgConnection,
+    account: Uuid,
+    id: Uuid,
+    parent: Option<Uuid>,
+    vault: Option<&NewVault>,
+    encrypted_name: bool,
+) -> Result<Option<Uuid>> {
+    let around = vault_of(&mut *connection, account, parent).await?;
+    let inside = match (vault, around) {
+        (Some(_), Some(_)) => return Err(FilesError::Invalid("a vault cannot lie in a vault".into())),
+        (Some(_), None) => {
+            if vault_rule(&mut *connection, account).await? == "forbidden" {
+                return Err(FilesError::Forbidden("the tenant does not allow vaults".into()));
+            }
+            Some(id)
+        }
+        (None, around) => around,
+    };
+    match (inside, encrypted_name) {
+        (Some(_), false) => Err(FilesError::Invalid("a name in a vault is encrypted (kernoid:encryptedName)".into())),
+        (None, true) => Err(FilesError::Invalid("only a name in a vault is encrypted".into())),
+        (None, false) if vault_rule(&mut *connection, account).await? == "required" => {
+            Err(FilesError::Forbidden("the tenant requires files in vaults".into()))
+        }
+        _ => Ok(inside),
+    }
 }
 
 /// The nodes of `account` among `ids`.
 async fn load(connection: &mut PgConnection, account: Uuid, ids: &[Uuid]) -> Result<Vec<NodeInfo>> {
     let rows = sqlx::query!(
         "SELECT id, parent_id, node_type, name, role, content_id, size, media_type, executable,
-                created, modified, accessed, changed, is_subscribed
+                created, modified, accessed, changed, is_subscribed, vault_id, vault_key, encrypted_name
          FROM file_nodes WHERE account_id = $1 AND id = ANY($2) ORDER BY id",
         account,
         ids,
@@ -279,7 +358,7 @@ async fn ancestors(connection: &mut PgConnection, id: Uuid) -> Result<Vec<Uuid>>
 }
 
 /// What `access` may do with a node of its store.
-async fn rights_of(connection: &mut PgConnection, access: &FileAccess, id: Uuid) -> Result<Rights> {
+pub(crate) async fn rights_of(connection: &mut PgConnection, access: &FileAccess, id: Uuid) -> Result<Rights> {
     if access.owned {
         return Ok(Rights::ALL);
     }
@@ -288,7 +367,12 @@ async fn rights_of(connection: &mut PgConnection, access: &FileAccess, id: Uuid)
 
 /// Loads a node `access` may act on, needing `wanted`: a node without any right is unknown (it does not show), one
 /// without the right wanted is refused.
-async fn acting_on(connection: &mut PgConnection, access: &FileAccess, id: Uuid, wanted: Rights) -> Result<NodeInfo> {
+pub(crate) async fn acting_on(
+    connection: &mut PgConnection,
+    access: &FileAccess,
+    id: Uuid,
+    wanted: Rights,
+) -> Result<NodeInfo> {
     let node = load_one(connection, access.owner, id).await?;
     let rights = rights_of(connection, access, id).await?;
     if rights.is_empty() && !access.nodes.contains_key(&id) {
@@ -498,7 +582,7 @@ impl Files {
         self.open(&mut tx, account).await?;
         let rows = sqlx::query!(
             "SELECT id, parent_id, node_type, name, role, content_id, size, media_type, executable,
-                    created, modified, accessed, changed, is_subscribed
+                    created, modified, accessed, changed, is_subscribed, vault_id, vault_key, encrypted_name
              FROM file_nodes WHERE account_id = $1 ORDER BY id",
             account,
         )
@@ -571,6 +655,9 @@ impl Files {
         if new.node_type == NodeType::File && new.content.is_none() {
             return Err(FilesError::Invalid("a file needs its content".into()));
         }
+        if new.vault.is_some() && new.node_type != NodeType::Directory {
+            return Err(FilesError::Invalid("a vault is a directory".into()));
+        }
         let account = access.owner;
         let mut tx = self.pool.begin().await?;
         let mut locked = self.lock_store(&mut tx, account).await?;
@@ -579,6 +666,8 @@ impl Files {
         let (name, destroyed) =
             place(&mut tx, &mut locked, access, modseq, new.parent, new.name, None, options).await?;
         let id = Uuid::now_v7();
+        let vault =
+            placed_in_vault(&mut tx, account, id, new.parent, new.vault.as_ref(), new.encrypted_name.is_some()).await?;
         let now = Utc::now();
         let modified = new.modified.unwrap_or(now);
         let content = match &new.content {
@@ -592,8 +681,9 @@ impl Files {
         let file = new.node_type == NodeType::File;
         sqlx::query!(
             "INSERT INTO file_nodes (id, account_id, parent_id, node_type, name, content_id, size, media_type,
-                                     executable, created, modified, accessed, is_subscribed)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
+                                     executable, created, modified, accessed, is_subscribed, vault_id, vault_key,
+                                     encrypted_name)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)",
             id,
             account,
             new.parent,
@@ -607,9 +697,22 @@ impl Files {
             modified,
             new.accessed.unwrap_or(now),
             new.is_subscribed,
+            vault,
+            new.vault.as_ref().map(|vault| vault.public_key.clone()),
+            new.encrypted_name,
         )
         .execute(&mut *tx)
         .await?;
+        if let Some(created) = &new.vault {
+            sqlx::query!(
+                "INSERT INTO file_vault_keys (vault_id, account_id, sealed) VALUES ($1, $2, $3)",
+                id,
+                access.user,
+                created.sealed,
+            )
+            .execute(&mut *tx)
+            .await?;
+        }
         record(&mut tx, account, modseq, id, Change::Created).await?;
         let node = load_one(&mut tx, account, id).await?;
         tx.commit().await?;
@@ -662,6 +765,32 @@ impl Files {
             }
             let height = height(&mut tx, id).await?;
             check_parent(&mut tx, access, parent, height).await?;
+            // What lies in a vault stays in it – or goes to the Trash, and back –, and a vault's root stays outside any
+            // other (RFC 0006, 6).
+            let around = vault_of(&mut tx, account, parent).await?;
+            let to_trash = match parent {
+                Some(parent) => sqlx::query_scalar!(
+                    r#"SELECT role = 'trash' AS "trash!" FROM file_nodes WHERE id = $1 AND account_id = $2 AND role IS NOT NULL"#,
+                    parent,
+                    account,
+                )
+                .fetch_optional(&mut *tx)
+                .await?
+                .unwrap_or(false),
+                None => false,
+            };
+            let fits = to_trash
+                || match node.vault {
+                    Some(vault) if vault == id => around.is_none(),
+                    Some(vault) => around == Some(vault),
+                    None => around.is_none(),
+                };
+            if !fits {
+                return Err(FilesError::Invalid("nothing moves into, out of or between vaults".into()));
+            }
+        }
+        if update.encrypted_name.is_some() && node.vault.is_none() {
+            return Err(FilesError::Invalid("only a name in a vault is encrypted".into()));
         }
         let modseq = locked.next_modseq(&mut tx).await?;
         let (name, destroyed) = if renamed {
@@ -685,7 +814,8 @@ impl Files {
             "UPDATE file_nodes SET parent_id = $3, name = $4, content_id = coalesce($5, content_id),
                     size = coalesce($6, size), media_type = coalesce($7, media_type),
                     executable = coalesce($8, executable), modified = coalesce($9, modified),
-                    accessed = coalesce($10, accessed), is_subscribed = coalesce($11, is_subscribed), changed = now()
+                    accessed = coalesce($10, accessed), is_subscribed = coalesce($11, is_subscribed),
+                    encrypted_name = coalesce($12, encrypted_name), changed = now()
              WHERE id = $1 AND account_id = $2",
             id,
             account,
@@ -698,6 +828,7 @@ impl Files {
             modified,
             update.accessed,
             is_subscribed,
+            update.encrypted_name,
         )
         .execute(&mut *tx)
         .await?;

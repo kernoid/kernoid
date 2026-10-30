@@ -5,6 +5,7 @@
   import Failure from "../Failure.svelte";
   import { t } from "../i18n.js";
   import { type FileNode, LEVELS, type Principal, type Rights, findPrincipals, level, principals, share } from "./model.js";
+  import { giveKeys } from "./vault.js";
 
   type Level = keyof typeof LEVELS;
 
@@ -34,12 +35,20 @@
     search = "";
   }
 
+  /** Who was shared a vault with but has no key of it yet: groups, and people without a key of their own. */
+  let waiting = $state<Principal[]>([]);
+
   async function save(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     const shareWith: Record<string, Rights> = {};
     for (const entry of entries) shareWith[entry.principal.id] = LEVELS[entry.level];
     try {
       await share(jmap, account, node, shareWith);
+      // A vault's key goes to everyone it is shared with, wrapped for their key (RFC 0006, 6).
+      if (node["kernoid:vaultKey"]) {
+        waiting = await giveKeys(jmap, account, node.id, entries.map((entry) => entry.principal));
+        if (waiting.length > 0) return;
+      }
       onclose(true);
     } catch (failure) {
       error = failure;
@@ -48,6 +57,16 @@
 </script>
 
 <div class="overlay" role="dialog" aria-modal="true" aria-label={t("Share")}>
+  {#if waiting.length > 0}
+    <div class="dialog">
+      <h2>{t("Shared – some still wait for the key")}</h2>
+      <p class="muted">{t("These can open the vault once they have a key of their own and you share it again:")}</p>
+      <ul class="plain">
+        {#each waiting as person (person.id)}<li>{person.name}</li>{/each}
+      </ul>
+      <div class="actions"><button type="button" class="primary" onclick={() => onclose(true)}>{t("Close")}</button></div>
+    </div>
+  {:else}
   <form class="dialog" onsubmit={(event) => void save(event)}>
     <h2>{t("Share")} „{node.name}“</h2>
     <ul class="items shares">
@@ -90,4 +109,5 @@
       <button type="submit" class="primary">{t("Save")}</button>
     </div>
   </form>
+  {/if}
 </div>

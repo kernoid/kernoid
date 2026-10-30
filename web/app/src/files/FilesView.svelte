@@ -10,7 +10,9 @@
     Cable,
     Copy,
     Folder,
+    FolderLock,
     FolderPlus,
+    Lock,
     HardDrive,
     History,
     Link,
@@ -52,6 +54,9 @@
     uploadFile,
   } from "./model.js";
   import ShareDialog from "./ShareDialog.svelte";
+  import { current, e2e, refresh as refreshE2e } from "../e2e/e2e.svelte.js";
+  import Unlock from "../e2e/Unlock.svelte";
+  import { createDirectoryIn, createVault, inVault, renameIn, saveFrom, uploadInto } from "./vault.js";
   import VersionsDialog from "./VersionsDialog.svelte";
   import Viewer from "./Viewer.svelte";
 
@@ -130,6 +135,11 @@
     return store?.mayCreateTopLevel ? LEVELS.edit : LEVELS.read;
   }
 
+  // Whether the account's key is unlocked here: vaults need it.
+  void refreshE2e(jmap).catch(() => undefined);
+  /** The vault the directory shown lies in, if any. */
+  const vaultHere = $derived(trail.value?.at(-1)?.["kernoid:vault"] ?? null);
+
   const inTrash = $derived.by(() => {
     const id = bin.value?.id;
     return id !== undefined && (trail.value ?? []).some((node) => node.id === id);
@@ -157,29 +167,33 @@
     void run(async () => {
       for (const [index, file] of chosen.entries()) {
         const existing = (list.value ?? []).find((node) => node.name === file.name);
-        await uploadFile(
-          jmap,
-          account,
-          parent,
-          file,
-          (sent, total) => {
-            const entry = uploads[index];
-            if (entry) uploads[index] = { ...entry, sent, total };
-          },
-          existing,
-        );
+        const progress = (sent: number, total: number) => {
+          const entry = uploads[index];
+          if (entry) uploads[index] = { ...entry, sent, total };
+        };
+        if (vaultHere && parent) await uploadInto(jmap, account, vaultHere, parent, file, progress, existing);
+        else await uploadFile(jmap, account, parent, file, progress, existing);
       }
     });
   }
 
   function newDirectory(): void {
     const name = window.prompt(t("Name of the new folder"));
-    if (name?.trim()) void run(() => createDirectory(jmap, account, directory, name.trim()));
+    if (!name?.trim()) return;
+    if (vaultHere && directory) void run(() => createDirectoryIn(jmap, account, vaultHere, directory, name.trim()));
+    else void run(() => createDirectory(jmap, account, directory, name.trim()));
+  }
+
+  function newVault(): void {
+    const name = window.prompt(t("Name of the new vault"));
+    if (name?.trim()) void run(() => createVault(jmap, account, directory, name.trim()));
   }
 
   function renameNode(node: FileNode): void {
     const name = window.prompt(t("New name"), node.name);
-    if (name?.trim() && name.trim() !== node.name) void run(() => rename(jmap, account, node, name.trim()));
+    if (!name?.trim() || name.trim() === node.name) return;
+    if (inVault(node)) void run(() => renameIn(jmap, account, node, name.trim()));
+    else void run(() => rename(jmap, account, node, name.trim()));
   }
 
   function remove(node: FileNode): void {
@@ -269,6 +283,14 @@
       </button>
       {#if !inTrash && here.mayAddChildren}
         <button type="button" disabled={busy} onclick={newDirectory}><FolderPlus size={17} />{t("New folder")}</button>
+        {#if !vaultHere && e2e.available && e2e.settings?.policy.vaults !== "forbidden"}
+          <button
+            type="button"
+            disabled={busy || !e2e.unlocked}
+            data-tip={e2e.unlocked ? t("Only those it is shared with can read what is in it") : t("Unlock your key on the account page first")}
+            onclick={newVault}><FolderLock size={17} />{t("New vault")}</button
+          >
+        {/if}
         <label class="button primary" class:disabled={busy}>
           <Upload size={17} />{t("Upload")}
           <input type="file" multiple hidden disabled={busy} onchange={(event) => upload(event.currentTarget.files)} />
@@ -276,6 +298,12 @@
       {/if}
     </div>
     <Failure error={error ?? list.error ?? trail.error} />
+    {#if e2e.available && current() && !e2e.unlocked}
+      <div class="pad">
+        <p class="muted small">{t("Vaults open – and new ones can be made – once your key is unlocked on this page.")}</p>
+        <Unlock onunlock={() => touch("FileNode")} />
+      </div>
+    {/if}
     {#each uploads as entry, index (index)}
       <div class="progress">
         <span class="small">{entry.name}</span>
@@ -304,12 +332,22 @@
                     open(account, node.id);
                   }}
                 >
-                  {#if node.role === "trash"}<Trash2 size={18} />{:else}<Folder size={18} />{/if}
-                  {label(node)}
+                  {#if node.role === "trash"}<Trash2 size={18} />{:else if inVault(node)}<FolderLock size={18} />{:else}<Folder size={18} />{/if}
+                  {node.locked ? t("Encrypted folder") : label(node)}
                 </button>
                 {#if Object.keys(node.shareWith ?? {}).length > 0}
                   <span class="muted small"> · {t("Shared")}</span>
                 {/if}
+              {:else if node.blobId && inVault(node)}
+                <button
+                  type="button"
+                  class="quiet file"
+                  disabled={node.locked}
+                  data-tip={t("Decrypted here and saved")}
+                  onclick={() => void run(() => saveFrom(jmap, account, node, downloadPath(jmap, account, node.blobId ?? "", "encrypted", "application/octet-stream")))}
+                >
+                  <Lock size={15} /><FileIcon name={node.name} type={node.mediaType} />{node.locked ? t("Encrypted file") : node.name}
+                </button>
               {:else if node.blobId}
                 <button type="button" class="quiet file" onclick={() => (viewing = node)}>
                   <FileIcon name={node.name} type={node.mediaType} />{node.name}
@@ -322,21 +360,22 @@
             <td class="muted small">{node.modified ? when(node.modified) : ""}</td>
             <td class="end">
               {#if !node.role}
-                {#if isDirectory(node) && rights.mayShare}
-                  <button type="button" class="quiet icon small" disabled={busy} aria-label={t("Share")} data-tip={t("Share")} onclick={() => (sharing = node)}><Share2 size={17} /></button>
+                {#if isDirectory(node) && rights.mayShare && (!inVault(node) || node["kernoid:vaultKey"])}
+                  <button type="button" class="quiet icon small" disabled={busy || node.locked} aria-label={t("Share")} data-tip={t("Share")} onclick={() => (sharing = node)}><Share2 size={17} /></button>
                 {/if}
-                {#if rights.mayShare && linksAvailable(jmap)}
+                <!-- Links, versions and copies of what is in a vault are not offered yet (RFC 0006, OPEN). -->
+                {#if rights.mayShare && linksAvailable(jmap) && !inVault(node)}
                   <button type="button" class="quiet icon small" disabled={busy} aria-label={t("Link")} data-tip={t("Link")} onclick={() => (linking = node)}><Link size={17} /></button>
                 {/if}
-                {#if !isDirectory(node) && rights.mayRead}
+                {#if !isDirectory(node) && rights.mayRead && !inVault(node)}
                   <button type="button" class="quiet icon small" disabled={busy} aria-label={t("Versions")} data-tip={t("Versions")} onclick={() => (history = node)}><History size={17} /></button>
                 {/if}
-                {#if rights.mayRead}
+                {#if rights.mayRead && !inVault(node)}
                   <button type="button" class="quiet icon small" disabled={busy} aria-label={t("Copy or move")} data-tip={t("Copy or move")} onclick={() => (copying = node)}>
                     <Copy size={17} />
                   </button>
                 {/if}
-                {#if rights.mayRename}
+                {#if rights.mayRename && !node.locked}
                   <button type="button" class="quiet icon small" disabled={busy} aria-label={t("Rename")} data-tip={t("Rename")} onclick={() => renameNode(node)}><Pencil size={17} /></button>
                 {/if}
                 {#if rights.mayDelete}

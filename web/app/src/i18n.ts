@@ -738,6 +738,16 @@ const de: Record<string, string> = {
   "Set in a recovered key": "Wiederhergestellten Schlüssel einsetzen",
   "A key your organisation recovered, or one you kept as a file. You get a new recovery code.": "Ein Schlüssel, den Ihre Organisation wiederhergestellt hat, oder einer, den Sie als Datei aufbewahrt haben. Sie bekommen einen neuen Wiederherstellungscode.",
   "Choose the key file": "Schlüsseldatei wählen",
+  "Name of the new vault": "Name des neuen Tresors",
+  "New vault": "Neuer Tresor",
+  "Only those it is shared with can read what is in it": "Was darin liegt, können nur die lesen, mit denen er geteilt ist",
+  "Unlock your key on the account page first": "Entsperren Sie zuerst Ihren Schlüssel auf der Konto-Seite",
+  "Encrypted folder": "Verschlüsselter Ordner",
+  "Vaults open – and new ones can be made – once your key is unlocked on this page.": "Tresore öffnen sich – und neue lassen sich anlegen –, sobald Ihr Schlüssel auf dieser Seite entsperrt ist.",
+  "Encrypted file": "Verschlüsselte Datei",
+  "Decrypted here and saved": "Hier entschlüsselt und gespeichert",
+  "Shared – some still wait for the key": "Geteilt – einige warten noch auf den Schlüssel",
+  "These can open the vault once they have a key of their own and you share it again:": "Diese können den Tresor öffnen, sobald sie einen eigenen Schlüssel haben und Sie ihn erneut teilen:",
 };
 
 const lang = (navigator.languages?.[0] ?? navigator.language ?? "en").toLowerCase().startsWith("de") ? "de" : "en";

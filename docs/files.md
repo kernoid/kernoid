@@ -50,6 +50,28 @@ tenant. Rights add up down the tree: what is granted on a folder holds for every
 - What is shared with someone appears in their session as another account (JMAP), in `/webdav/` as another folder,
   and in the web app on the side.
 
+## Vaults
+
+A **vault** is a directory whose content only its members can read – not the operator, not kernoid
+([RFC 0006](https://github.com/kernoid/kernoid/blob/main/rfcs/0006-end-to-end-encryption.md)). It needs the account's
+key (see [Mail]({{ '/mail/' | relative_url }}), End-to-end encryption) unlocked in the web app, and the tenant must
+allow it (Administration → Settings; `required` means nothing may be kept outside vaults).
+
+- In the web app: **New vault**. The app makes the vault's own key; kernoid keeps its public key and its secret key
+  encrypted to each member's key. Files go up encrypted and come down decrypted in the browser (saved, not opened in
+  the app); names are encrypted too – kernoid sees ids like `k-…` and sizes.
+- **Sharing** a vault gives the people shared with its key, wrapped for their keys. Someone without a key of their
+  own – and every group, for now – waits: share again once they have one.
+- What lies in a vault stays in it: nothing moves or is copied into, out of or between vaults, except into the Trash
+  and back. WebDAV does not show vaults; the content search, links and versions in the app leave them out.
+- **JMAP:** `kernoid:vault`, `kernoid:vaultKey`, `kernoid:encryptedName` on nodes; `kernoid:newVault` (`publicKey`,
+  `sealed`) creates one; `VaultKey/get` (the caller's wrapped key and who has one) and `VaultKey/set`
+  (`members/<account id>`).
+
+{: .note }
+OPEN: links to files in vaults, groups as members, a new vault key when someone leaves, very large files (encrypted
+in the browser in one piece for now).
+
 ## Search and the trash
 
 - **Search:** the web app's search box finds files and folders of a store by name and – for text files up to 1 MiB

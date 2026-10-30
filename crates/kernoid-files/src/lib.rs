@@ -15,14 +15,15 @@ pub mod copy;
 pub mod housekeeping;
 mod locks;
 mod node;
+mod vault;
 
 pub use access::{FileAccess, Rights, SharedStore, View};
 pub use changes::{Changes, prune_changes};
 pub use content::{Content, ContentInfo, Readable};
 pub use locks::{Lock, LockRequest};
 pub use node::{
-    FORBIDDEN_CHARS, MAX_DEPTH, MAX_DESTROY, MAX_NAME, NewNode, NodeInfo, NodeType, NodeUpdate, OnExists, Role,
-    SetOptions, Written, check_media_type, check_name,
+    FORBIDDEN_CHARS, MAX_DEPTH, MAX_DESTROY, MAX_NAME, NewNode, NewVault, NodeInfo, NodeType, NodeUpdate, OnExists,
+    Role, SetOptions, Written, check_media_type, check_name,
 };
 
 use kernoid_store::{BlobError, BlobStore, PgPool};

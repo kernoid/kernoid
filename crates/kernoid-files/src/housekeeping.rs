@@ -60,10 +60,12 @@ impl Files {
     }
 
     /// Indexes up to `limit` contents not looked at yet; returns how many it looked at. Contents that are not text,
-    /// or too large, get an empty index.
+    /// too large or in a vault (encrypted, RFC 0006, 6) get an empty index.
     pub async fn index_pending(&self, limit: i64) -> Result<u64> {
         let pending = sqlx::query!(
-            "SELECT id, media_type, size FROM file_contents WHERE body_search IS NULL ORDER BY id LIMIT $1",
+            r#"SELECT c.id, c.media_type, c.size, n.vault_id IS NOT NULL AS "sealed!"
+               FROM file_contents c JOIN file_nodes n ON n.id = c.node_id
+               WHERE c.body_search IS NULL ORDER BY c.id LIMIT $1"#,
             limit,
         )
         .fetch_all(&self.pool)
@@ -71,7 +73,7 @@ impl Files {
         let mut done = 0;
         for content in pending {
             let mut text = String::new();
-            if textual(&content.media_type) && (content.size as u64) <= MAX_INDEXED {
+            if !content.sealed && textual(&content.media_type) && (content.size as u64) <= MAX_INDEXED {
                 match self.existing(content.id).await {
                     Ok(stored) => match self.read_all(&stored, MAX_INDEXED).await {
                         Ok(bytes) => text = String::from_utf8_lossy(&bytes).replace('\0', " "),

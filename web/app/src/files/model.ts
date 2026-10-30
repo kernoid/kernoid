@@ -3,6 +3,7 @@
 // tenant's drives –, directories and files with the rights on them, uploads, sharing, versions, the trash.
 
 import { FILENODE, FILE_LINKS, FILE_VERSIONS, type Jmap, JmapError, PRINCIPALS } from "../jmap.js";
+import { openNames } from "./vault.js";
 
 export interface Rights {
   mayRead: boolean;
@@ -25,6 +26,12 @@ export interface FileNode {
   modified?: string | null;
   myRights?: Rights;
   shareWith?: Record<string, Rights> | null;
+  /** In a vault (RFC 0006, 6): the vault, its public key on the root, the encrypted name. */
+  "kernoid:vault"?: string | null;
+  "kernoid:vaultKey"?: string | null;
+  "kernoid:encryptedName"?: string | null;
+  /** In a vault whose key is not at hand here: the name is not known. */
+  locked?: boolean;
 }
 
 /** A store the user reaches. */
@@ -51,7 +58,20 @@ export interface Principal {
   email: string | null;
 }
 
-const PROPERTIES = ["parentId", "name", "role", "blobId", "size", "mediaType", "modified", "myRights", "shareWith"];
+const PROPERTIES = [
+  "parentId",
+  "name",
+  "role",
+  "blobId",
+  "size",
+  "mediaType",
+  "modified",
+  "myRights",
+  "shareWith",
+  "kernoid:vault",
+  "kernoid:vaultKey",
+  "kernoid:encryptedName",
+];
 const USING = [FILENODE, FILE_VERSIONS, PRINCIPALS];
 
 export const NO_RIGHTS: Rights = { mayRead: false, mayAddChildren: false, mayRename: false, mayDelete: false, mayModifyContent: false, mayShare: false };
@@ -113,7 +133,7 @@ export async function children(jmap: Jmap, accountId: string, parent: string | n
     ["FileNode/query", { accountId, filter }, "q"],
     ["FileNode/get", { accountId, properties: PROPERTIES, "#ids": { resultOf: "q", name: "FileNode/query", path: "/ids" } }, "g"],
   ]);
-  return (responses.get("g")?.[0] as { list: FileNode[] } | undefined)?.list ?? [];
+  return openNames(jmap, accountId, (responses.get("g")?.[0] as { list: FileNode[] } | undefined)?.list ?? []);
 }
 
 /** What in a store holds `text` in its name or – for text files kernoid has indexed – its content. */
@@ -122,14 +142,14 @@ export async function search(jmap: Jmap, accountId: string, text: string): Promi
     ["FileNode/query", { accountId, filter: { text }, sort: [{ property: "name" }], limit: 200 }, "q"],
     ["FileNode/get", { accountId, properties: PROPERTIES, "#ids": { resultOf: "q", name: "FileNode/query", path: "/ids" } }, "g"],
   ]);
-  return (responses.get("g")?.[0] as { list: FileNode[] } | undefined)?.list ?? [];
+  return openNames(jmap, accountId, (responses.get("g")?.[0] as { list: FileNode[] } | undefined)?.list ?? []);
 }
 
 /** A directory and the ones above it, from the top down. */
 export async function path(jmap: Jmap, accountId: string, id: string | null): Promise<FileNode[]> {
   if (!id) return [];
   const result = await jmap.call<{ list: FileNode[] }>(USING, "FileNode/get", { accountId, ids: [id], properties: PROPERTIES, fetchParents: true });
-  const byId = new Map(result.list.map((node) => [node.id, node]));
+  const byId = new Map((await openNames(jmap, accountId, result.list)).map((node) => [node.id, node]));
   const out: FileNode[] = [];
   for (let node = byId.get(id); node; node = node.parentId ? byId.get(node.parentId) : undefined) out.unshift(node);
   return out;
