@@ -46,4 +46,28 @@ describe('@kernoid/e2e', () => {
     const summary = JSON.parse(bob.decryptSummary(ada.encryptedSummary(mail, [bobKey])));
     expect(summary).toEqual({ subject: 'The plan', preview: 'Meet at noon.', hasAttachment: false });
   });
+
+  it('recovers a key through the tenant', () => {
+    // The administrator's recovery key, its secret kept as a file.
+    const admin = new Keyring();
+    const recovery = admin.generate('pqc', ['recovery@firma.example']);
+    const recoveryFile = new TextEncoder().encode(admin.exportSecret(recovery));
+
+    // The account's app makes its key and the copy for the recovery key.
+    const account = new Keyring();
+    const key = account.generate('pqc', ['ada@firma.example']);
+    account.addPublic(admin.publicKey(recovery));
+    const copy = account.encrypt(new TextEncoder().encode(account.exportSecret(key)), [recovery], undefined, false);
+
+    // Later, elsewhere: the administrator decrypts the copy with the recovery file …
+    const restorer = new Keyring();
+    restorer.importSecret(recoveryFile);
+    const recovered = restorer.decrypt(copy, []).data;
+
+    // … and the account sets the key in again.
+    const again = new Keyring();
+    expect(again.importSecret(recovered)).toBe(key);
+    const sealed = account.encryptMessage(mail, [key], undefined);
+    expect(new TextDecoder().decode(again.decryptMessage(sealed, []).data)).toContain('The plan');
+  });
 });

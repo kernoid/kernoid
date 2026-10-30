@@ -157,6 +157,31 @@ pub(crate) async fn addresses(
     })
 }
 
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub(crate) struct RecoveryCopyView {
+    /// The account's key in use.
+    fingerprint: String,
+    /// Its secret key, encrypted to the tenant's recovery key: an OpenPGP message, base64.
+    protected: String,
+}
+
+/// The copy of an account's key for the tenant's recovery key (RFC 0006, 8.2) – an administrator's app decrypts it
+/// with the recovery key's secret, which never reaches kernoid (needs `accounts.manage`).
+#[utoipa::path(get, path = "/v1/accounts/{id}/e2e-recovery-copy", tag = "accounts", params(TenantHeader),
+    responses((status = 200, body = RecoveryCopyView), (status = 404, description = "no such account, or no copy", body = Problem)))]
+pub(crate) async fn recovery_copy(
+    State(state): State<AppState>,
+    AdminSession(admin): AdminSession,
+    Path(account): Path<String>,
+) -> Response {
+    let result = async { state.identity.admin_recovery_copy(&admin, id(&account, "the account")?).await }.await;
+    respond(result, |(fingerprint, protected)| {
+        use base64::Engine;
+        let protected = base64::engine::general_purpose::STANDARD.encode(protected);
+        Json(RecoveryCopyView { fingerprint, protected }).into_response()
+    })
+}
+
 /// Changes an account's display name, login name or active state (needs `accounts.manage`).
 #[utoipa::path(patch, path = "/v1/accounts/{id}", tag = "accounts", params(TenantHeader), request_body = AccountChange,
     responses((status = 204), (status = 403, body = Problem)))]

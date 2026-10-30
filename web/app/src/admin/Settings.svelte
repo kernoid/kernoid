@@ -13,6 +13,7 @@
   import Head from "./ui/Head.svelte";
   import Outcome from "./ui/Outcome.svelte";
   import Select from "./ui/Select.svelte";
+  import EndToEnd from "./EndToEnd.svelte";
 
   const action = new Action();
   const tenant = loaded(() => need(admin.GET("/v1/tenant")));
@@ -88,6 +89,8 @@
     </Form>
   </section>
 {/if}
+
+<EndToEnd />
 
 {#if login.value}
   {@const policy = login.value}

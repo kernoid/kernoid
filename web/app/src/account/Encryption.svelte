@@ -12,7 +12,7 @@
   import { MAIL } from "../jmap.js";
   import { identities } from "../mail/model.js";
   import Unlock from "../e2e/Unlock.svelte";
-  import { addPasskey, current, e2e, exportSecret, lock, refresh, removeCopy, setMail, setup } from "../e2e/e2e.svelte.js";
+  import { addPasskey, current, e2e, exportSecret, importRecovered, lock, refresh, removeCopy, setMail, setup } from "../e2e/e2e.svelte.js";
 
   const jmap = useJmap();
   const settingsLoad = loaded(() => refresh(jmap));
@@ -95,6 +95,22 @@
       </dl>
       {#if !e2e.unlocked}
         <Unlock />
+        <details>
+          <summary class="small">{t("Set in a recovered key")}</summary>
+          <p class="muted small">{t("A key your organisation recovered, or one you kept as a file. You get a new recovery code.")}</p>
+          <label class="button">
+            {t("Choose the key file")}
+            <input
+              type="file"
+              accept=".asc,.gpg,application/pgp-keys"
+              hidden
+              onchange={(event) => {
+                const file = event.currentTarget.files?.[0];
+                if (file) void run(async () => (code = await importRecovered(jmap, new Uint8Array(await file.arrayBuffer()))));
+              }}
+            />
+          </label>
+        </details>
       {:else}
         <div class="actions">
           <button type="button" disabled={busy} onclick={() => void run(() => addPasskey(jmap))}><KeyRound size={17} />{t("Unlock with a passkey from now on")}</button>

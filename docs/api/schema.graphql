@@ -1033,6 +1033,11 @@ type QueryRoot {
 	"""
 	tenantLanguage: String
 	"""
+	The copy of an account's key in use for the tenant's recovery key, base64 – decrypted only with the recovery
+	key's secret, which never reaches kernoid (needs `accounts.manage`).
+	"""
+	accountRecoveryCopy(id: String!): String!
+	"""
 	What the tenant's accounts may encrypt end to end, and its recovery key (needs `directory.read`).
 	"""
 	tenantEndToEndPolicy: EndToEndPolicy!

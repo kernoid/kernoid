@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT k.fingerprint, c.protected FROM openpgp_keys k\n             JOIN openpgp_key_copies c ON c.fingerprint = k.fingerprint AND c.label = 'tenant'\n             WHERE k.account_id = $1 AND k.retired_at IS NULL",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "fingerprint",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "openpgp_keys",
+            "name": "fingerprint"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "protected",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "openpgp_key_copies",
+            "name": "protected"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "467472039a903fd32fd46d73063d09b40107fbda61adf0241e698ecaf3bd01bc"
+}

@@ -151,6 +151,14 @@ never reaches kernoid. Set it first: `PUT /v1/tenant/e2e/recovery-key` with `pub
 `setTenantRecoveryKey`, or `kernoid tenant recovery-key <TENANT> < key.asc`. End-to-end then means "only you and your
 organisation"; the apps tell each account so. Both are events (`tenant.e2e_policy_set`, `tenant.recovery_key_set`).
 
+In the web app (Administration → Settings, End-to-end encryption) the recovery key is made in the administrator's
+browser: its secret is saved there as a file, only its public key goes to kernoid. An account whose app had no copy for
+it yet – a key older than the recovery – adds one the next time it is unlocked. To recover an account's key
+(Administration → Accounts → the account, Recover the key), the administrator chooses the recovery key's file: the
+account's copy (`GET /v1/accounts/{id}/e2e-recovery-copy`, GraphQL `accountRecoveryCopy`, `accounts.manage`) is
+decrypted in the browser and saved as the account's key file, which its owner sets in again on their account page –
+and gets a new recovery code.
+
 ## Bootstrapping
 
 The first administrators are set up by the operator:

@@ -694,6 +694,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/accounts/{id}/e2e-recovery-copy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The copy of an account's key for the tenant's recovery key (RFC 0006, 8.2) – an administrator's app decrypts it
+         *     with the recovery key's secret, which never reaches kernoid (needs `accounts.manage`).
+         */
+        get: operations["get_v1_accounts_id_e2e_recovery_copy"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/accounts/{id}/files": {
         parameters: {
             query?: never;
@@ -2574,6 +2594,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/tenant/e2e": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What the tenant's accounts may encrypt end to end, and its recovery key (needs `directory.read`; RFC 0006, 8). */
+        get: operations["get_v1_tenant_e2e"];
+        /**
+         * Sets that policy (needs `tenant.manage`). Recovery through the tenant needs its recovery key first; `forbidden`
+         *     does not touch what is encrypted already.
+         */
+        put: operations["put_v1_tenant_e2e"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tenant/e2e/recovery-key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Sets the tenant's recovery key (needs `tenant.manage`; RFC 0006, 8.2). */
+        put: operations["put_v1_tenant_e2e_recovery_key"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/tenant/files-quota": {
         parameters: {
             query?: never;
@@ -3122,6 +3180,24 @@ export interface components {
             id: string;
             name: string;
         };
+        E2ePolicyBody: {
+            /** @description Encrypted calendars and address books. */
+            collections: components["schemas"]["E2eRuleView"];
+            /** @description Mail encrypted on arrival to the account's key. */
+            mail: components["schemas"]["E2eRuleView"];
+            /** @description Whether every account's secret key must be recoverable with the tenant's recovery key. */
+            recovery: boolean;
+            /** @description Vaults: directories only their members can read. */
+            vaults: components["schemas"]["E2eRuleView"];
+        };
+        E2ePolicyView: components["schemas"]["E2ePolicyBody"] & {
+            recovery_key?: components["schemas"]["RecoveryKeyView"] | null;
+        };
+        /**
+         * @description Whether accounts may use an end-to-end setting (RFC 0006, 8.1).
+         * @enum {string}
+         */
+        E2eRuleView: "allowed" | "required" | "forbidden";
         ExchangeLogin: {
             /** @description For browsers: keep the session in an HttpOnly cookie instead of answering with the token. */
             cookie?: boolean;
@@ -3199,6 +3275,9 @@ export interface components {
              * @description Days what is in a file trash stays; null keeps it.
              */
             trash_days?: number | null;
+        };
+        Fingerprint: {
+            fingerprint: string;
         };
         Finish: {
             /** @description The person agreed to what the application asks for (after `urn:kernoid:problem:consent-required`). */
@@ -3730,6 +3809,24 @@ export interface components {
         RecoveryCodes: {
             /** @description Shown this once; each works once. */
             codes: string[];
+        };
+        RecoveryCopyView: {
+            /** @description The account's key in use. */
+            fingerprint: string;
+            /** @description Its secret key, encrypted to the tenant's recovery key: an OpenPGP message, base64. */
+            protected: string;
+        };
+        RecoveryKeyBody: {
+            /**
+             * @description The OpenPGP public key an administrator's app made, base64 of its binary or armored form; its secret key stays
+             *     with the administrators.
+             */
+            public_key: string;
+        };
+        RecoveryKeyView: {
+            fingerprint: string;
+            /** @description The OpenPGP public key, base64 of its binary form. */
+            public_key: string;
         };
         Registered: {
             /** @description The new account; log in with the address or username and the password. */
@@ -5713,6 +5810,39 @@ export interface operations {
                 content?: never;
             };
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_v1_accounts_id_e2e_recovery_copy: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The tenant to act on – for instance administrators; the caller's own tenant if left out. */
+                "kernoid-tenant"?: string | null;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecoveryCopyView"];
+                };
+            };
+            /** @description no such account, or no copy */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10181,6 +10311,96 @@ export interface operations {
                 content?: never;
             };
             /** @description the record was not found */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_v1_tenant_e2e: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The tenant to act on – for instance administrators; the caller's own tenant if left out. */
+                "kernoid-tenant"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["E2ePolicyView"];
+                };
+            };
+        };
+    };
+    put_v1_tenant_e2e: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The tenant to act on – for instance administrators; the caller's own tenant if left out. */
+                "kernoid-tenant"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["E2ePolicyBody"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description recovery without a recovery key */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    put_v1_tenant_e2e_recovery_key: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The tenant to act on – for instance administrators; the caller's own tenant if left out. */
+                "kernoid-tenant"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecoveryKeyBody"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Fingerprint"];
+                };
+            };
+            /** @description not an OpenPGP key kernoid can use */
             400: {
                 headers: {
                     [name: string]: unknown;

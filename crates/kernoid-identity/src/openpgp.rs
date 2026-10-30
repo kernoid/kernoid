@@ -566,6 +566,24 @@ impl Identity {
         Ok(fingerprint)
     }
 
+    /// The `tenant` copy of an account's key in use – the secret key encrypted to the tenant's recovery key (RFC 0006,
+    /// 8.2): useless without that key's secret, which only the administrators hold. Needs `accounts.manage`.
+    pub async fn admin_recovery_copy(&self, admin: &Admin, account: Uuid) -> Result<(String, Vec<u8>)> {
+        admin.require(Permission::AccountsManage)?;
+        self.admin_account(admin, account).await?;
+        sqlx::query!(
+            "SELECT k.fingerprint, c.protected FROM openpgp_keys k
+             JOIN openpgp_key_copies c ON c.fingerprint = k.fingerprint AND c.label = 'tenant'
+             WHERE k.account_id = $1 AND k.retired_at IS NULL",
+            account,
+        )
+        .fetch_optional(self.pool())
+        .await
+        .map_err(store_error)?
+        .map(|row| (row.fingerprint, row.protected))
+        .ok_or(IdentityError::NotFound("a copy for the recovery key"))
+    }
+
     pub async fn admin_e2e_policy(&self, admin: &Admin) -> Result<(E2ePolicy, Option<(String, Vec<u8>)>)> {
         admin.require(Permission::DirectoryRead)?;
         self.e2e_policy(admin.tenant()).await

@@ -2277,6 +2277,58 @@
         }
       }
     },
+    "/v1/accounts/{id}/e2e-recovery-copy": {
+      "get": {
+        "tags": [
+          "accounts"
+        ],
+        "summary": "The copy of an account's key for the tenant's recovery key (RFC 0006, 8.2) – an administrator's app decrypts it\nwith the recovery key's secret, which never reaches kernoid (needs `accounts.manage`).",
+        "operationId": "get_v1_accounts_id_e2e_recovery_copy",
+        "parameters": [
+          {
+            "name": "kernoid-tenant",
+            "in": "header",
+            "description": "The tenant to act on – for instance administrators; the caller's own tenant if left out.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoveryCopyView"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "no such account, or no copy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/accounts/{id}/files": {
       "get": {
         "tags": [
@@ -12711,6 +12763,23 @@
               "type": "string"
             },
             "description": "Shown this once; each works once."
+          }
+        }
+      },
+      "RecoveryCopyView": {
+        "type": "object",
+        "required": [
+          "fingerprint",
+          "protected"
+        ],
+        "properties": {
+          "fingerprint": {
+            "type": "string",
+            "description": "The account's key in use."
+          },
+          "protected": {
+            "type": "string",
+            "description": "Its secret key, encrypted to the tenant's recovery key: an OpenPGP message, base64."
           }
         }
       },

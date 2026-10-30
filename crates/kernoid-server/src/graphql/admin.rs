@@ -651,6 +651,15 @@ impl AdminQuery {
         identity.admin_tenant_language(&admin).await.map_err(error)
     }
 
+    /// The copy of an account's key in use for the tenant's recovery key, base64 – decrypted only with the recovery
+    /// key's secret, which never reaches kernoid (needs `accounts.manage`).
+    async fn account_recovery_copy(&self, context: &Context<'_>, id: String) -> async_graphql::Result<String> {
+        use base64::Engine;
+        let (identity, admin) = admin(context).await?;
+        let (_, copy) = identity.admin_recovery_copy(&admin, uuid(&id, "the account")?).await.map_err(error)?;
+        Ok(base64::engine::general_purpose::STANDARD.encode(copy))
+    }
+
     /// What the tenant's accounts may encrypt end to end, and its recovery key (needs `directory.read`).
     async fn tenant_end_to_end_policy(&self, context: &Context<'_>) -> async_graphql::Result<EndToEndPolicy> {
         use base64::Engine;

@@ -146,13 +146,8 @@ export async function setup(jmap: Jmap, kind: "pqc" | "compatible", addresses: s
   const copies: Record<string, KeyCopy> = {
     recovery: { protected: base64(keys.protect(fingerprint, module.normalizeRecoveryCode(code))), salt: null },
   };
-  const recovery = e2e.settings?.recoveryKey;
-  if (e2e.settings?.policy.recovery && recovery) {
-    const tenant = keys.addPublic(bytes(recovery.publicKey));
-    // The tenant's copy is the exported secret key, encrypted to the recovery key (RFC 0006, 8.2).
-    const secret = new TextEncoder().encode(keys.exportSecret(fingerprint));
-    copies.tenant = { protected: base64(keys.encrypt(secret, [tenant], undefined, false)), salt: null };
-  }
+  const tenant = await tenantCopy(fingerprint);
+  if (tenant) copies.tenant = tenant;
   await jmap.set([OPENPGP], "OpenPgpKey", own(jmap), {
     create: { key: { publicKey: base64(keys.publicKey(fingerprint)), copies } },
   });
@@ -161,17 +156,60 @@ export async function setup(jmap: Jmap, kind: "pqc" | "compatible", addresses: s
   return code;
 }
 
+/** The copy for the tenant's recovery key (RFC 0006, 8.2): the secret key, armored, encrypted to that key. */
+async function tenantCopy(fingerprint: string): Promise<KeyCopy | undefined> {
+  const recovery = e2e.settings?.recoveryKey;
+  if (!e2e.settings?.policy.recovery || !recovery) return undefined;
+  const keys = await keyring();
+  const tenant = keys.addPublic(bytes(recovery.publicKey));
+  const secret = new TextEncoder().encode(keys.exportSecret(fingerprint));
+  return { protected: base64(keys.encrypt(secret, [tenant], undefined, false)), salt: null };
+}
+
+/** Once unlocked: if the tenant recovers keys and the key in use has no copy for it yet – made before the tenant
+ * switched recovery on, or before a new recovery key –, the copy is added. */
+async function completeCopies(jmap: Jmap): Promise<void> {
+  const key = current();
+  if (!key || e2e.unlocked !== key.id || key.copies.tenant) return;
+  const copy = await tenantCopy(key.id);
+  if (!copy) return;
+  await jmap.set([OPENPGP], "OpenPgpKey", own(jmap), { update: { [key.id]: { "copies/tenant": copy } } });
+  await refresh(jmap);
+}
+
 /** Unlocks the key in use with the recovery code. */
-export async function unlockWithCode(code: string): Promise<void> {
+export async function unlockWithCode(code: string, jmap?: Jmap): Promise<void> {
   const key = current();
   const copy = key?.copies.recovery;
   if (!key || !copy) throw new Error("no key to unlock");
   const module = await library();
   e2e.unlocked = (await keyring()).unlock(bytes(copy.protected), module.normalizeRecoveryCode(code));
+  if (jmap) await completeCopies(jmap).catch(() => undefined);
+}
+
+/** Sets in the key recovered by the organisation (or kept elsewhere): it must be the key in use. Unlocks it and gives
+ * it a new recovery code – the old one may be lost – which is returned to be shown once. */
+export async function importRecovered(jmap: Jmap, armored: Uint8Array): Promise<string> {
+  const key = current();
+  if (!key) throw new Error("no key to recover");
+  const module = await library();
+  const keys = await keyring();
+  const fingerprint = keys.importSecret(armored);
+  if (fingerprint !== key.id) {
+    keys.forget(fingerprint);
+    throw new Error("this is not the key in use");
+  }
+  e2e.unlocked = fingerprint;
+  const code = module.recoveryCode();
+  const copy = { protected: base64(keys.protect(fingerprint, module.normalizeRecoveryCode(code))), salt: null };
+  await jmap.set([OPENPGP], "OpenPgpKey", own(jmap), { update: { [key.id]: { "copies/recovery": copy } } });
+  await refresh(jmap);
+  await completeCopies(jmap).catch(() => undefined);
+  return code;
 }
 
 /** Unlocks every key (in use and retired) that has a copy for the passkey used. */
-export async function unlockWithPasskey(): Promise<void> {
+export async function unlockWithPasskey(jmap?: Jmap): Promise<void> {
   const salts: Record<string, Uint8Array> = {};
   for (const key of e2e.keys) {
     for (const [label, copy] of Object.entries(key.copies)) if (label.startsWith("passkey:") && copy.salt) salts[label] = bytes(copy.salt);
@@ -185,6 +223,7 @@ export async function unlockWithPasskey(): Promise<void> {
     if (!key.retired) e2e.unlocked = fingerprint;
   }
   if (!e2e.unlocked) throw new Error("this passkey has no copy of the key in use");
+  if (jmap) await completeCopies(jmap).catch(() => undefined);
 }
 
 /** Lets a passkey unlock the key in use from now on (it must be unlocked here). */

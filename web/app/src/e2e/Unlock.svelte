@@ -4,12 +4,13 @@
 <script lang="ts">
   import { KeyRound, LockOpen } from "@lucide/svelte";
 
-  import { touch } from "../app.svelte.js";
+  import { touch, useJmap } from "../app.svelte.js";
   import Failure from "../Failure.svelte";
   import { t } from "../i18n.js";
   import { current, unlockWithCode, unlockWithPasskey } from "./e2e.svelte.js";
 
   let { onunlock = () => {} }: { onunlock?: () => void } = $props();
+  const jmap = useJmap();
   let code = $state("");
   let busy = $state(false);
   let error = $state<unknown>();
@@ -33,7 +34,7 @@
 
 <div class="stack unlock">
   {#if passkeys}
-    <button type="button" class="primary" disabled={busy} onclick={() => void run(unlockWithPasskey)}>
+    <button type="button" class="primary" disabled={busy} onclick={() => void run(() => unlockWithPasskey(jmap))}>
       <KeyRound size={17} />{t("Unlock with a passkey")}
     </button>
   {/if}
@@ -41,7 +42,7 @@
     class="row"
     onsubmit={(event) => {
       event.preventDefault();
-      void run(() => unlockWithCode(code));
+      void run(() => unlockWithCode(code, jmap));
     }}
   >
     <input type="text" autocomplete="off" spellcheck="false" placeholder={t("Recovery code")} aria-label={t("Recovery code")} bind:value={code} />

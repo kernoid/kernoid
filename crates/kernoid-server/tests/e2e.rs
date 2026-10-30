@@ -94,7 +94,7 @@ async fn wkd(app: &Router, host: &str, path: &str) -> (StatusCode, Option<String
 
 #[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
 async fn the_tenant_sets_its_policy_and_recovery_key(pool: PgPool) {
-    let (app, _, _) = setup(&pool).await;
+    let (app, identity, bob) = setup(&pool).await;
     let token = token(&app).await;
     let (status, policy) = api(&app, &token, "GET", "/v1/tenant/e2e", None).await;
     assert_eq!(status, StatusCode::OK);
@@ -122,6 +122,17 @@ async fn the_tenant_sets_its_policy_and_recovery_key(pool: PgPool) {
         graphql["data"]["tenantEndToEndPolicy"],
         json!({ "mail": "required", "collections": "forbidden", "recovery": true, "recoveryKeyFingerprint": recovery.fingerprint() })
     );
+    // Bob's key brings its copy for the recovery key, which an administrator can fetch – useless without the secret.
+    let path = format!("/v1/accounts/{bob}/e2e-recovery-copy");
+    assert_eq!(api(&app, &token, "GET", &path, None).await.0, StatusCode::NOT_FOUND);
+    let key = SecretKey::generate(Kind::Pqc, &["bob@firma.de"]).unwrap();
+    let copy = |label: &str, protected: &[u8]| KeyCopy { label: label.into(), protected: protected.to_vec(), salt: None };
+    let copies = vec![copy("recovery", b"by code"), copy("tenant", b"to the recovery key")];
+    identity.add_openpgp_key(bob, &key.public().to_bytes().unwrap(), copies, "test").await.unwrap();
+    let (status, found) = api(&app, &token, "GET", &path, None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!((found["fingerprint"].as_str(), found["protected"].as_str()), (Some(key.fingerprint().as_str()), Some(STANDARD.encode(b"to the recovery key").as_str())));
+
     let mutation = json!({ "query": r#"mutation { setTenantEndToEndPolicy(mail: "sometimes", vaults: "allowed", collections: "allowed", recovery: false) }"# });
     let (_, graphql) = api(&app, &token, "POST", "/graphql", Some(mutation)).await;
     assert!(graphql["errors"].is_array(), "{graphql}");

@@ -25,6 +25,7 @@
     need,
   } from "./api.svelte.js";
   import Grants, { FILE_LEVELS, MAIL_LEVELS } from "./Grants.svelte";
+  import KeyRecovery from "./KeyRecovery.svelte";
   import MailTransfer from "./MailTransfer.svelte";
   import Sieve from "./Sieve.svelte";
   import Buttons from "./ui/Buttons.svelte";
@@ -274,6 +275,10 @@
       </tbody>
     </table>
   </section>
+
+  {#if me?.native && !me.shared}
+    <KeyRecovery {id} name={me.display_name} />
+  {/if}
 
   <section>
     <h2>{t("Quotas")}</h2>

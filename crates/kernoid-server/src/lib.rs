@@ -223,6 +223,7 @@ fn rest() -> OpenApiRouter<AppState> {
         .routes(routes!(admin::accounts::list, admin::accounts::add))
         .routes(routes!(admin::accounts::get, admin::accounts::change))
         .routes(routes!(admin::accounts::addresses))
+        .routes(routes!(admin::accounts::recovery_copy))
         .routes(routes!(admin::accounts::add_alias, admin::accounts::remove_alias))
         .routes(routes!(admin::accounts::set_password))
         .routes(routes!(admin::accounts::reset_second_factors))
