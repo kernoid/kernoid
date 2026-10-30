@@ -132,6 +132,28 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 - A new look for the web app: icons throughout, IBM Plex Sans, a comfortable or compact density, the theme as icons,
   the account's menu behind its picture, a bar at the bottom on phones.
 
+- Post-quantum key exchange (RFC 0006, 2): every TLS connection kernoid makes or takes – HTTPS, SMTP, IMAP, POP3,
+  LDAP, PostgreSQL, ACME, the operator's and the terminal app's – prefers the hybrid X25519MLKEM768 over X25519.
+  Clients without ML-KEM connect as before.
+- End-to-end encryption with OpenPGP (RFC 0006; docs: Mail, Files, Calendars and contacts): content only its owners
+  can read. Keys are made by the account's client – post-quantum (RFC 9980) or compatible – and kernoid keeps their
+  public part and copies of the secret key only as the client protected them (migration 0048). The JMAP extension
+  `https://kernoid.dev/jmap/openpgp` (`OpenPgpKey/*`, `E2eSettings/*`); the Web Key Directory serves the keys in use,
+  and mail sent through the queue carries Autocrypt. `apps/e2e` (MIT) is the library behind it, `@kernoid/e2e` in the
+  web app as WebAssembly.
+- End-to-end encrypted mail: an account that switches it on gets incoming mail encrypted to its key after Sieve, the
+  spam filter and the malware scan (PGP/MIME, the subject protected after RFC 9788); the worker encrypts what it
+  stored before. The web app and the terminal app read such mail, and send encrypted and signed when every recipient
+  has a key – known locally or from their Web Key Directory.
+- Vaults: directories only their members can read (migration 0049). Names and content are encrypted in the browser;
+  sharing a vault hands its key to the members who have one. WebDAV and the content search leave vaults out.
+- Encrypted calendars and address books (migration 0050): a new collection can be made encrypted; its events and
+  contacts are encrypted in the browser. CalDAV and CardDAV do not show such collections, and their events send no
+  invitations.
+- The tenant's policy for end-to-end encryption – mail, vaults, calendars and address books each allowed, required or
+  forbidden – and recovery through the tenant's recovery key, made in the administrator's browser
+  (`GET /v1/accounts/{id}/e2e-recovery-copy`; REST, GraphQL, CLI and the administration).
+
 ### Changed
 
 - The web app and the login UI are written in Svelte 5 (they were Solid and plain TypeScript); they look and behave
@@ -143,6 +165,8 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   `MailGrantView`, `IdpLinkView` and `TenantPolicy` – they had the names of other schemas, so the document described
   them wrong.
 
+- The web app's content security policy allows WebAssembly (`'wasm-unsafe-eval'`) and `blob:` images and media, for
+  end-to-end encryption.
 - The worker logs every delivery attempt – delivered, deferred or bounced – with the recipient's domain (never the
   address); before, successful deliveries left no trace above debug.
 
@@ -150,12 +174,13 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 - Take the new `deploy/compose` with the new image: the 0.1 image refuses the module settings the new compose file
   passes (`[modules.clamav]` did not exist).
-- `kernoid migrate` adds migrations 0034 to 0047 (CI's upgrade check runs them from 0.1.0 with mail and files in it).
+- `kernoid migrate` adds migrations 0034 to 0050 (CI's upgrade check runs them from 0.1.0 with mail and files in it).
 - DKIM: each domain gets an Ed25519 key beside its RSA key – publish the new TXT record `kernoid-ed1._domainkey`
   that the domain's DNS check shows; mail is signed with it once DNS has it.
 - A configuration that set `http.login_ui` or `http.web_app` to the image's old paths must drop them: those
   directories are gone, and the built-in login UI and web app serve instead.
-- Nothing else changes by itself: LDAP, ClamAV and Jitsi stay off until configured.
+- Nothing else changes by itself: LDAP, ClamAV and Jitsi stay off until configured; end-to-end encryption is allowed
+  for every tenant but on for no account until it makes a key and switches it on.
 
 ### Fixed
 
