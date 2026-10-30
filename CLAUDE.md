@@ -54,8 +54,9 @@ the server's: the server's workspace sets `license = "AGPL-3.0-or-later"` for it
 a member could depend on `kernoid-*` by a path without anyone noticing – apart, the SDK cannot reach server code at
 all. Its requirements are minimum versions, as a library's; its `Cargo.lock` pins them (at least two weeks old,
 `apps/tui/scripts/check-age.py --dir=apps/client`). It logs in with HTTP Basic (an address and an app password) and
-sends the credentials only to the origin it logged in to. The apps of `kernoid/apps` take it from crates.io once it is
-published (OPEN).
+sends the credentials only to the origin it logged in to. It is on crates.io with `kernoid-e2e` and `kernoid-sync`, released
+with kernoid in the same version (`cargo publish` in `apps/e2e`, then `apps/client`, then `apps/sync`); the apps of
+`kernoid/apps` take it from there.
 
 `apps/sync` (MIT) is `kernoid-sync`, the file sync of kernoid's apps on the SDK: one round (`Folder::sync`) reads the
 store's changes (`FileNode/changes`, the whole store when the state is too old), scans the folder (size and modification

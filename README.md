@@ -11,12 +11,14 @@
 **kernoid** is one self-hostable system for an organisation's core: an account is created once and is at the same
 time the mailbox, the login for single sign-on and the owner of files. Free software in Rust – everything included.
 
-> **Status:** 0.1.0, a pre-release – identity and single sign-on (OpenID Connect, SAML and OIDC federation, SCIM), mail
-> (SMTP, JMAP, IMAP), calendars and contacts (CalDAV, CardDAV, JMAP), files (JMAP, WebDAV, team folders), a web app
-> with administration and a terminal app. For trying out and testing: no external security audit yet, and formats
-> may still change ([changelog](CHANGELOG.md)). Next is 0.2 – public links, LDAP, a Kubernetes operator, the core
-> completed, virus scanning and Jitsi as the first modules; the first stable release, ready for production, comes with
-> the app for desktop and mobile once falkOSS is incorporated and holds the app stores' developer accounts. The design
+> **Status:** 0.2.0, a pre-release – identity and single sign-on (OpenID Connect, SAML and OIDC federation, SCIM),
+> mail (SMTP, JMAP, IMAP) with end-to-end encryption, calendars and contacts (CalDAV, CardDAV, JMAP), files (JMAP,
+> WebDAV, drives, public links), LDAP for older software, a Kubernetes operator, virus scanning and Jitsi as the first
+> modules, a web app with administration and a terminal app; the Rust SDK on crates.io (`kernoid-client`). For trying
+> out and testing: no external security audit yet, and formats may still change ([changelog](CHANGELOG.md)). The app
+> for desktop and mobile is an unsigned preview ([kernoid/apps](https://github.com/kernoid/apps)); the first stable
+> release, ready for production, comes with it signed once falkOSS is incorporated and holds the app stores'
+> developer accounts. The design
 > is in the [whitepaper](https://github.com/kernoid/whitepaper).
 
 **Documentation:** [kernoid.dev](https://kernoid.dev) – built from [`docs/`](docs/). **Website:** [kernoid.org](https://kernoid.org).
