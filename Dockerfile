@@ -1,6 +1,18 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # One image for every role; the configuration decides what a container does. It carries the Kubernetes operator too.
 
+# The end-to-end library (apps/e2e, MIT) as WebAssembly for the web app.
+FROM docker.io/library/rust:1.99.1-slim-trixie AS e2e
+WORKDIR /src
+COPY rust-toolchain.toml ./
+COPY apps/e2e apps/e2e
+RUN rustup target add wasm32-unknown-unknown
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    cargo install wasm-bindgen-cli --version "$(apps/e2e/scripts/wasm-bindgen-version.sh)" --locked
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/src/apps/e2e/target \
+    apps/e2e/scripts/build-wasm.sh
+
 # The login UI and the web app (web/, MIT): built first, then built into the binary (rust-embed). Install scripts of
 # dependencies do not run.
 FROM docker.io/library/node:26.11.1-trixie-slim AS web
@@ -8,10 +20,12 @@ RUN npm install --global --ignore-scripts --no-audit --no-fund pnpm@12.12.0
 WORKDIR /web
 COPY web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml ./
 COPY web/sdk/package.json sdk/
+COPY web/e2e/package.json e2e/
 COPY web/login/package.json login/
 COPY web/app/package.json app/
 RUN pnpm install --frozen-lockfile
 COPY web/ ./
+COPY --from=e2e /src/web/e2e/dist e2e/dist
 RUN pnpm --filter @kernoid/login --filter @kernoid/app run build
 
 FROM docker.io/library/rust:1.99.1-slim-trixie AS build

@@ -77,6 +77,34 @@ jobs:
       - run: cargo test --locked
       - run: cargo build --locked --release
 
+  # The end-to-end library (apps/e2e, MIT): a workspace of its own, tested natively and built as WebAssembly for the
+  # web app, which takes the build from here.
+  e2e:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/e2e
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Rust toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@2201cc584a476d1b508be977bbe4b7d1c7a52e9c # v2.9.3
+        with:
+          workspaces: apps/e2e
+      - run: cargo fmt --check
+      - run: cargo clippy --locked --all-targets
+      - run: cargo clippy --locked --target wasm32-unknown-unknown --features wasm
+      - run: cargo test --locked
+      - name: WebAssembly for the web app
+        run: |
+          cargo install wasm-bindgen-cli --version "$(scripts/wasm-bindgen-version.sh)" --locked
+          scripts/build-wasm.sh
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-wasm
+          path: web/e2e/dist
+          retention-days: 7
+
   # The Kubernetes operator: a workspace of its own (operator/); its CustomResourceDefinition must be the one in
   # deploy/kubernetes and in the Helm chart, which must lint (with the runner's Helm).
   operator:
@@ -104,6 +132,7 @@ jobs:
           helm lint ../deploy/helm/kernoid-operator --set watchNamespace=mail
 
   web:
+    needs: e2e
     runs-on: ubuntu-latest
     container: docker.io/library/node:26.11.1-trixie-slim
     defaults:
@@ -111,6 +140,10 @@ jobs:
         working-directory: web
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: e2e-wasm
+          path: web/e2e/dist
       - run: npm install --global --ignore-scripts --no-audit --no-fund pnpm@12.12.0
       - run: pnpm install --frozen-lockfile
       - name: The administration's API types match docs/_data/openapi.json
@@ -138,6 +171,10 @@ jobs:
         uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
         with:
           manifest-path: operator/Cargo.toml
+      - name: End-to-end library
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          manifest-path: apps/e2e/Cargo.toml
       - name: Web
         working-directory: web
         run: |
@@ -196,7 +233,7 @@ jobs:
   # image by digest, and `manifest` names both with the tags: `main` and `sha-<commit>` from main, the version
   # (`0.2.0`, `0.2`) from a tag `v0.2.0`.
   image:
-    needs: [rust, macos, tui, operator, web, stalwart, licences]
+    needs: [rust, macos, tui, e2e, operator, web, stalwart, licences]
     strategy:
       matrix:
         include:

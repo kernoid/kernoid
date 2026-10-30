@@ -39,9 +39,10 @@ precedence = "aggregate"
 SPDX-FileCopyrightText = "falkOSS – Falcon Lake Open Source Software gUG (haftungsbeschränkt) i. G. and the kernoid contributors"
 SPDX-License-Identifier = "MIT"
 
-# The terminal app is MIT as well (a first-party app; its own Cargo workspace, apps/tui).
+# The terminal app and the end-to-end library are MIT as well (first-party; Cargo workspaces of their own, apps/tui
+# and apps/e2e).
 [[annotations]]
-path = ["apps/tui/Cargo.lock", "apps/tui/.gitignore"]
+path = ["apps/tui/Cargo.lock", "apps/tui/.gitignore", "apps/e2e/Cargo.lock", "apps/e2e/.gitignore"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "falkOSS – Falcon Lake Open Source Software gUG (haftungsbeschränkt) i. G. and the kernoid contributors"
 SPDX-License-Identifier = "MIT"

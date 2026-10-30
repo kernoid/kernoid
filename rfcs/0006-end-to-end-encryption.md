@@ -63,8 +63,11 @@ for every person – **OPEN**, perhaps later as a second way for mail.
 There is **one implementation**: [rpgp](https://github.com/rpgp/rpgp) (crate `pgp`, MIT OR Apache-2.0) with its
 feature `pqc`. The server uses it for what it does (5.2, 4.4); the apps use it through `apps/e2e` (MIT, section 10),
 compiled to WebAssembly for the web app and natively for the terminal app – the same code everywhere. rpgp's ML-KEM
-and ML-DSA come from RustCrypto's `ml-kem` 0.2 and `ml-dsa` 0.0.x, which have had no external audit: part of the
-audit before 1.0 (whitepaper), like bergshamra.
+and ML-DSA come from RustCrypto's `ml-kem` 0.2 and `ml-dsa` 0.0.4, which have had no external audit: part of the
+audit before 1.0 (whitepaper), like bergshamra. `ml-dsa` 0.0.4 signs in variable time (RUSTSEC-2025-0144, fixed in
+0.1, which rpgp 0.21 does not take yet); signing happens only in the user's own client, so nobody can time it on
+request – **OPEN** until rpgp moves on. Secret keys of other kinds (RSA, NIST curves, X448) are not taken: their
+arithmetic in rpgp's dependencies is not constant-time (RUSTSEC-2023-0071, RUSTSEC-2026-0387).
 
 An account's key is one of two kinds (a setting of the account, chosen when the key is made):
 
@@ -236,4 +239,5 @@ encryption is simply on.
 - S/MIME (4.1); password-protected mail to people without a key (5.3); an encrypted search index (5.4).
 - Decrypting again when mail encryption is switched off (5.1).
 - Post-quantum signatures in TLS, JOSE, DKIM (2).
+- `ml-dsa` 0.1 once rpgp takes it (4.1).
 - Published hashes of the web app (9).

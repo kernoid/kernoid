@@ -1,0 +1,54 @@
+# SPDX-License-Identifier: MIT
+# End-to-end encryption of kernoid's apps (RFC 0006): OpenPGP keys and their protected copies, encrypting and
+# decrypting, PGP/MIME with header protection – on rpgp. A first-party library under MIT and a workspace of its own,
+# like the terminal app: the web app uses it as WebAssembly, the terminal app as a library, and the server for
+# encryption on arrival – one implementation everywhere. Dependencies are exact (`=`) and at least two weeks old when
+# taken (`../tui/scripts/check-age.py --dir=apps/e2e`).
+[workspace]
+
+[package]
+name = "kernoid-e2e"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.94"
+license = "MIT"
+repository = "https://github.com/kernoid/kernoid"
+description = "End-to-end encryption of kernoid's apps: OpenPGP with post-quantum keys, PGP/MIME"
+publish = false
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[features]
+# The bindings for the web app (`wasm-bindgen`), built with `scripts/build-wasm.sh`.
+wasm = ["dep:wasm-bindgen", "pgp/wasm"]
+
+[dependencies]
+# Mail parsed as the server parses it (Apache-2.0 OR MIT).
+mail-parser = { version = "=0.11.9", default-features = false }
+# OpenPGP (RFC 9580) with its post-quantum algorithms (RFC 9980) – MIT OR Apache-2.0.
+pgp = { version = "=0.21.0", default-features = false, features = ["pqc"] }
+rand = "=0.8.6"
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.151"
+thiserror = "=2.0.21"
+wasm-bindgen = { version = "=0.2.129", optional = true }
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+
+# Argon2 and the post-quantum algorithms are slow without optimisation; tests build dependencies optimised.
+[profile.dev.package."*"]
+opt-level = 2
+
+# The web app loads the WebAssembly: small rather than fast.
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

@@ -54,6 +54,16 @@ from `KERNOID_PASSWORD`, a command or a prompt, never an argument), sending it o
 Dependencies are exact (`=` in `Cargo.toml`) and at least two weeks old when taken – `apps/tui/scripts/check-age.py
 [--fix]` lists the younger ones in `Cargo.lock` (and sets them back); run it after changing the lock file.
 
+`apps/e2e` (MIT) is the end-to-end library of kernoid's apps (`kernoid-e2e`, RFC 0006): an account's OpenPGP key of
+one of two kinds (`pqc`: v6 with ML-DSA-65+Ed25519 and ML-KEM-768+X25519, RFC 9980; `compatible`: v4 Curve25519), its
+protected copies (Argon2 with AES-256-OCB), encrypting and decrypting (`message`), PGP/MIME with header protection and
+the encrypted summary (`mime`) – all through rpgp (crate `pgp`, feature `pqc`), nothing of its own. A **Cargo workspace
+of its own** like the terminal app; `--features wasm` gives the web app's `Keyring` (`src/wasm.rs`), which
+`scripts/build-wasm.sh` turns into `web/e2e/dist` (`@kernoid/e2e`, not checked in; CI's job `e2e` and the image's
+stage `e2e` build it with wasm-bindgen-cli of the version in its `Cargo.lock`). Homebrew's Rust has no WebAssembly
+target – build with rustup's (`PATH=$HOME/.cargo/bin:$PATH`). Its `deny.toml` ignores three advisories of rpgp's
+dependencies, each with the reason it does not reach kernoid's keys.
+
 `operator/` (AGPL) is the Kubernetes operator `kernoid-operator` (kube-rs; docs: Operations, Kubernetes): the resource
 `Kernoid` (`crd.rs`), what it becomes – a migration Job per image, a Deployment and Service per role – as pure
 functions with tests (`resources.rs`), and the loop that applies them server-side (`controller.rs`). It is a **Cargo
@@ -177,8 +187,9 @@ pinned by commit, CI on Linux and macOS. Where kernoid deviates, it has a reason
 cargo fmt --check && cargo clippy --all-targets && cargo test   # tests need DATABASE_URL, see README
 (cd apps/tui && cargo fmt --check && cargo clippy --locked --all-targets && cargo test --locked)
 (cd operator && cargo fmt --check && cargo clippy --locked --all-targets && cargo test --locked)
+(cd apps/e2e && cargo fmt --check && cargo clippy --locked --all-targets && cargo test --locked && scripts/build-wasm.sh)
 scripts/upgrade-check.sh v0.1.0 kernoid:local   # after `docker build -t kernoid:local .`
 ./scripts/check-sel.sh
-cargo deny check && (cd apps/tui && cargo deny check) && (cd operator && cargo deny check)    # cargo-deny 0.20.2
+cargo deny check && (cd apps/tui && cargo deny check) && (cd operator && cargo deny check) && (cd apps/e2e && cargo deny check)    # cargo-deny 0.20.2
 docker run --rm -v "$PWD":/data fsfe/reuse:6.2.0 lint
 ```

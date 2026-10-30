@@ -3,4 +3,6 @@
 [toolchain]
 channel = "1.99.1"
 components = ["rustfmt", "clippy"]
+# The end-to-end library for the web app (apps/e2e, RFC 0006).
+targets = ["wasm32-unknown-unknown"]
 profile = "minimal"

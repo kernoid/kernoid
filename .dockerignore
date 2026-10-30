@@ -8,4 +8,7 @@ web/sdk/dist
 web/login/dist
 web/app/node_modules
 web/app/dist
-apps/
+apps/tui/
+apps/e2e/target/
+web/e2e/node_modules
+web/e2e/dist

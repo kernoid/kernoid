@@ -1,0 +1,16 @@
+{
+  "name": "@kernoid/e2e",
+  "version": "0.1.0",
+  "license": "MIT",
+  "description": "End-to-end encryption of kernoid's apps in the browser: apps/e2e as WebAssembly (OpenPGP with post-quantum keys)",
+  "type": "module",
+  "exports": {
+    ".": { "types": "./dist/kernoid_e2e.d.ts", "default": "./dist/kernoid_e2e.js" }
+  },
+  "files": ["dist"],
+  "sideEffects": false,
+  "scripts": {
+    "wasm": "../../apps/e2e/scripts/build-wasm.sh",
+    "test": "vitest run"
+  }
+}

@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MIT
 packages:
   - sdk
+  - e2e
   - login
   - app
 # Only versions published at least two weeks ago (in minutes).
