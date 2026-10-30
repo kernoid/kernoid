@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO tenant_recovery_keys (tenant_id, fingerprint, public_key) VALUES ($1, $2, $3)\n                     ON CONFLICT (tenant_id) DO UPDATE SET fingerprint = $2, public_key = $3, created_at = now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e8cf99896631ae3aec86d178fc56ab922aac408c1a2a59bad7455a5f795e8052"
+}

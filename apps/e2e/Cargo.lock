@@ -833,6 +833,7 @@ dependencies = [
 name = "kernoid-e2e"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "mail-parser",
  "pgp",
  "rand",

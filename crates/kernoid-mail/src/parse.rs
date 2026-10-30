@@ -38,6 +38,9 @@ pub(crate) struct Summary {
     pub has_attachment: bool,
     /// The text parts (HTML as text) and attachment names, for the search index.
     pub search_text: String,
+    /// End-to-end encrypted (RFC 0006, 5.2), and the summary encrypted to the same keys – set by the import.
+    pub encrypted: bool,
+    pub encrypted_summary: Option<Vec<u8>>,
 }
 
 fn ids(value: &HeaderValue<'_>) -> Vec<String> {
@@ -92,6 +95,8 @@ pub(crate) fn summarize(raw: &[u8]) -> Option<Summary> {
         preview,
         has_attachment: message.attachment_count() > 0,
         search_text: search_text(&message),
+        encrypted: false,
+        encrypted_summary: None,
     })
 }
 

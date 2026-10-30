@@ -143,6 +143,16 @@ impl PublicKey {
         Ok(PublicKey(key))
     }
 
+    /// Reads concatenated binary keys (a Web Key Directory's answer); keys that do not parse or verify are left out.
+    pub fn parse_many(binary: &[u8]) -> Vec<PublicKey> {
+        match SignedPublicKey::from_bytes_many(binary) {
+            Ok(keys) => {
+                keys.filter_map(|key| key.ok()).filter(|key| key.verify_bindings().is_ok()).map(PublicKey).collect()
+            }
+            Err(_) => Vec::new(),
+        }
+    }
+
     pub fn fingerprint(&self) -> String {
         hex(self.0.fingerprint().as_bytes())
     }
@@ -171,6 +181,11 @@ impl PublicKey {
                 _ => id.to_owned(),
             })
             .collect()
+    }
+
+    /// Whether something can be encrypted to the key.
+    pub fn can_encrypt(&self) -> bool {
+        !self.encryption_subkeys().is_empty()
     }
 
     /// The subkeys that may encrypt: an algorithm that can, and a binding that says so.

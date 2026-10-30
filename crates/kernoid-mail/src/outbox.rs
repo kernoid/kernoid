@@ -64,10 +64,22 @@ impl Mail {
         if outgoing.recipients.is_empty() {
             return Err(MailError::Invalid("a message to send needs a recipient".into()));
         }
+        // Mail an account sends announces its key (Autocrypt), before DKIM signs it in the worker.
+        let raw = match outgoing.account {
+            Some(account) => match self.autocrypt_header(account, &outgoing.raw).await? {
+                Some(header) => {
+                    let mut raw = header.into_bytes();
+                    raw.extend_from_slice(&outgoing.raw);
+                    Bytes::from(raw)
+                }
+                None => outgoing.raw.clone(),
+            },
+            None => outgoing.raw.clone(),
+        };
         let id = Uuid::now_v7();
         let key = blob_key(id);
         garbage::pending(&self.pool, outgoing.tenant, &key).await?;
-        self.blobs.put(outgoing.tenant, &key, outgoing.raw.clone()).await?;
+        self.blobs.put(outgoing.tenant, &key, raw.clone()).await?;
         let mut tx = self.pool.begin().await?;
         if !garbage::keep(&mut tx, outgoing.tenant, &key).await? {
             return Err(MailError::Invalid("queueing the message took too long".into()));
@@ -79,7 +91,7 @@ impl Mail {
             outgoing.tenant,
             outgoing.account,
             outgoing.from,
-            outgoing.raw.len() as i64,
+            raw.len() as i64,
             Utc::now() + outgoing.lifetime,
         )
         .execute(&mut *tx)

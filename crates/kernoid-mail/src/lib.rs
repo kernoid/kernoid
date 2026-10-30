@@ -9,6 +9,7 @@
 mod access;
 mod changes;
 mod deliver;
+mod e2e;
 mod email;
 mod events;
 mod imap;
@@ -70,6 +71,9 @@ pub enum MailError {
     CannotCalculateChanges,
     #[error("the message could not be parsed")]
     Unparsable,
+    /// Encrypting a message to its account's key failed (RFC 0006, 5.2); nothing was stored.
+    #[error("the message could not be encrypted: {0}")]
+    Encryption(String),
     #[error(transparent)]
     Store(#[from] sqlx::Error),
     #[error(transparent)]

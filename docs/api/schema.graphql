@@ -201,6 +201,27 @@ type DriveObject {
 	active: Boolean!
 }
 
+"""
+What the tenant's accounts may encrypt end to end (RFC 0006, 8): each `allowed`, `required` or `forbidden`.
+"""
+type EndToEndPolicy {
+	mail: String!
+	vaults: String!
+	collections: String!
+	"""
+	Whether every account's secret key must be recoverable with the tenant's recovery key.
+	"""
+	recovery: Boolean!
+	"""
+	The fingerprint of the tenant's recovery key, if it has one.
+	"""
+	recoveryKeyFingerprint: String
+	"""
+	The recovery key's OpenPGP public key, base64.
+	"""
+	recoveryKey: String
+}
+
 type ExchangedIdpLogin {
 	session: CreatedSession!
 	"""
@@ -525,6 +546,17 @@ type MutationRoot {
 	for English (needs `tenant.manage`).
 	"""
 	setTenantLanguage(language: String): Boolean!
+	"""
+	Sets what the tenant's accounts may encrypt end to end – `mail`, `vaults` and `collections` each `allowed`,
+	`required` or `forbidden` – and whether their keys must be recoverable (needs `tenant.manage`; recovery needs
+	the recovery key first).
+	"""
+	setTenantEndToEndPolicy(mail: String!, vaults: String!, collections: String!, recovery: Boolean!): Boolean!
+	"""
+	Sets the tenant's recovery key: an OpenPGP public key (base64) an administrator's app made, whose secret key
+	stays with the administrators. Returns its fingerprint (needs `tenant.manage`).
+	"""
+	setTenantRecoveryKey(publicKey: String!): String!
 	"""
 	Sets whether every login to an application of the tenant needs a second factor, and how many days accounts
 	without one may still log in (`mfaGraceDays`, 0 to 365); needs `policies.manage`.
@@ -1000,6 +1032,10 @@ type QueryRoot {
 	English (needs `directory.read`).
 	"""
 	tenantLanguage: String
+	"""
+	What the tenant's accounts may encrypt end to end, and its recovery key (needs `directory.read`).
+	"""
+	tenantEndToEndPolicy: EndToEndPolicy!
 	"""
 	The modules the installation has switched on, which the tenant may use, and whether it does.
 	"""

@@ -29,6 +29,7 @@ pub mod link;
 pub mod login;
 pub mod mail_access;
 pub mod mfa;
+pub mod openpgp;
 pub mod passkey;
 mod password;
 pub mod project;

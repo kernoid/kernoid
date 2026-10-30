@@ -409,7 +409,22 @@ impl Context<'_> {
                 continue;
             }
             new.keywords = allowed_keywords(new.keywords, &new.mailbox_ids, &access);
-            match mail.import_email(account, raw, new).await {
+            // An app that stores mail it encrypted itself brings its summary encrypted too (RFC 0006, 5.2).
+            let summary = match object.get("kernoid:encryptedSummary") {
+                None | Some(Value::Null) => None,
+                Some(value) => {
+                    use base64::Engine;
+                    match value.as_str().and_then(|v| base64::engine::general_purpose::STANDARD.decode(v).ok()) {
+                        Some(summary) => Some(summary),
+                        None => {
+                            not_created
+                                .insert(creation.clone(), invalid_properties("kernoid:encryptedSummary is base64"));
+                            continue;
+                        }
+                    }
+                }
+            };
+            match mail.import_email_with(account, raw, new, summary).await {
                 Ok(imported) => {
                     self.created.insert(creation.clone(), imported.id.to_string());
                     created.insert(

@@ -116,3 +116,55 @@ fn recovery_codes_read_back_as_typed() {
     assert_eq!(normalize_recovery_code(&code.to_lowercase().replace('-', " ")), code);
     assert_eq!(normalize_recovery_code("o1il-abcd"), "0111-ABCD");
 }
+
+#[test]
+fn drafts_are_built_and_read_back() {
+    use kernoid_e2e::compose::{Attachment, Draft, Mailbox, build, parse, part};
+    let mailbox = |name: Option<&str>, email: &str| Mailbox { name: name.map(str::to_owned), email: email.to_owned() };
+    let draft = Draft {
+        from: Some(mailbox(Some("Ada Lovelace"), "ada@example.org")),
+        to: vec![mailbox(Some("Jürgen Müller"), "j@example.org"), mailbox(None, "bob@example.org")],
+        cc: vec![mailbox(Some("Doe, John"), "john@example.org")],
+        subject: "Grüße aus München – ein recht langer Betreff, der in mehrere Wörter muss".to_owned(),
+        message_id: "1@example.org".to_owned(),
+        in_reply_to: vec!["0@example.org".to_owned()],
+        references: vec!["0@example.org".to_owned()],
+        date: "Thu, 29 Oct 2026 10:00:00 +0100".to_owned(),
+        text: "Hallo,\nbis bald.".to_owned(),
+        html: Some("<p>Hallo,<br>bis bald.</p>".to_owned()),
+        attachments: vec![Attachment {
+            name: "Plan für März.txt".to_owned(),
+            media_type: "text/plain".to_owned(),
+            data: base64_encode(b"step one"),
+        }],
+        ..Draft::default()
+    };
+    let raw = build(&draft).unwrap();
+    let text = String::from_utf8(raw.clone()).unwrap();
+    assert!(text.is_ascii(), "{text}");
+    assert!(text.lines().all(|line| line.len() <= 998));
+    let parsed = parse(&raw).unwrap();
+    assert_eq!(parsed.subject.as_deref(), Some(draft.subject.as_str()));
+    assert_eq!(parsed.from, vec![mailbox(Some("Ada Lovelace"), "ada@example.org")]);
+    assert_eq!(parsed.to[0], mailbox(Some("Jürgen Müller"), "j@example.org"));
+    assert_eq!(parsed.cc[0], mailbox(Some("Doe, John"), "john@example.org"));
+    assert_eq!(parsed.in_reply_to, ["0@example.org"]);
+    assert_eq!(parsed.message_id.as_deref(), Some("1@example.org"));
+    assert_eq!(parsed.text.as_deref().map(str::trim_end), Some("Hallo,\nbis bald."));
+    assert!(parsed.html.unwrap().contains("<p>Hallo,"));
+    assert_eq!(parsed.attachments.len(), 1);
+    assert_eq!(parsed.attachments[0].name.as_deref(), Some("Plan für März.txt"));
+    assert_eq!(part(&raw, parsed.attachments[0].index).unwrap(), b"step one");
+
+    // Encrypted and decrypted, it reads the same.
+    let bob = key(Kind::Pqc, "bob@example.org");
+    let encrypted = encrypt_message(&raw, &[&bob.public()], None).unwrap();
+    let inner = decrypt_message(&encrypted, &[&bob], &[]).unwrap().data;
+    assert_eq!(parse(&inner).unwrap().subject, parsed.subject);
+    assert!(build(&Draft { from: Some(mailbox(None, "a\r\nBcc: x@y")), ..draft }).is_err());
+}
+
+fn base64_encode(data: &[u8]) -> String {
+    use base64::Engine;
+    base64::engine::general_purpose::STANDARD.encode(data)
+}

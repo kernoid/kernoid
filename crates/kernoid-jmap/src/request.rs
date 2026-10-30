@@ -9,7 +9,7 @@ use uuid::Uuid;
 use kernoid_mail::Access;
 
 use crate::{
-    CALENDARS, CONTACTS, CORE, Caller, FILE_LINKS, FILE_VERSIONS, FILENODE, Jmap, MAIL, MAX_CALLS_IN_REQUEST,
+    CALENDARS, CONTACTS, CORE, Caller, FILE_LINKS, FILE_VERSIONS, FILENODE, Jmap, MAIL, MAX_CALLS_IN_REQUEST, OPENPGP,
     PRINCIPALS, SUBMISSION, VACATION, blob_methods::BLOB,
 };
 
@@ -237,6 +237,7 @@ impl Jmap {
                 FILE_VERSIONS,
                 FILE_LINKS,
                 PRINCIPALS,
+                OPENPGP,
                 BLOB,
             ]
             .contains(&capability)
@@ -306,6 +307,11 @@ impl Jmap {
             "Email/query" => context.email_query(args).await,
             "Email/set" => context.email_set(args).await,
             "Email/import" => context.email_import(args).await,
+            "OpenPgpKey/get" => context.openpgp_key_get(args).await,
+            "OpenPgpKey/set" => context.openpgp_key_set(args).await,
+            "OpenPgpKey/lookup" => context.openpgp_key_lookup(args).await,
+            "E2eSettings/get" => context.e2e_settings_get(args).await,
+            "E2eSettings/set" => context.e2e_settings_set(args).await,
             "Email/parse" => context.email_parse(args).await,
             "Thread/get" => context.thread_get(args).await,
             "Thread/changes" => context.changes(args, kernoid_mail::ObjectType::Thread, "Thread/changes").await,

@@ -136,6 +136,21 @@ English: the account's own choice (on the account page, `GET`/`PUT /v1/account/l
 de|en|none`), else English. Invitations take the sender's language, notices the recipient's. The apps choose their own
 language from the browser. Both choices are events (`account.language_set`, `tenant.language_set`).
 
+## End-to-end encryption
+
+What the tenant's accounts may encrypt so that only they can read it ([RFC 0006](https://github.com/kernoid/kernoid/blob/main/rfcs/0006-end-to-end-encryption.md),
+see [Mail]({{ '/mail/' | relative_url }})): mail, vaults (directories only their members read), calendars and address
+books – each `allowed` (the default), `required` or `forbidden`. `forbidden` is for an organisation that must be able
+to read its mail (archiving duties); it does not touch what is encrypted already. `GET`/`PUT /v1/tenant/e2e`
+(`directory.read`, `tenant.manage` to set it), GraphQL `tenantEndToEndPolicy`, `setTenantEndToEndPolicy`,
+`kernoid tenant e2e-policy <TENANT> --mail required …`.
+
+**Recovery through the tenant** (`recovery`, off by default): every account's app then keeps one more protected copy
+of its secret key, encrypted to the tenant's **recovery key** – an OpenPGP key an administrator made, whose secret key
+never reaches kernoid. Set it first: `PUT /v1/tenant/e2e/recovery-key` with `public_key` (base64), GraphQL
+`setTenantRecoveryKey`, or `kernoid tenant recovery-key <TENANT> < key.asc`. End-to-end then means "only you and your
+organisation"; the apps tell each account so. Both are events (`tenant.e2e_policy_set`, `tenant.recovery_key_set`).
+
 ## Bootstrapping
 
 The first administrators are set up by the operator:

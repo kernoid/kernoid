@@ -16,6 +16,7 @@ calcard = "0.3.14"
 chrono-tz = "0.10.4"
 bytes = "1.12.1"
 chrono = { version = "0.4.45", features = ["serde"] }
+kernoid-e2e = { version = "0.1.0", path = "../../apps/e2e" }
 kernoid-files = { version = "0.1.0", path = "../kernoid-files" }
 kernoid-groupware = { version = "0.1.0", path = "../kernoid-groupware" }
 kernoid-identity = { version = "0.1.0", path = "../kernoid-identity" }

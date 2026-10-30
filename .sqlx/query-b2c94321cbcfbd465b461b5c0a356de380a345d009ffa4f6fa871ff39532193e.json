@@ -1,0 +1,71 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT e.id, e.account_id, e.received_at, e.keywords,\n                      array(SELECT mailbox_id FROM email_mailboxes WHERE email_id = e.id) AS \"mailboxes!\"\n               FROM emails e\n               JOIN accounts a ON a.id = e.account_id AND a.mail_e2e\n               WHERE NOT e.encrypted\n                 AND EXISTS (SELECT 1 FROM openpgp_keys k WHERE k.account_id = a.id AND k.retired_at IS NULL)\n                 AND NOT EXISTS (SELECT 1 FROM email_mailboxes em JOIN mailboxes m ON m.id = em.mailbox_id\n                                 WHERE em.email_id = e.id AND m.role = 'drafts')\n               ORDER BY e.account_id, e.received_at\n               LIMIT $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "emails",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "account_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "emails",
+            "name": "account_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "received_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "emails",
+            "name": "received_at"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "keywords",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "emails",
+            "name": "keywords"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "mailboxes!",
+        "type_info": "UuidArray",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "b2c94321cbcfbd465b461b5c0a356de380a345d009ffa4f6fa871ff39532193e"
+}

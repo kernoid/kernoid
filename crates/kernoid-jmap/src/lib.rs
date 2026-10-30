@@ -13,6 +13,7 @@ mod email_set;
 mod files;
 mod js;
 mod mailbox;
+mod openpgp;
 mod other;
 mod principals;
 mod query;
@@ -40,6 +41,7 @@ pub const WEBSOCKET: &str = "urn:ietf:params:jmap:websocket";
 pub const FILE_VERSIONS: &str = "https://kernoid.dev/jmap/file-versions";
 /// kernoid's own: links to files for people without an account (`FileLink/get`, `/set`, RFC 0005, 11.3).
 pub const FILE_LINKS: &str = "https://kernoid.dev/jmap/file-links";
+pub use openpgp::{KeyDirectory, OPENPGP};
 pub use vacation::VACATION;
 
 /// Limits announced in the session and kept by the API.
@@ -72,13 +74,38 @@ pub struct Jmap {
     groupware: Option<kernoid_groupware::Groupware>,
     /// Files (RFC 0005, 8), where the installation has them.
     files: Option<kernoid_files::Files>,
-    /// Grants on files and the tenant's people and groups (RFC 0005, 11).
+    /// Grants on files and the tenant's people and groups (RFC 0005, 11); keys of accounts (RFC 0006, 4.3).
     identity: Option<kernoid_identity::Identity>,
+    /// Keys of addresses outside the instance (RFC 0006, 4.3).
+    key_directory: Option<KeyDirectoryHandle>,
+}
+
+/// A [`KeyDirectory`] the server sets.
+#[derive(Clone)]
+pub(crate) struct KeyDirectoryHandle(pub std::sync::Arc<dyn KeyDirectory>);
+
+impl std::fmt::Debug for KeyDirectoryHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("KeyDirectory")
+    }
+}
+
+impl std::ops::Deref for KeyDirectoryHandle {
+    type Target = dyn KeyDirectory;
+    fn deref(&self) -> &Self::Target {
+        &*self.0
+    }
 }
 
 impl Jmap {
     pub fn new(mail: Mail, max_size: u64, queue_lifetime: chrono::Duration) -> Self {
-        Self { mail, max_size, queue_lifetime, groupware: None, files: None, identity: None }
+        Self { mail, max_size, queue_lifetime, groupware: None, files: None, identity: None, key_directory: None }
+    }
+
+    /// Where keys of addresses outside the instance are looked up (their Web Key Directory).
+    pub fn with_key_directory(mut self, directory: std::sync::Arc<dyn KeyDirectory>) -> Self {
+        self.key_directory = Some(KeyDirectoryHandle(directory));
+        self
     }
 
     pub fn with_identity(mut self, identity: kernoid_identity::Identity) -> Self {
@@ -197,6 +224,9 @@ impl Jmap {
             });
             entry["accountCapabilities"][PRINCIPALS] = json!({ "currentUserPrincipalId": own });
             primary.insert(PRINCIPALS.into(), json!(own));
+            // Keys belong to the own account only (RFC 0006, 4.3).
+            entry["accountCapabilities"][OPENPGP] = json!({});
+            primary.insert(OPENPGP.into(), json!(own));
         }
         // Blobs (RFC 9404) in every account the caller reaches: uploads in pieces, joined.
         for entry in accounts.values_mut() {
@@ -232,6 +262,7 @@ impl Jmap {
         }
         if self.identity.is_some() {
             capabilities[PRINCIPALS] = json!({});
+            capabilities[OPENPGP] = json!({});
         }
         capabilities[blob_methods::BLOB] = json!({});
         // RFC 8887: requests and push over one WebSocket.

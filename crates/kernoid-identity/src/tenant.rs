@@ -87,6 +87,52 @@ pub enum TenantEvent {
     /// Who gets a service when an account is created, and whether it needs approval (RFC 0003, 4).
     #[serde(rename = "tenant.service_policy_set")]
     ServicePolicySet { service: Service, assign: Assign, approval: bool },
+    /// What the tenant's accounts may encrypt end to end (RFC 0006, 8): each `allowed`, `required` or `forbidden`,
+    /// and whether their secret keys must be recoverable with the tenant's recovery key.
+    #[serde(rename = "tenant.e2e_policy_set")]
+    E2ePolicySet { mail: E2eRule, vaults: E2eRule, collections: E2eRule, recovery: bool },
+    /// The tenant's recovery key (RFC 0006, 8.2); its public key is in `tenant_recovery_keys`, its secret with the
+    /// administrators.
+    #[serde(rename = "tenant.recovery_key_set")]
+    RecoveryKeySet { fingerprint: String },
+}
+
+/// Whether a tenant's accounts may use an end-to-end setting (RFC 0006, 8.1).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum E2eRule {
+    #[default]
+    Allowed,
+    Required,
+    Forbidden,
+}
+
+impl E2eRule {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            E2eRule::Allowed => "allowed",
+            E2eRule::Required => "required",
+            E2eRule::Forbidden => "forbidden",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<E2eRule> {
+        match value {
+            "allowed" => Some(E2eRule::Allowed),
+            "required" => Some(E2eRule::Required),
+            "forbidden" => Some(E2eRule::Forbidden),
+            _ => None,
+        }
+    }
+}
+
+/// A tenant's end-to-end policy.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct E2ePolicy {
+    pub mail: E2eRule,
+    pub vaults: E2eRule,
+    pub collections: E2eRule,
+    pub recovery: bool,
 }
 
 impl DomainEvent for TenantEvent {}
@@ -120,6 +166,8 @@ pub struct Tenant {
     pub login_policy: LoginPolicy,
     pub registration: Registration,
     pub service_policies: BTreeMap<Service, ServicePolicy>,
+    pub e2e_policy: E2ePolicy,
+    pub recovery_key: Option<String>,
 }
 
 /// How a tenant's accounts log in.
@@ -203,6 +251,10 @@ impl Aggregate for Tenant {
             TenantEvent::ServicePolicySet { service, assign, approval } => {
                 self.service_policies.insert(service, ServicePolicy { assign, approval });
             }
+            TenantEvent::E2ePolicySet { mail, vaults, collections, recovery } => {
+                self.e2e_policy = E2ePolicy { mail, vaults, collections, recovery };
+            }
+            TenantEvent::RecoveryKeySet { fingerprint } => self.recovery_key = Some(fingerprint),
         }
     }
 }
@@ -323,6 +375,21 @@ pub(crate) async fn project(connection: &mut PgConnection, events: &[Event]) -> 
                     .execute(&mut *connection)
                     .await?;
             }
+            TenantEvent::E2ePolicySet { mail, vaults, collections, recovery } => {
+                sqlx::query!(
+                    "UPDATE tenants SET e2e_mail = $2, e2e_vaults = $3, e2e_collections = $4, e2e_recovery = $5
+                     WHERE id = $1",
+                    id,
+                    mail.as_str(),
+                    vaults.as_str(),
+                    collections.as_str(),
+                    recovery,
+                )
+                .execute(&mut *connection)
+                .await?;
+            }
+            // The public key is written by the command, which holds it.
+            TenantEvent::RecoveryKeySet { .. } => {}
             TenantEvent::MailRetentionSet { trash_days, junk_days } => {
                 sqlx::query!(
                     "UPDATE tenants SET trash_retention_days = $2, junk_retention_days = $3 WHERE id = $1",

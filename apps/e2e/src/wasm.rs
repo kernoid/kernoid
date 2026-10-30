@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 use wasm_bindgen::prelude::*;
 
-use crate::{Error, Kind, PublicKey, SecretKey, keys, message, mime};
+use crate::{Error, Kind, PublicKey, SecretKey, compose, keys, message, mime};
 
 fn js(error: Error) -> JsError {
     JsError::new(&error.to_string())
@@ -237,4 +237,25 @@ pub fn recovery_code() -> String {
 #[wasm_bindgen(js_name = normalizeRecoveryCode)]
 pub fn normalize_recovery_code(typed: &str) -> String {
     keys::normalize_recovery_code(typed)
+}
+
+/// Builds a message from a draft (JSON: `from`, `to`, `cc`, `replyTo`, `subject`, `messageId`, `inReplyTo`,
+/// `references`, `date`, `text`, `html`, `attachments` with `name`, `type`, `data` in base64).
+#[wasm_bindgen(js_name = buildMessage)]
+pub fn build_message(draft: &str) -> Result<Vec<u8>, JsError> {
+    let draft: compose::Draft = serde_json::from_str(draft).map_err(|e| JsError::new(&e.to_string()))?;
+    compose::build(&draft).map_err(js)
+}
+
+/// Reads a (decrypted) message into what the app shows, as JSON.
+#[wasm_bindgen(js_name = parseMessage)]
+pub fn parse_message(raw: &[u8]) -> Result<String, JsError> {
+    let parsed = compose::parse(raw).map_err(js)?;
+    serde_json::to_string(&parsed).map_err(|e| JsError::new(&e.to_string()))
+}
+
+/// The decoded content of one part of a message.
+#[wasm_bindgen(js_name = messagePart)]
+pub fn message_part(raw: &[u8], index: usize) -> Result<Vec<u8>, JsError> {
+    compose::part(raw, index).map_err(js)
 }

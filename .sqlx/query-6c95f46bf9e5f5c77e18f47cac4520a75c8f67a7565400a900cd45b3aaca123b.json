@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT k.public_key FROM openpgp_keys k JOIN addresses a ON a.account_id = k.account_id\n             WHERE k.account_id = $1 AND k.retired_at IS NULL AND k.kind = 'compatible' AND lower(a.address) = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "public_key",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "openpgp_keys",
+            "name": "public_key"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "6c95f46bf9e5f5c77e18f47cac4520a75c8f67a7565400a900cd45b3aaca123b"
+}

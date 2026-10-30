@@ -159,6 +159,36 @@ password of an account without a second factor – or with a kernoid session.
 - Searching message text (`body`, `text`) uses the full-text index; search snippets mark the words found.
 - Not yet: the `header` filter, `VacationResponse` (use Sieve), push subscriptions, `ShareNotification`.
 
+## End-to-end encryption
+
+An account can have its mail encrypted so that only it can read what is stored – not the operator, not kernoid
+([RFC 0006](https://github.com/kernoid/kernoid/blob/main/rfcs/0006-end-to-end-encryption.md)). It is a setting,
+because programs without OpenPGP can no longer read that mail; the tenant may forbid or require it (see
+[Administration]({{ '/administration/' | relative_url }})).
+
+- **Keys** are OpenPGP ([RFC 9580](https://www.rfc-editor.org/rfc/rfc9580)), made by the client, never by kernoid:
+  `pqc` (v6 with ML-DSA-65+Ed25519 and ML-KEM-768+X25519, [RFC 9980](https://www.rfc-editor.org/rfc/rfc9980)) or
+  `compatible` (v4 Curve25519, for correspondents whose programs know only v4). The secret key reaches kernoid only as
+  copies the client protected (Argon2 with AES-256-OCB) – with a passkey, a recovery code, a device's own secret, or
+  for the tenant's recovery key. A new key retires the old one, which still decrypts what was encrypted to it.
+- **On arrival** mail is encrypted to the account's key – after Sieve, the spam filter and the malware scan, before
+  it is stored – as PGP/MIME with the subject protected ([RFC 9788](https://www.rfc-editor.org/rfc/rfc9788)):
+  outside it reads `[...]`. Addresses, date and the ids threads need stay outside. A summary for the apps' lists is
+  encrypted to the same key (`kernoid:encryptedSummary`). Mail stored before the switch is encrypted by the worker,
+  each email replaced by its encrypted copy; drafts stay as their program wrote them. Mail that arrives encrypted is
+  stored as it came.
+- **What it costs:** search on the server finds addresses and dates, not text; IMAP and POP3 clients need OpenPGP and
+  the account's secret key.
+- **Publishing:** the keys in use are in the Web Key Directory – the direct method on the domain itself, the advanced
+  one on `openpgpkey.<domain>` (point it at kernoid and give it a certificate) –, and mail an account sends carries an
+  `Autocrypt:` header with a `compatible` key (Autocrypt Level 1 knows no post-quantum keys yet).
+- **JMAP:** kernoid's extension `https://kernoid.dev/jmap/openpgp` has the account's keys with their copies
+  (`OpenPgpKey/get`, `/set`: create with `publicKey` and `copies`, update `retired` or `copies/<label>`; keys are
+  never destroyed), the keys of others (`OpenPgpKey/lookup` with `emails`: local accounts, else their domain's Web Key
+  Directory, asked by the server over HTTPS) and the settings with the tenant's policy (`E2eSettings/get`, `/set`
+  with `mail`). Emails have `kernoid:encrypted` and `kernoid:encryptedSummary`; `Email/import` takes
+  `kernoid:encryptedSummary` for mail an app encrypted itself.
+
 ## IMAP and POP3
 
 Configure `[imap]` and give kernoid certificates (`mail.tls`, `http.tls` or `http.acme`); a process with the role `imap` (part of

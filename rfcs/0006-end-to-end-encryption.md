@@ -1,7 +1,9 @@
 <!-- SPDX-License-Identifier: CC-BY-4.0 -->
 # RFC 0006 – End-to-end and post-quantum encryption
 
-- **Status:** draft, 2026-10-30; implemented: section 2 (post-quantum TLS).
+- **Status:** draft, 2026-10-30; implemented: section 2 (post-quantum TLS), 4 (keys: `apps/e2e`, `kernoid-identity`'s
+  `openpgp`, migration 0048; WKD and Autocrypt), 5.1–5.2 on the server (`kernoid-mail`'s `e2e`), 8 (policy, recovery
+  key) and the JMAP extension; the apps' side of 5 and sections 6, 7 and 9 are next.
 - **Scope:** what kernoid encrypts so that quantum computers cannot read it later (sections 2–3), and how mail, files,
   calendars and contacts can be encrypted so that only their owners can read them – not the operator, not kernoid
   (sections 4–9).
@@ -101,10 +103,13 @@ used to encrypt again.
 
 ### 4.3 Finding the keys of others
 
-JMAP gets an extension, `https://kernoid.dev/jmap/openpgp`:
+JMAP gets an extension, `https://kernoid.dev/jmap/openpgp` (only in the caller's own account), and the account's
+settings with its tenant's policy are the singleton `E2eSettings` (`/get`, `/set` of `mail`):
 
 - `OpenPgpKey/get` – the account's own keys: public key, kind, fingerprint, created, retired, and the protected copies.
-- `OpenPgpKey/set` – add a key with its copies (made by the client), retire one, add or remove a copy.
+- `OpenPgpKey/set` – add a key with its copies (made by the client; at least one, every address of the key the
+  account's), retire one (`retired: true`), add or remove a copy (`copies/<label>`). Keys are never destroyed. The last
+  copy of the key in use stays, and so does the `tenant` copy while the tenant recovers keys.
 - `OpenPgpKey/lookup` – the public keys for a list of addresses: local accounts from the directory; others through
   their domain's **Web Key Directory**, which kernoid asks over HTTPS through `kernoid_oidc::outbound` (public
   addresses only). No public key servers: they would learn whom one writes to.
@@ -152,7 +157,15 @@ scan and **before** it stores it:
   a small OpenPGP message of its own, so an app need not fetch every message to show the list: the JMAP property
   `kernoid:encryptedSummary` (in `https://kernoid.dev/jmap/openpgp`).
 - Mail that arrives already encrypted (PGP/MIME or inline) is stored as it is.
-- When the setting is switched on, a worker job encrypts the mail already stored the same way.
+- When the setting is switched on, a worker job encrypts the mail already stored the same way. An email's content
+  never changes (RFC 8621, 4), so each is **replaced** – a new email with the same mailboxes, keywords and time of
+  receipt, the old one destroyed in the same transaction; IMAP clients see it expunged and new. Drafts stay as their
+  program wrote them.
+- **Only on arrival over SMTP**, not when a client stores a message (JMAP `Email/set`, `Email/import`, IMAP `APPEND`):
+  a client that is not end-to-end aware sends what it stored, and encrypting its draft would send ciphertext to its
+  recipients. kernoid's apps encrypt their copies themselves (5.3).
+- **OPEN:** an encrypted reply does not join the thread of a plain original (its subject is `[...]` outside), and an
+  account too full for both copies at once is not encrypted until it has room.
 
 This protects stored mail against everyone who comes later – a stolen backup, a seized server, an operator who
 looks tomorrow. It does not protect against an operator who changes kernoid to copy mail as it arrives; only mail

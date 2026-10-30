@@ -35,6 +35,7 @@ mod registration;
 mod scim;
 mod sessions;
 mod webdav;
+pub mod wkd;
 
 pub use forwarded::Client;
 pub use instance::CurrentInstance;
@@ -261,6 +262,8 @@ fn rest() -> OpenApiRouter<AppState> {
         .routes(routes!(admin::files::default_quota, admin::files::set_default_quota))
         .routes(routes!(admin::files::retention, admin::files::set_retention))
         .routes(routes!(admin::tenant::language, admin::tenant::set_language))
+        .routes(routes!(admin::tenant::e2e_policy, admin::tenant::set_e2e_policy))
+        .routes(routes!(admin::tenant::set_recovery_key))
         .routes(routes!(admin::files::drives, admin::files::add_drive))
         .routes(routes!(admin::files::access, admin::files::set_access, admin::files::remove_access))
         .routes(routes!(admin::mail::export, admin::mail::import_mbox))
@@ -442,6 +445,10 @@ pub fn router(state: AppState, modules: Router, http: &Http) -> Router {
     let mail = Router::new()
         .route("/.well-known/jmap", get(jmap::well_known))
         .route("/.well-known/autoconfig/mail/config-v1.1.xml", get(autoconfig::config))
+        .route("/.well-known/openpgpkey/hu/{hash}", get(wkd::direct))
+        .route("/.well-known/openpgpkey/policy", get(wkd::policy))
+        .route("/.well-known/openpgpkey/{domain}/hu/{hash}", get(wkd::advanced))
+        .route("/.well-known/openpgpkey/{domain}/policy", get(wkd::policy))
         .route("/mail/config-v1.1.xml", get(autoconfig::config))
         .route("/jmap/session", get(jmap::session))
         .route("/jmap/api", post(jmap::api))

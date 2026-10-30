@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, thread_id, size, received_at, sent_at, message_id, in_reply_to, \"references\", subject,\n                      from_addresses, to_addresses, cc_addresses, bcc_addresses, reply_to, sender, preview,\n                      has_attachment, keywords,\n                      array(SELECT mailbox_id FROM email_mailboxes WHERE email_id = e.id ORDER BY mailbox_id) AS \"mailboxes!\",\n                      array(SELECT uid FROM email_mailboxes WHERE email_id = e.id ORDER BY mailbox_id) AS \"uids!\"\n               FROM emails e WHERE account_id = $1 AND id = ANY($2)\n               ORDER BY received_at DESC, id DESC",
+  "query": "SELECT id, thread_id, size, received_at, sent_at, message_id, in_reply_to, \"references\", subject,\n                      from_addresses, to_addresses, cc_addresses, bcc_addresses, reply_to, sender, preview,\n                      has_attachment, keywords, encrypted, encrypted_summary,\n                      array(SELECT mailbox_id FROM email_mailboxes WHERE email_id = e.id ORDER BY mailbox_id) AS \"mailboxes!\",\n                      array(SELECT uid FROM email_mailboxes WHERE email_id = e.id ORDER BY mailbox_id) AS \"uids!\"\n               FROM emails e WHERE account_id = $1 AND id = ANY($2)\n               ORDER BY received_at DESC, id DESC",
   "describe": {
     "columns": [
       {
@@ -203,12 +203,34 @@
       },
       {
         "ordinal": 18,
+        "name": "encrypted",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "emails",
+            "name": "encrypted"
+          }
+        }
+      },
+      {
+        "ordinal": 19,
+        "name": "encrypted_summary",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "emails",
+            "name": "encrypted_summary"
+          }
+        }
+      },
+      {
+        "ordinal": 20,
         "name": "mailboxes!",
         "type_info": "UuidArray",
         "origin": "Expression"
       },
       {
-        "ordinal": 19,
+        "ordinal": 21,
         "name": "uids!",
         "type_info": "Int8Array",
         "origin": "Expression"
@@ -239,9 +261,11 @@
       false,
       false,
       false,
+      false,
+      true,
       null,
       null
     ]
   },
-  "hash": "2cd8b4dbd03ba144ec5ed5fa26c5a4b11e7f643bbfc25630d883bb66fe061253"
+  "hash": "2658ce3ba5d4cbf5c0a53e95906591ea11c9a6c96a89c01e4ed833a392da8d61"
 }

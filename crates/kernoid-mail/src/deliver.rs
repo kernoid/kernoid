@@ -311,7 +311,8 @@ impl Mail {
             keywords: keywords.into_iter().collect(),
             received_at: None,
         };
-        Ok(Delivered::Stored(self.import_email(account, raw, email).await?))
+        let arrival = self.encrypt_on_arrival(account, raw).await?;
+        Ok(Delivered::Stored(self.import_email_with(account, arrival.raw, email, arrival.encrypted_summary).await?))
     }
 
     /// Queues what a script sends (RFC 0002, 10.6): a redirect with the original sender rewritten by SRS into an

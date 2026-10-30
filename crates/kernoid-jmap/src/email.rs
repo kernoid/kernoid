@@ -327,6 +327,15 @@ fn email_object(
             }
             "hasAttachment" => json!(info.has_attachment),
             "preview" => json!(info.preview),
+            // kernoid's own (RFC 0006, 5.2): whether the message is end-to-end encrypted, and its summary encrypted to
+            // the same keys.
+            "kernoid:encrypted" => json!(info.encrypted),
+            "kernoid:encryptedSummary" => {
+                use base64::Engine;
+                info.encrypted_summary
+                    .as_deref()
+                    .map_or(Value::Null, |s| json!(base64::engine::general_purpose::STANDARD.encode(s)))
+            }
             property => match raw {
                 Some((raw, message)) => match from_message(raw, message, Some(info.id), property, options) {
                     Some(value) => value,

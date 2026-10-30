@@ -2,6 +2,8 @@
 [workspace]
 resolver = "3"
 members = ["crates/*"]
+# The end-to-end library is a dependency of the server, not a member: a workspace of its own (MIT), like apps/tui.
+exclude = ["apps/e2e"]
 
 [workspace.package]
 version = "0.1.0"

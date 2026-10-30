@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT c.fingerprint, c.label, c.protected, c.salt FROM openpgp_key_copies c\n             JOIN openpgp_keys k ON k.fingerprint = c.fingerprint WHERE k.account_id = $1 ORDER BY c.label",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "fingerprint",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "openpgp_key_copies",
+            "name": "fingerprint"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "label",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "openpgp_key_copies",
+            "name": "label"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "protected",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "openpgp_key_copies",
+            "name": "protected"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "salt",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "openpgp_key_copies",
+            "name": "salt"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "dc6af3d53e5ea9ea8eeb56cfb3190153eac3846e60f50f70bad562c1f15eb29e"
+}

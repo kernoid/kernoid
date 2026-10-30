@@ -9,7 +9,18 @@ all-features = true
 [advisories]
 # Unmaintained crates are reported, but only those kernoid depends on directly fail the build.
 unmaintained = "workspace"
-ignore = []
+# Three of rpgp's dependencies, which kernoid takes through apps/e2e (RFC 0006) – the same reasons as in
+# apps/e2e/deny.toml. The server never decrypts or signs with an account's key: it only encrypts to public keys and
+# reads them.
+ignore = [
+    # crypto-bigint 0.5 (NIST curves, X448) is not constant-time; the fix is 0.7.6, which rpgp 0.21 does not take.
+    # kernoid's keys are Curve25519 and ML-KEM/ML-DSA, and secret keys of other kinds are refused.
+    { id = "RUSTSEC-2026-0387", reason = "no secret key of kernoid's is on a curve crypto-bigint 0.5 computes" },
+    # ml-dsa 0.0.4 signs in variable time; rpgp 0.21 requires it. The server never signs with ML-DSA.
+    { id = "RUSTSEC-2025-0144", reason = "ML-DSA signs only in the user's client, never as a service anyone can time" },
+    # RSA decryption is not constant-time (Marvin), with no fixed version; kernoid never uses an RSA secret key.
+    { id = "RUSTSEC-2023-0071", reason = "no RSA secret key is ever used; only public RSA operations" },
+]
 
 [licenses]
 confidence-threshold = 0.93

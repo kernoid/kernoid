@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT k.public_key FROM addresses ad\n             JOIN accounts a ON a.id = ad.account_id\n             JOIN tenant_domains d ON d.tenant_id = a.tenant_id AND d.domain = $2 AND d.verified\n             JOIN openpgp_keys k ON k.account_id = a.id AND k.retired_at IS NULL\n             WHERE lower(ad.address) = $1 AND a.active",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "public_key",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "openpgp_keys",
+            "name": "public_key"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b0372a24700d5884b4fc5b5c217bcbc9d9eb6e88a3c39b61066d4d4333bf0155"
+}

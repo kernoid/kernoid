@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: MIT
 //! End-to-end encryption of kernoid's apps (RFC 0006): an account's OpenPGP key and the protected copies of its
 //! secret key (`keys`), encrypting and decrypting data (`message`), mail as PGP/MIME with header protection and the
-//! summary the apps show in lists (`mime`). All of it is rpgp; nothing here is cryptography of its own.
+//! summary the apps show in lists (`mime`), and mail built and read in the client (`compose`). All of the
+//! cryptography is rpgp; nothing here is cryptography of its own.
 
+pub mod compose;
 pub mod keys;
 pub mod message;
 pub mod mime;

@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO openpgp_key_copies (fingerprint, label, protected, salt) VALUES ($1, $2, $3, $4)\n                     ON CONFLICT (fingerprint, label) DO UPDATE SET protected = $3, salt = $4, created_at = now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "95401a7a7ca5bcff7c7db82b4282f99492711af1c1c0536c6980fe0cec7970ff"
+}

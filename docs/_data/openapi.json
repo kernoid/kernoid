@@ -8885,6 +8885,138 @@
         }
       }
     },
+    "/v1/tenant/e2e": {
+      "get": {
+        "tags": [
+          "tenant"
+        ],
+        "summary": "What the tenant's accounts may encrypt end to end, and its recovery key (needs `directory.read`; RFC 0006, 8).",
+        "operationId": "get_v1_tenant_e2e",
+        "parameters": [
+          {
+            "name": "kernoid-tenant",
+            "in": "header",
+            "description": "The tenant to act on – for instance administrators; the caller's own tenant if left out.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/E2ePolicyView"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "tenant"
+        ],
+        "summary": "Sets that policy (needs `tenant.manage`). Recovery through the tenant needs its recovery key first; `forbidden`\ndoes not touch what is encrypted already.",
+        "operationId": "put_v1_tenant_e2e",
+        "parameters": [
+          {
+            "name": "kernoid-tenant",
+            "in": "header",
+            "description": "The tenant to act on – for instance administrators; the caller's own tenant if left out.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/E2ePolicyBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "description": "recovery without a recovery key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tenant/e2e/recovery-key": {
+      "put": {
+        "tags": [
+          "tenant"
+        ],
+        "summary": "Sets the tenant's recovery key (needs `tenant.manage`; RFC 0006, 8.2).",
+        "operationId": "put_v1_tenant_e2e_recovery_key",
+        "parameters": [
+          {
+            "name": "kernoid-tenant",
+            "in": "header",
+            "description": "The tenant to act on – for instance administrators; the caller's own tenant if left out.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecoveryKeyBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Fingerprint"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "not an OpenPGP key kernoid can use",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/tenant/files-quota": {
       "get": {
         "tags": [
@@ -10576,6 +10708,64 @@
           }
         }
       },
+      "E2ePolicyBody": {
+        "type": "object",
+        "required": [
+          "mail",
+          "vaults",
+          "collections",
+          "recovery"
+        ],
+        "properties": {
+          "collections": {
+            "$ref": "#/components/schemas/E2eRuleView",
+            "description": "Encrypted calendars and address books."
+          },
+          "mail": {
+            "$ref": "#/components/schemas/E2eRuleView",
+            "description": "Mail encrypted on arrival to the account's key."
+          },
+          "recovery": {
+            "type": "boolean",
+            "description": "Whether every account's secret key must be recoverable with the tenant's recovery key."
+          },
+          "vaults": {
+            "$ref": "#/components/schemas/E2eRuleView",
+            "description": "Vaults: directories only their members can read."
+          }
+        }
+      },
+      "E2ePolicyView": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/E2ePolicyBody"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "recovery_key": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/RecoveryKeyView"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "E2eRuleView": {
+        "type": "string",
+        "description": "Whether accounts may use an end-to-end setting (RFC 0006, 8.1).",
+        "enum": [
+          "allowed",
+          "required",
+          "forbidden"
+        ]
+      },
       "ExchangeLogin": {
         "type": "object",
         "required": [
@@ -10770,6 +10960,17 @@
             "format": "int32",
             "description": "Days what is in a file trash stays; null keeps it.",
             "minimum": 0
+          }
+        }
+      },
+      "Fingerprint": {
+        "type": "object",
+        "required": [
+          "fingerprint"
+        ],
+        "properties": {
+          "fingerprint": {
+            "type": "string"
           }
         }
       },
@@ -12510,6 +12711,34 @@
               "type": "string"
             },
             "description": "Shown this once; each works once."
+          }
+        }
+      },
+      "RecoveryKeyBody": {
+        "type": "object",
+        "required": [
+          "public_key"
+        ],
+        "properties": {
+          "public_key": {
+            "type": "string",
+            "description": "The OpenPGP public key an administrator's app made, base64 of its binary or armored form; its secret key stays\nwith the administrators."
+          }
+        }
+      },
+      "RecoveryKeyView": {
+        "type": "object",
+        "required": [
+          "fingerprint",
+          "public_key"
+        ],
+        "properties": {
+          "fingerprint": {
+            "type": "string"
+          },
+          "public_key": {
+            "type": "string",
+            "description": "The OpenPGP public key, base64 of its binary form."
           }
         }
       },

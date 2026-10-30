@@ -7,7 +7,11 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use kernoid_identity::{CHALLENGE_LABEL, DomainName, IdentityError, admin::TenantPolicy};
+use kernoid_identity::{
+    CHALLENGE_LABEL, DomainName, IdentityError,
+    admin::TenantPolicy,
+    tenant::{E2ePolicy, E2eRule},
+};
 use serde::{Deserialize, Serialize};
 
 use super::{AdminSession, no_content, respond};
@@ -225,6 +229,138 @@ pub(crate) async fn set_language(
     Json(body): Json<TenantLanguage>,
 ) -> Response {
     respond(state.identity.admin_set_tenant_language(&admin, body.language.as_deref()).await, no_content)
+}
+
+/// Whether accounts may use an end-to-end setting (RFC 0006, 8.1).
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum E2eRuleView {
+    Allowed,
+    Required,
+    Forbidden,
+}
+
+impl From<E2eRule> for E2eRuleView {
+    fn from(rule: E2eRule) -> Self {
+        match rule {
+            E2eRule::Allowed => E2eRuleView::Allowed,
+            E2eRule::Required => E2eRuleView::Required,
+            E2eRule::Forbidden => E2eRuleView::Forbidden,
+        }
+    }
+}
+
+impl From<E2eRuleView> for E2eRule {
+    fn from(rule: E2eRuleView) -> Self {
+        match rule {
+            E2eRuleView::Allowed => E2eRule::Allowed,
+            E2eRuleView::Required => E2eRule::Required,
+            E2eRuleView::Forbidden => E2eRule::Forbidden,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
+pub(crate) struct E2ePolicyBody {
+    /// Mail encrypted on arrival to the account's key.
+    mail: E2eRuleView,
+    /// Vaults: directories only their members can read.
+    vaults: E2eRuleView,
+    /// Encrypted calendars and address books.
+    collections: E2eRuleView,
+    /// Whether every account's secret key must be recoverable with the tenant's recovery key.
+    recovery: bool,
+}
+
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub(crate) struct RecoveryKeyView {
+    fingerprint: String,
+    /// The OpenPGP public key, base64 of its binary form.
+    public_key: String,
+}
+
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub(crate) struct E2ePolicyView {
+    #[serde(flatten)]
+    policy: E2ePolicyBody,
+    recovery_key: Option<RecoveryKeyView>,
+}
+
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
+pub(crate) struct RecoveryKeyBody {
+    /// The OpenPGP public key an administrator's app made, base64 of its binary or armored form; its secret key stays
+    /// with the administrators.
+    public_key: String,
+}
+
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub(crate) struct Fingerprint {
+    fingerprint: String,
+}
+
+fn base64_key(value: &str) -> Result<Vec<u8>, IdentityError> {
+    use base64::Engine;
+    base64::engine::general_purpose::STANDARD
+        .decode(value.trim())
+        .map_err(|_| IdentityError::Refused("the public key is base64".into()))
+}
+
+/// What the tenant's accounts may encrypt end to end, and its recovery key (needs `directory.read`; RFC 0006, 8).
+#[utoipa::path(get, path = "/v1/tenant/e2e", tag = "tenant", params(TenantHeader),
+    responses((status = 200, body = E2ePolicyView)))]
+pub(crate) async fn e2e_policy(State(state): State<AppState>, AdminSession(admin): AdminSession) -> Response {
+    respond(state.identity.admin_e2e_policy(&admin).await, |(policy, key)| {
+        use base64::Engine;
+        Json(E2ePolicyView {
+            policy: E2ePolicyBody {
+                mail: policy.mail.into(),
+                vaults: policy.vaults.into(),
+                collections: policy.collections.into(),
+                recovery: policy.recovery,
+            },
+            recovery_key: key.map(|(fingerprint, key)| RecoveryKeyView {
+                fingerprint,
+                public_key: base64::engine::general_purpose::STANDARD.encode(key),
+            }),
+        })
+        .into_response()
+    })
+}
+
+/// Sets that policy (needs `tenant.manage`). Recovery through the tenant needs its recovery key first; `forbidden`
+/// does not touch what is encrypted already.
+#[utoipa::path(put, path = "/v1/tenant/e2e", tag = "tenant", params(TenantHeader), request_body = E2ePolicyBody,
+    responses((status = 204), (status = 400, description = "recovery without a recovery key", body = Problem)))]
+pub(crate) async fn set_e2e_policy(
+    State(state): State<AppState>,
+    AdminSession(admin): AdminSession,
+    Json(body): Json<E2ePolicyBody>,
+) -> Response {
+    let policy = E2ePolicy {
+        mail: body.mail.into(),
+        vaults: body.vaults.into(),
+        collections: body.collections.into(),
+        recovery: body.recovery,
+    };
+    respond(state.identity.admin_set_e2e_policy(&admin, policy).await, no_content)
+}
+
+/// Sets the tenant's recovery key (needs `tenant.manage`; RFC 0006, 8.2).
+#[utoipa::path(put, path = "/v1/tenant/e2e/recovery-key", tag = "tenant", params(TenantHeader),
+    request_body = RecoveryKeyBody,
+    responses((status = 200, body = Fingerprint), (status = 400, description = "not an OpenPGP key kernoid can use", body = Problem)))]
+pub(crate) async fn set_recovery_key(
+    State(state): State<AppState>,
+    AdminSession(admin): AdminSession,
+    Json(body): Json<RecoveryKeyBody>,
+) -> Response {
+    let key = match base64_key(&body.public_key) {
+        Ok(key) => key,
+        Err(error) => return respond(Err::<(), _>(error), no_content),
+    };
+    respond(state.identity.admin_set_recovery_key(&admin, &key).await, |fingerprint| {
+        Json(Fingerprint { fingerprint }).into_response()
+    })
 }
 
 /// The permissions of the caller for the tenant administered – for a UI to show what it may do.

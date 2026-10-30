@@ -674,6 +674,24 @@ enum TenantCommand {
         tenant: Uuid,
         language: String,
     },
+    /// What the tenant's accounts may encrypt end to end (RFC 0006, 8): each allowed, required or forbidden.
+    E2ePolicy {
+        tenant: Uuid,
+        #[arg(long, default_value = "allowed")]
+        mail: String,
+        #[arg(long, default_value = "allowed")]
+        vaults: String,
+        #[arg(long, default_value = "allowed")]
+        collections: String,
+        /// Every account's secret key recoverable with the tenant's recovery key (set it first).
+        #[arg(long, action = clap::ArgAction::Set, default_value_t = false)]
+        recovery: bool,
+    },
+    /// Set the tenant's recovery key: an OpenPGP public key (armored or binary) on standard input; its secret key
+    /// stays with the administrators.
+    RecoveryKey {
+        tenant: Uuid,
+    },
     /// Switch a module on or off for the tenant.
     Module {
         tenant: Uuid,
@@ -867,7 +885,8 @@ async fn serve(config: Config) -> anyhow::Result<()> {
         )
         .with_groupware(kernoid_groupware::Groupware::new(mail_store(db.clone(), blobs.clone(), &config), keys.clone()))
         .with_files(file_store(db.clone(), blobs.clone(), &config))
-        .with_identity(Identity::new(events.clone())),
+        .with_identity(Identity::new(events.clone()))
+        .with_key_directory(std::sync::Arc::new(kernoid_server::wkd::Lookup::new())),
         mail_events.clone(),
     );
     // Calendars and contacts (RFC 0004) over CalDAV and CardDAV.
@@ -1513,6 +1532,27 @@ async fn mail_housekeeping(
                         }
                     }
                 }
+                // Mail stored before its account switched encryption on (RFC 0006, 5.2), a few minutes per round.
+                let encrypting_until = std::time::Instant::now() + std::time::Duration::from_secs(300);
+                let mut encrypted = 0;
+                loop {
+                    match mail.encrypt_stored(HOUSEKEEPING_BATCH).await {
+                        Ok(done) => {
+                            encrypted += done;
+                            let more = done as i64 == HOUSEKEEPING_BATCH;
+                            if !more || shutdown.is_cancelled() || std::time::Instant::now() > encrypting_until {
+                                break;
+                            }
+                        }
+                        Err(error) => {
+                            tracing::warn!(%error, "encrypting stored mail failed; trying again later");
+                            break;
+                        }
+                    }
+                }
+                if encrypted > 0 {
+                    tracing::info!(encrypted, "stored mail encrypted to its accounts' keys");
+                }
                 // The search index of emails stored before it (RFC 0002, 13.1), a few minutes per round at most.
                 let indexing_until = std::time::Instant::now() + std::time::Duration::from_secs(300);
                 let mut indexed = 0;
@@ -1995,6 +2035,24 @@ async fn tenant(config: &Config, command: TenantCommand) -> anyhow::Result<()> {
             identity
                 .set_tenant_language(tenant, Some(language.as_str()).filter(|code| *code != "none"), OPERATOR)
                 .await?;
+        }
+        TenantCommand::E2ePolicy { tenant, mail, vaults, collections, recovery } => {
+            let rule = |value: &str| {
+                kernoid_identity::tenant::E2eRule::parse(value)
+                    .ok_or_else(|| anyhow::anyhow!("{value}: a rule is allowed, required or forbidden"))
+            };
+            let policy = kernoid_identity::tenant::E2ePolicy {
+                mail: rule(&mail)?,
+                vaults: rule(&vaults)?,
+                collections: rule(&collections)?,
+                recovery,
+            };
+            identity.set_e2e_policy(tenant, policy, OPERATOR).await?;
+        }
+        TenantCommand::RecoveryKey { tenant } => {
+            let mut key = Vec::new();
+            std::io::Read::read_to_end(&mut std::io::stdin(), &mut key).context("reading standard input")?;
+            println!("{}", identity.set_recovery_key(tenant, &key, OPERATOR).await?);
         }
         TenantCommand::Module { tenant, module, enabled } => {
             let known: Vec<&str> = MODULES.iter().map(|module| module.name()).collect();

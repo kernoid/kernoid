@@ -101,6 +101,25 @@ pub struct Tenant {
     modules: Vec<String>,
 }
 
+/// What the tenant's accounts may encrypt end to end (RFC 0006, 8): each `allowed`, `required` or `forbidden`.
+#[derive(Debug, SimpleObject)]
+pub struct EndToEndPolicy {
+    mail: String,
+    vaults: String,
+    collections: String,
+    /// Whether every account's secret key must be recoverable with the tenant's recovery key.
+    recovery: bool,
+    /// The fingerprint of the tenant's recovery key, if it has one.
+    recovery_key_fingerprint: Option<String>,
+    /// The recovery key's OpenPGP public key, base64.
+    recovery_key: Option<String>,
+}
+
+fn e2e_rule(value: &str) -> async_graphql::Result<kernoid_identity::tenant::E2eRule> {
+    kernoid_identity::tenant::E2eRule::parse(value)
+        .ok_or_else(|| error(IdentityError::Refused("a rule is allowed, required or forbidden".into())))
+}
+
 #[derive(Debug, SimpleObject)]
 pub struct TenantModule {
     name: String,
@@ -632,6 +651,21 @@ impl AdminQuery {
         identity.admin_tenant_language(&admin).await.map_err(error)
     }
 
+    /// What the tenant's accounts may encrypt end to end, and its recovery key (needs `directory.read`).
+    async fn tenant_end_to_end_policy(&self, context: &Context<'_>) -> async_graphql::Result<EndToEndPolicy> {
+        use base64::Engine;
+        let (identity, admin) = admin(context).await?;
+        let (policy, key) = identity.admin_e2e_policy(&admin).await.map_err(error)?;
+        Ok(EndToEndPolicy {
+            mail: policy.mail.as_str().to_owned(),
+            vaults: policy.vaults.as_str().to_owned(),
+            collections: policy.collections.as_str().to_owned(),
+            recovery: policy.recovery,
+            recovery_key_fingerprint: key.as_ref().map(|(fingerprint, _)| fingerprint.clone()),
+            recovery_key: key.map(|(_, key)| base64::engine::general_purpose::STANDARD.encode(key)),
+        })
+    }
+
     /// The modules the installation has switched on, which the tenant may use, and whether it does.
     async fn tenant_modules(&self, context: &Context<'_>) -> async_graphql::Result<Vec<TenantModule>> {
         let (identity, admin) = admin(context).await?;
@@ -961,6 +995,43 @@ impl AdminMutation {
         let (identity, admin) = admin(context).await?;
         identity.admin_set_tenant_language(&admin, language.as_deref()).await.map_err(error)?;
         Ok(true)
+    }
+
+    /// Sets what the tenant's accounts may encrypt end to end – `mail`, `vaults` and `collections` each `allowed`,
+    /// `required` or `forbidden` – and whether their keys must be recoverable (needs `tenant.manage`; recovery needs
+    /// the recovery key first).
+    async fn set_tenant_end_to_end_policy(
+        &self,
+        context: &Context<'_>,
+        mail: String,
+        vaults: String,
+        collections: String,
+        recovery: bool,
+    ) -> async_graphql::Result<bool> {
+        let (identity, admin) = admin(context).await?;
+        let policy = kernoid_identity::tenant::E2ePolicy {
+            mail: e2e_rule(&mail)?,
+            vaults: e2e_rule(&vaults)?,
+            collections: e2e_rule(&collections)?,
+            recovery,
+        };
+        identity.admin_set_e2e_policy(&admin, policy).await.map_err(error)?;
+        Ok(true)
+    }
+
+    /// Sets the tenant's recovery key: an OpenPGP public key (base64) an administrator's app made, whose secret key
+    /// stays with the administrators. Returns its fingerprint (needs `tenant.manage`).
+    async fn set_tenant_recovery_key(
+        &self,
+        context: &Context<'_>,
+        public_key: String,
+    ) -> async_graphql::Result<String> {
+        use base64::Engine;
+        let (identity, admin) = admin(context).await?;
+        let key = base64::engine::general_purpose::STANDARD
+            .decode(public_key.trim())
+            .map_err(|_| error(IdentityError::Refused("the public key is base64".into())))?;
+        identity.admin_set_recovery_key(&admin, &key).await.map_err(error)
     }
 
     /// Sets whether every login to an application of the tenant needs a second factor, and how many days accounts

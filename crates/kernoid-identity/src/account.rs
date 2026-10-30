@@ -143,6 +143,21 @@ pub enum AccountEvent {
     ServiceGranted { service: Service },
     #[serde(rename = "account.service_revoked")]
     ServiceRevoked { service: Service },
+    /// An OpenPGP key made by the account's client (RFC 0006, 4); the public key and the protected copies of its
+    /// secret key are in `openpgp_keys` and `openpgp_key_copies`. Any earlier key in use is retired in the same command.
+    #[serde(rename = "account.openpgp_key_added")]
+    OpenPgpKeyAdded { fingerprint: String, kind: String },
+    /// The key decrypts what was encrypted to it; nothing is encrypted to it again.
+    #[serde(rename = "account.openpgp_key_retired")]
+    OpenPgpKeyRetired { fingerprint: String },
+    /// A protected copy of the key's secret key, added or replaced (`label`: `recovery`, `tenant`, `passkey:…`, …).
+    #[serde(rename = "account.openpgp_key_copy_set")]
+    OpenPgpKeyCopySet { fingerprint: String, label: String },
+    #[serde(rename = "account.openpgp_key_copy_removed")]
+    OpenPgpKeyCopyRemoved { fingerprint: String, label: String },
+    /// Mail encrypted to the account's key on arrival (RFC 0006, 5.1).
+    #[serde(rename = "account.mail_e2e_set")]
+    MailE2eSet { on: bool },
 }
 
 impl DomainEvent for AccountEvent {
@@ -206,10 +221,15 @@ pub struct Account {
     pub username: Option<String>,
     /// The contact address and whether it is verified.
     pub email: Option<(String, bool)>,
+    /// OpenPGP keys by fingerprint: whether retired.
+    pub openpgp_keys: BTreeMap<String, bool>,
+    /// Protected copies: (fingerprint, label).
+    pub openpgp_copies: BTreeSet<(String, String)>,
+    pub mail_e2e: bool,
 }
 
 impl Account {
-    fn has_address(&self, address: &Address) -> bool {
+    pub(crate) fn has_address(&self, address: &Address) -> bool {
         self.primary.as_ref() == Some(address) || self.aliases.contains(address)
     }
 }
@@ -250,6 +270,19 @@ impl Aggregate for Account {
             AccountEvent::ServiceRevoked { service } => {
                 self.services.remove(&service);
             }
+            AccountEvent::OpenPgpKeyAdded { fingerprint, .. } => {
+                self.openpgp_keys.insert(fingerprint, false);
+            }
+            AccountEvent::OpenPgpKeyRetired { fingerprint } => {
+                self.openpgp_keys.insert(fingerprint, true);
+            }
+            AccountEvent::OpenPgpKeyCopySet { fingerprint, label } => {
+                self.openpgp_copies.insert((fingerprint, label));
+            }
+            AccountEvent::OpenPgpKeyCopyRemoved { fingerprint, label } => {
+                self.openpgp_copies.remove(&(fingerprint, label));
+            }
+            AccountEvent::MailE2eSet { on } => self.mail_e2e = on,
             AccountEvent::Renamed { display_name } => self.display_name = display_name,
             AccountEvent::LanguageSet { language } => self.language = language,
             AccountEvent::AliasAdded { address } => {
@@ -428,6 +461,34 @@ pub(crate) async fn project(connection: &mut PgConnection, events: &[Event]) -> 
                 set_service(connection, id, service, Some(ServiceState::On)).await?;
             }
             AccountEvent::ServiceRevoked { service } => set_service(connection, id, service, None).await?,
+            // Keys and copies are written by the command, which holds their bytes.
+            AccountEvent::OpenPgpKeyAdded { .. } | AccountEvent::OpenPgpKeyCopySet { .. } => {}
+            AccountEvent::OpenPgpKeyRetired { fingerprint } => {
+                sqlx::query!(
+                    "UPDATE openpgp_keys SET retired_at = coalesce(retired_at, now())
+                     WHERE fingerprint = $1 AND account_id = $2",
+                    fingerprint,
+                    id,
+                )
+                .execute(&mut *connection)
+                .await?;
+            }
+            AccountEvent::OpenPgpKeyCopyRemoved { fingerprint, label } => {
+                sqlx::query!(
+                    "DELETE FROM openpgp_key_copies c USING openpgp_keys k
+                     WHERE c.fingerprint = k.fingerprint AND k.account_id = $1 AND c.fingerprint = $2 AND c.label = $3",
+                    id,
+                    fingerprint,
+                    label,
+                )
+                .execute(&mut *connection)
+                .await?;
+            }
+            AccountEvent::MailE2eSet { on } => {
+                sqlx::query!("UPDATE accounts SET mail_e2e = $2 WHERE id = $1", id, on)
+                    .execute(&mut *connection)
+                    .await?;
+            }
             AccountEvent::Renamed { display_name } => {
                 sqlx::query!("UPDATE accounts SET display_name = $2 WHERE id = $1", id, display_name)
                     .execute(&mut *connection)

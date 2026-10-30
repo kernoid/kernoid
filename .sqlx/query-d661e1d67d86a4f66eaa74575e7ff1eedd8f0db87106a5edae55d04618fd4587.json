@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM openpgp_key_copies c USING openpgp_keys k\n                     WHERE c.fingerprint = k.fingerprint AND k.account_id = $1 AND c.fingerprint = $2 AND c.label = $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d661e1d67d86a4f66eaa74575e7ff1eedd8f0db87106a5edae55d04618fd4587"
+}

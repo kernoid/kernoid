@@ -2,7 +2,8 @@
 # End-to-end encryption of kernoid's apps (RFC 0006): OpenPGP keys and their protected copies, encrypting and
 # decrypting, PGP/MIME with header protection – on rpgp. A first-party library under MIT and a workspace of its own,
 # like the terminal app: the web app uses it as WebAssembly, the terminal app as a library, and the server for
-# encryption on arrival – one implementation everywhere. Dependencies are exact (`=`) and at least two weeks old when
+# encryption on arrival – one implementation everywhere. Since the server's workspace builds it too, its requirements
+# are minimum versions, not exact ones – each workspace's Cargo.lock pins them; versions are at least two weeks old when
 # taken (`../tui/scripts/check-age.py --dir=apps/e2e`).
 [workspace]
 
@@ -24,15 +25,16 @@ crate-type = ["rlib", "cdylib"]
 wasm = ["dep:wasm-bindgen", "pgp/wasm"]
 
 [dependencies]
+base64 = "0.22.1"
 # Mail parsed as the server parses it (Apache-2.0 OR MIT).
-mail-parser = { version = "=0.11.9", default-features = false }
+mail-parser = { version = "0.11.9", default-features = false }
 # OpenPGP (RFC 9580) with its post-quantum algorithms (RFC 9980) – MIT OR Apache-2.0.
-pgp = { version = "=0.21.0", default-features = false, features = ["pqc"] }
-rand = "=0.8.6"
-serde = { version = "=1.0.228", features = ["derive"] }
-serde_json = "=1.0.151"
-thiserror = "=2.0.21"
-wasm-bindgen = { version = "=0.2.129", optional = true }
+pgp = { version = "0.21.0", default-features = false, features = ["pqc"] }
+rand = "0.8.6"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.151"
+thiserror = "2.0.21"
+wasm-bindgen = { version = "0.2.129", optional = true }
 
 [lints.rust]
 unsafe_code = "forbid"

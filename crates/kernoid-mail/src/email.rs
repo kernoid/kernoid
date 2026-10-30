@@ -81,6 +81,9 @@ pub struct EmailInfo {
     pub sender: Vec<Mailbox>,
     pub preview: String,
     pub has_attachment: bool,
+    /// End-to-end encrypted (RFC 0006, 5): its summary, encrypted to the same keys.
+    pub encrypted: bool,
+    pub encrypted_summary: Option<Vec<u8>>,
 }
 
 /// Which emails a query returns; all conditions must hold.
@@ -215,6 +218,32 @@ impl Mail {
     /// Stores a raw message in the account: parsed, checked against size and quota, sealed into object storage,
     /// threaded and put into the given mailboxes. Delivery and JMAP `Email/import` both come here.
     pub async fn import_email(&self, account: Uuid, raw: Bytes, new: NewEmail) -> Result<Imported> {
+        self.import_email_with(account, raw, new, None).await
+    }
+
+    /// The same, for a message end-to-end encrypted (PGP/MIME) with its summary encrypted to the same keys – the
+    /// JMAP property `kernoid:encryptedSummary` (RFC 0006, 5.2). kernoid reads nothing of an encrypted message but its
+    /// outer header fields: its subject, preview and search text stay empty.
+    pub async fn import_email_with(
+        &self,
+        account: Uuid,
+        raw: Bytes,
+        new: NewEmail,
+        encrypted_summary: Option<Vec<u8>>,
+    ) -> Result<Imported> {
+        self.import(account, raw, new, encrypted_summary, None).await
+    }
+
+    /// Imports, and destroys `replaces` in the same transaction – the encrypted copy taking the place of a stored
+    /// email (RFC 0006, 5.2).
+    pub(crate) async fn import(
+        &self,
+        account: Uuid,
+        raw: Bytes,
+        new: NewEmail,
+        encrypted_summary: Option<Vec<u8>>,
+        replaces: Option<Uuid>,
+    ) -> Result<Imported> {
         let size = raw.len() as u64;
         if size > self.limits.max_message_size {
             return Err(MailError::TooLarge { limit: self.limits.max_message_size });
@@ -224,10 +253,24 @@ impl Mail {
             return Err(MailError::Invalid("an email is in at least one mailbox".into()));
         }
         let parsed = raw.clone();
-        let summary = tokio::task::spawn_blocking(move || parse::summarize(&parsed))
-            .await
-            .map_err(|_| MailError::Unparsable)?
-            .ok_or(MailError::Unparsable)?;
+        let (summary, encrypted) =
+            tokio::task::spawn_blocking(move || (parse::summarize(&parsed), kernoid_e2e::mime::is_encrypted(&parsed)))
+                .await
+                .map_err(|_| MailError::Unparsable)?;
+        let mut summary = summary.ok_or(MailError::Unparsable)?;
+        summary.encrypted = encrypted;
+        if encrypted {
+            summary.subject = None;
+            summary.preview = String::new();
+            summary.has_attachment = false;
+            summary.search_text = String::new();
+        } else if encrypted_summary.is_some() {
+            return Err(MailError::Invalid("an encrypted summary belongs to an encrypted message".into()));
+        }
+        if encrypted_summary.as_ref().is_some_and(|s| s.len() > 65_536) {
+            return Err(MailError::Invalid("an encrypted summary has at most 65536 bytes".into()));
+        }
+        summary.encrypted_summary = encrypted_summary;
 
         // A first look at the quota, before anything is written; checked again under the lock.
         let tenant = {
@@ -241,7 +284,7 @@ impl Mail {
         let key = blob_key(account, id);
         garbage::pending(&self.pool, tenant, &key).await?;
         self.blobs.put(tenant, &key, raw).await?;
-        match self.store_imported(account, id, size, &mailboxes, &new, &summary).await {
+        match self.store_imported(account, id, size, &mailboxes, &new, &summary, replaces).await {
             Ok(imported) => Ok(imported),
             Err(error) => {
                 // The mark collects it later if this fails as well.
@@ -253,6 +296,7 @@ impl Mail {
         }
     }
 
+    #[allow(clippy::too_many_arguments, reason = "the parts of one import")]
     async fn store_imported(
         &self,
         account: Uuid,
@@ -261,6 +305,7 @@ impl Mail {
         mailboxes: &[Uuid],
         new: &NewEmail,
         summary: &Summary,
+        replaces: Option<Uuid>,
     ) -> Result<Imported> {
         let mut tx = self.pool.begin().await?;
         let mut locked = self.lock(&mut tx, account).await?;
@@ -299,9 +344,10 @@ impl Mail {
         sqlx::query!(
             r#"INSERT INTO emails (id, account_id, thread_id, size, received_at, sent_at, message_id, in_reply_to,
                                    "references", subject, from_addresses, to_addresses, cc_addresses, bcc_addresses,
-                                   reply_to, sender, preview, has_attachment, keywords, body_search)
+                                   reply_to, sender, preview, has_attachment, keywords, body_search, encrypted,
+                                   encrypted_summary)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19,
-                       to_tsvector('simple', $20))"#,
+                       to_tsvector('simple', $20), $21, $22)"#,
             id,
             account,
             thread_id,
@@ -322,6 +368,8 @@ impl Mail {
             summary.has_attachment,
             &keywords,
             summary.search_text,
+            summary.encrypted,
+            summary.encrypted_summary,
         )
         .execute(&mut *tx)
         .await?;
@@ -347,6 +395,9 @@ impl Mail {
         .execute(&mut *tx)
         .await?;
         record(&mut tx, account, modseq, ObjectType::Email, id, Change::Created).await?;
+        if let Some(old) = replaces {
+            destroy_in(&mut tx, &mut locked, modseq, old).await?;
+        }
         tx.commit().await?;
         Ok(Imported { id, thread_id, size })
     }
@@ -484,7 +535,7 @@ impl Mail {
         let rows = sqlx::query!(
             r#"SELECT id, thread_id, size, received_at, sent_at, message_id, in_reply_to, "references", subject,
                       from_addresses, to_addresses, cc_addresses, bcc_addresses, reply_to, sender, preview,
-                      has_attachment, keywords,
+                      has_attachment, keywords, encrypted, encrypted_summary,
                       array(SELECT mailbox_id FROM email_mailboxes WHERE email_id = e.id ORDER BY mailbox_id) AS "mailboxes!",
                       array(SELECT uid FROM email_mailboxes WHERE email_id = e.id ORDER BY mailbox_id) AS "uids!"
                FROM emails e WHERE account_id = $1 AND id = ANY($2)
@@ -516,6 +567,8 @@ impl Mail {
                 sender: read_addresses(row.sender),
                 preview: row.preview,
                 has_attachment: row.has_attachment,
+                encrypted: row.encrypted,
+                encrypted_summary: row.encrypted_summary,
             })
             .collect())
     }

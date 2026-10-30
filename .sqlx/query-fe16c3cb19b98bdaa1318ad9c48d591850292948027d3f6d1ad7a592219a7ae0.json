@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT k.public_key FROM accounts a\n             JOIN openpgp_keys k ON k.account_id = a.id AND k.retired_at IS NULL\n             WHERE a.id = $1 AND a.mail_e2e",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "public_key",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "openpgp_keys",
+            "name": "public_key"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "fe16c3cb19b98bdaa1318ad9c48d591850292948027d3f6d1ad7a592219a7ae0"
+}
