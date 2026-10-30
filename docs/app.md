@@ -28,6 +28,23 @@ TypeScript, built into kernoid, and can be installed as an app from the browser.
 [Lucide](https://lucide.dev) (ISC), its typeface IBM Plex Sans (OFL, served by kernoid itself), its editor
 [TipTap](https://tiptap.dev) (MIT).
 
+## End-to-end encryption
+
+On the account page (End-to-end encryption) the app makes the account's OpenPGP key – post-quantum, or compatible
+with older mail programs – in the browser and shows a recovery code once; kernoid keeps only copies of the secret key
+the browser protected ([RFC 0006](https://github.com/kernoid/kernoid/blob/main/rfcs/0006-end-to-end-encryption.md),
+see [Mail]({{ '/mail/' | relative_url }})). The key is unlocked per page – with a passkey that can (its PRF extension;
+"Unlock with a passkey from now on" adds one) or with the recovery code – and is gone when the page closes. Unlocked:
+
+- Encrypted emails show their subject and preview in the list and read as usual; their text and attachments are
+  decrypted and read in the browser, never sent back. Attachments are saved, not opened in the app.
+- An email to recipients who all have keys (other accounts with one, or addresses whose domain publishes them in a Web
+  Key Directory) goes out end-to-end encrypted and signed – the writing window says whether it will – and its copy in
+  Sent is encrypted to the sender. Files attached stay in the browser until then.
+
+The encryption itself is kernoid's library `apps/e2e` (rpgp) as WebAssembly, loaded only when it is needed; the app's
+policy allows WebAssembly (`'wasm-unsafe-eval'`) and decrypted images and media (`blob:`), never decrypted pages.
+
 {: .note }
 OPEN: notifications while the app is closed (Web Push), previews of office documents (an
 office suite is planned as a module).

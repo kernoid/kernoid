@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Mail over JMAP (RFC 8621): mailboxes, the emails of one, one email to read, and sending.
 
+import { base64, e2e, lookup, OPENPGP, unlockedRing } from "../e2e/e2e.svelte.js";
 import { type Jmap, MAIL, SUBMISSION } from "../jmap.js";
 
 export interface Mailbox {
@@ -29,6 +30,9 @@ export interface EmailSummary {
   receivedAt: string;
   preview: string;
   hasAttachment: boolean;
+  /** End-to-end encrypted (RFC 0006): subject and preview come from its encrypted summary, if the key is unlocked. */
+  "kernoid:encrypted"?: boolean;
+  "kernoid:encryptedSummary"?: string | null;
 }
 
 export interface BodyPart {
@@ -37,6 +41,8 @@ export interface BodyPart {
   type: string;
   name: string | null;
   size: number;
+  /** A part decrypted here: its content as a `blob:` URL, never sent anywhere. */
+  url?: string;
 }
 
 export interface Email extends EmailSummary {
@@ -49,6 +55,9 @@ export interface Email extends EmailSummary {
   htmlBody: BodyPart[];
   attachments: BodyPart[];
   bodyValues: Record<string, { value: string }>;
+  blobId?: string;
+  /** For an encrypted email: locked (the key is not unlocked here), or decrypted – and whose signature it carries. */
+  sealed?: { locked: boolean; signed: boolean; verified: boolean };
 }
 
 export interface Identity {
@@ -87,6 +96,32 @@ export async function mailboxes(jmap: Jmap, accountId: string): Promise<Mailbox[
 }
 
 const SUMMARY = ["threadId", "mailboxIds", "keywords", "from", "to", "subject", "receivedAt", "preview", "hasAttachment"];
+const SEALED = ["kernoid:encrypted", "kernoid:encryptedSummary"];
+
+const binary = (text: string): Uint8Array => Uint8Array.from(atob(text), (c) => c.charCodeAt(0));
+
+/** The properties to ask for: with the end-to-end ones where the server has them. */
+function summaryProperties(jmap: Jmap): string[] {
+  return OPENPGP in (jmap.session.capabilities ?? {}) ? [...SUMMARY, ...SEALED] : SUMMARY;
+}
+
+/** Fills in subject and preview of encrypted emails from their summaries, where the key is unlocked here. */
+async function openSummaries(list: EmailSummary[]): Promise<void> {
+  const ring = await unlockedRing();
+  for (const email of list) {
+    if (!email["kernoid:encrypted"]) continue;
+    const sealed = email["kernoid:encryptedSummary"];
+    if (!ring || !sealed) continue;
+    try {
+      const summary = JSON.parse(ring.decryptSummary(binary(sealed))) as { subject: string | null; preview: string; hasAttachment: boolean };
+      email.subject = summary.subject;
+      email.preview = summary.preview;
+      email.hasAttachment = summary.hasAttachment;
+    } catch {
+      // Encrypted to a key not unlocked here: shown as encrypted.
+    }
+  }
+}
 
 export async function emails(jmap: Jmap, accountId: string, mailbox: string, text: string, limit: number): Promise<{ list: EmailSummary[]; total: number }> {
   const filter: Record<string, unknown> = { inMailbox: mailbox };
@@ -95,24 +130,98 @@ export async function emails(jmap: Jmap, accountId: string, mailbox: string, tex
     [MAIL],
     [
       ["Email/query", { accountId, filter, sort: [{ property: "receivedAt", isAscending: false }], limit, calculateTotal: true }, "q"],
-      ["Email/get", { accountId, "#ids": { resultOf: "q", name: "Email/query", path: "/ids" }, properties: SUMMARY }, "g"],
+      ["Email/get", { accountId, "#ids": { resultOf: "q", name: "Email/query", path: "/ids" }, properties: summaryProperties(jmap) }, "g"],
     ],
   );
   const query = responses.get("q")?.[0] as { total?: number } | undefined;
   const get = responses.get("g")?.[0] as { list: EmailSummary[] } | undefined;
-  return { list: get?.list ?? [], total: query?.total ?? 0 };
+  const list = get?.list ?? [];
+  await openSummaries(list);
+  return { list, total: query?.total ?? 0 };
 }
 
 export async function email(jmap: Jmap, accountId: string, id: string): Promise<Email | undefined> {
   const result = await jmap.call<{ list: Email[] }>([MAIL], "Email/get", {
     accountId,
     ids: [id],
-    properties: [...SUMMARY, "cc", "replyTo", "messageId", "references", "sentAt", "textBody", "htmlBody", "attachments", "bodyValues"],
+    properties: [...summaryProperties(jmap), "blobId", "cc", "replyTo", "messageId", "references", "sentAt", "textBody", "htmlBody", "attachments", "bodyValues"],
     fetchTextBodyValues: true,
     fetchHTMLBodyValues: true,
     maxBodyValueBytes: 2_000_000,
   });
-  return result.list[0];
+  const found = result.list[0];
+  if (!found?.["kernoid:encrypted"]) return found;
+  await openSummaries([found]);
+  return decrypted(jmap, accountId, found);
+}
+
+interface Parsed {
+  subject: string | null;
+  from: Address[];
+  to: Address[];
+  cc: Address[];
+  replyTo: Address[];
+  sentAt: string | null;
+  messageId: string | null;
+  references: string[];
+  text: string | null;
+  html: string | null;
+  attachments: { index: number; name: string | null; type: string; size: number; cid: string | null; inline: boolean }[];
+}
+
+/** An encrypted email read here: its message downloaded, decrypted and read into parts in this page – the text never
+ * goes back to the server. Locked if the key is not unlocked. */
+async function decrypted(jmap: Jmap, accountId: string, found: Email): Promise<Email> {
+  const ring = await unlockedRing();
+  const locked: Email = { ...found, textBody: [], htmlBody: [], attachments: [], bodyValues: {}, sealed: { locked: true, signed: false, verified: false } };
+  if (!ring || !found.blobId) return locked;
+  const response = await fetch(jmap.downloadPath(accountId, found.blobId, "message.eml", "message/rfc822"), { credentials: "same-origin" });
+  if (!response.ok) return locked;
+  const raw = new Uint8Array(await response.arrayBuffer());
+  const senders = found.from?.length ? [...(await lookup(jmap, found.from.map((a) => a.email))).values()].flat() : [];
+  let opened;
+  try {
+    opened = ring.decryptMessage(raw, senders);
+  } catch {
+    return locked;
+  }
+  const module = await import("@kernoid/e2e");
+  const inner = opened.data;
+  const parsed = JSON.parse(module.parseMessage(inner)) as Parsed;
+  const bodyValues: Record<string, { value: string }> = {};
+  const textBody: BodyPart[] = [];
+  const htmlBody: BodyPart[] = [];
+  if (parsed.text !== null) {
+    bodyValues.text = { value: parsed.text };
+    textBody.push({ partId: "text", blobId: null, type: "text/plain", name: null, size: parsed.text.length });
+  }
+  if (parsed.html !== null) {
+    bodyValues.html = { value: parsed.html };
+    htmlBody.push({ partId: "html", blobId: null, type: "text/html", name: null, size: parsed.html.length });
+  } else if (parsed.text !== null) {
+    htmlBody.push(...textBody);
+  }
+  const attachments = parsed.attachments.map((part) => {
+    const content = module.messagePart(inner, part.index);
+    const url = URL.createObjectURL(new Blob([content.slice().buffer], { type: part.type }));
+    return { partId: null, blobId: null, type: part.type, name: part.name, size: part.size, url } satisfies BodyPart;
+  });
+  return {
+    ...found,
+    subject: parsed.subject,
+    from: parsed.from.length ? parsed.from : found.from,
+    to: parsed.to.length ? parsed.to : found.to,
+    cc: parsed.cc,
+    replyTo: parsed.replyTo,
+    sentAt: parsed.sentAt,
+    messageId: parsed.messageId ? [parsed.messageId] : found.messageId,
+    references: parsed.references.length ? parsed.references : found.references,
+    textBody,
+    htmlBody,
+    attachments,
+    bodyValues,
+    sealed: { locked: false, signed: opened.signed, verified: Boolean(opened.verifiedBy) },
+  };
 }
 
 /** The HTML of an email, if it has an HTML body. */
@@ -206,7 +315,9 @@ export interface Attachment {
 
 export interface Draft {
   identity: Identity;
-  attachments?: Attachment[];
+  /** The files attached – uploaded already to the sending account, or not yet: an end-to-end encrypted email carries
+   * them inside, so they are uploaded only if it goes out plain. */
+  files?: { file: File; attachment?: Attachment }[];
   to: Address[];
   cc: Address[];
   subject: string;
@@ -235,6 +346,9 @@ export async function send(jmap: Jmap, draft: Draft, holdSeconds = 0): Promise<S
   const drafts = boxes.find((box) => box.role === "drafts");
   const sent = boxes.find((box) => box.role === "sent");
   if (!drafts) throw new Error("no Drafts mailbox");
+  const recipients = await sealedTo(jmap, draft);
+  if (recipients) return sendSealed(jmap, draft, recipients, drafts, sent, holdSeconds);
+  const attachments = await Promise.all((draft.files ?? []).map((entry) => entry.attachment ?? upload(jmap, accountId, entry.file)));
   const email: Record<string, unknown> = {
     mailboxIds: { [drafts.id]: true },
     keywords: { $draft: true, $seen: true },
@@ -246,8 +360,8 @@ export async function send(jmap: Jmap, draft: Draft, holdSeconds = 0): Promise<S
   };
   if (draft.html) email.htmlBody = [{ partId: "html", type: "text/html" }];
   if (draft.cc.length > 0) email.cc = draft.cc;
-  if (draft.attachments?.length) {
-    email.attachments = draft.attachments.map((file) => ({ blobId: file.blobId, type: file.type, name: file.name, disposition: "attachment" }));
+  if (attachments.length) {
+    email.attachments = attachments.map((file) => ({ blobId: file.blobId, type: file.type, name: file.name, disposition: "attachment" }));
   }
   if (draft.inReplyTo) email.inReplyTo = draft.inReplyTo;
   if (draft.references) email.references = draft.references;
@@ -280,6 +394,109 @@ export async function send(jmap: Jmap, draft: Draft, holdSeconds = 0): Promise<S
   const stored = created("e", "draft");
   const submitted = created("s", "send");
   return { accountId, emailId: stored?.id ?? "", submissionId: submitted?.id ?? "", pending: submitted?.undoStatus === "pending" };
+}
+
+/** The fingerprints an email goes out end-to-end encrypted to – every recipient's key and the sender's own – or
+ * nothing if it goes plain: the sender's key is not unlocked here, the identity is not the account's own, or a
+ * recipient has no key (RFC 0006, 5.3). */
+export async function sealedTo(jmap: Jmap, draft: Pick<Draft, "identity" | "to" | "cc">): Promise<string[] | undefined> {
+  const ring = await unlockedRing();
+  const own = e2e.unlocked;
+  if (!ring || !own || draft.identity.accountId !== jmap.account(MAIL)) return undefined;
+  if (!ring.addresses(own).some((address) => address.toLowerCase() === draft.identity.email.toLowerCase())) return undefined;
+  const addresses = [...draft.to, ...draft.cc].map((address) => address.email);
+  if (addresses.length === 0) return undefined;
+  const keys = await lookup(jmap, addresses);
+  if ([...keys.values()].some((list) => list.length === 0)) return undefined;
+  return [...new Set([...[...keys.values()].flat(), own])];
+}
+
+/** A date as RFC 5322 writes it, in the browser's zone. */
+function rfc5322Date(date: Date): string {
+  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const two = (n: number) => String(n).padStart(2, "0");
+  const offset = -date.getTimezoneOffset();
+  const zone = `${offset >= 0 ? "+" : "-"}${two(Math.floor(Math.abs(offset) / 60))}${two(Math.abs(offset) % 60)}`;
+  return `${days[date.getDay()]}, ${two(date.getDate())} ${months[date.getMonth()]} ${date.getFullYear()} ${two(date.getHours())}:${two(date.getMinutes())}:${two(date.getSeconds())} ${zone}`;
+}
+
+/** Sends end-to-end encrypted: the message built, encrypted and signed in this page, uploaded as it is, imported
+ * into Drafts with its summary encrypted to the sender, and submitted with an envelope – the server never sees text
+ * or attachments (RFC 0006, 5.3). */
+async function sendSealed(jmap: Jmap, draft: Draft, recipients: string[], drafts: Mailbox, sent: Mailbox | undefined, holdSeconds: number): Promise<Sent> {
+  const ring = await unlockedRing();
+  const own = e2e.unlocked;
+  if (!ring || !own) throw new Error("the key is locked");
+  const module = await import("@kernoid/e2e");
+  const accountId = draft.identity.accountId;
+  const domain = draft.identity.email.split("@")[1] ?? "localhost";
+  const strip = (ids: string[] | null | undefined) => (ids ?? []).map((id) => id.replace(/^<|>$/g, ""));
+  const attachments = await Promise.all(
+    (draft.files ?? []).map(async ({ file }) => ({ name: file.name, type: file.type || "application/octet-stream", data: base64(new Uint8Array(await file.arrayBuffer())) })),
+  );
+  const raw = module.buildMessage(
+    JSON.stringify({
+      from: { name: draft.identity.name || null, email: draft.identity.email },
+      to: draft.to,
+      cc: draft.cc,
+      subject: draft.subject,
+      messageId: `${crypto.randomUUID()}@${domain}`,
+      inReplyTo: strip(draft.inReplyTo),
+      references: strip(draft.references),
+      date: rfc5322Date(new Date()),
+      text: draft.body,
+      html: draft.html || null,
+      attachments,
+    }),
+  );
+  const encrypted = ring.encryptMessage(raw, recipients, own);
+  const summary = ring.encryptedSummary(raw, [own]);
+  const blob = await jmap.upload(accountId, new Blob([encrypted.slice().buffer], { type: "message/rfc822" }));
+  const update: Record<string, unknown> = { "keywords/$draft": null };
+  if (sent) update.mailboxIds = { [sent.id]: true };
+  const mailFrom: Record<string, unknown> = { email: draft.identity.email, parameters: holdSeconds > 0 ? { HOLDFOR: String(holdSeconds) } : null };
+  const responses = await jmap.request(
+    [MAIL, SUBMISSION, OPENPGP],
+    [
+      [
+        "Email/import",
+        {
+          accountId,
+          emails: {
+            draft: { blobId: blob.blobId, mailboxIds: { [drafts.id]: true }, keywords: { $draft: true, $seen: true }, "kernoid:encryptedSummary": base64(summary) },
+          },
+        },
+        "e",
+      ],
+      [
+        "EmailSubmission/set",
+        {
+          accountId,
+          create: {
+            send: {
+              identityId: draft.identity.id,
+              emailId: "#draft",
+              envelope: { mailFrom, rcptTo: [...draft.to, ...draft.cc].map((address) => ({ email: address.email, parameters: null })) },
+            },
+          },
+          onSuccessUpdateEmail: { "#send": update },
+        },
+        "s",
+      ],
+    ],
+  );
+  for (const [, results] of responses) {
+    for (const result of results) {
+      const failed = (result.notCreated ?? {}) as Record<string, { type: string; description?: string }>;
+      const first = Object.values(failed)[0];
+      if (first) throw new Error(first.description ?? first.type);
+    }
+  }
+  const created = (key: string, name: string) =>
+    ((responses.get(key)?.[0]?.created ?? {}) as Record<string, { id: string; undoStatus?: string }>)[name];
+  const submitted = created("s", "send");
+  return { accountId, emailId: created("e", "draft")?.id ?? "", submissionId: submitted?.id ?? "", pending: submitted?.undoStatus === "pending" };
 }
 
 /** Takes back an email held before sending: it is not sent, and leaves Sent; the writing window opens again. */

@@ -22,10 +22,11 @@
     files?: AttachedFile[];
   }
 
-  /** A file attached, uploaded to the account it goes out from. */
+  /** A file attached: uploaded to the account it goes out from – or kept here while the key is unlocked, as an
+   * end-to-end encrypted email carries it inside (RFC 0006, 5.3). */
   export interface AttachedFile {
     file: File;
-    attachment: import("./model.js").Attachment;
+    attachment?: import("./model.js").Attachment;
     account: string;
   }
 
@@ -37,7 +38,7 @@
 </script>
 
 <script lang="ts">
-  import { Paperclip, Send, X } from "@lucide/svelte";
+  import { Lock, LockOpen, Paperclip, Send, X } from "@lucide/svelte";
 
   import { loaded, useJmap } from "../app.svelte.js";
   import Failure from "../Failure.svelte";
@@ -46,7 +47,8 @@
   import { MAIL } from "../jmap.js";
   import FileIcon from "../ui/FileIcon.svelte";
   import Editor from "./Editor.svelte";
-  import { identities, parseAddresses, send, upload } from "./model.js";
+  import { e2e } from "../e2e/e2e.svelte.js";
+  import { identities, parseAddresses, sealedTo, send, upload } from "./model.js";
 
   let {
     start,
@@ -119,9 +121,31 @@
 
   const sender = $derived((from.value ?? []).find((entry) => entry.id === identity) ?? from.value?.[0]);
 
+  /** Whether it goes out end-to-end encrypted, as far as the recipients typed so far tell. */
+  let sealed = $state(false);
+  $effect(() => {
+    const chosen = sender;
+    const recipients = { to: parseAddresses(to), cc: parseAddresses(cc) };
+    if (!chosen || !e2e.unlocked) {
+      sealed = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      sealedTo(jmap, { identity: chosen, ...recipients })
+        .then((keys) => (sealed = Boolean(keys)))
+        .catch(() => (sealed = false));
+    }, 400);
+    return () => clearTimeout(timer);
+  });
+
   async function add(list: FileList | null | undefined): Promise<void> {
     const account = sender?.accountId ?? jmap.account(MAIL);
     for (const file of Array.from(list ?? [])) {
+      // With the key unlocked, the file stays here until it is known whether the email goes out encrypted.
+      if (e2e.unlocked) {
+        files = [...files, { file, account }];
+        continue;
+      }
       uploading += 1;
       try {
         files = [...files, { file, attachment: await upload(jmap, account, file), account }];
@@ -144,15 +168,13 @@
     busy = true;
     error = undefined;
     try {
-      // Attachments go out from the sender's account: upload again what went to another.
-      const attachments = await Promise.all(
-        files.map((entry) => (entry.account === chosen.accountId ? entry.attachment : upload(jmap, chosen.accountId, entry.file))),
-      );
+      // Attachments go out from the sender's account: what went to another is uploaded again, if needed at all.
+      const attached = files.map((entry) => ({ file: entry.file, ...(entry.account === chosen.accountId && entry.attachment ? { attachment: entry.attachment } : {}) }));
       const sent = await send(
         jmap,
         {
           identity: chosen,
-          attachments,
+          files: attached,
           to: keep(to),
           cc: keep(cc),
           subject,
@@ -237,7 +259,7 @@
     {#if files.length > 0 || uploading > 0}
       <ul class="attachments">
         {#each files as entry, index (index)}
-          {@const file = entry.attachment}
+          {@const file = { name: entry.file.name, type: entry.file.type, size: entry.file.size }}
           <li class="attachment">
             <span class="quiet">
               <FileIcon name={file.name} type={file.type} size={22} />
@@ -272,7 +294,13 @@
         <input type="file" multiple hidden onchange={(event) => void add(event.currentTarget.files)} />
       </label>
       <span class="grow"></span>
-      <span class="muted small">{t("Drop files here to attach them")}</span>
+      {#if e2e.unlocked}
+        <span class="small" class:muted={!sealed} data-tip={sealed ? t("Only the recipients can read it") : t("A recipient has no key: it goes out as usual")}>
+          {#if sealed}<Lock size={15} />{t("End-to-end encrypted")}{:else}<LockOpen size={15} />{t("Not end-to-end encrypted")}{/if}
+        </span>
+      {:else}
+        <span class="muted small">{t("Drop files here to attach them")}</span>
+      {/if}
     </div>
   </form>
 </div>

@@ -21,10 +21,13 @@ use crate::Problem;
 
 const CONTENT_SECURITY_POLICY: &str = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; \
      font-src 'self'; connect-src 'self'; manifest-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'";
-/// The web app also shows files: images, audio and video from this origin's downloads, PDFs in a frame of it.
-const APP_CONTENT_SECURITY_POLICY: &str = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; \
-     font-src 'self'; media-src 'self'; frame-src 'self'; connect-src 'self'; manifest-src 'self'; form-action 'self'; base-uri 'none'; \
-     frame-ancestors 'none'";
+/// The web app also shows files: images, audio and video from this origin's downloads, PDFs in a frame of it. It runs
+/// the end-to-end library as WebAssembly (`'wasm-unsafe-eval'` compiles WebAssembly only, no JavaScript) and shows
+/// what it decrypted as images and media from `blob:` URLs – never in a frame, where a decrypted page would run as
+/// this origin.
+const APP_CONTENT_SECURITY_POLICY: &str = "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; \
+     img-src 'self' data: blob:; font-src 'self'; media-src 'self' blob:; frame-src 'self'; connect-src 'self'; \
+     manifest-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'";
 
 /// The login UI, built by `pnpm build` in `web/`; a build of kernoid without it answers 404 at `/login`.
 #[derive(rust_embed::Embed)]

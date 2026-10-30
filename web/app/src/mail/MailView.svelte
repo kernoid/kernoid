@@ -8,6 +8,7 @@
     Flag,
     FolderInput,
     Forward,
+    Lock,
     MailOpen,
     Paperclip,
     Reply,
@@ -52,6 +53,8 @@
     unsend,
   } from "./model.js";
   import { boxName } from "./names.js";
+  import { refresh as refreshE2e } from "../e2e/e2e.svelte.js";
+  import Unlock from "../e2e/Unlock.svelte";
 
   function when(iso: string): string {
     const date = new Date(iso);
@@ -126,6 +129,8 @@
     () => (open ? { account: store, id: open, version: changed("Email") } : undefined),
     ({ account, id }) => email(jmap, account, id),
   );
+  // Whether the account encrypts, and its keys: encrypted mail is shown once they are unlocked.
+  void refreshE2e(jmap).catch(() => undefined);
 
   // Reading marks as read.
   $effect(() => {
@@ -260,7 +265,15 @@
   }
 
   function attachmentUrl(part: BodyPart): string {
-    return jmap.downloadPath(store, part.blobId ?? "", part.name ?? "attachment", part.type);
+    return part.url ?? jmap.downloadPath(store, part.blobId ?? "", part.name ?? "attachment", part.type);
+  }
+
+  /** A part decrypted here is saved, never opened: a `blob:` page would run as the app. */
+  function saveDecrypted(part: BodyPart): void {
+    const link = document.createElement("a");
+    link.href = part.url ?? "";
+    link.download = part.name ?? "attachment";
+    link.click();
   }
 
   const blank: ComposeStart = { to: "", cc: "", subject: "", body: "" };
@@ -381,7 +394,10 @@
                   {when(summary.receivedAt)}
                 </span>
               </span>
-              <span class="subject">{summary.subject || t("(no subject)")}</span>
+              <span class="subject">
+                {#if summary["kernoid:encrypted"]}<Lock size={13} aria-label={t("End-to-end encrypted")} />{/if}
+                {summary.subject || (summary["kernoid:encrypted"] && !summary.preview ? t("Encrypted message") : t("(no subject)"))}
+              </span>
               <span class="preview">{summary.preview}</span>
             </span>
           </button>
@@ -475,7 +491,24 @@
             <Trash2 size={17} />
           </button>
         </div>
-        <h2 class="subject-line">{current.subject || t("(no subject)")}</h2>
+        <h2 class="subject-line">{current.subject || (current.sealed?.locked ? t("Encrypted message") : t("(no subject)"))}</h2>
+        {#if current.sealed}
+          <p class="small sealed" class:muted={current.sealed.locked}>
+            <Lock size={14} />
+            {#if current.sealed.locked}
+              {t("End-to-end encrypted. Unlock your key to read it.")}
+            {:else if current.sealed.verified}
+              {t("End-to-end encrypted, signed by the sender.")}
+            {:else if current.sealed.signed}
+              {t("End-to-end encrypted. Signed, but with a key that is not the sender's known one.")}
+            {:else}
+              {t("Stored encrypted to your key. Not signed: it may have arrived in plain text.")}
+            {/if}
+          </p>
+          {#if current.sealed.locked}
+            <Unlock onunlock={() => void message.refetch()} />
+          {/if}
+        {/if}
         <div class="sender">
           <Avatar name={current.from?.[0]?.name ?? ""} address={current.from?.[0]?.email ?? ""} size={42} />
           <div>
@@ -496,7 +529,7 @@
           <ul class="attachments">
             {#each current.attachments as part, index (index)}
               {@const name = part.name ?? part.type}
-              {@const viewable = kindOf(name, part.type) !== "other"}
+              {@const viewable = !part.url && kindOf(name, part.type) !== "other"}
               <li class="attachment">
                 <button
                   type="button"
@@ -504,6 +537,7 @@
                   data-tip={viewable ? t("Show") : t("Download")}
                   onclick={() => {
                     if (viewable) viewing = part;
+                    else if (part.url) saveDecrypted(part);
                     else window.location.assign(attachmentUrl(part));
                   }}
                 >

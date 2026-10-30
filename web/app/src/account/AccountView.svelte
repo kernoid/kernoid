@@ -15,6 +15,7 @@
   import { type AppPassword, client, deviceName, languageName, relogin, when } from "./account.js";
   import Connect from "./Connect.svelte";
   import MailSettings from "./MailSettings.svelte";
+  import Encryption from "./Encryption.svelte";
   import Vacation from "./Vacation.svelte";
 
   const session = loaded(() => client.session());
@@ -165,6 +166,8 @@
     <MailSettings />
 
     <Vacation />
+
+    <Encryption />
 
     {#if notificationsSupported()}
       <section>
