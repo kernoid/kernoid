@@ -503,7 +503,7 @@ a.button { display: inline-block; text-decoration: none; color: inherit; padding
 .page.admin > * { max-width: 980px; }
 .head { margin-bottom: 4px; flex-wrap: wrap; }
 .head h1 { margin: 0; }
-.page .stack label input:not([type="checkbox"]), .page .stack label select, .page .stack label textarea,
+.page .stack label:not(.inline) input:not([type="checkbox"]):not([type="radio"]), .page .stack label select, .page .stack label textarea,
 .dialog label textarea { width: 100%; }
 .page .stack { max-width: 520px; }
 .page label small, .dialog label small { display: block; margin-top: 2px; }
@@ -667,3 +667,31 @@ a.button.icon:hover { background: var(--hover); color: var(--text); }
 input.days { width: 90px; min-width: 0; flex: none !important; }
 .page fieldset.choice { border: 0; padding: 0; margin: 0; display: grid; gap: 8px; }
 .page fieldset.choice legend { margin-bottom: 6px; }
+
+/* People in tables (administration). */
+.nodes .person { display: inline-flex; align-items: center; gap: 12px; text-align: left; padding: 2px 0; min-height: 0; background: none; border: 0; }
+.nodes .person > span { display: grid; }
+.nodes .person .who { font-weight: 560; }
+
+/* The calendar: this month's days on the surface, the neighbours' quieter. */
+.calendar { background: var(--surface); }
+.month { background: var(--surface); }
+.day.other { background: var(--panel); color: var(--faint); }
+.day .event { cursor: pointer; }
+.timegrid { background: var(--surface); }
+
+/* Pages of settings (account, administration): sections as cards on a quiet ground. */
+.page { background: var(--bg); }
+.page section {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: calc(var(--radius) + 2px);
+  padding: calc(var(--space) + 8px) calc(var(--space) + 12px);
+  margin-top: calc(var(--space) + 4px);
+  box-shadow: var(--shadow-soft);
+}
+.page section > h2:first-child { margin-top: 0; font-size: 1.05rem; }
+.page .profile-head { background: var(--surface); border: 1px solid var(--line); border-radius: calc(var(--radius) + 2px); padding: calc(var(--space) + 8px) calc(var(--space) + 12px); box-shadow: var(--shadow-soft); }
+.page > .notice, .page > .error { margin: 10px 2px 0; }
+.page .stack label.inline { display: flex; align-items: center; gap: 8px; }
+.page .stack label.inline > span { font-size: 0.95rem; }

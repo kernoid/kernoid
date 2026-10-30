@@ -3,7 +3,11 @@
      and one account in detail (Account.svelte): name, state, addresses, logins, password and second factors, services,
      quotas, who may use its mail and files, sessions, applications and linked providers. -->
 <script lang="ts">
+  import { UserPlus } from "@lucide/svelte";
+
+  import { avatarOfAccount } from "../avatars.svelte.js";
   import { t } from "../i18n.js";
+  import Avatar from "../ui/Avatar.svelte";
   import Account, { kindOf } from "./Account.svelte";
   import { admin, need } from "./api.svelte.js";
   import Buttons from "./ui/Buttons.svelte";
@@ -41,7 +45,7 @@
   {/key}
 {:else}
   <Head title={t("Accounts")}>
-    <button type="button" class="primary" onclick={() => (creating = "person")}>{t("New account")}</button>
+    <button type="button" class="primary" onclick={() => (creating = "person")}><UserPlus size={17} />{t("New account")}</button>
     <button type="button" onclick={() => (creating = "shared")}>{t("New shared mailbox")}</button>
     <button type="button" onclick={() => (creating = "external")}>{t("New external account")}</button>
   </Head>
@@ -52,8 +56,13 @@
       {#each shown as account (account.id)}
         <tr>
           <td class="name">
-            <button type="button" class="quiet file" onclick={() => go("accounts", account.id)}>{account.display_name}</button>
-            <div class="small muted">{account.address}</div>
+            <button type="button" class="quiet person" onclick={() => go("accounts", account.id)}>
+              <Avatar name={account.display_name} address={account.address} src={avatarOfAccount(account.id)} size={34} />
+              <span>
+                <span class="who">{account.display_name}</span>
+                <span class="small muted">{account.address}</span>
+              </span>
+            </button>
           </td>
           <td class="muted small">{kindOf(account)}</td>
           <td class="small">
