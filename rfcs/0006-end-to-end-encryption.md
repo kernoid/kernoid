@@ -266,8 +266,9 @@ keys and their copies, encrypting and decrypting messages, PGP/MIME and parsing 
 uses it as WebAssembly (`@kernoid/e2e`), the terminal app as a library, native apps later the same way.
 
 In kernoid's own apps end-to-end encryption needs no setting – they understand it. The settings of this RFC exist for
-other software (IMAP, CalDAV, WebDAV clients). **OPEN** (maintainer): bringing native apps forward, where end-to-end
-encryption is simply on.
+other software (IMAP, CalDAV, WebDAV clients). The native apps – one Flutter app for desktop and mobile
+(`kernoid/apps`) – are built now and released with kernoid's first stable version (maintainer, 2026-10-30), with
+end-to-end encryption from their first version.
 
 ## 11. Open
 
