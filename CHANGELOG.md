@@ -7,7 +7,7 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 ## [Unreleased]
 
-## [0.2.0] – DATE
+## [0.2.0] – 2026-10-30
 
 The core completed, still a pre-release. Files gain public links and drop boxes, uploads in pieces, versions shared
 across stores and search in their content; mail gains SRS, sending as a group, IMAP `SORT`/`THREAD`/`QUOTA`, OAuth for
