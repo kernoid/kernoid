@@ -28,6 +28,9 @@ directories = "=6.0.0"
 hickory-proto = { version = "=0.26.3", default-features = false, features = ["std"] }
 html2text = "=0.17.1"
 iana-time-zone = "=0.1.65"
+# End-to-end encryption (RFC 0006): keys, PGP/MIME, building and reading mail in the client – kernoid's own library
+# (MIT), shared with the web app and the server.
+kernoid-e2e = { path = "../e2e" }
 ratatui = "=0.30.2"
 # TLS with AWS-LC for its post-quantum key exchange (X25519MLKEM768), preferred over X25519 (RFC 0006, 2).
 rustls = { version = "=0.23.46", default-features = false, features = ["aws-lc-rs", "prefer-post-quantum", "std", "tls12"] }
@@ -36,6 +39,11 @@ serde = { version = "=1.0.228", features = ["derive"] }
 serde_json = "=1.0.151"
 toml = { version = "=1.1.6", default-features = false, features = ["parse", "serde"] }
 ureq = { version = "=3.4.2", default-features = false, features = ["rustls-no-provider", "platform-verifier"] }
+
+# Argon2 (unlocking the key) and the post-quantum algorithms are slow without optimisation; tests build dependencies
+# optimised, as the end-to-end library does.
+[profile.dev.package."*"]
+opt-level = 2
 
 [lints.rust]
 unsafe_code = "forbid"

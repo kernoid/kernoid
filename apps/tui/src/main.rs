@@ -27,7 +27,8 @@ use crate::app::{App, Background};
 /// kernoid in the terminal: mail, files, calendars and contacts.
 ///
 /// The password is an app password (made in the account settings); it comes from KERNOID_PASSWORD, from
-/// --password-command, or is asked for – never give it as an argument.
+/// --password-command, or is asked for – never give it as an argument. End-to-end encrypted mail is read once the
+/// account's key is unlocked with its recovery code: from KERNOID_RECOVERY_CODE, or asked for in the app (K).
 #[derive(Debug, Parser)]
 #[command(version)]
 struct Args {
@@ -92,7 +93,7 @@ fn run(args: Args) -> Result<(), String> {
     let (sender, receiver) = mpsc::channel();
     let pushed = sender.clone();
     push::listen(client.clone(), move |event| pushed.send(Background::Push(event)).is_ok());
-    let mut app = App::new(client, downloads, sender);
+    let mut app = App::new(client, downloads, sender, config::recovery_code());
     let mut terminal = ratatui::try_init().map_err(|e| e.to_string())?;
     // Clicks and the wheel (app.rs, `mouse`); while it is on, Shift and drag selects text in most terminals.
     let mouse = |on: bool| {

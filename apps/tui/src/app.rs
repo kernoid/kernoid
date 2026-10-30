@@ -22,6 +22,7 @@ use kernoid_tui::{
         self, Client, MAIL,
         calendars::{self, Calendar, Event, EventForm},
         contacts::{self, AddressBook, Card, CardForm},
+        e2e::{E2e, Outgoing, Plan},
         files::{self, FileLink, FileNode, Found, Level, LinkMode, Principal, Store, Version},
         mail::{self, Conversation, Email, EmailSummary, Identity, Mailbox, Vacation},
         push::Push,
@@ -111,6 +112,15 @@ pub enum Prompt {
     ExportCards,
     /// Read the `.vcf` file typed into the first address book the user may write.
     ImportCards,
+    /// The recovery code that unlocks the account's key; `reopen` the emails open once it is unlocked.
+    Unlock {
+        reopen: bool,
+    },
+    /// Save a part decrypted here to the path typed.
+    SavePart {
+        name: String,
+        data: Vec<u8>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -256,6 +266,8 @@ pub enum Popup {
     Written {
         message: Message,
         error: Option<String>,
+        /// Whether it goes out end-to-end encrypted, or why not (only where the server has the extension).
+        encryption: Option<String>,
     },
     Confirm {
         what: Destroy,
@@ -379,6 +391,10 @@ pub struct App {
     pub reader_width: usize,
     /// Where the last frame drew what a click can reach.
     pub regions: Regions,
+    /// End-to-end encryption: the account's keys, those unlocked in this run, the keys of others looked up.
+    pub e2e: E2e,
+    /// The recovery code from the environment, until it unlocked the key.
+    recovery: Option<String>,
     background: Sender<Background>,
     next_transfer: u64,
 }
@@ -441,6 +457,18 @@ fn write_new(path: &std::path::Path, text: &str) -> Result<(), String> {
     file.write_all(text.as_bytes()).map_err(|error| format!("{}: {error}", path.display()))
 }
 
+/// Writes bytes to a new file – one that is there already stays as it is; readable only by the user, as it may be
+/// something decrypted.
+fn write_new_bytes(path: &Path, data: &[u8]) -> Result<(), String> {
+    use std::io::Write;
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    let mut file = options.open(path).map_err(|error| format!("{}: {error}", path.display()))?;
+    file.write_all(data).map_err(|error| format!("{}: {error}", path.display()))
+}
+
 pub fn expand(path: &str) -> PathBuf {
     match (path.strip_prefix("~/"), std::env::var_os("HOME")) {
         (Some(rest), Some(home)) => PathBuf::from(home).join(rest),
@@ -449,7 +477,7 @@ pub fn expand(path: &str) -> PathBuf {
 }
 
 impl App {
-    pub fn new(client: Client, downloads: PathBuf, background: Sender<Background>) -> Self {
+    pub fn new(client: Client, downloads: PathBuf, background: Sender<Background>, recovery: Option<String>) -> Self {
         let mut app = Self {
             client,
             tab: Tab::Mail,
@@ -470,6 +498,8 @@ impl App {
             edit: None,
             reader_width: 80,
             regions: Regions::default(),
+            e2e: E2e::default(),
+            recovery,
             background,
             next_transfer: 0,
         };
@@ -574,7 +604,57 @@ impl App {
             self.info("this account has no mail");
             return;
         }
+        self.load_keys();
         self.switch_mail_account(0);
+    }
+
+    /// The account's keys for end-to-end encryption; unlocked with `KERNOID_RECOVERY_CODE` if it is set.
+    fn load_keys(&mut self) {
+        match E2e::load(&self.client) {
+            Ok(e2e) => self.e2e = e2e,
+            Err(error) => self.fail(format!("the keys for end-to-end encryption: {error}")),
+        }
+        if let Some(code) = self.recovery.take()
+            && self.e2e.has_key()
+            && let Err(error) = self.e2e.unlock(&code)
+        {
+            self.fail(format!("KERNOID_RECOVERY_CODE: {error}"));
+        }
+    }
+
+    /// Asks for the recovery code; `reopen` the emails open once the key is unlocked.
+    fn ask_unlock(&mut self, reopen: bool) {
+        self.prompt_secret(Prompt::Unlock { reopen }, "Recovery code (unlocks your key for this run)");
+    }
+
+    /// `K`: unlocks the key, or locks it again.
+    fn toggle_lock(&mut self) {
+        if !self.e2e.has_key() {
+            self.info("your account has no key for end-to-end encryption (made in the web app)");
+        } else if self.e2e.is_unlocked() {
+            self.e2e.lock();
+            self.close_reader();
+            self.load_emails(false);
+            self.info("your key is locked again");
+        } else {
+            self.ask_unlock(false);
+        }
+    }
+
+    fn unlocked(&mut self, code: &str, reopen: bool) {
+        if let Err(error) = self.e2e.unlock(code) {
+            self.fail(error);
+            return;
+        }
+        let e2e = &self.e2e;
+        for email in self.mail.emails.iter_mut().flat_map(|c| c.emails.iter_mut().chain(std::iter::once(&mut c.latest)))
+        {
+            e2e.open_summary(email);
+        }
+        if reopen && !self.mail.open.is_empty() {
+            self.open_email();
+        }
+        self.info("your key is unlocked – for this run only");
     }
 
     fn switch_mail_account(&mut self, index: usize) {
@@ -602,6 +682,14 @@ impl App {
 
     /// A page of the selected mailbox: conversations, or single emails.
     fn fetch_emails(&mut self, position: u64, limit: u64) -> Option<(Vec<Conversation>, u64)> {
+        let mut found = self.fetch_rows(position, limit)?;
+        for email in found.0.iter_mut().flat_map(|c| c.emails.iter_mut().chain(std::iter::once(&mut c.latest))) {
+            self.e2e.open_summary(email);
+        }
+        Some(found)
+    }
+
+    fn fetch_rows(&mut self, position: u64, limit: u64) -> Option<(Vec<Conversation>, u64)> {
         let account = self.mail_account()?.to_owned();
         let mailbox = self.mailbox()?.id.clone();
         let search = self.mail.search.clone();
@@ -664,10 +752,17 @@ impl App {
             return;
         };
         let ids: Vec<&str> = conversation.emails.iter().map(|e| e.id.as_str()).collect();
-        let Some(emails) = self.attempt(|app| mail::full(&app.client, &account, &ids)) else { return };
+        let Some(emails) = self.attempt(|app| {
+            let list = mail::full(&app.client, &account, &ids)?;
+            // Encrypted ones are decrypted here, if the key is unlocked.
+            list.into_iter().map(|email| app.e2e.open(&app.client, &account, email)).collect::<jmap::Result<Vec<_>>>()
+        }) else {
+            return;
+        };
         if emails.is_empty() {
             return;
         }
+        let locked = emails.iter().any(|e| e.sealed.is_some_and(|s| s.locked));
         let width = self.reader_width.saturating_sub(2);
         self.mail.texts = emails.iter().map(|email| email.text(width)).collect();
         self.mail.scroll = 0;
@@ -687,6 +782,9 @@ impl App {
         }
         self.mail.open = emails;
         self.mail_focus = MailFocus::Reader;
+        if locked && self.e2e.has_key() && !self.e2e.is_unlocked() {
+            self.ask_unlock(true);
+        }
     }
 
     /// The emails keys act on: in the reader those open (of the mailbox shown), else the selected conversation's
@@ -831,8 +929,8 @@ impl App {
         match edit {
             Edit::Message(message) => {
                 let popup = match text.and_then(|text| compose::parse(&text, &message)) {
-                    Ok(message) => Popup::Written { message, error: None },
-                    Err(error) => Popup::Written { message, error: Some(error) },
+                    Ok(message) => self.written(message, None),
+                    Err(error) => self.written(message, Some(error)),
                 };
                 self.popup = Some(popup);
             }
@@ -878,29 +976,73 @@ impl App {
         }
     }
 
+    /// The popup asking what to do with a message written: with whether it would go out end-to-end encrypted.
+    fn written(&mut self, message: Message, error: Option<String>) -> Popup {
+        let encryption = self.e2e.available.then(|| {
+            let account = self.mail_account().map(str::to_owned).unwrap_or_default();
+            match compose::chosen(&message.from, &self.mail.identities).cloned() {
+                Some(identity) => match self.e2e.plan(&self.client, &account, &identity, &message.draft) {
+                    Plan::Sealed(_) => "end-to-end encrypted and signed".to_owned(),
+                    Plan::Plain(reason) => format!("not end-to-end encrypted: {reason}"),
+                },
+                None => "not end-to-end encrypted".to_owned(),
+            }
+        });
+        Popup::Written { message, error, encryption }
+    }
+
     fn send(&mut self, message: Message, keep: bool) {
         let Some(account) = self.mail_account().map(str::to_owned) else { return };
         let identity = compose::chosen(&message.from, &self.mail.identities).cloned();
         let mut draft = message.draft.clone();
         if !keep && draft.to.is_empty() && draft.cc.is_empty() && draft.bcc.is_empty() {
-            self.popup = Some(Popup::Written { message, error: Some("no recipients".into()) });
+            self.popup = Some(self.written(message, Some("no recipients".into())));
             return;
         }
         let Some(identity) = identity else {
-            self.popup = Some(Popup::Written { message, error: Some("you may not send as this From address".into()) });
+            self.popup = Some(self.written(message, Some("you may not send as this From address".into())));
             return;
         };
+        let boxes = self.mail.mailboxes.clone();
+        // End-to-end encrypted where it can be: built here, the files read here, nothing uploaded as it is.
+        let plan = if keep {
+            self.e2e.draft_plan(&self.client, &account, &identity, &draft)
+        } else {
+            self.e2e.plan(&self.client, &account, &identity, &draft)
+        };
+        if let Plan::Sealed(keys) = plan {
+            let outgoing = Outgoing {
+                account: &account,
+                identity: &identity,
+                draft: &draft,
+                files: &message.files,
+                boxes: &boxes,
+            };
+            let result = if keep {
+                self.e2e.keep(&self.client, outgoing, &keys).map(|()| "kept in Drafts, end-to-end encrypted")
+            } else {
+                self.e2e.send(&self.client, outgoing, &keys).map(|()| "sent end-to-end encrypted")
+            };
+            match result {
+                Ok(done) => {
+                    self.info(done);
+                    self.load_mailboxes();
+                    self.load_emails(false);
+                }
+                Err(error) => self.popup = Some(self.written(message, Some(error.to_string()))),
+            }
+            return;
+        }
         for path in &message.files {
             match mail::attach(&self.client, &account, path) {
                 Ok(attachment) => draft.attachments.push(attachment),
                 Err(error) => {
                     let error = format!("{}: {error}", path.display());
-                    self.popup = Some(Popup::Written { message, error: Some(error) });
+                    self.popup = Some(self.written(message, Some(error)));
                     return;
                 }
             }
         }
-        let boxes = self.mail.mailboxes.clone();
         let result = if keep {
             draft.from = compose::chosen(&message.from, &self.mail.identities).map(|identity| mail::EmailAddress {
                 name: (!identity.name.is_empty()).then(|| identity.name.clone()),
@@ -916,7 +1058,7 @@ impl App {
                 self.load_mailboxes();
                 self.load_emails(false);
             }
-            Err(error) => self.popup = Some(Popup::Written { message, error: Some(error.to_string()) }),
+            Err(error) => self.popup = Some(self.written(message, Some(error.to_string()))),
         }
     }
 
@@ -2189,6 +2331,18 @@ impl App {
                     self.find_people(sharing, &text);
                 }
             }
+            // Not trimmed: the code is read as typed (separators and case do not matter).
+            Prompt::Unlock { reopen } if !text.is_empty() => self.unlocked(&input.text, reopen),
+            Prompt::SavePart { name, data } if !text.is_empty() => {
+                let mut path = expand(&text);
+                if path.is_dir() {
+                    path = free_path(&path, &name);
+                }
+                match write_new_bytes(&path, &data) {
+                    Ok(()) => self.info(format!("saved to {}", path.display())),
+                    Err(error) => self.fail(error),
+                }
+            }
             Prompt::Rename { id } if !text.is_empty() => {
                 let Some(store) = self.store().map(|s| s.id.clone()) else { return };
                 if self.attempt(|app| files::rename(&app.client, &store, &id, &text)).is_some() {
@@ -2238,8 +2392,21 @@ impl App {
                         else {
                             return;
                         };
-                        let Some(blob) = part.blob_id.clone() else { return };
                         let name = part.name.clone().unwrap_or_else(|| "attachment".into());
+                        // A part decrypted here is saved from memory; it never went to the server as it is.
+                        let email =
+                            self.mail.open.iter().flat_map(|e| e.attachments.iter().map(move |_| e)).nth(selected);
+                        if let Some(data) = email.and_then(|email| email.part(part)) {
+                            match data {
+                                Ok(data) => {
+                                    let path = free_path(&self.downloads, &name);
+                                    self.prompt(Prompt::SavePart { name, data }, "Save as", path.display().to_string());
+                                }
+                                Err(error) => self.fail(error),
+                            }
+                            return;
+                        }
+                        let Some(blob) = part.blob_id.clone() else { return };
                         let path = free_path(&self.downloads, &name);
                         let kind = part.kind.clone();
                         self.prompt(
@@ -2295,12 +2462,12 @@ impl App {
                     self.popup = Some(Popup::Versions { node, list, selected });
                 }
             },
-            Popup::Written { message, error } => match key.code {
+            Popup::Written { message, error, encryption } => match key.code {
                 KeyCode::Char('s') | KeyCode::Char('y') => self.send(message, false),
                 KeyCode::Char('d') => self.send(message, true),
                 KeyCode::Char('e') => self.edit = Some(Edit::Message(message)),
                 KeyCode::Char('c') | KeyCode::Char('n') | KeyCode::Esc => self.info("dropped"),
-                _ => self.popup = Some(Popup::Written { message, error }),
+                _ => self.popup = Some(Popup::Written { message, error, encryption }),
             },
             Popup::Unsaved { edit, error } => match key.code {
                 KeyCode::Char('e') | KeyCode::Enter => self.edit = Some(edit),
@@ -2459,6 +2626,7 @@ impl App {
         match (self.mail_focus, key.code) {
             (_, KeyCode::Char('c')) => self.write(Kind::New),
             (_, KeyCode::Char('V')) => self.edit_vacation(),
+            (_, KeyCode::Char('K')) => self.toggle_lock(),
             (_, KeyCode::Char('/')) => self.prompt(Prompt::SearchMail, "Search", self.mail.search.clone()),
             (_, KeyCode::Char('a')) if self.mail.accounts.len() > 1 && self.mail_focus == MailFocus::Mailboxes => {
                 let next = (self.mail.account + 1) % self.mail.accounts.len();

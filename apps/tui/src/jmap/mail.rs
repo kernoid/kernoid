@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 //! Mail over JMAP (RFC 8621): mailboxes, the emails of one, one email to read, keywords, moving, deleting,
-//! sending through the Drafts mailbox (RFC 8621, 7.5), and the vacation response (RFC 8621, 8).
+//! sending through the Drafts mailbox (RFC 8621, 7.5), and the vacation response (RFC 8621, 8). End-to-end encrypted
+//! emails are opened and sent in `e2e`.
 
 use std::collections::BTreeMap;
 
@@ -8,7 +9,7 @@ use chrono::{DateTime, Local, NaiveDateTime, TimeZone, Utc};
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
-use super::{Client, Error, MAIL, Result, SUBMISSION, VACATION, ids_of, set_error};
+use super::{Client, Error, MAIL, Result, SUBMISSION, VACATION, e2e::OPENPGP, ids_of, set_error};
 
 /// The vacation response of the user's account (RFC 8621, 8), its times here.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -167,6 +168,15 @@ pub struct EmailSummary {
     pub has_attachment: bool,
     #[serde(default)]
     pub size: u64,
+    /// End-to-end encrypted (RFC 0006, 5): subject and preview are the summary's, once it is decrypted here.
+    #[serde(default, rename = "kernoid:encrypted")]
+    pub encrypted: bool,
+    /// The summary, encrypted to the account's key (base64).
+    #[serde(default, rename = "kernoid:encryptedSummary")]
+    pub encrypted_summary: Option<String>,
+    /// Subject, preview and attachments came from the decrypted summary.
+    #[serde(skip)]
+    pub opened: bool,
 }
 
 impl EmailSummary {
@@ -192,6 +202,9 @@ pub struct BodyPart {
     pub name: Option<String>,
     #[serde(default)]
     pub size: u64,
+    /// A part of an end-to-end encrypted message, decrypted here: its index in the inner message (`Email::inner`).
+    #[serde(skip)]
+    pub inner: Option<usize>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -222,6 +235,35 @@ pub struct Email {
     pub attachments: Vec<BodyPart>,
     #[serde(default)]
     pub body_values: BTreeMap<String, BodyValue>,
+    /// The raw message, for end-to-end encrypted emails (downloaded and decrypted here).
+    #[serde(default)]
+    pub blob_id: Option<String>,
+    /// For an end-to-end encrypted email: locked or decrypted, and how it was signed.
+    #[serde(skip)]
+    pub sealed: Option<Sealed>,
+    /// The decrypted message – its attachments are read from it.
+    #[serde(skip)]
+    pub inner: Option<Inner>,
+}
+
+/// What reading an end-to-end encrypted email gave.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Sealed {
+    /// Not decrypted: the key is locked, or the email is encrypted to another key.
+    pub locked: bool,
+    pub signed: bool,
+    /// Signed by a key of its sender.
+    pub verified: bool,
+}
+
+/// A decrypted message, kept in memory only; its length is all `Debug` shows.
+#[derive(Clone)]
+pub struct Inner(pub Vec<u8>);
+
+impl std::fmt::Debug for Inner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Inner({} bytes)", self.0.len())
+    }
 }
 
 impl Email {
@@ -240,6 +282,12 @@ impl Email {
             .map(|(part, text)| if part.kind == "text/html" { html_to_text(text, width) } else { text.clone() })
             .collect::<Vec<_>>()
             .join("\n\n")
+    }
+
+    /// The content of an attachment decrypted here.
+    pub fn part(&self, part: &BodyPart) -> Option<Result<Vec<u8>>> {
+        let (inner, index) = (self.inner.as_ref()?, part.inner?);
+        Some(kernoid_e2e::compose::part(&inner.0, index).map_err(Error::from))
     }
 }
 
@@ -279,6 +327,20 @@ fn parse<T: serde::de::DeserializeOwned>(result: Value) -> Result<Vec<T>> {
 const SUMMARY: [&str; 10] =
     ["threadId", "mailboxIds", "keywords", "from", "to", "subject", "receivedAt", "preview", "hasAttachment", "size"];
 
+/// The properties of a summary: with the end-to-end ones where the server has them.
+fn summary(client: &Client) -> Vec<&'static str> {
+    let mut properties = SUMMARY.to_vec();
+    if client.session.capabilities.contains_key(OPENPGP) {
+        properties.extend(["kernoid:encrypted", "kernoid:encryptedSummary"]);
+    }
+    properties
+}
+
+/// The capabilities a request for emails uses.
+fn using(client: &Client) -> Vec<&'static str> {
+    if client.session.capabilities.contains_key(OPENPGP) { vec![MAIL, OPENPGP] } else { vec![MAIL] }
+}
+
 /// A page of emails in a mailbox – or, without one, in all – newest first; `text` searches them (full text).
 pub fn emails(
     client: &Client,
@@ -295,8 +357,9 @@ pub fn emails(
     if !text.trim().is_empty() {
         filter.insert("text".into(), text.trim().into());
     }
+    let properties = summary(client);
     let responses = client.request(
-        &[MAIL],
+        &using(client),
         vec![
             (
                 "Email/query",
@@ -308,7 +371,7 @@ pub fn emails(
             ),
             (
                 "Email/get",
-                json!({ "accountId": account, "#ids": ids_of("q", "Email/query"), "properties": SUMMARY }),
+                json!({ "accountId": account, "#ids": ids_of("q", "Email/query"), "properties": properties }),
                 "g",
             ),
         ],
@@ -325,8 +388,9 @@ pub fn email(client: &Client, account: &str, id: &str) -> Result<Option<Email>> 
 
 /// Emails with their bodies and attachments, oldest first – the messages of a thread.
 pub fn full(client: &Client, account: &str, ids: &[&str]) -> Result<Vec<Email>> {
-    let mut properties: Vec<&str> = SUMMARY.to_vec();
+    let mut properties = summary(client);
     properties.extend([
+        "blobId",
         "cc",
         "replyTo",
         "messageId",
@@ -338,7 +402,7 @@ pub fn full(client: &Client, account: &str, ids: &[&str]) -> Result<Vec<Email>> 
         "bodyValues",
     ]);
     let result = client.call(
-        &[MAIL],
+        &using(client),
         "Email/get",
         json!({
             "accountId": account, "ids": ids, "properties": properties,
@@ -395,8 +459,9 @@ pub fn conversations(
     if !text.trim().is_empty() {
         filter.insert("text".into(), text.trim().into());
     }
+    let properties = summary(client);
     let responses = client.request(
-        &[MAIL],
+        &using(client),
         vec![
             (
                 "Email/query",
@@ -409,7 +474,7 @@ pub fn conversations(
             ),
             (
                 "Email/get",
-                json!({ "accountId": account, "#ids": ids_of("q", "Email/query"), "properties": SUMMARY }),
+                json!({ "accountId": account, "#ids": ids_of("q", "Email/query"), "properties": properties }),
                 "g",
             ),
             (
@@ -420,7 +485,7 @@ pub fn conversations(
             (
                 "Email/get",
                 json!({
-                    "accountId": account, "properties": SUMMARY,
+                    "accountId": account, "properties": properties,
                     "#ids": { "resultOf": "t", "name": "Thread/get", "path": "/list/*/emailIds" },
                 }),
                 "m",
@@ -573,7 +638,7 @@ impl Draft {
     }
 }
 
-fn role<'a>(boxes: &'a [Mailbox], role: &str) -> Option<&'a Mailbox> {
+pub(crate) fn role<'a>(boxes: &'a [Mailbox], role: &str) -> Option<&'a Mailbox> {
     boxes.iter().find(|mailbox| mailbox.role.as_deref() == Some(role))
 }
 

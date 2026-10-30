@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 //! Settings from `~/.config/kernoid/tui.toml` (or `$XDG_CONFIG_HOME`, or `KERNOID_TUI_CONFIG`) and the command
 //! line, and the password: from `KERNOID_PASSWORD`, from a command (a password manager or the system keychain), or
-//! asked for – never from an argument.
+//! asked for – never from an argument; likewise the recovery code of the account's key (`KERNOID_RECOVERY_CODE`).
 
 use std::{
     path::{Path, PathBuf},
@@ -75,6 +75,12 @@ pub fn password(command: Option<&str>, address: &str) -> Result<String, String> 
         return Ok(password);
     }
     rpassword::prompt_password(format!("App password for {address}: ")).map_err(|error| error.to_string())
+}
+
+/// The recovery code that unlocks the account's key for end-to-end encryption (RFC 0006, 4.2), from
+/// `KERNOID_RECOVERY_CODE` – else the app asks for it when it needs it. Never from an argument.
+pub fn recovery_code() -> Option<String> {
+    std::env::var("KERNOID_RECOVERY_CODE").ok().filter(|code| !code.trim().is_empty())
 }
 
 /// A command line run by the shell.

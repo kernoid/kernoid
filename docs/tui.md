@@ -16,7 +16,7 @@ selects text in most terminals (to copy a link's address).
 
 | Part | What it does |
 |---|---|
-| Mail | the mailboxes of the account and of shared mailboxes it may use; conversations (threads) – or single emails, `t` switches – with full-text search; reading a whole conversation (HTML emails as plain text – nothing is loaded or run), attachments saved to disk, writing, replying, replying to all and forwarding (with the attachments) in your editor, attaching files, keeping drafts, flagging, marking read or unread, moving, deleting (to the trash; in the trash for good); the vacation response, written in your editor like a message; new mail appears by itself |
+| Mail | the mailboxes of the account and of shared mailboxes it may use; conversations (threads) – or single emails, `t` switches – with full-text search; reading a whole conversation (HTML emails as plain text – nothing is loaded or run), attachments saved to disk, writing, replying, replying to all and forwarding (with the attachments) in your editor, attaching files, keeping drafts, flagging, marking read or unread, moving, deleting (to the trash; in the trash for good); the vacation response, written in your editor like a message; end-to-end encrypted mail read and sent ([below](#end-to-end-encrypted-mail)); new mail appears by itself |
 | Files | the account's own files, the tenant's drives and what others share; folders, search by name and content (the hits with where they are), downloads and uploads of any size with progress (a file of the same name gets the upload as new content, the old one stays as a version), a file's versions – saving an earlier one, or restoring it –, details, sharing folders with people and groups (read, edit, or edit and share – as in the web app), links for people without an account (to view – and, for a folder, to add files, or only to add them: a drop box –, with an expiry and a password; the address shown once), new folders, renaming, copying and moving – within a store, or to another (own files, drives, what others share) –, deleting (to the trash) |
 | Calendar | the account's calendars and those shared with it, two weeks at a time; repeating events as their instances, all-day events, place, participants with their answers, description; making, changing and deleting events – participants are invited by email; one event of a series on its own, or the whole series –, answering invitations (accept, maybe, decline); events the organizer called off are shown cancelled; an event saved as an `.ics` file, the events of one imported |
 | Contacts | the cards of the account's address books with search; name, organisations, addresses and phone numbers – as many as a card has, with labels such as `(work)` or `(mobile)` –, notes; making, changing and deleting contacts; writing an email to a contact; the contacts listed saved as a `.vcf` file, the contacts of one imported |
@@ -71,6 +71,9 @@ kernoid-tui --address alice@firma.example --server https://login.firma.example
   kernoid-tui -a alice@firma.example --password-command 'pass show kernoid/alice'
   ```
 
+- **Recovery code:** end-to-end encrypted mail needs the account's key, unlocked with its recovery code – from the
+  environment variable `KERNOID_RECOVERY_CODE`, or asked for in the app, never as an argument
+  ([below](#end-to-end-encrypted-mail)).
 - **HTTPS only:** plain HTTP is allowed to this machine (`localhost`, `*.localhost`, loopback addresses) – for trying
   kernoid out – and elsewhere only with `--allow-http`, as the password would travel readable.
 - `--check` logs in, lists the accounts of the session and quits – to check the settings.
@@ -96,7 +99,7 @@ downloads = "/Users/alice/Downloads/kernoid"   # default: the download directory
 |---|---|
 | Everywhere | `1`–`4` or `Tab`: Mail, Files, Calendar, Contacts · `g` or `F5`: load again (in Files also the session: stores shared since) · `?` help · `q` or `Ctrl-C` quit |
 | Lists | `j`/`k` or arrows · `Enter` or `l` open · `h` or `←` back · `PgUp`/`PgDn` |
-| Mail | `c` write · `/` search (`Esc` clears) · `r` reply · `R` reply to all · `f` forward · `m` move · `d` delete · `u` read/unread · `s` flag · `t` conversations or single emails · `a` next account (in the mailboxes) |
+| Mail | `c` write · `/` search (`Esc` clears) · `r` reply · `R` reply to all · `f` forward · `m` move · `d` delete · `u` read/unread · `s` flag · `t` conversations or single emails · `a` next account (in the mailboxes) · `K` unlock the key for end-to-end encrypted mail (again: lock it) |
 | Reading | `Space`/`PgDn` scroll · `n`/`p` next/previous · `A` attachments (`Enter` saves) · `Esc` back |
 | Files | `Enter` open a folder, or a file's versions · `←`/`Backspace` up · `d` download · `u` upload · `v` versions (`Enter` save, `r` restore) · `i` details · `S` share a folder · `n` new folder · `R` rename · `D` delete |
 | Sharing | `a` add a person or group (by name or address) · `Enter` next level · `x` remove · `s` save · `Esc` cancel |
@@ -127,6 +130,32 @@ the original's attachments as `Attached:` lines – remove one to leave it out. 
 `s` send, `d` keep as a draft, `e` edit again, `c` drop. Sending stores the message in Drafts and submits it; once
 sent it moves to Sent (RFC 8621, 7.5). The text goes into a file of the system's temporary directory, readable only
 by you, removed once the editor closed.
+
+## End-to-end encrypted mail
+
+Where the account has a key for end-to-end encryption ([RFC 0006](https://github.com/kernoid/kernoid/blob/main/rfcs/0006-end-to-end-encryption.md),
+made in the web app), the app reads and sends encrypted mail as the web app does – with the same library,
+`apps/e2e`.
+
+- **Unlocking:** the key is unlocked with its recovery code: from `KERNOID_RECOVERY_CODE` at the start, or typed
+  (hidden) when an encrypted email is opened, or with `K`. Case, spaces and dashes do not matter. The unlocked key
+  stays in the app's memory until it quits (or `K` locks it again); the code opens retired keys too, for mail
+  encrypted to them before. Passkeys cannot unlock it in the terminal.
+- **List:** encrypted emails show `🔒` and their subject and preview from the encrypted summary – while the key is
+  locked, `🔒 encrypted`.
+- **Reading:** the message is downloaded, decrypted and read here; the server's `Email/parse` never sees it. The
+  `E2E` line says whether it is signed by a key of its sender. Attachments are saved decrypted (readable only by
+  you).
+- **Sending:** a message goes out end-to-end encrypted and signed when the key is unlocked, it is sent from your
+  own account as an address of the key, and every recipient in `To` and `Cc` has a key (looked up through kernoid:
+  local accounts and the Web Key Directory of other domains). The message is built here, files included, encrypted
+  to the recipients and to you, imported into Drafts with its summary encrypted to you, and submitted with an
+  envelope – the server sees neither text nor attachments. Otherwise it goes as before; the question after the
+  editor closes says which, and why not. A message with `Bcc` goes unencrypted: an OpenPGP message names every
+  recipient's key, so the others would see them. Drafts kept while the key is unlocked (from your own account, without `Bcc`) are encrypted to you.
+
+`OPEN`: forwarding the attachments of an encrypted email (they are left out), changing a draft kept encrypted,
+search over the text of encrypted mail, a device's own copy of the key (`device:<id>`, RFC 0006, 4.2).
 
 ## Conversations
 
@@ -166,6 +195,7 @@ a note after the blank line. Something the server did not take, or that could no
 |---|---|
 | Session, requests, uploads, downloads | JMAP Core (RFC 8620), HTTP Basic |
 | Mail | JMAP Mail (RFC 8621): `Mailbox`, `Email`, `Identity`, `EmailSubmission` |
+| End-to-end encryption | kernoid's `https://kernoid.dev/jmap/openpgp`: `OpenPgpKey/get`, `OpenPgpKey/lookup`, `kernoid:encrypted` and `kernoid:encryptedSummary`, `Email/import`; OpenPGP (RFC 9580, 9980) and PGP/MIME (RFC 3156) with header protection (RFC 9788) through `apps/e2e` (rpgp) |
 | Threads | `Email/query` with `collapseThreads`, `Thread/get` (RFC 8621, 3) |
 | Files | JMAP for files ([draft-ietf-jmap-filenode-19](https://datatracker.ietf.org/doc/draft-ietf-jmap-filenode/)): `FileNode` with `shareWith`; kernoid's `FileVersion/get` (`https://kernoid.dev/jmap/file-versions`); principals (RFC 9670) to find people and groups |
 | Calendars | JMAP for Calendars (draft-ietf-jmap-calendars): `Calendar`, `CalendarEvent/query` with `expandRecurrences`, `CalendarEvent/set` with `sendSchedulingMessages` (invitations, answers, cancellations through iTIP) |

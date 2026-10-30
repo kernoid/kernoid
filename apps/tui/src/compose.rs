@@ -229,6 +229,9 @@ mod tests {
                 preview: String::new(),
                 has_attachment: true,
                 size: 0,
+                encrypted: false,
+                encrypted_summary: None,
+                opened: false,
             },
             cc: Some(vec![address("dave@x.example"), address("bob@x.example")]),
             reply_to: None,
@@ -243,8 +246,12 @@ mod tests {
                 kind: "application/pdf".into(),
                 name: Some("plan.pdf".into()),
                 size: 10,
+                inner: None,
             }],
             body_values: BTreeMap::new(),
+            blob_id: None,
+            sealed: None,
+            inner: None,
         }
     }
 

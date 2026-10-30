@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 //! JMAP (RFC 8620) over HTTP: the session, method calls with result references, uploads, downloads and the push
 //! stream – the only way this app talks to kernoid. Typed calls for mail, files, calendars, contacts and principals
-//! are in the submodules.
+//! are in the submodules; end-to-end encrypted mail in `e2e`.
 
 pub mod calendars;
 pub mod contacts;
+pub mod e2e;
 pub mod files;
 pub mod mail;
 pub mod push;
@@ -52,6 +53,8 @@ pub enum Error {
     Protocol(String),
     /// Reading or writing a local file.
     Io(std::io::Error),
+    /// End-to-end encryption: unlocking the key, encrypting, decrypting (RFC 0006).
+    E2e(String),
 }
 
 impl fmt::Display for Error {
@@ -68,6 +71,7 @@ impl fmt::Display for Error {
             Self::Method { kind, description: None } | Self::Set { kind, description: None } => write!(f, "{kind}"),
             Self::Protocol(error) => write!(f, "unexpected answer: {error}"),
             Self::Io(error) => write!(f, "{error}"),
+            Self::E2e(error) => write!(f, "end-to-end encryption: {error}"),
         }
     }
 }
@@ -77,6 +81,12 @@ impl std::error::Error for Error {}
 impl From<ureq::Error> for Error {
     fn from(error: ureq::Error) -> Self {
         Self::Transport(error.to_string())
+    }
+}
+
+impl From<kernoid_e2e::Error> for Error {
+    fn from(error: kernoid_e2e::Error) -> Self {
+        Self::E2e(error.to_string())
     }
 }
 

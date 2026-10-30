@@ -12,7 +12,7 @@ use ratatui::{
 
 use kernoid_tui::jmap::{
     files::{LinkMode, StoreKind},
-    mail::{Conversation, format_addresses},
+    mail::{Conversation, Sealed, format_addresses},
 };
 
 use crate::app::{self, App, FilesFocus, MailFocus, Pane, Popup, PopupRegion, Tab};
@@ -188,6 +188,21 @@ fn draw_mail(frame: &mut Frame, app: &mut App, area: Rect) {
             if index == 0 || !many {
                 lines.push(field("Subject", email.summary.subject.clone().unwrap_or_default()).bold());
             }
+            if let Some(sealed) = email.sealed {
+                let state = match sealed {
+                    Sealed { locked: true, .. } if app.e2e.is_unlocked() => {
+                        "end-to-end encrypted – not to your key".to_owned()
+                    }
+                    Sealed { locked: true, .. } => "end-to-end encrypted – locked; K unlocks your key".to_owned(),
+                    Sealed { verified: true, .. } => "end-to-end encrypted, signed by the sender".to_owned(),
+                    Sealed { signed: true, .. } => {
+                        "end-to-end encrypted, signed – not by a key of the sender".to_owned()
+                    }
+                    Sealed { .. } => "end-to-end encrypted, not signed".to_owned(),
+                };
+                let line = field("E2E", state);
+                lines.push(if sealed.locked || !sealed.verified { line.fg(Color::Yellow) } else { line.fg(ACCENT) });
+            }
             if !email.attachments.is_empty() {
                 let names: Vec<String> = email
                     .attachments
@@ -237,7 +252,15 @@ fn email_line(row: &Conversation, width: usize, to: bool) -> ListItem<'static> {
     let count = if row.emails.len() > 1 { format!("({}) ", row.emails.len()) } else { String::new() };
     let used = 4 + 1 + 22 + 1 + date.chars().count() + 1 + count.chars().count();
     let room = width.saturating_sub(used);
-    let subject: String = email.subject.clone().unwrap_or_default().chars().take(room).collect();
+    // An encrypted email whose summary is not decrypted here: its subject outside is only `[...]`.
+    let subject = match (email.encrypted, email.opened) {
+        (true, false) => "🔒 encrypted".to_owned(),
+        (true, true) => format!("🔒 {}", email.subject.clone().unwrap_or_default()),
+        _ => email.subject.clone().unwrap_or_default(),
+    };
+    // The lock is two columns wide.
+    let room = room.saturating_sub(usize::from(email.encrypted));
+    let subject: String = subject.chars().take(room).collect();
     let subject = format!("{subject:<room$}");
     let style = if unread { Style::new().bold() } else { Style::new() };
     ListItem::new(Line::from(vec![
@@ -484,7 +507,7 @@ fn draw_popup(frame: &mut Frame, app: &App, popup: &Popup, region: &mut Option<P
                 "Enter save  r restore  Esc close",
             );
         }
-        Popup::Written { message, error } => {
+        Popup::Written { message, error, encryption } => {
             let mut lines = vec![
                 Line::from(format!("From:    {}", message.from)),
                 Line::from(format!("To:      {}", format_addresses(&message.draft.to))),
@@ -499,6 +522,11 @@ fn draw_popup(frame: &mut Frame, app: &App, popup: &Popup, region: &mut Option<P
             let files = message.draft.attachments.len() + message.files.len();
             if files > 0 {
                 lines.push(Line::from(format!("Files:   {files}")));
+            }
+            if let Some(encryption) = encryption {
+                let sealed = encryption.starts_with("end-to-end");
+                let line = Line::from(format!("{}  {encryption}", if sealed { "🔒" } else { "  " }));
+                lines.push(if sealed { line.fg(ACCENT) } else { line.fg(DIM) });
             }
             if let Some(error) = error {
                 lines.push(Line::default());
@@ -630,6 +658,8 @@ Mail         c write   / search (Esc clears)   r reply   R reply to all
              f forward   m move   d delete (to the trash; there: for good)
              u read/unread   s flag   t conversations or single emails
              a next account (in the mailboxes)   V vacation response
+             K unlock your key with the recovery code (end-to-end
+               encrypted mail; again: lock it)
 Reading      Space/PgDn scroll   n/p next/previous   A attachments
 Writing      in $VISUAL or $EDITOR; header lines, a blank line, the text.
              Attach: <path> adds a file; remove an Attached: line to drop one.
