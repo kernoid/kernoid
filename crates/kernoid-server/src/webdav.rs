@@ -257,8 +257,9 @@ fn etag(node: &NodeInfo) -> String {
     }
 }
 
+/// A response of `kernoid_dav::proto`, which writes the XML declaration itself.
 fn xml(status: StatusCode, body: impl std::fmt::Display) -> Response {
-    let mut response = (status, format!("<?xml version=\"1.0\" encoding=\"utf-8\"?>{body}")).into_response();
+    let mut response = (status, body.to_string()).into_response();
     response.headers_mut().insert(header::CONTENT_TYPE, HeaderValue::from_static("application/xml; charset=utf-8"));
     response
 }

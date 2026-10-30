@@ -228,6 +228,8 @@ async fn drives_are_administered_and_reached_over_webdav(pool: PgPool) {
     let (status, _, body) = text(&app, dav("PROPFIND", "/webdav/", "bob@firma.de", &[("depth", "1")], "")).await;
     assert_eq!(status, StatusCode::MULTI_STATUS);
     assert!(body.contains("/webdav/bob@firma.de/") && body.contains("/webdav/falkOSS/"), "{body}");
+    // Well-formed: one XML declaration, at the start – file managers refuse anything else.
+    assert!(body.starts_with("<?xml ") && body.matches("<?xml").count() == 1, "{body}");
     assert_eq!(text(&app, dav("OPTIONS", "/webdav/", "bob@firma.de", &[], "")).await.1["dav"], "1, 2");
 
     // A folder and a file, written and read back, also in part.
