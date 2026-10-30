@@ -6,6 +6,7 @@
   import { CalendarDays, Contact, FolderOpen, Mail, Monitor, Moon, Shield, Sun } from "@lucide/svelte";
 
   import { loaded, message, provideJmap } from "./app.svelte.js";
+  import { avatarOfAccount, loadAvatars } from "./avatars.svelte.js";
   import { t } from "./i18n.js";
   import { FILENODE, type Jmap, MAIL } from "./jmap.js";
   import MailNotifications from "./mail/MailNotifications.svelte";
@@ -64,6 +65,7 @@
   }
 
   const me = loaded(() => login.session());
+  void loadAvatars();
 
   const links: [Section, string, typeof Mail][] = [
     ["mail", "Mail", Mail],
@@ -114,6 +116,7 @@
       <UserMenu
         name={me.value?.account.display_name ?? jmap.session.username}
         address={me.value?.account.address ?? jmap.session.username}
+        avatar={avatarOfAccount(me.value?.account.id)}
         {admin}
         onlogout={() => void logout()}
       />

@@ -586,3 +586,7 @@ label.button { display: inline-flex; align-items: center; gap: 7px; min-height: 
 .search.row form > svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--faint); pointer-events: none; }
 .contact-head h2 { margin: 0; font-size: 1.4rem; }
 .toolbar h2 { font-size: 1.2rem; font-weight: 650; }
+.profile-head { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.profile-head h1 { margin: 0; }
+.profile-head p { margin: 2px 0 0; }
+.answer code.secret + button { margin-left: 4px; vertical-align: middle; }

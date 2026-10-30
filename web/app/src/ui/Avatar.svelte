@@ -2,6 +2,8 @@
 <!-- A person as a picture: their own if they uploaded one, else their initials on a colour of their own – the same
      colour for the same address everywhere. -->
 <script lang="ts">
+  import { avatarOfAddress } from "../avatars.svelte.js";
+
   let { name, address = "", src, size = 32 }: { name: string; address?: string; src?: string | undefined; size?: number } = $props();
 
   /** Up to two letters: first and last word, or the address before the @. */
@@ -22,11 +24,13 @@
   });
 
   let failed = $state(false);
+  // Their picture, if they set one: given, or found by address among the tenant's.
+  const picture = $derived(src ?? avatarOfAddress(address));
 </script>
 
 <span class="avatar" style:--size={`${size}px`} style:--hue={hue} aria-hidden="true">
-  {#if src && !failed}
-    <img {src} alt="" onerror={() => (failed = true)} />
+  {#if picture && !failed}
+    <img src={picture} alt="" onerror={() => (failed = true)} />
   {:else}
     {initials}
   {/if}

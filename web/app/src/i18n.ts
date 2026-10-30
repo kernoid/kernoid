@@ -613,6 +613,12 @@ const de: Record<string, string> = {
   Comfortable: "Luftig",
   Compact: "Kompakt",
   Sections: "Bereiche",
+  "Change picture": "Bild ändern",
+  "Remove picture": "Bild entfernen",
+  "The picture is set.": "Das Bild ist gesetzt.",
+  "The picture is removed.": "Das Bild ist entfernt.",
+  "PNG, JPEG or WebP – cut to a square": "PNG, JPEG oder WebP – wird quadratisch zugeschnitten",
+  "Copied": "Kopiert",
 };
 
 const lang = (navigator.languages?.[0] ?? navigator.language ?? "en").toLowerCase().startsWith("de") ? "de" : "en";

@@ -3,8 +3,11 @@
      for mail programs, applications and sessions – through kernoid's session API with the same cookie as JMAP. -->
 <script lang="ts">
   import type { KernoidError } from "@kernoid/sdk";
+  import { Check, Copy, ImageUp, Trash2 } from "@lucide/svelte";
 
   import { emptyText, loaded } from "../app.svelte.js";
+  import { avatarOfAccount, removeAvatar, setAvatar, squareImage } from "../avatars.svelte.js";
+  import Avatar from "../ui/Avatar.svelte";
   import Failure from "../Failure.svelte";
   import { t } from "../i18n.js";
   import { notificationsSupported, notificationsWanted, setNotifications } from "../mail/notify.svelte.js";
@@ -54,13 +57,52 @@
   };
 
   const themeName = { system: "System", light: "Light", dark: "Dark" } as const;
+
+  let copied = $state(false);
+  async function copy(text: string): Promise<void> {
+    await navigator.clipboard?.writeText(text);
+    copied = true;
+    setTimeout(() => (copied = false), 2000);
+  }
 </script>
 
 <main class="page">
   {#if session.value}
     {@const me = session.value}
-    <h1>{me.account.display_name}</h1>
-    <p class="muted">{me.account.address}</p>
+    <div class="profile-head">
+      <Avatar name={me.account.display_name} address={me.account.address} src={avatarOfAccount(me.account.id)} size={72} />
+      <div class="grow">
+        <h1>{me.account.display_name}</h1>
+        <p class="muted">{me.account.address}</p>
+      </div>
+      <div class="row">
+        <label class="button" data-tip={t("PNG, JPEG or WebP – cut to a square")}>
+          <ImageUp size={17} />{t("Change picture")}
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            hidden
+            onchange={(event) => {
+              const file = event.currentTarget.files?.[0];
+              event.currentTarget.value = "";
+              if (file) void run(async () => (await setAvatar(await squareImage(file)), t("The picture is set.")));
+            }}
+          />
+        </label>
+        {#if avatarOfAccount(me.account.id)}
+          <button
+            type="button"
+            class="icon danger"
+            aria-label={t("Remove picture")}
+            data-tip={t("Remove picture")}
+            disabled={busy}
+            onclick={() => run(async () => (await removeAvatar(), t("The picture is removed.")))}
+          >
+            <Trash2 size={17} />
+          </button>
+        {/if}
+      </div>
+    </div>
     {#if notice}
       <p class="notice" role="status">{notice}</p>
     {/if}
@@ -331,6 +373,15 @@
         <div class="answer">
           <span class="grow">
             {t("App password for {name}:", { name: created.name })} <code class="secret">{created.password}</code>
+            <button
+              type="button"
+              class="icon quiet small"
+              aria-label={copied ? t("Copied") : t("Copy")}
+              data-tip={copied ? t("Copied") : t("Copy")}
+              onclick={() => created && copy(created.password)}
+            >
+              {#if copied}<Check size={16} />{:else}<Copy size={16} />{/if}
+            </button>
             <br />
             <small class="muted">{t("Shown only now – enter it in the program.")}</small>
           </span>
