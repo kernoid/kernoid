@@ -204,6 +204,7 @@ offline grants – withdraw those on the account page, too.
 | `offline_access` | none; refresh tokens that outlive the session, for applications allowed to ask, with consent |
 | `urn:kernoid:project:roles` | `urn:kernoid:project:roles` – also without the scope if the project asserts roles |
 | `mail` | none; the access token logs a mail program in over IMAP and SMTP (`OAUTHBEARER`, `XOAUTH2`) – for an account with mail |
+| `urn:kernoid:data` | none; the access token reaches the account's data over JMAP, CalDAV, CardDAV and WebDAV (`Authorization: Bearer`) – what kernoid's apps ask for |
 | `urn:kernoid:tenant:id:<tenant id>` | none; restricts the login to accounts of that tenant |
 
 `amr` follows RFC 8176: `pwd`, `otp` (TOTP or a recovery code), `pop` (passkey), and `mfa` for more than one factor.
@@ -217,9 +218,19 @@ and tenant name:
 }
 ```
 
+### kernoid's own apps
+
+Every instance has a client for kernoid's own apps built in: public, of no tenant, usable by every account of the
+instance, without anyone registering it. The discovery document (`/.well-known/openid-configuration`) names it as
+`kernoid_apps_client_id`. The apps open the login page in the system's browser – a passkey, a password, a second
+factor, as the tenant has it – with PKCE, are sent back to `dev.kernoid.kernoid:/oauth` (Apple's systems, Android) or
+`http://127.0.0.1:<port>/oauth` (desktops, any port), and ask for `openid profile email offline_access
+urn:kernoid:data`. Staying logged in asks for no consent; ending the session ends the app's login. Other apps register
+an application of their own and may ask for `urn:kernoid:data` as well.
+
 ### Who may log in
 
-An account may log in to applications of its own tenant, and to those of projects granted to its tenant, while it and
-its tenant are active. If the
+An account may log in to applications of its own tenant, to those of projects granted to its tenant, and to the
+client of kernoid's own apps, while it and its tenant are active. If the
 application's project has `role_check` on, the account needs a role in the project. A second factor is needed if the
 tenant or the application requires one.

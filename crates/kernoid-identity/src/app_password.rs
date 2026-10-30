@@ -42,6 +42,9 @@ fn hash(secret: &str) -> Vec<u8> {
 /// The scope an OpenID Connect access token needs to log a mail program in over IMAP or SMTP (`OAUTHBEARER`,
 /// `XOAUTH2`).
 pub const MAIL_SCOPE: &str = "mail";
+/// The scope an OpenID Connect access token needs to reach the account's data over JMAP, CalDAV, CardDAV and WebDAV –
+/// what kernoid's own apps ask for, and other apps may.
+pub const DATA_SCOPE: &str = "urn:kernoid:data";
 
 /// The bearer token of an `OAUTHBEARER` (RFC 7628, 3.1: `n,a=<user>,` then `auth=Bearer <token>` between ^A) or an
 /// `XOAUTH2` response (`user=<user>` ^A `auth=Bearer <token>` ^A ^A), decoded from base64 already: the user it names,
@@ -276,6 +279,29 @@ impl Identity {
                 Ok(account)
             }
         }
+    }
+
+    /// An app's login to the account's data (JMAP, CalDAV, CardDAV, WebDAV) with an OpenID Connect access token of
+    /// kernoid: valid, of an active account of an active tenant, with the scope [`DATA_SCOPE`], its session – if it
+    /// has one – not ended. Which services the account has is the caller's to check. The second factor was asked
+    /// for when the token was issued.
+    pub async fn data_token_login(&self, token: &str) -> Result<AccountInfo> {
+        let account = sqlx::query_scalar!(
+            r#"SELECT k.account_id
+               FROM access_tokens k
+               JOIN accounts a ON a.id = k.account_id
+               JOIN tenants t ON t.id = a.tenant_id
+               LEFT JOIN sessions s ON s.id = k.session_id
+               WHERE k.token_hash = $1 AND k.expires_at > now() AND $2 = ANY(k.scopes) AND a.active AND t.active
+                 AND (k.session_id IS NULL OR (s.terminated_at IS NULL AND s.expires_at > now()))"#,
+            &Sha256::digest(token.as_bytes())[..],
+            DATA_SCOPE,
+        )
+        .fetch_optional(self.pool())
+        .await
+        .map_err(store_error)?
+        .ok_or(IdentityError::InvalidCredentials)?;
+        self.account_info(account).await
     }
 
     /// A mail program's login with an OpenID Connect access token of kernoid (`OAUTHBEARER`, `XOAUTH2`): valid, of

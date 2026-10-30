@@ -74,3 +74,72 @@ async fn a_file_up_down_changed_and_seen_by_push() {
     tokio::fs::remove_dir_all(&dir).await.unwrap();
     assert!(told, "push told nothing of FileNode");
 }
+
+/// What the browser does in a login: kernoid's login page logs in (here: `/v1/sessions` with the password) and
+/// finishes the auth request `authorize` parked; the callback URL comes back.
+async fn browser(login_url: &str, server: &str, address: &str, password: &str) -> String {
+    let http = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .resolve(
+            url::Url::parse(server).unwrap().host_str().unwrap(),
+            std::net::SocketAddr::from(([127, 0, 0, 1], url::Url::parse(server).unwrap().port().unwrap_or(443))),
+        )
+        .build()
+        .unwrap();
+    let session: serde_json::Value = http
+        .post(format!("{server}/v1/sessions"))
+        .json(&serde_json::json!({ "address": address, "password": password }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let token = session["token"].as_str().expect("a session").to_owned();
+    let to_login = http.get(login_url).send().await.unwrap();
+    let location = to_login.headers()["location"].to_str().unwrap().to_owned();
+    let request = location.split("authRequest=").nth(1).expect("an auth request").to_owned();
+    let finished: serde_json::Value = http
+        .post(format!("{server}/v1/auth-requests/{request}"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    finished["callback_url"].as_str().unwrap_or_else(|| panic!("{finished}")).to_owned()
+}
+
+#[tokio::test]
+async fn an_app_logs_in_with_openid_connect() {
+    let Ok(server) = std::env::var("KERNOID_TEST_SERVER") else { return };
+    let address = std::env::var("KERNOID_TEST_ADDRESS").unwrap();
+    let password = std::env::var("KERNOID_TEST_PASSWORD").unwrap();
+    let options = Options::default();
+    // A loopback redirect on a port of the app's choosing, as a desktop app listens.
+    let login =
+        kernoid_client::oidc::begin(&server, "http://127.0.0.1:47613/oauth", Some(&address), &options).await.unwrap();
+    assert!(login.url.contains("code_challenge_method=S256") && login.url.contains("urn%3Akernoid%3Adata"));
+    let callback = browser(&login.url, &server, &address, &password).await;
+    assert!(callback.starts_with("http://127.0.0.1:47613/oauth?"), "{callback}");
+    let tokens = kernoid_client::oidc::finish(&login, &callback, &options).await.unwrap();
+    assert!(tokens.refresh_token.is_some());
+
+    // The access token reaches JMAP; renewed, the client keeps working with the new one.
+    let url = kernoid_client::session_url(Some(&server), &address).unwrap();
+    let client = Client::connect_with_token(&url, &tokens.access_token, &options).await.unwrap();
+    assert_eq!(client.session.username, address);
+    let account = client.primary(MAIL).unwrap();
+    mail::mailboxes(&client, &account).await.unwrap();
+    let renewed = kernoid_client::oidc::refresh(&tokens, &options).await.unwrap();
+    assert_ne!(renewed.access_token, tokens.access_token);
+    client.set_access_token(&renewed.access_token);
+    mail::mailboxes(&client, &account).await.unwrap();
+    // The refresh token used is used up.
+    assert!(matches!(kernoid_client::oidc::refresh(&tokens, &options).await, Err(kernoid_client::Error::Unauthorized)));
+    // A callback for another request is refused.
+    let other = kernoid_client::oidc::begin(&server, "http://127.0.0.1:47613/oauth", None, &options).await.unwrap();
+    assert!(kernoid_client::oidc::finish(&other, &callback, &options).await.is_err());
+}

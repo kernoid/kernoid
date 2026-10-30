@@ -100,7 +100,8 @@ pub(crate) async fn configuration(
     State(state): State<AppState>,
     CurrentInstance(instance): CurrentInstance,
 ) -> Response {
-    Json(discovery(&state.oidc.issuer(&instance.primary_domain))).into_response()
+    let apps_client = state.oidc.apps_client(instance.id).await.ok().flatten();
+    Json(discovery(&state.oidc.issuer(&instance.primary_domain), apps_client)).into_response()
 }
 
 pub(crate) async fn keys(State(state): State<AppState>, CurrentInstance(instance): CurrentInstance) -> Response {

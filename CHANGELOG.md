@@ -9,6 +9,10 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 ### Added
 
+- kernoid's own apps sign in with OpenID Connect: every instance has a client for them built in (migration 0051,
+  `kernoid_apps_client_id` in the discovery document), usable by every account of the instance; access tokens with the
+  new scope `urn:kernoid:data` reach JMAP, CalDAV, CardDAV and WebDAV. Loopback redirect URIs match on any port
+  (RFC 8252, 7.3). The Rust SDK logs in with it (`kernoid_client::oidc`).
 - The audit log: the events of the tenant or the instance, newest first and for one object – `GET /v1/audit`,
   GraphQL `auditLog`, and a page in the web app's administration (with an account's history).
 - An account's addresses – the primary one and its aliases: `GET /v1/accounts/{id}/addresses`, GraphQL

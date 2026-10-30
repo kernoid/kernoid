@@ -1537,6 +1537,7 @@ dependencies = [
  "calcard",
  "chrono",
  "futures-util",
+ "getrandom 0.3.4",
  "hickory-proto",
  "html2text",
  "iana-time-zone",
@@ -1545,8 +1546,10 @@ dependencies = [
  "rustls",
  "serde",
  "serde_json",
+ "sha2",
  "tokio",
  "tokio-util",
+ "url",
 ]
 
 [[package]]

@@ -25,11 +25,11 @@ selects text in most terminals (to copy a link's address).
 Not yet (`OPEN`): finding the server through DNS on Windows (there is no
 `/etc/resolv.conf`; give `--server`).
 
-**Logging in with OpenID Connect** stays `OPEN` on purpose. A terminal app would use the device authorization grant
-(RFC 8628) – the app shows a code, the user confirms it in a browser – and then send the access token to JMAP. Both
-halves are missing on the server: kernoid's provider has no device authorization endpoint, and JMAP, IMAP and
-CalDAV accept a kernoid session or HTTP Basic, not an OAuth bearer token (IMAP and SMTP do, with the scope `mail`). An app
-password, revocable on its own and limited to programs, is the way until then.
+**Logging in with OpenID Connect** is `OPEN` for the terminal app. JMAP takes access tokens with the scope
+`urn:kernoid:data` now (kernoid's apps use them, [Login](login.md)), but a terminal has no browser to come back to: it
+would use the device authorization grant (RFC 8628) – the app shows a code, the user confirms it in a browser –, and
+kernoid's provider has no device authorization endpoint yet. An app password, revocable on its own and limited to
+programs, is the way until then.
 
 ## Building
 

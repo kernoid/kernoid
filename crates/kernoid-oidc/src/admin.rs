@@ -20,7 +20,7 @@ impl Oidc {
     pub async fn admin_application(&self, admin: &Admin, application: Uuid) -> Result<ApplicationInfo> {
         admin.require(Permission::DirectoryRead)?;
         match self.application(application).await {
-            Ok(info) if info.tenant == admin.tenant() => Ok(info),
+            Ok(info) if info.tenant == Some(admin.tenant()) => Ok(info),
             Ok(_) | Err(OidcError::InvalidClient) => Err(IdentityError::NotFound("the application").into()),
             Err(error) => Err(error),
         }

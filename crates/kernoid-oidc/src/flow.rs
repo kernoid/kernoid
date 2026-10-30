@@ -19,8 +19,15 @@ use crate::{
 };
 
 /// Scopes kernoid knows; others are ignored, as OpenID Connect allows.
-pub const SCOPES: &[&str] =
-    &["openid", "profile", "email", OFFLINE_SCOPE, ROLES_SCOPE, kernoid_identity::app_password::MAIL_SCOPE];
+pub const SCOPES: &[&str] = &[
+    "openid",
+    "profile",
+    "email",
+    OFFLINE_SCOPE,
+    ROLES_SCOPE,
+    kernoid_identity::app_password::MAIL_SCOPE,
+    kernoid_identity::app_password::DATA_SCOPE,
+];
 /// Refresh tokens that outlive the session (OpenID Connect Core, 11) – for applications that may ask for it, with the
 /// person's consent.
 pub const OFFLINE_SCOPE: &str = "offline_access";
@@ -185,9 +192,29 @@ pub(crate) fn pkce_challenge(verifier: &str) -> String {
     URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()))
 }
 
-/// The discovery document of an instance (OpenID Connect Discovery 1.0).
-pub fn discovery(issuer: &str) -> Value {
+/// Whether a redirect URI is one registered: the same – or, for loopback addresses over HTTP, the same but for the
+/// port, which a native app picks when it listens (RFC 8252, 7.3).
+pub(crate) fn redirect_allowed(registered: &str, given: &str) -> bool {
+    if registered == given {
+        return true;
+    }
+    let loopback = |uri: &str| -> Option<(String, String)> {
+        let rest = uri.strip_prefix("http://")?;
+        let (authority, path) = rest.split_once('/').map_or((rest, ""), |(a, p)| (a, p));
+        let host = if let Some(v6) = authority.strip_prefix('[') {
+            format!("[{}]", v6.split_once(']')?.0)
+        } else {
+            authority.split_once(':').map_or(authority, |(host, _)| host).to_owned()
+        };
+        (host == "127.0.0.1" || host == "[::1]").then(|| (host, path.to_owned()))
+    };
+    matches!((loopback(registered), loopback(given)), (Some(a), Some(b)) if a == b)
+}
+
+/// The discovery document of an instance (OpenID Connect Discovery 1.0), with the client id of kernoid's own apps.
+pub fn discovery(issuer: &str, apps_client: Option<Uuid>) -> Value {
     json!({
+        "kernoid_apps_client_id": apps_client.map(|id| id.to_string()),
         "issuer": issuer,
         "authorization_endpoint": format!("{issuer}/oauth/v2/authorize"),
         "token_endpoint": format!("{issuer}/oauth/v2/token"),
@@ -218,6 +245,14 @@ pub fn discovery(issuer: &str) -> Value {
 }
 
 impl Oidc {
+    /// The client id of kernoid's own apps on an instance (migration 0051).
+    pub async fn apps_client(&self, instance: Uuid) -> Result<Option<Uuid>> {
+        sqlx::query_scalar!("SELECT id FROM applications WHERE instance_id = $1 AND builtin", instance)
+            .fetch_optional(self.pool())
+            .await
+            .map_err(internal)
+    }
+
     /// Checks an authorization request and parks it for the login UI. Errors about the client or its redirect URI
     /// are returned (to be shown); everything else goes back to the redirect URI.
     pub async fn authorize(&self, instance: &InstanceInfo, request: &AuthorizeRequest) -> Result<Authorized> {
@@ -228,7 +263,7 @@ impl Oidc {
             return Err(OidcError::InvalidClient);
         }
         let redirect_uri = request.redirect_uri.as_deref().ok_or(OidcError::InvalidRedirectUri)?;
-        if !application.redirect_uris.iter().any(|registered| registered == redirect_uri) {
+        if !application.redirect_uris.iter().any(|registered| redirect_allowed(registered, redirect_uri)) {
             return Err(OidcError::InvalidRedirectUri);
         }
 
@@ -366,9 +401,10 @@ impl Oidc {
             return Err(OidcError::MfaRequired);
         }
         let asks_consent = request.prompt.iter().any(|value| value == "consent");
+        // kernoid's own apps need no consent to stay logged in: the person installed them to use this account.
         if asks_consent
             || application.options.consent_required
-            || request.scopes.iter().any(|scope| scope == OFFLINE_SCOPE)
+            || (!application.builtin && request.scopes.iter().any(|scope| scope == OFFLINE_SCOPE))
         {
             let given = self.identity.consent(session.account.id, application.id).await?.unwrap_or_default();
             let covered = request.scopes.iter().all(|scope| given.contains(scope));
@@ -428,8 +464,12 @@ impl Oidc {
     /// Whether an account of `tenant` may log in to an application: one of the application's own tenant, or of a
     /// tenant the application's project is granted to; and, if the project checks roles, only with a role in it.
     async fn may_use(&self, application: &ApplicationInfo, account: Uuid, tenant: Uuid) -> Result<bool> {
-        let Some(project) = application.project else { return Ok(application.tenant == tenant) };
-        if application.tenant != tenant && self.identity.project_access(tenant, project).await.is_err() {
+        // kernoid's own apps: every account of the instance (the instance is checked at authorize).
+        if application.builtin {
+            return Ok(true);
+        }
+        let Some(project) = application.project else { return Ok(application.tenant == Some(tenant)) };
+        if application.tenant != Some(tenant) && self.identity.project_access(tenant, project).await.is_err() {
             return Ok(false);
         }
         let info = self.identity.project(project).await?;
@@ -607,7 +647,8 @@ impl Oidc {
             return Err(OidcError::InvalidGrant("the refresh token has expired or its session ended".into()));
         }
         // Offline access ends when the application may no longer ask for it, or the consent is withdrawn.
-        if found.offline {
+        // kernoid's own apps stay logged in without a consent given (see finish).
+        if found.offline && !client.builtin {
             let given = self.identity.consent(found.account_id, client.id).await?.unwrap_or_default();
             if !client.options.offline_access || !given.iter().any(|scope| scope == OFFLINE_SCOPE) {
                 return Err(OidcError::InvalidGrant("offline access is no longer granted".into()));

@@ -10,6 +10,11 @@
 //! Read models are written in the transaction of the events (inline projections), so lookups are current at once
 //! and PostgreSQL enforces the uniqueness rules.
 
+/// Where the built-in client of kernoid's own apps may send the browser back: the apps' private scheme (RFC 8252,
+/// 7.1) and the loopback addresses, on any port (7.3).
+pub const APPS_REDIRECT_URIS: [&str; 3] =
+    ["dev.kernoid.kernoid:/oauth", "http://127.0.0.1/oauth", "http://[::1]/oauth"];
+
 pub mod account;
 mod address;
 pub mod admin;

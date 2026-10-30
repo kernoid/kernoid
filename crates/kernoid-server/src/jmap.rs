@@ -85,7 +85,13 @@ async fn log_in(
     } else {
         let token = crate::cookie::session_token(state, &parts.method, &parts.headers, Some(&instance))
             .map_err(|_| unauthorized(&parts.headers))?;
-        state.identity.data_session(instance.id, &token).await.map_err(|_| unauthorized(&parts.headers))?.account
+        // A kernoid session (`ks1.…`), or an app's OpenID Connect access token with the scope `urn:kernoid:data`.
+        let account = if token.starts_with("ks1.") {
+            state.identity.data_session(instance.id, &token).await.map(|session| session.account)
+        } else {
+            state.identity.data_token_login(&token).await
+        };
+        account.map_err(|_| unauthorized(&parts.headers))?
     };
     // An account of another instance does not use this one.
     if account.instance != instance.id {

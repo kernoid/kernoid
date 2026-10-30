@@ -129,6 +129,15 @@ pub(crate) async fn project(connection: &mut PgConnection, events: &[Event]) -> 
                 )
                 .execute(&mut *connection)
                 .await?;
+                // The client of kernoid's own apps, built in (RFC 0001, 7.2; migration 0051).
+                sqlx::query!(
+                    "INSERT INTO applications (id, tenant_id, instance_id, name, kind, redirect_uris, offline_access, builtin)
+                     VALUES (uuidv7(), NULL, $1, 'kernoid', 'public', $2, true, true)",
+                    id,
+                    &crate::APPS_REDIRECT_URIS.map(str::to_owned),
+                )
+                .execute(&mut *connection)
+                .await?;
             }
             InstanceEvent::Renamed { name } => {
                 sqlx::query!("UPDATE instances SET name = $2 WHERE id = $1", id, name)

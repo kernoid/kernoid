@@ -9,6 +9,7 @@ pub mod contacts;
 pub mod e2e;
 pub mod files;
 pub mod mail;
+pub mod oidc;
 pub mod push;
 pub mod srv;
 pub mod transfer;
@@ -259,7 +260,8 @@ pub struct Client {
     http: reqwest::Client,
     /// A client without overall timeout, for transfers and the push stream.
     streaming: reqwest::Client,
-    authorization: String,
+    /// `Basic …` or `Bearer …`; shared by the clones, so that a renewed access token reaches them all.
+    authorization: std::sync::Arc<std::sync::RwLock<String>>,
     origin: String,
     session_url: String,
     pub session: Session,
@@ -299,6 +301,26 @@ fn http(origin: &str, user_agent: &str, timeout: Option<Duration>) -> Result<req
 impl Client {
     /// Fetches the session at `session_url` with HTTP Basic – the address and an app password.
     pub async fn connect(session_url: &str, username: &str, password: &str, options: &Options) -> Result<Self> {
+        let credentials = base64::engine::general_purpose::STANDARD.encode(format!("{username}:{password}"));
+        Self::open(session_url, username, format!("Basic {credentials}"), options).await
+    }
+
+    /// Fetches the session at `session_url` with an OpenID Connect access token of kernoid with the scope
+    /// `urn:kernoid:data` – from [`oidc`]. Renew it with [`Client::set_access_token`] before it expires.
+    pub async fn connect_with_token(session_url: &str, access_token: &str, options: &Options) -> Result<Self> {
+        Self::open(session_url, "", format!("Bearer {access_token}"), options).await
+    }
+
+    /// A new access token for this client and its clones (after [`oidc::refresh`]).
+    pub fn set_access_token(&self, access_token: &str) {
+        *self.authorization.write().unwrap_or_else(|poisoned| poisoned.into_inner()) = format!("Bearer {access_token}");
+    }
+
+    fn authorization(&self) -> String {
+        self.authorization.read().unwrap_or_else(|poisoned| poisoned.into_inner()).clone()
+    }
+
+    async fn open(session_url: &str, username: &str, authorization: String, options: &Options) -> Result<Self> {
         let (origin, _) =
             split_origin(session_url).ok_or_else(|| Error::Protocol(format!("not a URL: {session_url}")))?;
         let origin = origin.to_owned();
@@ -308,11 +330,10 @@ impl Client {
         {
             return Err(Error::Protocol(format!("{origin} is not HTTPS; the password would travel readable")));
         }
-        let credentials = base64::engine::general_purpose::STANDARD.encode(format!("{username}:{password}"));
         let mut client = Self {
             http: http(&origin, &options.user_agent, Some(Duration::from_secs(120)))?,
             streaming: http(&origin, &options.user_agent, None)?,
-            authorization: format!("Basic {credentials}"),
+            authorization: std::sync::Arc::new(std::sync::RwLock::new(authorization)),
             origin,
             session_url: session_url.to_owned(),
             session: Session {
@@ -341,7 +362,7 @@ impl Client {
         let response = self
             .http
             .get(url)
-            .header("authorization", &self.authorization)
+            .header("authorization", self.authorization())
             .header("accept", "application/json")
             .send()
             .await?;
@@ -381,7 +402,7 @@ impl Client {
         let response = self
             .http
             .post(self.here(&self.session.api_url))
-            .header("authorization", &self.authorization)
+            .header("authorization", self.authorization())
             .header("content-type", "application/json")
             .header("accept", "application/json")
             .body(body)
@@ -464,7 +485,7 @@ impl Client {
         progress: &mut (dyn FnMut(u64, Option<u64>) + Send),
     ) -> Result<u64> {
         let url = self.download_url(account, blob, name, kind);
-        let response = self.streaming.get(url).header("authorization", &self.authorization).send().await?;
+        let response = self.streaming.get(url).header("authorization", self.authorization()).send().await?;
         let status = response.status().as_u16();
         if status == 401 {
             return Err(Error::Unauthorized);
@@ -507,7 +528,7 @@ impl Client {
         let response = self
             .streaming
             .post(url)
-            .header("authorization", &self.authorization)
+            .header("authorization", self.authorization())
             .header("content-type", kind)
             .header("content-length", size.to_string())
             .body(reqwest::Body::wrap_stream(stream))
@@ -531,7 +552,7 @@ impl Client {
         let response = self
             .streaming
             .get(self.here(&url))
-            .header("authorization", &self.authorization)
+            .header("authorization", self.authorization())
             .header("accept", "text/event-stream")
             .send()
             .await?;

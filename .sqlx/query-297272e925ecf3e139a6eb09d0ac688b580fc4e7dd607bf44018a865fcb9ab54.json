@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO applications (id, tenant_id, instance_id, name, kind, redirect_uris, offline_access, builtin)\n                     VALUES (uuidv7(), NULL, $1, 'kernoid', 'public', $2, true, true)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "297272e925ecf3e139a6eb09d0ac688b580fc4e7dd607bf44018a865fcb9ab54"
+}

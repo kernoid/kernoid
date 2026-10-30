@@ -1161,3 +1161,77 @@ async fn access_tokens_with_the_mail_scope_log_mail_programs_in(pool: PgPool) {
     setup.oidc.revoke(&setup.instance, &setup.app.to_string(), Some(&setup.secret), &with.access_token).await.unwrap();
     assert!(setup.identity.token_login(&with.access_token, None).await.is_err());
 }
+
+#[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
+async fn kernoids_own_apps_have_a_client_on_every_instance(pool: PgPool) {
+    let setup = setup(&pool, Key::random().unwrap()).await;
+    // Made with the instance, named in discovery, and no tenant's to change.
+    let client = setup.oidc.apps_client(setup.instance.id).await.unwrap().expect("the apps' client");
+    let document = kernoid_oidc::discovery("https://login.firma.de", Some(client));
+    assert_eq!(document["kernoid_apps_client_id"], client.to_string());
+    assert!(kernoid_identity::APPS_REDIRECT_URIS.contains(&"dev.kernoid.kernoid:/oauth"));
+
+    // An account of another tenant may use it; a loopback redirect on any port; staying logged in needs no consent.
+    let other = setup.identity.add_tenant(setup.instance.id, "Other", "test").await.unwrap();
+    setup.identity.add_tenant_domain(setup.instance.id, other, &domain("other.de"), "test").await.unwrap();
+    setup.identity.trust_tenant_domain(setup.instance.id, other, &domain("other.de"), "test").await.unwrap();
+    let bob = setup.identity.add_account(other, &Address::parse("bob@other.de").unwrap(), "Bob", "test").await.unwrap();
+    setup.identity.set_password(bob, PASSWORD, "test").await.unwrap();
+    let bobs = setup
+        .identity
+        .create_session(setup.instance.id, "bob@other.de", PASSWORD, None, &ClientMeta::default())
+        .await
+        .unwrap();
+    let redirect = "http://127.0.0.1:53817/oauth";
+    let request = AuthorizeRequest {
+        redirect_uri: Some(redirect.into()),
+        ..authorize_request(client, "openid offline_access urn:kernoid:data")
+    };
+    let Authorized::Login { auth_request, .. } = setup.oidc.authorize(&setup.instance, &request).await.unwrap() else {
+        panic!("expected a login")
+    };
+    let callback = setup.oidc.finish(&setup.instance, &auth_request, &bobs.token, false).await.unwrap();
+    assert!(callback.starts_with(redirect), "{callback}");
+    let token = TokenRequest {
+        redirect_uri: Some(redirect.into()),
+        client_id: Some(client.to_string()),
+        client_secret: None,
+        ..token_request(&setup, &query(&callback)["code"])
+    };
+    let tokens = setup.oidc.token(&setup.instance, &token).await.unwrap();
+    assert!(tokens.refresh_token.is_some(), "offline_access without a consent screen");
+    // The token reaches the account's data; a token without the scope does not.
+    assert_eq!(setup.identity.data_token_login(&tokens.access_token).await.unwrap().id, bob);
+    // Renewed with the refresh token – no consent was asked, none is needed.
+    let renewed = setup
+        .oidc
+        .token(
+            &setup.instance,
+            &TokenRequest {
+                grant_type: Some("refresh_token".into()),
+                refresh_token: tokens.refresh_token.clone(),
+                client_id: Some(client.to_string()),
+                ..TokenRequest::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(setup.identity.data_token_login(&renewed.access_token).await.unwrap().id, bob);
+    let plain = AuthorizeRequest { redirect_uri: Some(redirect.into()), ..authorize_request(client, "openid") };
+    let Authorized::Login { auth_request, .. } = setup.oidc.authorize(&setup.instance, &plain).await.unwrap() else {
+        panic!()
+    };
+    let callback = setup.oidc.finish(&setup.instance, &auth_request, &bobs.token, false).await.unwrap();
+    let narrow = setup
+        .oidc
+        .token(&setup.instance, &TokenRequest { code: Some(query(&callback)["code"].clone()), ..token })
+        .await
+        .unwrap();
+    assert!(setup.identity.data_token_login(&narrow.access_token).await.is_err());
+
+    // Other redirects than the registered ones are refused, also on loopback with another path or host.
+    for wrong in ["http://127.0.0.1:53817/other", "http://localhost:53817/oauth", "dev.kernoid.other:/oauth"] {
+        let request = AuthorizeRequest { redirect_uri: Some(wrong.into()), ..authorize_request(client, "openid") };
+        assert!(matches!(setup.oidc.authorize(&setup.instance, &request).await, Err(OidcError::InvalidRedirectUri)));
+    }
+}

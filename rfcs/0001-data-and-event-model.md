@@ -227,8 +227,17 @@ running (`pg_snapshot_xmin`), which needs no locks between writers and readers.
 ### 7.2 OpenID Connect (implemented)
 
 - **Applications** are OpenID Connect clients of one tenant: *confidential* (a secret, shown once, stored as
-  SHA-256) or *public* (browser and mobile apps, no secret). Redirect URIs are matched exactly; accepted are `https`,
-  `http` only for loopback, and private schemes with a dot (RFC 8252).
+  SHA-256) or *public* (browser and mobile apps, no secret). Redirect URIs are matched exactly – a loopback redirect
+  over `http` on any port, which a native app picks when it listens (RFC 8252, 7.3); accepted are `https`, `http`
+  only for loopback, and private schemes with a dot (RFC 8252).
+- **kernoid's own apps** (decided 2026-10-30) sign in with a **built-in public client per instance** – of no tenant,
+  usable by every account of the instance, made with the instance (migration 0051), changed by nobody and therefore
+  no aggregate. The discovery document names it (`kernoid_apps_client_id`); its redirect URIs are the apps' scheme
+  `dev.kernoid.kernoid:/oauth` and `http://127.0.0.1/oauth`, `http://[::1]/oauth` on any port. Staying logged in
+  (`offline_access`) needs no consent screen for it. Other apps register applications of their own, as before.
+- The scope **`urn:kernoid:data`** lets the access token reach the account's data – JMAP, CalDAV, CardDAV, WebDAV –
+  in place of a session or an app password; what the account may do there is the same. The scope `mail` stays the
+  one for IMAP and SMTP.
 - **PKCE with S256 is required for every client** (as in OAuth 2.1); there is no implicit flow, no `plain`.
 - `authorize` checks client and redirect URI first – errors about them are shown, never redirected to – then
   parks an **auth request** (10 minutes) and sends the browser to the login UI (`<issuer>/login?authRequest=…`). The
