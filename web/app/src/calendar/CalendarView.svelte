@@ -3,14 +3,18 @@
      changed and answered here send their invitations and answers. Colours and positions are set as style properties
      (style:), which the Content-Security-Policy allows – not as style attributes. -->
 <script lang="ts">
-  import { CalendarPlus, ChevronLeft, ChevronRight } from "@lucide/svelte";
+  import { CalendarPlus, ChevronLeft, ChevronRight, Lock } from "@lucide/svelte";
 
   import { changed, loaded, resource, touch, useJmap } from "../app.svelte.js";
   import Failure from "../Failure.svelte";
   import { locale, t } from "../i18n.js";
   import { identities } from "../mail/model.js";
   import EventDialog, { type EventStart } from "./EventDialog.svelte";
-  import { type CalendarEvent, calendars, instances } from "./model.js";
+  import { type CalendarEvent, calendars, encrypted, instances } from "./model.js";
+  import { current, e2e, refresh as refreshE2e } from "../e2e/e2e.svelte.js";
+  import { createSealedCollection } from "../e2e/sealed.js";
+  import Unlock from "../e2e/Unlock.svelte";
+  import { CALENDARS } from "../jmap.js";
 
   function startOfMonth(date: Date): Date {
     return new Date(date.getFullYear(), date.getMonth(), 1);
@@ -153,6 +157,18 @@
     },
   );
   let dialog = $state<EventStart>();
+  // Encrypted calendars (RFC 0006, 7) need the account's key unlocked on this page.
+  void refreshE2e(jmap).catch(() => undefined);
+  let making = $state<unknown>();
+
+  function newEncryptedCalendar(): void {
+    const name = window.prompt(t("Name of the new encrypted calendar"));
+    if (!name?.trim()) return;
+    making = undefined;
+    createSealedCollection(jmap, CALENDARS, "Calendar", jmap.account(CALENDARS), name.trim())
+      .then(() => touch("Calendar"))
+      .catch((failure: unknown) => (making = failure));
+  }
 
   const colour = (event: CalendarEvent) =>
     list.value?.find((calendar) => event.calendarIds[calendar.id] && calendar.accountId === event.accountId)?.color ??
@@ -214,17 +230,33 @@
       <button type="button" class="primary" onclick={() => (dialog = { day: new Date() })}><CalendarPlus size={17} />{t("New event")}</button>
     {/if}
   </div>
-  <Failure error={list.error ?? events.error} />
+  <Failure error={list.error ?? events.error ?? making} />
+  {#if e2e.available && current() && !e2e.unlocked && (list.value ?? []).some(encrypted)}
+    <div class="pad">
+      <p class="muted small">{t("Encrypted calendars show their events once your key is unlocked on this page.")}</p>
+      <Unlock onunlock={() => touch("CalendarEvent")} />
+    </div>
+  {/if}
   <div class="legend">
     {#each list.value ?? [] as calendar (`${calendar.accountId}/${calendar.id}`)}
       <span class="chip">
         <i style:background={calendar.color ?? "var(--mint)"}></i>
+        {#if encrypted(calendar)}<Lock size={12} aria-label={t("End-to-end encrypted")} />{/if}
         {calendar.name}
         {#if calendar.shared}
           <small class="muted"> · {calendar.shared}</small>
         {/if}
       </span>
     {/each}
+    {#if e2e.available && e2e.settings?.policy.collections !== "forbidden"}
+      <button
+        type="button"
+        class="quiet small"
+        disabled={!e2e.unlocked}
+        data-tip={e2e.unlocked ? t("Its events only those it is shared with can read") : t("Unlock your key on the account page first")}
+        onclick={newEncryptedCalendar}><Lock size={13} />{t("New encrypted calendar")}</button
+      >
+    {/if}
   </div>
   {#if view === "month"}
     <div class="month" role="grid">

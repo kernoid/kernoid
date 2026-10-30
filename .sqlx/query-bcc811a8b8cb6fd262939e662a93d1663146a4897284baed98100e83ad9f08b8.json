@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT length(data)::bigint AS \"size!\" FROM sealed_items\n                       WHERE id = $1 AND account_id = $2 AND collection_id = $3 FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "size!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "bcc811a8b8cb6fd262939e662a93d1663146a4897284baed98100e83ad9f08b8"
+}

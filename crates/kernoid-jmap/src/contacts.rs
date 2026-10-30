@@ -38,8 +38,17 @@ fn forbidden(description: &str) -> Value {
     json!({ "type": "forbidden", "description": description })
 }
 
-const BOOK_PROPERTIES: [&str; 8] =
-    ["id", "name", "description", "sortOrder", "isDefault", "isSubscribed", "shareWith", "myRights"];
+const BOOK_PROPERTIES: [&str; 9] = [
+    "id",
+    "name",
+    "description",
+    "sortOrder",
+    "isDefault",
+    "isSubscribed",
+    "shareWith",
+    "myRights",
+    "kernoid:collectionKey",
+];
 
 fn book_rights(access: &CollectionAccess, book: Uuid) -> Value {
     let level = access.level(book);
@@ -63,6 +72,7 @@ fn book_object(book: &AddressBookInfo, access: &CollectionAccess, properties: &[
             "isSubscribed" => json!(book.is_subscribed),
             "shareWith" => Value::Null,
             "myRights" => book_rights(access, book.id),
+            "kernoid:collectionKey" => crate::openpgp::b64_or_null(book.collection_key.as_deref()),
             _ => continue,
         };
         out.insert(property.clone(), value);
@@ -148,7 +158,12 @@ impl Context<'_> {
                     sort_order: object.get("sortOrder").and_then(Value::as_i64).unwrap_or(0),
                     is_default: false,
                 };
-                match groupware.create_addressbook(owner, new).await {
+                let made = groupware.create_addressbook(owner, new).await;
+                let made = match made {
+                    Ok(id) => crate::openpgp::seal_new(&groupware, owner, self.caller.account, id, object).await,
+                    Err(error) => Err(error),
+                };
+                match made {
                     Ok(id) => {
                         self.created.insert(creation.clone(), id.to_string());
                         created.insert(creation.clone(), json!({ "id": id.to_string(), "isDefault": false }));

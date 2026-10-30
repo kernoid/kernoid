@@ -30,6 +30,7 @@
     removeInstance,
     update,
     updateInstance,
+    encrypted,
   } from "./model.js";
 
   let {
@@ -146,6 +147,13 @@
     }
   }
 
+  // An encrypted calendar sends no invitations (RFC 0006, 7: the server cannot read what it would send).
+  const sealedChoice = $derived.by(() => {
+    const [accountId, id] = calendarId.split("/");
+    const chosen = calendars.find((calendar) => calendar.accountId === accountId && calendar.id === id);
+    return chosen ? encrypted(chosen) : false;
+  });
+
   function form(): EventForm {
     const [accountId, id] = calendarId.split("/");
     const calendar = calendars.find((entry) => entry.accountId === accountId && entry.id === id);
@@ -177,7 +185,7 @@
       const event = base.value;
       if (!instance) return;
       if (single && event && instance.recurrenceId) await removeInstance(jmap, event, instance.recurrenceId);
-      else await remove(jmap, instance.accountId, instance.baseEventId ?? instance.id);
+      else await remove(jmap, instance.accountId, instance.baseEventId ?? instance.id, calendarOf(instance));
     });
 
   const answers = [
@@ -281,10 +289,14 @@
         </button>
       {/if}
     </div>
-    <label>
-      <span>{t("Participants")}</span>
-      <input type="text" placeholder={t("Addresses, separated by commas")} bind:value={participants} disabled={!canEdit} />
-    </label>
+    {#if sealedChoice}
+      <p class="muted small">{t("No invitations from an encrypted calendar yet")}</p>
+    {:else}
+      <label>
+        <span>{t("Participants")}</span>
+        <input type="text" placeholder={t("Addresses, separated by commas")} bind:value={participants} disabled={!canEdit} />
+      </label>
+    {/if}
     {#if instance?.participants}
       <ul class="participants">
         {#if instance.organizerCalendarAddress}

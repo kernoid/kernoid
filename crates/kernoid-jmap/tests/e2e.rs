@@ -242,3 +242,91 @@ async fn sent_mail_announces_a_compatible_key(pool: PgPool) {
     assert!(sent[0].contains("\r\nFrom: bob@firma.example\r\n"));
     assert!(!sent[1].contains("Autocrypt:"), "post-quantum keys wait for Autocrypt's next version");
 }
+
+#[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
+async fn encrypted_calendars_hold_only_what_the_apps_encrypted(pool: PgPool) {
+    let identity = Identity::new(EventStore::new(pool.clone()));
+    let instance =
+        identity.add_instance("Instance", &DomainName::parse("login.firma.example").unwrap(), WHO).await.unwrap();
+    let tenant = identity.add_tenant(instance, "Firma", WHO).await.unwrap();
+    let domain = DomainName::parse("firma.example").unwrap();
+    identity.add_tenant_domain(instance, tenant, &domain, WHO).await.unwrap();
+    identity.trust_tenant_domain(instance, tenant, &domain, WHO).await.unwrap();
+    let keys = Arc::new(TenantKeys::with_main_keys(pool.clone(), MainKeys::new(Key::random().unwrap(), Vec::new())));
+    let mail = Mail::new(pool.clone(), BlobStore::new(Arc::new(InMemory::new()), keys.clone()), Limits::default());
+    let groupware = kernoid_groupware::Groupware::new(mail.clone(), keys);
+    let jmap = Jmap::new(mail, 1_000_000, chrono::Duration::days(5))
+        .with_identity(identity.clone())
+        .with_groupware(groupware.clone());
+    let address = "alice@firma.example";
+    let account = identity.add_account(tenant, &Address::parse(address).unwrap(), "Alice", WHO).await.unwrap();
+    let alice = Caller { account, tenant, username: address.into(), mail: true, files: false };
+    let id = account.to_string();
+    let using = ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:calendars", "https://kernoid.dev/jmap/openpgp"];
+    let call = |name: &'static str, args: Value| {
+        let (jmap, alice) = (&jmap, &alice);
+        async move {
+            let request = json!({ "using": using, "methodCalls": [[name, args, "0"]] });
+            let response = jmap.api(alice, request.to_string().as_bytes()).await.unwrap();
+            response["methodResponses"][0][1].clone()
+        }
+    };
+
+    // The calendar's key, made by the app; its secret wrapped for Alice.
+    let own = SecretKey::generate(Kind::Pqc, &[address]).unwrap();
+    let calendar_key = SecretKey::generate(Kind::Pqc, &["calendar@vault.invalid"]).unwrap();
+    let wrapped =
+        kernoid_e2e::message::encrypt(calendar_key.export().unwrap().as_bytes(), &[&own.public()], None, false)
+            .unwrap();
+    let created = call(
+        "Calendar/set",
+        json!({ "accountId": id, "create": { "c": { "name": "Private", "kernoid:newEncrypted": {
+            "publicKey": STANDARD.encode(calendar_key.public().to_bytes().unwrap()), "sealed": STANDARD.encode(&wrapped) } } } }),
+    )
+    .await;
+    let calendar = created["created"]["c"]["id"].as_str().unwrap_or_else(|| panic!("{created}")).to_owned();
+    let got = call("Calendar/get", json!({ "accountId": id, "ids": [calendar] })).await;
+    assert!(got["list"][0]["kernoid:collectionKey"].is_string());
+
+    // Plain events are refused; encrypted entries are kept as they came.
+    let plain = call(
+        "CalendarEvent/set",
+        json!({ "accountId": id, "create": { "e": { "@type": "Event", "title": "Leak", "calendarIds": { &calendar: true },
+            "start": "2026-11-02T09:00:00", "duration": "PT1H" } } }),
+    )
+    .await;
+    assert!(plain["notCreated"]["e"].is_object(), "{plain}");
+    let event = br#"{"@type":"Event","title":"Doctor","start":"2026-11-03T10:00:00"}"#;
+    let sealed = kernoid_e2e::message::encrypt(event, &[&calendar_key.public()], Some(&own), false).unwrap();
+    let set = call(
+        "SealedItem/set",
+        json!({ "accountId": id, "collectionId": calendar, "create": { "i": { "data": STANDARD.encode(&sealed) } } }),
+    )
+    .await;
+    let item = set["created"]["i"]["id"].as_str().unwrap_or_else(|| panic!("{set}")).to_owned();
+    let items = call("SealedItem/get", json!({ "accountId": id, "collectionId": calendar })).await;
+    let data = STANDARD.decode(items["list"][0]["data"].as_str().unwrap()).unwrap();
+    assert_eq!(kernoid_e2e::message::decrypt(&data, &[&calendar_key], &[]).unwrap().data, event);
+
+    // The key comes back to its member, unwrapped by her own key.
+    let key = call("CollectionKey/get", json!({ "accountId": id, "ids": [calendar] })).await;
+    let back = STANDARD.decode(key["list"][0]["sealed"].as_str().unwrap()).unwrap();
+    let secret = kernoid_e2e::message::decrypt(&back, &[&own], &[]).unwrap().data;
+    assert_eq!(SecretKey::import(&secret).unwrap().fingerprint(), calendar_key.fingerprint());
+    assert_eq!(key["list"][0]["members"], json!([id]));
+
+    // Not in a plain calendar; destroying the calendar takes its entries with it.
+    let plain_calendar = groupware.default_calendar(account).await.unwrap().id.to_string();
+    let wrong = call(
+        "SealedItem/set",
+        json!({ "accountId": id, "collectionId": plain_calendar, "create": { "i": { "data": "AAAA" } } }),
+    )
+    .await;
+    assert!(wrong["notCreated"]["i"].is_object(), "{wrong}");
+    let destroyed =
+        call("SealedItem/set", json!({ "accountId": id, "collectionId": calendar, "destroy": [item] })).await;
+    assert_eq!(destroyed["destroyed"], json!([item]));
+    let gone =
+        call("Calendar/set", json!({ "accountId": id, "destroy": [calendar], "onDestroyRemoveEvents": true })).await;
+    assert_eq!(gone["destroyed"], json!([calendar]), "{gone}");
+}

@@ -55,6 +55,25 @@ Free/busy requests of a program's scheduling outbox answer for accounts whose ca
 Sharing is changed through the administration API and the CLI (`accounts.manage`), and by the owner itself; CalDAV's
 own ACL method is not offered – programs show the access but do not change it.
 
+## Encrypted calendars and address books
+
+A calendar or address book can be made **encrypted** in the web app (New encrypted calendar, New encrypted address
+book; the account's key unlocked, the tenant allowing it): its events and contacts only its members can read
+([RFC 0006](https://github.com/kernoid/kernoid/blob/main/rfcs/0006-end-to-end-encryption.md)). The app makes the
+collection's own key; kernoid keeps its public key, its secret key wrapped for each member, and each entry as an
+OpenPGP message it cannot read.
+
+- **What it costs:** CalDAV and CardDAV do not show such collections; the server cannot search them, tell free/busy
+  times or send invitations – the app hides participants for them. A repeating event repeats by its frequency only.
+- **JMAP** (`https://kernoid.dev/jmap/openpgp`): `kernoid:collectionKey` on calendars and address books;
+  `kernoid:newEncrypted` (`publicKey`, `sealed`) on a new one; `SealedItem/get` and `SealedItem/set` (`collectionId`,
+  entries with `data`) for its entries, `CollectionKey/get` and `/set` (`members/<account id>`) for its key. A plain
+  event or contact is refused there.
+
+{: .note }
+OPEN: sharing an encrypted collection hands over its key only through the API so far (the web app's sharing of
+calendars comes with it), invitations sent by the app, changed instances of a series.
+
 ## Invitations
 
 When an account creates, changes or deletes an event it organizes – or answers one it is invited to – kernoid sends

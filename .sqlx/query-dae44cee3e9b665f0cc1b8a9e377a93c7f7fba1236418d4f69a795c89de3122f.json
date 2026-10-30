@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM sealed_items WHERE id = $1 AND account_id = $2 AND collection_id = $3\n               RETURNING length(data)::bigint AS \"size!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "size!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "dae44cee3e9b665f0cc1b8a9e377a93c7f7fba1236418d4f69a795c89de3122f"
+}

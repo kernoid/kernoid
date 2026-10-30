@@ -40,6 +40,33 @@ fn b64(bytes: &[u8]) -> Value {
     json!(STANDARD.encode(bytes))
 }
 
+pub(crate) fn b64_or_null(bytes: Option<&[u8]>) -> Value {
+    bytes.map_or(Value::Null, b64)
+}
+
+/// A calendar or address book just made, made encrypted if `kernoid:newEncrypted` (`publicKey`, `sealed`: the secret
+/// key wrapped for the creator) asks for it (RFC 0006, 7). If that fails, the collection goes again.
+pub(crate) async fn seal_new(
+    groupware: &kernoid_groupware::Groupware,
+    owner: uuid::Uuid,
+    creator: uuid::Uuid,
+    id: uuid::Uuid,
+    object: &Map<String, Value>,
+) -> Result<uuid::Uuid, kernoid_groupware::GroupwareError> {
+    let Some(encrypted) = object.get("kernoid:newEncrypted").and_then(Value::as_object) else { return Ok(id) };
+    let field = |key: &str| encrypted.get(key).and_then(Value::as_str).and_then(|text| STANDARD.decode(text).ok());
+    let outcome = match (field("publicKey"), field("sealed")) {
+        (Some(public), Some(sealed)) => groupware.seal_collection(owner, id, &public, creator, &sealed).await,
+        _ => Err(kernoid_groupware::GroupwareError::Invalid("kernoid:newEncrypted has publicKey and sealed".into())),
+    };
+    if let Err(error) = outcome {
+        let _ = groupware.destroy_calendar(owner, id, true).await;
+        let _ = groupware.destroy_addressbook(owner, id, true).await;
+        return Err(error);
+    }
+    Ok(id)
+}
+
 fn bytes(value: &Value, what: &str) -> Result<Vec<u8>, Value> {
     value
         .as_str()
@@ -391,6 +418,209 @@ impl Context<'_> {
                 "notUpdated": or_null(not_updated),
                 "notDestroyed": null,
             }),
+        )])
+    }
+}
+
+impl Context<'_> {
+    /// The encrypted collection `collectionId` names and the caller's level on it.
+    async fn sealed_collection(
+        &self,
+        args: &Map<String, Value>,
+        wanted: kernoid_groupware::Level,
+    ) -> Result<(uuid::Uuid, uuid::Uuid), MethodError> {
+        let (owner, access) = self.groupware_access(args).await?;
+        let collection = args
+            .get("collectionId")
+            .and_then(Value::as_str)
+            .and_then(|id| self.id(id))
+            .ok_or_else(|| MethodError::invalid("collectionId is required"))?;
+        if !access.allows(collection, wanted) {
+            return Err(MethodError::new("forbidden", "not allowed in this collection"));
+        }
+        Ok((owner, collection))
+    }
+
+    /// `SealedItem/get` (RFC 0006, 7): every entry of an encrypted calendar or address book (`collectionId`), with
+    /// `data` (an OpenPGP message, base64) and `updated`.
+    pub async fn sealed_item_get(&self, args: Map<String, Value>) -> MethodResult {
+        let (owner, collection) = self.sealed_collection(&args, kernoid_groupware::Level::Read).await?;
+        let groupware = self.groupware()?;
+        let items = groupware.sealed_items(owner, collection).await.map_err(MethodError::server_fail)?;
+        let state = groupware.state(owner).await?;
+        let list: Vec<Value> = items
+            .iter()
+            .map(|item| {
+                json!({
+                    "id": item.id.to_string(),
+                    "data": b64(&item.data),
+                    "updated": item.updated.to_rfc3339_opts(SecondsFormat::Secs, true),
+                })
+            })
+            .collect();
+        Ok(vec![(
+            "SealedItem/get".into(),
+            json!({ "accountId": owner.to_string(), "collectionId": collection.to_string(), "state": state.to_string(), "list": list }),
+        )])
+    }
+
+    /// `SealedItem/set`: `create` and `update` with `data` (base64), `destroy` – in one encrypted collection.
+    pub async fn sealed_item_set(&mut self, args: Map<String, Value>) -> MethodResult {
+        let (owner, collection) = self.sealed_collection(&args, kernoid_groupware::Level::Write).await?;
+        let groupware = self.groupware()?.clone();
+        let data = |object: &Value| {
+            object
+                .get("data")
+                .and_then(Value::as_str)
+                .and_then(|text| STANDARD.decode(text).ok())
+                .ok_or_else(|| invalid_properties("data is base64"))
+        };
+        let error = |error: kernoid_groupware::GroupwareError| crate::contacts::set_error(&error);
+        let (mut created, mut not_created) = (Map::new(), Map::new());
+        if let Some(Value::Object(create)) = args.get("create") {
+            for (creation, object) in create {
+                let result = match data(object) {
+                    Ok(bytes) => groupware.put_sealed_item(owner, collection, None, &bytes).await.map_err(error),
+                    Err(failure) => Err(failure),
+                };
+                match result {
+                    Ok(id) => {
+                        self.created.insert(creation.clone(), id.to_string());
+                        created.insert(creation.clone(), json!({ "id": id.to_string() }));
+                    }
+                    Err(failure) => {
+                        not_created.insert(creation.clone(), failure);
+                    }
+                }
+            }
+        }
+        let (mut updated, mut not_updated) = (Map::new(), Map::new());
+        if let Some(Value::Object(update)) = args.get("update") {
+            for (id, object) in update {
+                let result = match (self.id(id), data(object)) {
+                    (Some(item), Ok(bytes)) => {
+                        groupware.put_sealed_item(owner, collection, Some(item), &bytes).await.map(drop).map_err(error)
+                    }
+                    (None, _) => Err(json!({ "type": "notFound" })),
+                    (_, Err(failure)) => Err(failure),
+                };
+                match result {
+                    Ok(()) => {
+                        updated.insert(id.clone(), Value::Null);
+                    }
+                    Err(failure) => {
+                        not_updated.insert(id.clone(), failure);
+                    }
+                }
+            }
+        }
+        let (mut destroyed, mut not_destroyed) = (Vec::new(), Map::new());
+        if let Some(Value::Array(destroy)) = args.get("destroy") {
+            for id in destroy.iter().filter_map(Value::as_str) {
+                let result = match self.id(id) {
+                    Some(item) => groupware.destroy_sealed_item(owner, collection, item).await.map_err(error),
+                    None => Err(json!({ "type": "notFound" })),
+                };
+                match result {
+                    Ok(()) => destroyed.push(Value::String(id.to_owned())),
+                    Err(failure) => {
+                        not_destroyed.insert(id.to_owned(), failure);
+                    }
+                }
+            }
+        }
+        let state = groupware.state(owner).await?;
+        Ok(vec![(
+            "SealedItem/set".into(),
+            json!({
+                "accountId": owner.to_string(),
+                "collectionId": collection.to_string(),
+                "newState": state.to_string(),
+                "created": or_null(created),
+                "updated": or_null(updated),
+                "destroyed": destroyed,
+                "notCreated": or_null(not_created),
+                "notUpdated": or_null(not_updated),
+                "notDestroyed": or_null(not_destroyed),
+            }),
+        )])
+    }
+
+    /// `CollectionKey/get`: for the collections asked for (`ids`), the caller's wrapped key (or null) and the accounts
+    /// that have one.
+    pub async fn collection_key_get(&self, args: Map<String, Value>) -> MethodResult {
+        let (owner, access) = self.groupware_access(&args).await?;
+        let groupware = self.groupware()?;
+        let wanted = ids(&args)?.ok_or_else(|| MethodError::invalid("ids is required"))?;
+        let (mut list, mut not_found) = (Vec::new(), Vec::new());
+        for id in wanted {
+            let Some(collection) = self.id(&id).filter(|c| access.allows(*c, kernoid_groupware::Level::Read)) else {
+                not_found.push(Value::String(id));
+                continue;
+            };
+            let sealed =
+                groupware.collection_key(collection, self.caller.account).await.map_err(MethodError::server_fail)?;
+            let members = groupware.collection_members(collection).await.map_err(MethodError::server_fail)?;
+            list.push(json!({
+                "id": id,
+                "sealed": b64_or_null(sealed.as_deref()),
+                "members": members.iter().map(uuid::Uuid::to_string).collect::<Vec<_>>(),
+            }));
+        }
+        Ok(vec![(
+            "CollectionKey/get".into(),
+            json!({ "accountId": owner.to_string(), "list": list, "notFound": not_found }),
+        )])
+    }
+
+    /// `CollectionKey/set`: `update` of a collection with `members/<account id>` – a wrapped key or null; for whoever may
+    /// administer the collection (its owner, or a grant at `admin`).
+    pub async fn collection_key_set(&self, args: Map<String, Value>) -> MethodResult {
+        let (owner, access) = self.groupware_access(&args).await?;
+        let groupware = self.groupware()?;
+        let (mut updated, mut not_updated) = (Map::new(), Map::new());
+        if let Some(Value::Object(update)) = args.get("update") {
+            for (id, patch) in update {
+                let result = async {
+                    let collection = self.id(id).ok_or_else(|| json!({ "type": "notFound" }))?;
+                    if !access.allows(collection, kernoid_groupware::Level::Admin) {
+                        return Err(
+                            json!({ "type": "forbidden", "description": "only who administers the collection" }),
+                        );
+                    }
+                    for (key, value) in patch.as_object().ok_or_else(|| invalid_properties("a patch object"))? {
+                        let member = key
+                            .strip_prefix("members/")
+                            .and_then(|m| uuid::Uuid::parse_str(m).ok())
+                            .ok_or_else(|| invalid_properties(format!("{key} cannot be set")))?;
+                        let sealed = match value {
+                            Value::Null => None,
+                            Value::String(text) => {
+                                Some(STANDARD.decode(text).map_err(|_| invalid_properties("a wrapped key is base64"))?)
+                            }
+                            _ => return Err(invalid_properties("a wrapped key or null")),
+                        };
+                        groupware
+                            .set_collection_key(collection, member, sealed.as_deref())
+                            .await
+                            .map_err(|error| crate::contacts::set_error(&error))?;
+                    }
+                    Ok(())
+                }
+                .await;
+                match result {
+                    Ok(()) => {
+                        updated.insert(id.clone(), Value::Null);
+                    }
+                    Err(failure) => {
+                        not_updated.insert(id.clone(), failure);
+                    }
+                }
+            }
+        }
+        Ok(vec![(
+            "CollectionKey/set".into(),
+            json!({ "accountId": owner.to_string(), "updated": or_null(updated), "notUpdated": or_null(not_updated) }),
         )])
     }
 }

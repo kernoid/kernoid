@@ -1,14 +1,18 @@
 <!-- SPDX-License-Identifier: MIT -->
 <!-- Contacts: the address books' cards, one shown, made and changed here. -->
 <script lang="ts">
-  import { Pencil, Search, Trash2, UserPlus } from "@lucide/svelte";
+  import { Lock, Pencil, Search, Trash2, UserPlus } from "@lucide/svelte";
 
   import Avatar from "../ui/Avatar.svelte";
   import { changed, resource, touch, useJmap } from "../app.svelte.js";
   import Failure from "../Failure.svelte";
   import { t } from "../i18n.js";
   import CardDialog from "./CardDialog.svelte";
-  import { type Card, addressBooks, cards, fullName, remove } from "./model.js";
+  import { type Card, addressBooks, cards, encryptedBook, fullName, remove } from "./model.js";
+  import { current, e2e, refresh as refreshE2e } from "../e2e/e2e.svelte.js";
+  import { createSealedCollection } from "../e2e/sealed.js";
+  import Unlock from "../e2e/Unlock.svelte";
+  import { CONTACTS } from "../jmap.js";
 
   const jmap = useJmap();
   const books = resource(() => changed("AddressBook") + 1, () => addressBooks(jmap));
@@ -24,9 +28,22 @@
   const bookOf = (card: Card) =>
     books.value?.find((book) => book.accountId === card.accountId && card.addressBookIds[book.id]);
 
+  // Encrypted address books (RFC 0006, 7) need the account's key unlocked on this page.
+  void refreshE2e(jmap).catch(() => undefined);
+  let making = $state<unknown>();
+
+  function newEncryptedBook(): void {
+    const name = window.prompt(t("Name of the new encrypted address book"));
+    if (!name?.trim()) return;
+    making = undefined;
+    createSealedCollection(jmap, CONTACTS, "AddressBook", jmap.account(CONTACTS), name.trim())
+      .then(() => touch("AddressBook"))
+      .catch((failure: unknown) => (making = failure));
+  }
+
   function removeCard(card: Card): void {
     if (!window.confirm(t("Delete this?"))) return;
-    void remove(jmap, card).then(() => {
+    void remove(jmap, card, books.value ?? []).then(() => {
       open = undefined;
       touch("ContactCard");
     });
@@ -50,7 +67,24 @@
         <UserPlus size={18} />
       </button>
     </div>
-    <Failure error={books.error ?? list.error} />
+    <Failure error={books.error ?? list.error ?? making} />
+    {#if e2e.available && current() && !e2e.unlocked && (books.value ?? []).some(encryptedBook)}
+      <div class="pad">
+        <p class="muted small">{t("Encrypted address books show their contacts once your key is unlocked on this page.")}</p>
+        <Unlock onunlock={() => touch("ContactCard")} />
+      </div>
+    {/if}
+    {#if e2e.available && e2e.settings?.policy.collections !== "forbidden"}
+      <div class="pad">
+        <button
+          type="button"
+          class="quiet small"
+          disabled={!e2e.unlocked}
+          data-tip={e2e.unlocked ? t("Its contacts only those it is shared with can read") : t("Unlock your key on the account page first")}
+          onclick={newEncryptedBook}><Lock size={13} />{t("New encrypted address book")}</button
+        >
+      </div>
+    {/if}
     {#if list.value?.length === 0}
       <p class="muted pad">{t("No contacts")}</p>
     {/if}

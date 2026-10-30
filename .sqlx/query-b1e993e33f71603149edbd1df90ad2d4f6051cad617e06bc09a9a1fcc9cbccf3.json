@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT sealed FROM collection_keys WHERE collection_id = $1 AND account_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "sealed",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "collection_keys",
+            "name": "sealed"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b1e993e33f71603149edbd1df90ad2d4f6051cad617e06bc09a9a1fcc9cbccf3"
+}

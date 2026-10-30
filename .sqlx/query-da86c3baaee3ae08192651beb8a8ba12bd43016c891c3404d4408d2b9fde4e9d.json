@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO collection_keys (collection_id, account_id, sealed) VALUES ($1, $2, $3)\n                     ON CONFLICT (collection_id, account_id) DO UPDATE SET sealed = $3, created_at = now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "da86c3baaee3ae08192651beb8a8ba12bd43016c891c3404d4408d2b9fde4e9d"
+}

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT c.id, c.resource_name, c.dead_properties, c.name, c.description, c.color, c.sort_order, c.timezone, c.components, c.is_default,\n                      c.is_subscribed, c.is_visible,\n                      greatest((SELECT max(modseq) FROM groupware_changes g\n                                WHERE g.account_id = c.account_id AND (g.object_id = c.id OR g.collection_id = c.id)), 0)\n                          AS \"modseq!\"\n               FROM calendars c WHERE c.account_id = $1 ORDER BY c.sort_order, c.name, c.id",
+  "query": "SELECT c.id, c.resource_name, c.dead_properties, c.name, c.description, c.color, c.sort_order, c.timezone, c.components, c.is_default,\n                      c.is_subscribed, c.is_visible, c.collection_key,\n                      greatest((SELECT max(modseq) FROM groupware_changes g\n                                WHERE g.account_id = c.account_id AND (g.object_id = c.id OR g.collection_id = c.id)), 0)\n                          AS \"modseq!\"\n               FROM calendars c WHERE c.account_id = $1 ORDER BY c.sort_order, c.name, c.id",
   "describe": {
     "columns": [
       {
@@ -137,6 +137,17 @@
       },
       {
         "ordinal": 12,
+        "name": "collection_key",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "calendars",
+            "name": "collection_key"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
         "name": "modseq!",
         "type_info": "Int8",
         "origin": "Expression"
@@ -160,8 +171,9 @@
       false,
       false,
       false,
+      true,
       null
     ]
   },
-  "hash": "81b12ba2c1c4e0bc9dc2091ea8f87c7d8676195bb27f0ffae017ad83fafa7938"
+  "hash": "b4c9dab313966b4656f50d5df6e367a08fe2e9f11d340f42bb2866cdf63b07d4"
 }

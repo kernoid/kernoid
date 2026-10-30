@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO sealed_items (id, account_id, collection_id, data) VALUES ($1, $2, $3, $4)\n             ON CONFLICT (id) DO UPDATE SET data = $4, updated_at = now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6de5cbbdef06e35fdf35b715051104c01065abd4d5456a5ed6ccbf01690905fc"
+}

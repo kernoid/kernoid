@@ -367,6 +367,7 @@ impl Groupware {
     ) -> Result<Written> {
         let account = change.account();
         let tenant = change.tenant();
+        crate::sealed::refuse_plain(change.connection(), calendar).await?;
         let size = text.len() as i64;
         change.charge(size - old_size.unwrap_or(0)).await?;
         let modseq = change.next_modseq().await?;

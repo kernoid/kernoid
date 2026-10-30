@@ -165,9 +165,18 @@ impl Dav {
                 })
                 .ok_or(Error::NotFound)?;
             let info = self.groupware.calendar(found.owner, id).await?;
+            if info.collection_key.is_some() {
+                return Err(Error::NotFound);
+            }
             return Ok(Collection::Calendar { owner: found.owner, segment: segment.into(), level: found.level, info });
         }
-        let info = self.groupware.calendar_by_name(user, segment).await?.ok_or(Error::NotFound)?;
+        // Encrypted calendars and address books are only for kernoid's apps (RFC 0006, 7).
+        let info = self
+            .groupware
+            .calendar_by_name(user, segment)
+            .await?
+            .filter(|info| info.collection_key.is_none())
+            .ok_or(Error::NotFound)?;
         Ok(Collection::Calendar { owner: user, segment: segment.into(), level: Level::Admin, info })
     }
 
@@ -179,6 +188,9 @@ impl Dav {
                 .find(|shared| shared.collection == id && shared.collection_type == CollectionType::AddressBook)
                 .ok_or(Error::NotFound)?;
             let info = self.groupware.addressbook(found.owner, id).await?;
+            if info.collection_key.is_some() {
+                return Err(Error::NotFound);
+            }
             return Ok(Collection::Addressbook {
                 owner: found.owner,
                 segment: segment.into(),
@@ -186,7 +198,12 @@ impl Dav {
                 info,
             });
         }
-        let info = self.groupware.addressbook_by_name(user, segment).await?.ok_or(Error::NotFound)?;
+        let info = self
+            .groupware
+            .addressbook_by_name(user, segment)
+            .await?
+            .filter(|info| info.collection_key.is_none())
+            .ok_or(Error::NotFound)?;
         Ok(Collection::Addressbook { owner: user, segment: segment.into(), level: Level::Admin, info })
     }
 
@@ -194,7 +211,7 @@ impl Dav {
     pub(crate) async fn home_collections(&self, user: Uuid, calendars: bool) -> Result<Vec<Collection>, Error> {
         let mut collections = Vec::new();
         if calendars {
-            for info in self.groupware.calendars(user).await? {
+            for info in self.groupware.calendars(user).await?.into_iter().filter(|info| info.collection_key.is_none()) {
                 collections.push(Collection::Calendar {
                     owner: user,
                     segment: info.resource_name.clone(),
@@ -205,7 +222,9 @@ impl Dav {
             collections.push(Collection::Inbox { owner: user });
             collections.push(Collection::Outbox { owner: user });
         } else {
-            for info in self.groupware.addressbooks(user).await? {
+            for info in
+                self.groupware.addressbooks(user).await?.into_iter().filter(|info| info.collection_key.is_none())
+            {
                 collections.push(Collection::Addressbook {
                     owner: user,
                     segment: info.resource_name.clone(),
@@ -221,6 +240,9 @@ impl Dav {
             match (shared.collection_type, calendars) {
                 (CollectionType::Calendar, true) => {
                     let Ok(info) = self.groupware.calendar(shared.owner, shared.collection).await else { continue };
+                    if info.collection_key.is_some() {
+                        continue;
+                    }
                     collections.push(Collection::Calendar {
                         owner: shared.owner,
                         segment: shared_segment(shared.collection),
@@ -230,6 +252,9 @@ impl Dav {
                 }
                 (CollectionType::AddressBook, false) => {
                     let Ok(info) = self.groupware.addressbook(shared.owner, shared.collection).await else { continue };
+                    if info.collection_key.is_some() {
+                        continue;
+                    }
                     collections.push(Collection::Addressbook {
                         owner: shared.owner,
                         segment: shared_segment(shared.collection),

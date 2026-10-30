@@ -35,7 +35,7 @@
     if (!target) return;
     const form: CardForm = { book: target, name, email, phone, organization, note };
     try {
-      if (card) await update(jmap, card, form);
+      if (card) await update(jmap, card, form, books);
       else await create(jmap, form);
       onclose(true);
     } catch (failure) {

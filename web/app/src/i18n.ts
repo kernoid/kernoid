@@ -748,6 +748,15 @@ const de: Record<string, string> = {
   "Decrypted here and saved": "Hier entschlüsselt und gespeichert",
   "Shared – some still wait for the key": "Geteilt – einige warten noch auf den Schlüssel",
   "These can open the vault once they have a key of their own and you share it again:": "Diese können den Tresor öffnen, sobald sie einen eigenen Schlüssel haben und Sie ihn erneut teilen:",
+  "Name of the new encrypted calendar": "Name des neuen verschlüsselten Kalenders",
+  "Encrypted calendars show their events once your key is unlocked on this page.": "Verschlüsselte Kalender zeigen ihre Termine, sobald Ihr Schlüssel auf dieser Seite entsperrt ist.",
+  "Its events only those it is shared with can read": "Seine Termine können nur die lesen, mit denen er geteilt ist",
+  "New encrypted calendar": "Neuer verschlüsselter Kalender",
+  "Name of the new encrypted address book": "Name des neuen verschlüsselten Adressbuchs",
+  "New encrypted address book": "Neues verschlüsseltes Adressbuch",
+  "Encrypted address books show their contacts once your key is unlocked on this page.": "Verschlüsselte Adressbücher zeigen ihre Kontakte, sobald Ihr Schlüssel auf dieser Seite entsperrt ist.",
+  "Its contacts only those it is shared with can read": "Seine Kontakte können nur die lesen, mit denen es geteilt ist",
+  "No invitations from an encrypted calendar yet": "Aus einem verschlüsselten Kalender gehen noch keine Einladungen hinaus",
 };
 
 const lang = (navigator.languages?.[0] ?? navigator.language ?? "en").toLowerCase().startsWith("de") ? "de" : "en";

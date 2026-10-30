@@ -26,6 +26,8 @@ pub struct AddressBookInfo {
     pub dead_properties: serde_json::Value,
     /// The modification sequence of the last change of one of its contacts or of itself (`getctag`).
     pub modseq: i64,
+    /// Encrypted (RFC 0006, 7): the collection's public key; its entries are the members' apps' (`sealed`).
+    pub collection_key: Option<Vec<u8>>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -99,6 +101,7 @@ impl Groupware {
         let mut read = self.read(account).await?;
         let rows = sqlx::query!(
             r#"SELECT b.id, b.resource_name, b.dead_properties, b.name, b.description, b.sort_order, b.is_default, b.is_subscribed,
+                      b.collection_key,
                       greatest((SELECT max(modseq) FROM groupware_changes g
                                 WHERE g.account_id = b.account_id AND (g.object_id = b.id OR g.collection_id = b.id)), 0)
                           AS "modseq!"
@@ -121,6 +124,7 @@ impl Groupware {
                 is_default: row.is_default,
                 is_subscribed: row.is_subscribed,
                 modseq: row.modseq,
+                collection_key: row.collection_key,
             })
             .collect())
     }
@@ -268,11 +272,14 @@ impl Groupware {
         )
         .fetch_all(change.connection())
         .await?;
-        if !contacts.is_empty() && !remove_contacts {
+        let sealed = crate::sealed::sizes(change.connection(), id).await?;
+        if (!contacts.is_empty() || !sealed.is_empty()) && !remove_contacts {
             return Err(GroupwareError::NotEmpty);
         }
+        let sealed_freed: i64 = sealed.iter().sum();
+        crate::sealed::remove_collection(change.connection(), id).await?;
         let modseq = change.next_modseq().await?;
-        let mut freed = 0;
+        let mut freed = sealed_freed;
         for contact in &contacts {
             freed += contact.size;
             let entry = Entry {

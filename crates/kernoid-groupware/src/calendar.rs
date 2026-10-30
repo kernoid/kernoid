@@ -31,6 +31,8 @@ pub struct CalendarInfo {
     pub dead_properties: serde_json::Value,
     /// The modification sequence of the last change of one of its events or of itself (`getctag`).
     pub modseq: i64,
+    /// Encrypted (RFC 0006, 7): the collection's public key; its entries are the members' apps' (`sealed`).
+    pub collection_key: Option<Vec<u8>>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -133,7 +135,7 @@ impl Groupware {
         let mut read = self.read(account).await?;
         let rows = sqlx::query!(
             r#"SELECT c.id, c.resource_name, c.dead_properties, c.name, c.description, c.color, c.sort_order, c.timezone, c.components, c.is_default,
-                      c.is_subscribed, c.is_visible,
+                      c.is_subscribed, c.is_visible, c.collection_key,
                       greatest((SELECT max(modseq) FROM groupware_changes g
                                 WHERE g.account_id = c.account_id AND (g.object_id = c.id OR g.collection_id = c.id)), 0)
                           AS "modseq!"
@@ -160,6 +162,7 @@ impl Groupware {
                 is_subscribed: row.is_subscribed,
                 is_visible: row.is_visible,
                 modseq: row.modseq,
+                collection_key: row.collection_key,
             })
             .collect())
     }
@@ -324,11 +327,13 @@ impl Groupware {
         )
         .fetch_all(change.connection())
         .await?;
-        if !events.is_empty() && !remove_events {
+        let sealed = crate::sealed::sizes(change.connection(), id).await?;
+        if (!events.is_empty() || !sealed.is_empty()) && !remove_events {
             return Err(GroupwareError::NotEmpty);
         }
         let modseq = change.next_modseq().await?;
-        let mut freed = 0;
+        let mut freed: i64 = sealed.iter().sum();
+        crate::sealed::remove_collection(change.connection(), id).await?;
         for event in &events {
             freed += event.size;
             let entry = Entry {

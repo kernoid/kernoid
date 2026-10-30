@@ -2,6 +2,7 @@
 // Calendars over JMAP (draft-ietf-jmap-calendars): calendars, the instances of a time window, events as JSCalendar
 // 2.0 as kernoid writes them, invitations and answers (`sendSchedulingMessages`).
 
+import { putSealed, removeSealed, sealedEntries } from "../e2e/sealed.js";
 import { CALENDARS, type Jmap } from "../jmap.js";
 
 export interface Calendar {
@@ -13,7 +14,14 @@ export interface Calendar {
   myRights: { mayWriteAll: boolean; mayRSVP: boolean; mayAdmin: boolean };
   accountId: string;
   shared: string | null;
+  /** Encrypted (RFC 0006, 7): its events are encrypted entries only kernoid's apps read. */
+  "kernoid:collectionKey"?: string | null;
+  /** Encrypted, and its key not at hand on this page. */
+  locked?: boolean;
 }
+
+/** Whether a calendar is encrypted. */
+export const encrypted = (calendar: Pick<Calendar, "kernoid:collectionKey">): boolean => Boolean(calendar["kernoid:collectionKey"]);
 
 export interface Participant {
   calendarAddress?: string;
@@ -60,12 +68,56 @@ export async function calendars(jmap: Jmap): Promise<Calendar[]> {
   return out;
 }
 
+/** A duration in ISO 8601 (`PT1H30M`, `P2D`) in milliseconds. */
+function millis(value: string | undefined): number {
+  const match = /^P(?:(\d+)W)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/.exec(value ?? "");
+  if (!match) return 3_600_000;
+  const [, w, d, h, m, sec] = match.map((part) => Number(part ?? 0));
+  return ((((w ?? 0) * 7 + (d ?? 0)) * 24 + (h ?? 0)) * 60 + (m ?? 0)) * 60_000 + (sec ?? 0) * 1000;
+}
+
+/** The instances of an encrypted calendar's events in a window, computed here: the server cannot. A start is read in
+ * the browser's time zone – the one the app wrote it in; a repeating event repeats by its frequency (**OPEN**:
+ * intervals, counts, ends and changed instances, which the app does not write either). */
+async function sealedInstances(jmap: Jmap, calendar: Calendar, after: Date, before: Date): Promise<CalendarEvent[]> {
+  const { locked, entries } = await sealedEntries<Omit<CalendarEvent, "id" | "accountId">>(jmap, CALENDARS, calendar.accountId, calendar.id);
+  calendar.locked = locked;
+  const out: CalendarEvent[] = [];
+  for (const { id, value } of entries) {
+    const first = new Date(value.start);
+    if (Number.isNaN(first.getTime())) continue;
+    const length = millis(value.duration);
+    const step = (date: Date, n: number): Date => {
+      const next = new Date(date);
+      const frequency = value.recurrenceRule?.frequency;
+      if (frequency === "daily") next.setDate(date.getDate() + n);
+      else if (frequency === "weekly") next.setDate(date.getDate() + 7 * n);
+      else if (frequency === "monthly") next.setMonth(date.getMonth() + n);
+      else if (frequency === "yearly") next.setFullYear(date.getFullYear() + n);
+      return next;
+    };
+    for (let n = 0; n < 1000; n++) {
+      const start = value.recurrenceRule ? step(first, n) : first;
+      if (start >= before) break;
+      const end = new Date(start.getTime() + length);
+      if (end > after) {
+        out.push({ ...value, id, calendarIds: { [calendar.id]: true }, accountId: calendar.accountId, utcStart: start.toISOString(), utcEnd: end.toISOString() });
+      }
+      if (!value.recurrenceRule) break;
+    }
+  }
+  return out;
+}
+
 /** The instances of the visible calendars between `after` and `before`. */
 export async function instances(jmap: Jmap, list: Calendar[], after: Date, before: Date): Promise<CalendarEvent[]> {
   const out: CalendarEvent[] = [];
+  for (const calendar of list.filter((entry) => entry.isVisible && encrypted(entry))) {
+    out.push(...(await sealedInstances(jmap, calendar, after, before)));
+  }
   const accounts = [...new Set(list.map((calendar) => calendar.accountId))];
   for (const accountId of accounts) {
-    const visible = new Set(list.filter((calendar) => calendar.accountId === accountId && calendar.isVisible).map((c) => c.id));
+    const visible = new Set(list.filter((calendar) => calendar.accountId === accountId && calendar.isVisible && !encrypted(calendar)).map((c) => c.id));
     if (visible.size === 0) continue;
     const responses = await jmap.request(
       [CALENDARS],
@@ -152,13 +204,30 @@ function object(form: EventForm, own: string): Record<string, unknown> {
   return value;
 }
 
+/** An event of an encrypted calendar as the app stores it: no participants – the server cannot invite anyone to what it
+ * cannot read (**OPEN**: invitations sent by the app). */
+function sealedObject(form: EventForm, own: string): Record<string, unknown> {
+  const value = object({ ...form, participants: [] }, own);
+  delete value.participants;
+  delete value.organizerCalendarAddress;
+  return value;
+}
+
 export async function create(jmap: Jmap, form: EventForm, own: string): Promise<void> {
+  if (encrypted(form.calendar)) {
+    await putSealed(jmap, CALENDARS, form.calendar.accountId, form.calendar.id, undefined, sealedObject(form, own));
+    return;
+  }
   await jmap.set([CALENDARS], "CalendarEvent", form.calendar.accountId, {
     create: { e: { ...object(form, own), calendarIds: { [form.calendar.id]: true } } },
   }, { sendSchedulingMessages: true });
 }
 
 export async function update(jmap: Jmap, id: string, form: EventForm, own: string): Promise<void> {
+  if (encrypted(form.calendar)) {
+    await putSealed(jmap, CALENDARS, form.calendar.accountId, form.calendar.id, id, sealedObject(form, own));
+    return;
+  }
   await jmap.set([CALENDARS], "CalendarEvent", form.calendar.accountId, {
     update: { [id]: { ...object(form, own), calendarIds: { [form.calendar.id]: true } } },
   }, { sendSchedulingMessages: true });
@@ -185,7 +254,11 @@ async function overrideInstance(jmap: Jmap, series: CalendarEvent, recurrenceId:
   await jmap.set([CALENDARS], "CalendarEvent", series.accountId, { update: { [series.id]: { recurrenceOverrides: overrides } } }, { sendSchedulingMessages: true });
 }
 
-export async function remove(jmap: Jmap, accountId: string, id: string): Promise<void> {
+export async function remove(jmap: Jmap, accountId: string, id: string, calendar?: Calendar): Promise<void> {
+  if (calendar && encrypted(calendar)) {
+    await removeSealed(jmap, CALENDARS, accountId, calendar.id, id);
+    return;
+  }
   await jmap.set([CALENDARS], "CalendarEvent", accountId, { destroy: [id] }, { sendSchedulingMessages: true });
 }
 

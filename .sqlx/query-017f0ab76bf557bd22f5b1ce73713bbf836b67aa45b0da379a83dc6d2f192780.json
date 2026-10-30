@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT b.id, b.resource_name, b.dead_properties, b.name, b.description, b.sort_order, b.is_default, b.is_subscribed,\n                      greatest((SELECT max(modseq) FROM groupware_changes g\n                                WHERE g.account_id = b.account_id AND (g.object_id = b.id OR g.collection_id = b.id)), 0)\n                          AS \"modseq!\"\n               FROM addressbooks b WHERE b.account_id = $1 ORDER BY b.sort_order, b.name, b.id",
+  "query": "SELECT b.id, b.resource_name, b.dead_properties, b.name, b.description, b.sort_order, b.is_default, b.is_subscribed,\n                      b.collection_key,\n                      greatest((SELECT max(modseq) FROM groupware_changes g\n                                WHERE g.account_id = b.account_id AND (g.object_id = b.id OR g.collection_id = b.id)), 0)\n                          AS \"modseq!\"\n               FROM addressbooks b WHERE b.account_id = $1 ORDER BY b.sort_order, b.name, b.id",
   "describe": {
     "columns": [
       {
@@ -93,6 +93,17 @@
       },
       {
         "ordinal": 8,
+        "name": "collection_key",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "addressbooks",
+            "name": "collection_key"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
         "name": "modseq!",
         "type_info": "Int8",
         "origin": "Expression"
@@ -112,8 +123,9 @@
       false,
       false,
       false,
+      true,
       null
     ]
   },
-  "hash": "9e91b2ebefd6e2ed953f1c4e75610b4b178182fbe551433362fa6fa806a86957"
+  "hash": "017f0ab76bf557bd22f5b1ce73713bbf836b67aa45b0da379a83dc6d2f192780"
 }

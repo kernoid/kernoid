@@ -25,7 +25,7 @@ fn forbidden(description: &str) -> Value {
     json!({ "type": "forbidden", "description": description })
 }
 
-const CALENDAR_PROPERTIES: [&str; 12] = [
+const CALENDAR_PROPERTIES: [&str; 13] = [
     "id",
     "name",
     "description",
@@ -38,6 +38,7 @@ const CALENDAR_PROPERTIES: [&str; 12] = [
     "timeZone",
     "shareWith",
     "myRights",
+    "kernoid:collectionKey",
 ];
 
 fn calendar_rights(access: &CollectionAccess, calendar: Uuid) -> Value {
@@ -70,6 +71,8 @@ fn calendar_object(calendar: &CalendarInfo, access: &CollectionAccess, propertie
             "timeZone" => json!(calendar.timezone),
             "shareWith" => Value::Null,
             "myRights" => calendar_rights(access, calendar.id),
+            // Encrypted (RFC 0006, 7): the collection's public key; its entries are `SealedItem`s.
+            "kernoid:collectionKey" => crate::openpgp::b64_or_null(calendar.collection_key.as_deref()),
             _ => continue,
         };
         out.insert(property.clone(), value);
@@ -222,7 +225,12 @@ impl Context<'_> {
                     components: Vec::new(),
                     is_default: false,
                 };
-                match groupware.create_calendar(owner, new).await {
+                let made = groupware.create_calendar(owner, new).await;
+                let made = match made {
+                    Ok(id) => crate::openpgp::seal_new(&groupware, owner, self.caller.account, id, object).await,
+                    Err(error) => Err(error),
+                };
+                match made {
                     Ok(id) => {
                         self.created.insert(creation.clone(), id.to_string());
                         created.insert(creation.clone(), json!({ "id": id.to_string(), "isDefault": false }));

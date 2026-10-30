@@ -4,7 +4,8 @@
 - **Status:** draft, 2026-10-30; implemented: section 2 (post-quantum TLS), 4 (keys: `apps/e2e`, `kernoid-identity`'s
   `openpgp`, migration 0048; WKD and Autocrypt), 5.1–5.2 on the server (`kernoid-mail`'s `e2e`), 8 (policy, recovery
   key) and the JMAP extension; the web app's side of 5 and 8; section 6 (vaults: `kernoid-files`' `vault`, migration
-  0049, the web app). Sections 7 and 9 are next.
+  0049, the web app); section 7 (encrypted calendars and address books: `kernoid-groupware`'s `sealed`, migration 0050,
+  the web app). Section 9 is open.
 - **Scope:** what kernoid encrypts so that quantum computers cannot read it later (sections 2–3), and how mail, files,
   calendars and contacts can be encrypted so that only their owners can read them – not the operator, not kernoid
   (sections 4–9).
@@ -218,6 +219,17 @@ directory, not of the account; it cannot be switched later: making a new vault a
 
 A calendar or address book can be made **encrypted** (a setting chosen when it is made, like a vault): its events and
 contacts are OpenPGP messages encrypted to the collection's key, which is shared like a vault's key.
+
+- The entries are not iCalendar or vCard but the apps' own JSON of an event or contact (JSCalendar, JSContact as the
+  web app writes them), encrypted and signed – stored apart from the calendar's events (`sealed_items`), counted
+  against the quota, telling of changes through the store's state. kernoid refuses plain iCalendar and vCard in such
+  a collection, whichever way it comes; only a new, empty collection that is not the default becomes encrypted.
+- JMAP: `kernoid:collectionKey` on `Calendar` and `AddressBook`; `kernoid:newEncrypted` (`publicKey`, `sealed`) on
+  create; `SealedItem/get`, `SealedItem/set` (`collectionId`; `data`) – reading needs `read`, writing `write`;
+  `CollectionKey/get`, `CollectionKey/set` (`members/<account id>`, for who administers the collection).
+- The web app computes the instances itself – by the frequency the app writes; **OPEN:** intervals, counts, ends,
+  changed instances – and sends no invitations from such a calendar (**OPEN:** invitations encrypted to the
+  participants' keys, sent by the app).
 
 - **What it costs:** CalDAV and CardDAV do not show it; the server cannot know when an event takes place, so free/busy
   and queries by time come from the apps; invitations to people outside are sent by the app, decrypted (iMIP has no

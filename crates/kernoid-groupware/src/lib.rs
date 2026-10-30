@@ -19,6 +19,7 @@ mod notification;
 mod principal;
 #[allow(clippy::all, missing_debug_implementations)]
 pub mod scheduling;
+pub mod sealed;
 mod send;
 mod transfer;
 
