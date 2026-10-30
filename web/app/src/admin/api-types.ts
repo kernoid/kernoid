@@ -3382,6 +3382,11 @@ export interface components {
              * @description 1 to 3650; null follows the tenant.
              */
             trash_retention_days?: number | null;
+            /**
+             * Format: int32
+             * @description 0 to 30; left out, emails go out at once.
+             */
+            undo_send_seconds?: number;
         };
         MailSettingsView: {
             /** @description The address new emails come from; null is the account's primary address. */
@@ -3396,6 +3401,11 @@ export interface components {
              * @description Days the Trash keeps an email; null follows the tenant.
              */
             trash_retention_days?: number | null;
+            /**
+             * Format: int32
+             * @description Seconds an email waits before it goes out, to be taken back (0 to 30); 0 sends at once.
+             */
+            undo_send_seconds: number;
         };
         MailboxView: {
             id: string;

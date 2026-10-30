@@ -28,7 +28,8 @@
   import { locale, t } from "../i18n.js";
   import Avatar from "../ui/Avatar.svelte";
   import FileIcon from "../ui/FileIcon.svelte";
-  import type { ComposeStart } from "./Compose.svelte";
+  import type { Closed, ComposeStart } from "./Compose.svelte";
+  import { toast } from "../ui/toasts.svelte.js";
   import Folders, { EMAILS } from "./Folders.svelte";
   import { showHtml } from "./html.js";
   import {
@@ -48,6 +49,7 @@
     moveMany,
     originalPath,
     setKeyword,
+    unsend,
   } from "./model.js";
   import { boxName } from "./names.js";
 
@@ -222,6 +224,32 @@
         forward: current.subject ?? "",
       },
     };
+  }
+
+  /** After sending: say so – with a way to take it back while it is held. */
+  function sent(closed: Closed): void {
+    touch("Email", "Mailbox");
+    if (!closed.sent.pending) {
+      toast(t("Message sent"));
+      return;
+    }
+    const seconds = settings.value?.undo_send_seconds ?? 0;
+    toast(t("Sending …"), {
+      seconds,
+      action: {
+        label: t("Undo"),
+        run: async () => {
+          try {
+            await unsend(jmap, closed.sent);
+            touch("Email", "Mailbox");
+            composing = closed.again;
+          } catch {
+            toast(t("Too late – the message was sent."), { kind: "error" });
+          }
+        },
+      },
+    });
+    setTimeout(() => touch("Email", "Mailbox"), (seconds + 3) * 1000);
   }
 
   function choose(account: string, box: string): void {
@@ -530,9 +558,10 @@
         start={composing}
         defaultFrom={settings.value?.default_from ?? null}
         replyFrom={store}
-        onclose={(sent) => {
+        holdSeconds={settings.value?.undo_send_seconds ?? 0}
+        onclose={(closed) => {
           composing = undefined;
-          if (sent) touch("Email", "Mailbox");
+          if (closed) sent(closed);
         }}
       />
     {/await}

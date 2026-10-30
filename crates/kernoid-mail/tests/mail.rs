@@ -618,18 +618,23 @@ async fn an_account_keeps_its_trash_as_long_as_it_chooses_and_sends_from_its_add
     assert_eq!((settings.trash_retention_days, settings.tenant_trash_retention_days), (None, Some(30)));
     assert_eq!(mail.apply_retention(100).await.unwrap(), 0);
     // The account's own 7 days: gone.
-    mail.set_settings(alice, Some(7), None).await.unwrap();
+    mail.set_settings(alice, Some(7), None, 0).await.unwrap();
     assert_eq!(mail.apply_retention(100).await.unwrap(), 1);
     assert!(matches!(mail.email(alice, old.id).await, Err(MailError::NotFound(_))));
-    assert!(matches!(mail.set_settings(alice, Some(0), None).await, Err(MailError::Invalid(_))));
+    assert!(matches!(mail.set_settings(alice, Some(0), None, 0).await, Err(MailError::Invalid(_))));
 
     // Sending from: only an address the account may send from.
     let (_, own) = mail.account_addresses(alice).await.unwrap();
     let address = own[0].to_uppercase();
-    mail.set_settings(alice, None, Some(&address)).await.unwrap();
-    assert_eq!(mail.settings(alice).await.unwrap().default_from, Some(own[0].to_lowercase()));
-    assert!(matches!(mail.set_settings(alice, None, Some("ceo@elsewhere.example")).await, Err(MailError::Invalid(_))));
-    mail.set_settings(alice, None, None).await.unwrap();
+    mail.set_settings(alice, None, Some(&address), 10).await.unwrap();
+    let settings = mail.settings(alice).await.unwrap();
+    assert_eq!((settings.default_from, settings.undo_send_seconds), (Some(own[0].to_lowercase()), 10));
+    assert!(matches!(mail.set_settings(alice, None, None, 31).await, Err(MailError::Invalid(_))));
+    assert!(matches!(
+        mail.set_settings(alice, None, Some("ceo@elsewhere.example"), 0).await,
+        Err(MailError::Invalid(_))
+    ));
+    mail.set_settings(alice, None, None, 0).await.unwrap();
     assert_eq!(
         mail.settings(alice).await.unwrap(),
         kernoid_mail::MailSettings { tenant_trash_retention_days: Some(30), ..Default::default() }

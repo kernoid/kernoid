@@ -218,8 +218,18 @@ export interface Draft {
   references?: string[] | null;
 }
 
-/** Stores the message in the Drafts of the identity's account and submits it there. */
-export async function send(jmap: Jmap, draft: Draft): Promise<void> {
+/** What was sent: where, and the submission – to take it back while it is held. */
+export interface Sent {
+  accountId: string;
+  emailId: string;
+  submissionId: string;
+  /** Held, and may still be taken back. */
+  pending: boolean;
+}
+
+/** Stores the message in the Drafts of the identity's account and submits it there – held for `holdSeconds` first
+ * (RFC 8621, 7: HOLDFOR), so that it can be taken back until then. */
+export async function send(jmap: Jmap, draft: Draft, holdSeconds = 0): Promise<Sent> {
   const accountId = draft.identity.accountId;
   const boxes = await mailboxes(jmap, accountId);
   const drafts = boxes.find((box) => box.role === "drafts");
@@ -243,15 +253,19 @@ export async function send(jmap: Jmap, draft: Draft): Promise<void> {
   if (draft.references) email.references = draft.references;
   const update: Record<string, unknown> = { "keywords/$draft": null };
   if (sent) update.mailboxIds = { [sent.id]: true };
+  const submission: Record<string, unknown> = { identityId: draft.identity.id, emailId: "#draft" };
+  if (holdSeconds > 0) {
+    // An envelope names its recipients too: everyone in To and Cc.
+    submission.envelope = {
+      mailFrom: { email: draft.identity.email, parameters: { HOLDFOR: String(holdSeconds) } },
+      rcptTo: [...draft.to, ...draft.cc].map((address) => ({ email: address.email, parameters: null })),
+    };
+  }
   const responses = await jmap.request(
     [MAIL, SUBMISSION],
     [
       ["Email/set", { accountId, create: { draft: email } }, "e"],
-      [
-        "EmailSubmission/set",
-        { accountId, create: { send: { identityId: draft.identity.id, emailId: "#draft" } }, onSuccessUpdateEmail: { "#send": update } },
-        "s",
-      ],
+      ["EmailSubmission/set", { accountId, create: { send: submission }, onSuccessUpdateEmail: { "#send": update } }, "s"],
     ],
   );
   for (const [, results] of responses) {
@@ -261,6 +275,17 @@ export async function send(jmap: Jmap, draft: Draft): Promise<void> {
       if (first) throw new Error(first.description ?? first.type);
     }
   }
+  const created = (key: string, name: string) =>
+    ((responses.get(key)?.[0]?.created ?? {}) as Record<string, { id: string; undoStatus?: string }>)[name];
+  const stored = created("e", "draft");
+  const submitted = created("s", "send");
+  return { accountId, emailId: stored?.id ?? "", submissionId: submitted?.id ?? "", pending: submitted?.undoStatus === "pending" };
+}
+
+/** Takes back an email held before sending: it is not sent, and leaves Sent; the writing window opens again. */
+export async function unsend(jmap: Jmap, sent: Sent): Promise<void> {
+  await jmap.set([MAIL, SUBMISSION], "EmailSubmission", sent.accountId, { update: { [sent.submissionId]: { undoStatus: "canceled" } } });
+  await jmap.set([MAIL], "Email", sent.accountId, { destroy: [sent.emailId] });
 }
 
 // Mailboxes of one's own (RFC 8621, 2.5): made, renamed, moved under another and destroyed.

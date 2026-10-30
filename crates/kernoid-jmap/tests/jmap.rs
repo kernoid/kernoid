@@ -348,6 +348,87 @@ async fn submissions_send_stored_emails(pool: PgPool) {
 }
 
 #[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
+async fn held_submissions_wait_and_may_be_taken_back(pool: PgPool) {
+    let setup = setup(pool.clone()).await;
+    let alice = setup.caller("alice").await;
+    let bob = setup.caller("bob").await;
+    let id = alice.account.to_string();
+    let mail = setup.jmap.mail();
+    let drafts = mail.mailbox_with_role(alice.account, Role::Drafts).await.unwrap().to_string();
+    let bob_inbox = mail.mailbox_with_role(bob.account, Role::Inbox).await.unwrap();
+    let in_bobs_inbox = || async {
+        let query = kernoid_mail::EmailQuery { in_mailbox: Some(bob_inbox), ..Default::default() };
+        mail.query(bob.account, &query, 0, 10).await.unwrap().0.len()
+    };
+    let (_, identities) = setup.one(&alice, "Identity/get", json!({ "accountId": id })).await;
+    let identity = identities["list"][0]["id"].as_str().unwrap().to_owned();
+    let send = |subject: &'static str| {
+        let (drafts, identity, id) = (drafts.clone(), identity.clone(), id.clone());
+        let alice = &alice;
+        let setup = &setup;
+        async move {
+            let responses = setup
+                .call(
+                    alice,
+                    json!([
+                        ["Email/set", { "accountId": id, "create": { "e": {
+                            "mailboxIds": { &drafts: true }, "from": [{ "email": "alice@firma.example" }],
+                            "to": [{ "email": "bob@firma.example" }, { "email": "carol@remote.example" }], "subject": subject,
+                        } } }, "c"],
+                        ["EmailSubmission/set", { "accountId": id, "create": { "s": {
+                            "identityId": identity, "emailId": "#e",
+                            "envelope": {
+                                "mailFrom": { "email": "alice@firma.example", "parameters": { "HOLDFOR": "10" } },
+                                "rcptTo": [{ "email": "bob@firma.example" }, { "email": "carol@remote.example" }],
+                            },
+                        } } }, "s"],
+                    ]),
+                )
+                .await;
+            responses["s"][0].1["created"]["s"].clone()
+        }
+    };
+
+    // Held: pending, and nothing has gone anywhere yet.
+    let first = send("Taken back").await;
+    assert_eq!(first["undoStatus"], "pending", "{first}");
+    assert_eq!(in_bobs_inbox().await, 0);
+    assert!(sqlx::query_scalar!("SELECT address FROM outbound_recipients").fetch_all(&pool).await.unwrap().is_empty());
+
+    // Taken back: canceled, and never sent – once due either.
+    let (_, canceled) = setup
+        .one(
+            &alice,
+            "EmailSubmission/set",
+            json!({ "accountId": id, "update": { first["id"].as_str().unwrap(): { "undoStatus": "canceled" } } }),
+        )
+        .await;
+    assert!(canceled["updated"].as_object().unwrap().contains_key(first["id"].as_str().unwrap()), "{canceled}");
+    let second = send("Sent later").await;
+    sqlx::query!("UPDATE email_submissions SET send_at = now() - interval '1 second'").execute(&pool).await.unwrap();
+    assert_eq!(mail.release_held(10).await.unwrap(), 1);
+    assert_eq!(in_bobs_inbox().await, 1);
+    let queued = sqlx::query_scalar!("SELECT address FROM outbound_recipients").fetch_all(&pool).await.unwrap();
+    assert_eq!(queued, ["carol@remote.example"]);
+
+    // Once sent, it cannot be taken back.
+    let (_, late) = setup
+        .one(
+            &alice,
+            "EmailSubmission/set",
+            json!({ "accountId": id, "update": { second["id"].as_str().unwrap(): { "undoStatus": "canceled" } } }),
+        )
+        .await;
+    assert_eq!(late["notUpdated"][second["id"].as_str().unwrap()]["type"], "cannotUnsend");
+    let (_, listed) = setup.one(&alice, "EmailSubmission/get", json!({ "accountId": id })).await;
+    let statuses: Vec<&str> =
+        listed["list"].as_array().unwrap().iter().map(|entry| entry["undoStatus"].as_str().unwrap()).collect();
+    assert_eq!(statuses.len(), 2);
+    assert!(statuses.contains(&"canceled") && statuses.contains(&"final"), "{statuses:?}");
+    assert_eq!(mail.release_held(10).await.unwrap(), 0);
+}
+
+#[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
 async fn shared_accounts_follow_the_grants(pool: PgPool) {
     use kernoid_identity::role::Principal;
     let setup = setup(pool).await;

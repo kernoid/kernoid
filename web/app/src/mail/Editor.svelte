@@ -50,7 +50,9 @@
         Placeholder.configure({ placeholder: t("Write your message …") }),
       ],
       editorProps: { attributes: { class: "editor-body", "aria-label": t("Text"), role: "textbox", "aria-multiline": "true" } },
-      onTransaction: () => (tick += 1),
+      // After the current update: a transaction may come while Svelte updates – the editor losing the focus as the
+      // window closes –, when state must not change.
+      onTransaction: () => queueMicrotask(() => (tick += 1)),
       onUpdate: ({ editor: current }) => onchange(current.getHTML(), current.getText({ blockSeparator: "\n\n" })),
     });
     editor = instance;

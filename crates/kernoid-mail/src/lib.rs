@@ -21,6 +21,7 @@ mod search;
 mod settings;
 pub mod srs;
 mod store;
+mod submission;
 mod thread;
 mod uploads;
 mod vacation;
@@ -36,8 +37,9 @@ pub use mbox::{MboxImport, MboxMessage, mbox_entry, read_mbox};
 pub use outbox::{Batch, Leased, Outgoing, QueuedRecipient};
 pub use parse::{Mailbox as AddressInfo, search_query};
 pub use scripts::{SieveScript, check_script};
-pub use settings::MailSettings;
+pub use settings::{MAX_UNDO_SEND_SECONDS, MailSettings};
 pub use store::{StoreChange, StoreRead};
+pub use submission::SendError;
 pub use uploads::{UPLOAD_LIFETIME, Upload};
 pub use vacation::VacationResponse;
 

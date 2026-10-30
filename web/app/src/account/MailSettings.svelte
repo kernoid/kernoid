@@ -29,6 +29,7 @@
           body: {
             default_from: String(data.get("from") ?? "") || null,
             trash_retention_days: data.get("own") === "on" && days ? Number(days) : null,
+            undo_send_seconds: Number(data.get("undo") ?? 0),
           },
         }),
       );
@@ -57,6 +58,15 @@
           {/each}
         </select>
         <small class="muted">{t("New emails come from it; you can pick another when writing.")}</small>
+      </label>
+      <label>
+        <span>{t("Undo sending")}</span>
+        <select name="undo" value={String(current.undo_send_seconds)}>
+          <option value="0">{t("Off")}</option>
+          <option value="5">{t("{seconds} seconds", { seconds: 5 })}</option>
+          <option value="10">{t("{seconds} seconds", { seconds: 10 })}</option>
+        </select>
+        <small class="muted">{t("A sent email waits this long and can be taken back until then.")}</small>
       </label>
       <fieldset class="choice">
         <legend class="muted small">{t("Keep emails in the Trash")}</legend>

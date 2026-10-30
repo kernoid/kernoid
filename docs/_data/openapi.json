@@ -11349,11 +11349,19 @@
             ],
             "format": "int32",
             "description": "1 to 3650; null follows the tenant."
+          },
+          "undo_send_seconds": {
+            "type": "integer",
+            "format": "int32",
+            "description": "0 to 30; left out, emails go out at once."
           }
         }
       },
       "MailSettingsView": {
         "type": "object",
+        "required": [
+          "undo_send_seconds"
+        ],
         "properties": {
           "default_from": {
             "type": [
@@ -11377,6 +11385,11 @@
             ],
             "format": "int32",
             "description": "Days the Trash keeps an email; null follows the tenant."
+          },
+          "undo_send_seconds": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Seconds an email waits before it goes out, to be taken back (0 to 30); 0 sends at once."
           }
         }
       },

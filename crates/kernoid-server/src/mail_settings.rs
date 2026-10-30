@@ -24,6 +24,8 @@ pub(crate) struct MailSettingsView {
     tenant_trash_retention_days: Option<i32>,
     /// The address new emails come from; null is the account's primary address.
     default_from: Option<String>,
+    /// Seconds an email waits before it goes out, to be taken back (0 to 30); 0 sends at once.
+    undo_send_seconds: i32,
 }
 
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
@@ -32,6 +34,9 @@ pub(crate) struct MailSettingsChange {
     trash_retention_days: Option<i32>,
     /// An address the account may send from; null is its primary address.
     default_from: Option<String>,
+    /// 0 to 30; left out, emails go out at once.
+    #[serde(default)]
+    undo_send_seconds: i32,
 }
 
 #[utoipa::path(get, path = "/v1/account/mail-settings", tag = "account", responses(
@@ -51,6 +56,7 @@ pub(crate) async fn get(
             trash_retention_days: settings.trash_retention_days,
             tenant_trash_retention_days: settings.tenant_trash_retention_days,
             default_from: settings.default_from,
+            undo_send_seconds: settings.undo_send_seconds,
         })
     }
     .await;
@@ -74,7 +80,14 @@ pub(crate) async fn set(
 ) -> Response {
     let result = async {
         let session = state.identity.session(instance.id, &token).await?;
-        mail(&state)?.set_settings(session.account.id, body.trash_retention_days, body.default_from.as_deref()).await?;
+        mail(&state)?
+            .set_settings(
+                session.account.id,
+                body.trash_retention_days,
+                body.default_from.as_deref(),
+                body.undo_send_seconds,
+            )
+            .await?;
         Ok::<_, MailAdminError>(())
     }
     .await;

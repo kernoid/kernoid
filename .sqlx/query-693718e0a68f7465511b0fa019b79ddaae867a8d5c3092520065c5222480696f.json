@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, email_id, identity_id, envelope_from, recipients, send_at FROM email_submissions\n             WHERE account_id = $1 ORDER BY send_at DESC LIMIT 500",
+  "query": "SELECT id, account_id, envelope_from, recipients FROM email_submissions\n                 WHERE undo_status = 'pending' AND send_at <= now()\n                 ORDER BY send_at LIMIT 1 FOR UPDATE SKIP LOCKED",
   "describe": {
     "columns": [
       {
@@ -16,28 +16,17 @@
       },
       {
         "ordinal": 1,
-        "name": "email_id",
+        "name": "account_id",
         "type_info": "Uuid",
         "origin": {
           "Table": {
             "table": "email_submissions",
-            "name": "email_id"
+            "name": "account_id"
           }
         }
       },
       {
         "ordinal": 2,
-        "name": "identity_id",
-        "type_info": "Text",
-        "origin": {
-          "Table": {
-            "table": "email_submissions",
-            "name": "identity_id"
-          }
-        }
-      },
-      {
-        "ordinal": 3,
         "name": "envelope_from",
         "type_info": "Text",
         "origin": {
@@ -48,7 +37,7 @@
         }
       },
       {
-        "ordinal": 4,
+        "ordinal": 3,
         "name": "recipients",
         "type_info": "TextArray",
         "origin": {
@@ -57,32 +46,17 @@
             "name": "recipients"
           }
         }
-      },
-      {
-        "ordinal": 5,
-        "name": "send_at",
-        "type_info": "Timestamptz",
-        "origin": {
-          "Table": {
-            "table": "email_submissions",
-            "name": "send_at"
-          }
-        }
       }
     ],
     "parameters": {
-      "Left": [
-        "Uuid"
-      ]
+      "Left": []
     },
     "nullable": [
-      false,
-      false,
       false,
       false,
       false,
       false
     ]
   },
-  "hash": "01d9d0ceb940e1f1b6d675cb2129502e7bb7f05a12559fc184e9a9de85329fc1"
+  "hash": "693718e0a68f7465511b0fa019b79ddaae867a8d5c3092520065c5222480696f"
 }

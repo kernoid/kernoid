@@ -17,6 +17,7 @@
   import AccountView from "./account/AccountView.svelte";
   import AdminView from "./admin/AdminView.svelte";
   import { type Theme, setTheme, theme } from "./theme.svelte.js";
+  import Toasts from "./ui/Toasts.svelte";
   import Tooltip from "./ui/Tooltip.svelte";
   import UserMenu from "./ui/UserMenu.svelte";
 
@@ -150,4 +151,5 @@
     {/snippet}
   </svelte:boundary>
   <Tooltip />
+  <Toasts />
 </div>

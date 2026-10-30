@@ -4,7 +4,7 @@
 use std::collections::BTreeSet;
 
 use bytes::Bytes;
-use kernoid_mail::{Access, Delivered, Delivery, MailError, Outgoing, Recipient};
+use kernoid_mail::{Access, MailError, SendError};
 use mail_parser::MessageParser;
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
@@ -146,11 +146,11 @@ impl Context<'_> {
         if let Some(Value::Object(create)) = args.get("create") {
             for (creation, object) in create {
                 match self.submit(&access, object, &identities).await {
-                    Ok((id, email)) => {
+                    Ok((id, email, send_at, undo_status)) => {
                         self.created.insert(creation.clone(), id.to_string());
                         created.insert(
                             creation.clone(),
-                            json!({ "id": id.to_string(), "undoStatus": "final", "sendAt": chrono::Utc::now() }),
+                            json!({ "id": id.to_string(), "undoStatus": undo_status, "sendAt": send_at }),
                         );
                         sent.push((creation.clone(), email));
                     }
@@ -160,11 +160,29 @@ impl Context<'_> {
                 }
             }
         }
-        let mut not_updated = Map::new();
+        // Taking back what is held (undoStatus "canceled"); nothing else of a submission changes.
+        let (mut updated, mut not_updated) = (Map::new(), Map::new());
         if let Some(Value::Object(update)) = args.get("update") {
-            for id in update.keys() {
-                not_updated
-                    .insert(id.clone(), json!({ "type": "cannotUnsend", "description": "mail is sent at once" }));
+            for (id, patch) in update {
+                let wants_cancel = patch.as_object().is_some_and(|patch| {
+                    patch.len() == 1 && patch.get("undoStatus").and_then(Value::as_str) == Some("canceled")
+                });
+                if !wants_cancel {
+                    not_updated.insert(id.clone(), invalid_properties("only undoStatus may change, to canceled"));
+                    continue;
+                }
+                let canceled = match self.id(id) {
+                    Some(submission) => mail.cancel_held(account, submission).await?,
+                    None => false,
+                };
+                if canceled {
+                    updated.insert(id.clone(), Value::Null);
+                } else {
+                    not_updated.insert(
+                        id.clone(),
+                        json!({ "type": "cannotUnsend", "description": "it was sent already, or never held" }),
+                    );
+                }
             }
         }
         let mut not_destroyed = Map::new();
@@ -179,7 +197,7 @@ impl Context<'_> {
                 "oldState": old_state.to_string(),
                 "newState": new_state.to_string(),
                 "created": created, "notCreated": not_created,
-                "updated": {}, "notUpdated": not_updated,
+                "updated": updated, "notUpdated": not_updated,
                 "destroyed": [], "notDestroyed": not_destroyed,
             }),
         )];
@@ -227,7 +245,7 @@ impl Context<'_> {
         access: &Access,
         object: &Value,
         identities: &[(String, String, String)],
-    ) -> Result<(Uuid, Uuid), Value> {
+    ) -> Result<(Uuid, Uuid, chrono::DateTime<chrono::Utc>, &'static str), Value> {
         let account = access.owner;
         let mail = self.jmap.mail();
         let identity = object
@@ -288,62 +306,42 @@ impl Context<'_> {
         }
         drop(message);
         let sending = Bytes::from(without_bcc(&raw));
-
-        let mut local = BTreeSet::new();
-        let mut remote = Vec::new();
-        for recipient in &recipients {
-            match mail.resolve_recipient(recipient).await.map_err(|error| set_error(&error))? {
-                Recipient::Account { account: target, .. } => {
-                    local.insert((target, recipient.clone()));
-                }
-                Recipient::Group { members, .. } => {
-                    local.extend(members.into_iter().map(|member| (member, recipient.clone())))
-                }
-                Recipient::NotLocal => remote.push(recipient.clone()),
-                // An SRS address takes bounces from other servers only.
-                Recipient::Disabled | Recipient::Unknown | Recipient::Forwarded { .. } => {
-                    return Err(json!({ "type": "invalidRecipients", "invalidRecipients": [recipient] }));
-                }
+        let send_error = |error: SendError| match error {
+            SendError::InvalidRecipient(recipient) => {
+                json!({ "type": "invalidRecipients", "invalidRecipients": [recipient] })
             }
-        }
-        let mut delivered = BTreeSet::new();
-        for (target, to) in &local {
-            if !delivered.insert(*target) {
-                continue;
-            }
-            match mail.deliver(*target, sending.clone(), Delivery { from: &mail_from, to, junk: false }).await {
-                Ok(Delivered::Stored(_) | Delivered::Duplicate | Delivered::Discarded) => {}
-                Err(error) => return Err(set_error(&error)),
-            }
-        }
-        if !remote.is_empty() {
-            let tenant = mail.account_tenant(account).await.map_err(|error| set_error(&error))?;
-            mail.enqueue(Outgoing {
-                tenant,
-                account: Some(account),
-                from: &mail_from,
-                recipients: &remote,
-                raw: sending,
-                lifetime: self.jmap.queue_lifetime,
-            })
-            .await
-            .map_err(|error| set_error(&error))?;
-        }
+            SendError::Mail(error) => set_error(&error),
+        };
+        // Held for later (RFC 8621, 7; FUTURERELEASE, RFC 4865): what is held is checked now and sent by the worker.
+        let hold = hold_for(envelope).map_err(|description| invalid_properties(&description))?;
         let id = Uuid::now_v7();
+        mail.check_recipients(&recipients).await.map_err(send_error)?;
+        match hold {
+            Some(_) => mail.hold(account, id, sending).await.map_err(|error| set_error(&error))?,
+            None => mail
+                .send_now(account, &mail_from, &recipients, sending, self.jmap.queue_lifetime)
+                .await
+                .map_err(send_error)?,
+        }
+        let send_at = chrono::Utc::now() + chrono::Duration::seconds(hold.unwrap_or(0));
+        let undo_status = if hold.is_some() { "pending" } else { "final" };
         sqlx::query!(
-            "INSERT INTO email_submissions (id, account_id, email_id, identity_id, envelope_from, recipients)
-             VALUES ($1, $2, $3, $4, $5, $6)",
+            "INSERT INTO email_submissions (id, account_id, email_id, identity_id, envelope_from, recipients, send_at,
+                                            undo_status)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
             id,
             account,
             email,
             identity,
             mail_from,
             &recipients,
+            send_at,
+            undo_status,
         )
         .execute(mail.pool())
         .await
         .map_err(|error| set_error(&MailError::Store(error)))?;
-        Ok((id, email))
+        Ok((id, email, send_at, undo_status))
     }
 
     pub async fn submission_get(&self, args: Map<String, Value>) -> MethodResult {
@@ -353,7 +351,7 @@ impl Context<'_> {
         }
         let account = access.owner;
         let rows = sqlx::query!(
-            "SELECT id, email_id, identity_id, envelope_from, recipients, send_at FROM email_submissions
+            "SELECT id, email_id, identity_id, envelope_from, recipients, send_at, undo_status FROM email_submissions
              WHERE account_id = $1 ORDER BY send_at DESC LIMIT 500",
             account,
         )
@@ -376,7 +374,7 @@ impl Context<'_> {
                     "rcptTo": row.recipients.iter().map(|to| json!({ "email": to, "parameters": null })).collect::<Vec<_>>(),
                 },
                 "sendAt": row.send_at,
-                "undoStatus": "final",
+                "undoStatus": row.undo_status,
                 "deliveryStatus": null,
                 "dsnBlobIds": [],
                 "mdnBlobIds": [],
@@ -481,5 +479,56 @@ mod tests {
             Some("<mark>Lunch</mark> &lt;today&gt; &amp; <mark>lunacy</mark>")
         );
         assert_eq!(highlight("nothing", &words), None);
+    }
+}
+
+/// The longest a submission may be held (`maxDelayedSend` in the session).
+pub(crate) const MAX_DELAYED_SEND: i64 = 60;
+
+/// How long a submission is held: `HOLDFOR` (seconds) or `HOLDUNTIL` (a time) among the parameters of the envelope's
+/// `mailFrom` (RFC 8621, 7; RFC 4865), up to [`MAX_DELAYED_SEND`]; none sends at once.
+fn hold_for(envelope: Option<&Value>) -> Result<Option<i64>, String> {
+    let parameters = envelope.and_then(|envelope| envelope.get("mailFrom")).and_then(|from| from.get("parameters"));
+    let Some(parameters) = parameters.and_then(Value::as_object) else {
+        return Ok(None);
+    };
+    let seconds = if let Some(value) = parameters.get("HOLDFOR") {
+        value
+            .as_str()
+            .and_then(|text| text.parse::<i64>().ok())
+            .or_else(|| value.as_i64())
+            .ok_or("HOLDFOR is a number of seconds")?
+    } else if let Some(value) = parameters.get("HOLDUNTIL") {
+        let until = value
+            .as_str()
+            .and_then(|text| chrono::DateTime::parse_from_rfc3339(text).ok())
+            .ok_or("HOLDUNTIL is a date-time")?;
+        (until.with_timezone(&chrono::Utc) - chrono::Utc::now()).num_seconds().max(0)
+    } else {
+        return Ok(None);
+    };
+    if !(0..=MAX_DELAYED_SEND).contains(&seconds) {
+        return Err(format!("a submission is held for up to {MAX_DELAYED_SEND} seconds"));
+    }
+    Ok((seconds > 0).then_some(seconds))
+}
+
+#[cfg(test)]
+mod hold_tests {
+    use serde_json::json;
+
+    use super::hold_for;
+
+    #[test]
+    fn submissions_are_held_for_seconds_or_until_a_time() {
+        let with = |parameters| json!({ "mailFrom": { "email": "a@b", "parameters": parameters } });
+        assert_eq!(hold_for(None), Ok(None));
+        assert_eq!(hold_for(Some(&with(json!(null)))), Ok(None));
+        assert_eq!(hold_for(Some(&with(json!({ "HOLDFOR": "10" })))), Ok(Some(10)));
+        assert_eq!(hold_for(Some(&with(json!({ "HOLDFOR": "0" })))), Ok(None));
+        assert!(hold_for(Some(&with(json!({ "HOLDFOR": "100000" })))).is_err());
+        assert!(hold_for(Some(&with(json!({ "HOLDFOR": "soon" })))).is_err());
+        let soon = (chrono::Utc::now() + chrono::Duration::seconds(30)).to_rfc3339();
+        assert!(matches!(hold_for(Some(&with(json!({ "HOLDUNTIL": soon })))), Ok(Some(29..=30))));
     }
 }

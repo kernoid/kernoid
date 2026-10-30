@@ -275,7 +275,10 @@ impl Jmap {
             }),
         );
         if access.send_as {
-            capabilities.insert(SUBMISSION.into(), json!({ "maxDelayedSend": 0, "submissionExtensions": {} }));
+            capabilities.insert(
+                SUBMISSION.into(),
+                json!({ "maxDelayedSend": other::MAX_DELAYED_SEND, "submissionExtensions": { "FUTURERELEASE": [] } }),
+            );
         }
         json!({
             "name": name,

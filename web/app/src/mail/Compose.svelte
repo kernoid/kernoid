@@ -15,6 +15,24 @@
     references?: string[] | null;
     /** Reply all: leave the own addresses out. */
     excludeOwn?: boolean;
+    /** Written already, as HTML (an email taken back): instead of `body` and `quote`. */
+    html?: string;
+    /** Chosen already: the identity, and files attached (an email taken back). */
+    identity?: string;
+    files?: AttachedFile[];
+  }
+
+  /** A file attached, uploaded to the account it goes out from. */
+  export interface AttachedFile {
+    file: File;
+    attachment: import("./model.js").Attachment;
+    account: string;
+  }
+
+  /** What closing the window brings: what was sent – and how to open it again, if it is taken back. */
+  export interface Closed {
+    sent: import("./model.js").Sent;
+    again: ComposeStart;
   }
 </script>
 
@@ -28,19 +46,22 @@
   import { MAIL } from "../jmap.js";
   import FileIcon from "../ui/FileIcon.svelte";
   import Editor from "./Editor.svelte";
-  import { type Attachment, identities, parseAddresses, send, upload } from "./model.js";
+  import { identities, parseAddresses, send, upload } from "./model.js";
 
   let {
     start,
     defaultFrom = null,
     replyFrom,
+    holdSeconds = 0,
     onclose,
   }: {
     start: ComposeStart;
     defaultFrom?: string | null;
     /** The mail account of the email answered or forwarded: its identity comes first. */
     replyFrom?: string | undefined;
-    onclose: (sent: boolean) => void;
+    /** Seconds an email is held before it goes out, to be taken back (the account's setting). */
+    holdSeconds?: number;
+    onclose: (closed?: Closed) => void;
   } = $props();
 
   const escape = (text: string) => text.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] ?? c);
@@ -52,6 +73,7 @@
 
   /** What the editor starts with: the text given, then the quoted email. */
   function initial(): string {
+    if (start.html !== undefined) return start.html;
     const quote = start.quote;
     const own = start.body ? paragraphs(start.body) : "<p></p>";
     if (!quote) return own;
@@ -73,11 +95,13 @@
   let showCc = $state(Boolean(start.cc));
   let html = $state("");
   let text = $state("");
-  let identity = $state("");
+  // svelte-ignore state_referenced_locally
+  let identity = $state(start.identity ?? "");
   let busy = $state(false);
   let error = $state<unknown>();
   /** The files attached, uploaded to the account they go out from (again if the sender changes account). */
-  let files = $state<{ file: File; attachment: Attachment; account: string }[]>([]);
+  // svelte-ignore state_referenced_locally
+  let files = $state<AttachedFile[]>(start.files ?? []);
   let uploading = $state(0);
   let dropping = $state(false);
   // svelte-ignore state_referenced_locally
@@ -124,7 +148,7 @@
       const attachments = await Promise.all(
         files.map((entry) => (entry.account === chosen.accountId ? entry.attachment : upload(jmap, chosen.accountId, entry.file))),
       );
-      await send(
+      const sent = await send(
         jmap,
         {
           identity: chosen,
@@ -137,8 +161,10 @@
           inReplyTo: start.inReplyTo ?? null,
           references: start.references ?? null,
         },
+        holdSeconds,
       );
-      onclose(true);
+      const again: ComposeStart = { ...start, to, cc, subject, body: "", html, identity: chosen.id, files };
+      onclose({ sent, again });
     } catch (failure) {
       error = failure;
     } finally {
@@ -168,7 +194,7 @@
   >
     <div class="compose-head">
       <h2>{subject.trim() || t("New message")}</h2>
-      <button type="button" class="icon quiet" aria-label={t("Cancel")} data-tip={t("Cancel")} onclick={() => onclose(false)}>
+      <button type="button" class="icon quiet" aria-label={t("Cancel")} data-tip={t("Cancel")} onclick={() => onclose()}>
         <X size={18} />
       </button>
     </div>

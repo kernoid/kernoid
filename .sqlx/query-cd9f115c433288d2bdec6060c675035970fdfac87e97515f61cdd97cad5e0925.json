@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE mail_accounts SET trash_retention_days = $2, default_from = $3, undo_send_seconds = $4\n             WHERE account_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4",
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cd9f115c433288d2bdec6060c675035970fdfac87e97515f61cdd97cad5e0925"
+}

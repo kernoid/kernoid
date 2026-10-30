@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT ma.trash_retention_days, ma.default_from, t.trash_retention_days AS tenant_days\n             FROM mail_accounts ma JOIN tenants t ON t.id = ma.tenant_id\n             WHERE ma.account_id = $1",
+  "query": "SELECT ma.trash_retention_days, ma.default_from, ma.undo_send_seconds, t.trash_retention_days AS tenant_days\n             FROM mail_accounts ma JOIN tenants t ON t.id = ma.tenant_id\n             WHERE ma.account_id = $1",
   "describe": {
     "columns": [
       {
@@ -27,6 +27,17 @@
       },
       {
         "ordinal": 2,
+        "name": "undo_send_seconds",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "mail_accounts",
+            "name": "undo_send_seconds"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
         "name": "tenant_days",
         "type_info": "Int4",
         "origin": {
@@ -45,8 +56,9 @@
     "nullable": [
       true,
       true,
+      false,
       true
     ]
   },
-  "hash": "a9b7da864c5193be7d3634466951420771041bd801ebe4f093f8047443da4f7f"
+  "hash": "4aafa5141d552b2dd7a4f2db776c07bc631d914db4224d5f4c7a537e7bd28e82"
 }

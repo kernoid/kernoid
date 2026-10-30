@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE email_submissions SET undo_status = 'final' WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "706b10a743d00f6d36012ca3b186ace40bdd0470a66d8ace6172c1057a596b1c"
+}

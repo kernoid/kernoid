@@ -144,7 +144,8 @@ Mail programs and web apps reach an account's mail over [JMAP](https://jmap.io) 
 password of an account without a second factor – or with a kernoid session.
 
 - Mailboxes, emails (read, written, imported, parsed, queried), threads, identities (the account's addresses),
-  sending (`EmailSubmission`, through the queue with the same checks as submission) and the vacation response
+  sending (`EmailSubmission`, through the queue with the same checks as submission; held up to 60 seconds with
+  `HOLDFOR`/`HOLDUNTIL` and taken back with `undoStatus: canceled` until then) and the vacation response
   (`VacationResponse`, of the own account).
 - Blobs: an email's raw message and each of its parts can be downloaded; an HTML part is also a page of its own at
   `/jmap/view/<account>/<blob>` – its embedded images (`cid:`) as `data:`, served with a policy that runs no script,

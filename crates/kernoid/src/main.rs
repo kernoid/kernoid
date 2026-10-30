@@ -1139,6 +1139,7 @@ async fn serve(config: Config) -> anyhow::Result<()> {
             }
             None => tracing::info!("no [smtp] in the configuration: not sending mail"),
         }
+        tasks.spawn(held_submissions(mail_store(db.clone(), blobs.clone(), &config), shutdown.clone()));
         tasks.spawn(link_notices(
             Identity::new(events.clone()),
             mail_store(db.clone(), blobs.clone(), &config),
@@ -1370,6 +1371,23 @@ fn file_store(db: kernoid_store::PgPool, blobs: BlobStore, config: &Config) -> k
     let limits =
         kernoid_files::Limits { max_file_size: config.files.max_file_size, versions_kept: config.files.versions_kept };
     kernoid_files::Files::new(db, blobs, limits)
+}
+
+/// Sends what was held to be taken back (RFC 8621, 7; `kernoid_mail::Mail::release_held`) once its time has come –
+/// checked every two seconds, so an email goes out at most that late. With several workers, each takes what the others
+/// have not.
+async fn held_submissions(mail: kernoid_mail::Mail, shutdown: CancellationToken) -> anyhow::Result<()> {
+    loop {
+        match mail.release_held(50).await {
+            Ok(0) => {}
+            Ok(sent) => tracing::info!(sent, "held emails sent"),
+            Err(error) => tracing::warn!(%error, "sending held emails failed; trying again shortly"),
+        }
+        tokio::select! {
+            () = shutdown.cancelled() => return Ok(()),
+            () = tokio::time::sleep(std::time::Duration::from_secs(2)) => {}
+        }
+    }
 }
 
 /// Tells the makers of links what came in through them (`kernoid_server::file_links`), every minute. With several

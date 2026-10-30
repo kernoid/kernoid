@@ -118,6 +118,11 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   several at once – onto a folder; the Trash marked, emptied with one button and kept as long as the account chooses
   (`GET/PUT /v1/account/mail-settings`; retention takes the account's days over the tenant's); writing with formatting,
   sent as HTML with the plain text alongside, from a default sender the account chooses; attachments shown in place.
+- Sending later and taking back (JMAP, RFC 8621, 7): a submission held with `HOLDFOR` or `HOLDUNTIL` (up to 60
+  seconds; `maxDelayedSend`, `FUTURERELEASE`) is `pending` until its time – nothing is delivered or queued –, can be
+  `canceled` until then, and is sent by the worker (every two seconds). The web app says when an email is sent and,
+  if the account chose to wait 5 or 10 seconds (`undo_send_seconds` of the mail settings; off by default), offers to
+  take it back – the writing window opens again. Migration 0046.
 - Shared mailboxes in the web app: each one the account may use appears with its folders beside its own; writing
   offers the addresses it may send as, and such an email is kept in and sent from the shared mailbox.
 - Pictures of accounts (`PUT/DELETE /v1/account/avatar`, `GET /v1/avatars`, `GET /v1/avatars/{account}`; PNG, JPEG or
