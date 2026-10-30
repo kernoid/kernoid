@@ -16,14 +16,14 @@ calcard = "0.3.14"
 chrono-tz = "0.10.4"
 bytes = "1.12.1"
 chrono = { version = "0.4.45", features = ["serde"] }
-kernoid-e2e = { version = "0.1.0", path = "../../apps/e2e" }
-kernoid-files = { version = "0.1.0", path = "../kernoid-files" }
-kernoid-groupware = { version = "0.1.0", path = "../kernoid-groupware" }
-kernoid-identity = { version = "0.1.0", path = "../kernoid-identity" }
-kernoid-store = { version = "0.1.0", path = "../kernoid-store" }
+kernoid-e2e = { version = "0.2.0", path = "../../apps/e2e" }
+kernoid-files = { version = "0.2.0", path = "../kernoid-files" }
+kernoid-groupware = { version = "0.2.0", path = "../kernoid-groupware" }
+kernoid-identity = { version = "0.2.0", path = "../kernoid-identity" }
+kernoid-store = { version = "0.2.0", path = "../kernoid-store" }
 base64 = "0.22.1"
 futures-util = { version = "0.3.34", default-features = false }
-kernoid-mail = { version = "0.1.0", path = "../kernoid-mail" }
+kernoid-mail = { version = "0.2.0", path = "../kernoid-mail" }
 mail-builder = "1.0.0"
 mail-parser = { version = "0.11.9", features = ["full_encoding"] }
 serde = { version = "1.0.229", features = ["derive"] }

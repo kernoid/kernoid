@@ -1,6 +1,6 @@
 {
   "name": "@kernoid/e2e",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "license": "MIT",
   "description": "End-to-end encryption of kernoid's apps in the browser: apps/e2e as WebAssembly (OpenPGP with post-quantum keys)",
   "type": "module",

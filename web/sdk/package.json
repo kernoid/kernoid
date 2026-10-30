@@ -1,6 +1,6 @@
 {
   "name": "@kernoid/sdk",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "license": "MIT",
   "description": "Log in with kernoid: OpenID Connect for web apps, and the session API for login UIs",
   "type": "module",

@@ -20,4 +20,4 @@ let report = folder.sync(&client).await?; // again after every push of `FileNode
 OPEN: moves as moves (today a deletion and a creation), transfers resumed after an interruption (RFC 9404), content
 hashes, vaults (end-to-end encrypted folders), the name rules of Windows.
 
-MIT – see [LICENSE](../../LICENSES/MIT.txt).
+MIT – see [LICENSE](LICENSE).

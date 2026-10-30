@@ -18,7 +18,7 @@ machine unless asked for. TLS through rustls on AWS-LC with the system's trust s
 X25519MLKEM768 preferred.
 
 kernoid's terminal app (`apps/tui`) is built on it, and so will be the apps of
-[kernoid/apps](https://github.com/kernoid/apps). Not on crates.io yet (OPEN).
+[kernoid/apps](https://github.com/kernoid/apps).
 
 ```rust
 let url = kernoid_client::session_url(None, "alice@example.org")?;
@@ -27,4 +27,4 @@ let account = client.primary(kernoid_client::MAIL)?;
 let mailboxes = kernoid_client::mail::mailboxes(&client, &account).await?;
 ```
 
-MIT – see [LICENSE](../../LICENSES/MIT.txt).
+MIT – see [LICENSE](LICENSE).

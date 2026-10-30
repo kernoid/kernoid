@@ -11,7 +11,7 @@ as object storage – and sets up a first instance, tenant and administrator. It
 which is fine for trying kernoid out and nothing else; see [Operations]({{ '/operations/' | relative_url }}) for TLS.
 
 {: .note }
-Compose runs the released image `ghcr.io/kernoid/kernoid:0.1.0` (`linux/amd64`). To run the code of the checkout
+Compose runs the released image `ghcr.io/kernoid/kernoid:0.2.0` (`linux/amd64` and `linux/arm64`). To run the code of the checkout
 instead, build it and name it in `.env`: `docker build -t kernoid:local ../..` and `KERNOID_IMAGE=kernoid:local`.
 For a public machine with TLS and mail, see `deploy/test` and its README.
 

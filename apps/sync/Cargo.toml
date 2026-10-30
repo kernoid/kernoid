@@ -7,7 +7,7 @@
 
 [package]
 name = "kernoid-sync"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.94"
 license = "MIT"
@@ -15,11 +15,13 @@ repository = "https://github.com/kernoid/kernoid"
 description = "kernoid's file sync: a folder kept in step with a file store over JMAP"
 keywords = ["kernoid", "jmap", "sync", "files"]
 categories = ["filesystem", "network-programming"]
-publish = false
+homepage = "https://kernoid.dev"
+readme = "README.md"
+exclude = ["scripts/", "deny.toml", "tests/"]
 
 [dependencies]
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
-kernoid-client = { path = "../client" }
+kernoid-client = { version = "0.2.0", path = "../client" }
 # SQLite built in (its code is in the public domain), so that every platform has the same.
 rusqlite = { version = "0.40.2", features = ["bundled"] }
 serde_json = "1.0.151"

@@ -7,6 +7,16 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 ## [Unreleased]
 
+## [0.2.0] – DATE
+
+The core completed, still a pre-release. Files gain public links and drop boxes, uploads in pieces, versions shared
+across stores and search in their content; mail gains SRS, sending as a group, IMAP `SORT`/`THREAD`/`QUOTA`, OAuth for
+mail programs and the vacation response; kernoid answers LDAP for older software. End-to-end encryption (RFC 0006)
+comes to mail, vaults and encrypted calendars and address books – in the web app and the terminal app –, with
+post-quantum keys and TLS. The first modules: virus scanning (ClamAV) and video calls (Jitsi). Kubernetes gets an
+operator with a Helm chart, and the image runs on `linux/arm64` too. The Rust SDK `kernoid-client`, `kernoid-sync` and
+`kernoid-e2e` are on crates.io (MIT), and kernoid's apps (`kernoid/apps`, MIT) release their 0.2.0 with it.
+
 ### Added
 
 - kernoid's own apps sign in with OpenID Connect: every instance has a client for them built in (migration 0051,
@@ -180,7 +190,6 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 - OpenAPI: the mail grant, an account's linked identity provider and the tenant's login policy are the schemas
   `MailGrantView`, `IdpLinkView` and `TenantPolicy` – they had the names of other schemas, so the document described
   them wrong.
-
 - The web app's content security policy allows WebAssembly (`'wasm-unsafe-eval'`) and `blob:` images and media, for
   end-to-end encryption.
 - The worker logs every delivery attempt – delivered, deferred or bounced – with the recipient's domain (never the
@@ -190,11 +199,13 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 - Take the new `deploy/compose` with the new image: the 0.1 image refuses the module settings the new compose file
   passes (`[modules.clamav]` did not exist).
-- `kernoid migrate` adds migrations 0034 to 0050 (CI's upgrade check runs them from 0.1.0 with mail and files in it).
+- `kernoid migrate` adds migrations 0034 to 0051 (CI's upgrade check runs them from 0.1.0 with mail and files in it).
 - DKIM: each domain gets an Ed25519 key beside its RSA key – publish the new TXT record `kernoid-ed1._domainkey`
   that the domain's DNS check shows; mail is signed with it once DNS has it.
 - A configuration that set `http.login_ui` or `http.web_app` to the image's old paths must drop them: those
   directories are gone, and the built-in login UI and web app serve instead.
+- The image is `ghcr.io/kernoid/kernoid:0.2.0` (or `:0.2`), for `linux/amd64` and `linux/arm64`; set
+  `KERNOID_IMAGE` to it where 0.1.0 was named.
 - Nothing else changes by itself: LDAP, ClamAV and Jitsi stay off until configured; end-to-end encryption is allowed
   for every tenant but on for no account until it makes a key and switches it on.
 
@@ -223,6 +234,12 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 - A download whose content cannot be read answers with a problem (500) instead of an empty, broken response.
 - So does an mbox export whose first email cannot be read (503, "stored content could not be read"); an email that
   cannot be read later on ends the export and is logged.
+
+### Known gaps
+
+Marked `OPEN` in the documentation, among them: uploads resumed after the page was closed, search in PDF and Office
+files, single logout from the administration's sign-out, who may read the LDAP directory, links and groups in vaults,
+invitations from encrypted calendars, post-quantum signatures in OpenPGP, Web Push while the web app is closed.
 
 ## [0.1.0] – 2026-10-28
 
@@ -285,5 +302,6 @@ Marked `OPEN` in the documentation, among them: public links to files, resumable
 OAUTHBEARER and LDAP, IMAP `SORT` and `THREAD`, a week and a day view, an audit log in the web app, a Kubernetes
 operator – planned for 0.2.
 
-[Unreleased]: https://github.com/kernoid/kernoid/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/kernoid/kernoid/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/kernoid/kernoid/releases/tag/v0.2.0
 [0.1.0]: https://github.com/kernoid/kernoid/releases/tag/v0.1.0

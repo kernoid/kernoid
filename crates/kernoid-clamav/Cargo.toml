@@ -14,8 +14,8 @@ workspace = true
 [dependencies]
 bytes = "1.12.1"
 futures-util = { version = "0.3.34", default-features = false }
-kernoid-module = { version = "0.1.0", path = "../kernoid-module" }
-kernoid-store = { version = "0.1.0", path = "../kernoid-store" }
+kernoid-module = { version = "0.2.0", path = "../kernoid-module" }
+kernoid-store = { version = "0.2.0", path = "../kernoid-store" }
 tokio = { version = "1.54.1", features = ["net", "io-util", "time"] }
 toml = "1.1.8"
 tracing = "0.1.44"

@@ -16,23 +16,23 @@ anyhow = "1.0.104"
 bytes = "1.12.1"
 chrono = "0.4.45"
 clap = { version = "4.6.7", features = ["derive", "env"] }
-kernoid-clamav = { version = "0.1.0", path = "../kernoid-clamav" }
-kernoid-config = { version = "0.1.0", path = "../kernoid-config" }
-kernoid-events = { version = "0.1.0", path = "../kernoid-events" }
-kernoid-identity = { version = "0.1.0", path = "../kernoid-identity" }
-kernoid-jitsi = { version = "0.1.0", path = "../kernoid-jitsi" }
-kernoid-ldap = { version = "0.1.0", path = "../kernoid-ldap" }
-kernoid-imap = { version = "0.1.0", path = "../kernoid-imap" }
-kernoid-dav = { version = "0.1.0", path = "../kernoid-dav" }
-kernoid-files = { version = "0.1.0", path = "../kernoid-files" }
-kernoid-groupware = { version = "0.1.0", path = "../kernoid-groupware" }
-kernoid-jmap = { version = "0.1.0", path = "../kernoid-jmap" }
-kernoid-mail = { version = "0.1.0", path = "../kernoid-mail" }
-kernoid-module = { version = "0.1.0", path = "../kernoid-module" }
-kernoid-oidc = { version = "0.1.0", path = "../kernoid-oidc" }
-kernoid-server = { version = "0.1.0", path = "../kernoid-server" }
-kernoid-smtp = { version = "0.1.0", path = "../kernoid-smtp" }
-kernoid-store = { version = "0.1.0", path = "../kernoid-store" }
+kernoid-clamav = { version = "0.2.0", path = "../kernoid-clamav" }
+kernoid-config = { version = "0.2.0", path = "../kernoid-config" }
+kernoid-events = { version = "0.2.0", path = "../kernoid-events" }
+kernoid-identity = { version = "0.2.0", path = "../kernoid-identity" }
+kernoid-jitsi = { version = "0.2.0", path = "../kernoid-jitsi" }
+kernoid-ldap = { version = "0.2.0", path = "../kernoid-ldap" }
+kernoid-imap = { version = "0.2.0", path = "../kernoid-imap" }
+kernoid-dav = { version = "0.2.0", path = "../kernoid-dav" }
+kernoid-files = { version = "0.2.0", path = "../kernoid-files" }
+kernoid-groupware = { version = "0.2.0", path = "../kernoid-groupware" }
+kernoid-jmap = { version = "0.2.0", path = "../kernoid-jmap" }
+kernoid-mail = { version = "0.2.0", path = "../kernoid-mail" }
+kernoid-module = { version = "0.2.0", path = "../kernoid-module" }
+kernoid-oidc = { version = "0.2.0", path = "../kernoid-oidc" }
+kernoid-server = { version = "0.2.0", path = "../kernoid-server" }
+kernoid-smtp = { version = "0.2.0", path = "../kernoid-smtp" }
+kernoid-store = { version = "0.2.0", path = "../kernoid-store" }
 metrics-exporter-prometheus = { version = "0.18.3", default-features = false }
 opentelemetry = { version = "0.33.1", default-features = false, features = ["trace"] }
 opentelemetry-otlp = { version = "0.33.1", default-features = false, features = ["http-proto", "reqwest-blocking-client", "trace"] }

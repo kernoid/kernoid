@@ -9,13 +9,17 @@
 
 [package]
 name = "kernoid-e2e"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.94"
 license = "MIT"
 repository = "https://github.com/kernoid/kernoid"
 description = "End-to-end encryption of kernoid's apps: OpenPGP with post-quantum keys, PGP/MIME"
-publish = false
+homepage = "https://kernoid.dev"
+readme = "README.md"
+exclude = ["scripts/", "deny.toml", "tests/"]
+keywords = ["kernoid", "openpgp", "e2e", "post-quantum", "pgp-mime"]
+categories = ["cryptography", "email"]
 
 [lib]
 crate-type = ["rlib", "cdylib"]

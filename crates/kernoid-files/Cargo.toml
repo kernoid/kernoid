@@ -15,7 +15,7 @@ workspace = true
 bytes = "1.12.1"
 chrono = { version = "0.4.45", features = ["serde"] }
 futures-util = { version = "0.3.34", default-features = false }
-kernoid-store = { version = "0.1.0", path = "../kernoid-store" }
+kernoid-store = { version = "0.2.0", path = "../kernoid-store" }
 sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres", "macros", "uuid", "chrono"] }
 thiserror = "2.0.21"
 tracing = "0.1.44"
