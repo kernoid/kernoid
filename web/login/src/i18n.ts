@@ -71,6 +71,9 @@ const de = {
   "Your organisation requires a second factor. Until {date} you can log in without one.":
     "Ihre Organisation verlangt einen zweiten Faktor. Bis zum {date} können Sie sich noch ohne anmelden.",
   "Set it up now": "Jetzt einrichten",
+  "Passkey created": "Passkey erstellt",
+  "Now confirm this login with it once.": "Bestätigen Sie diese Anmeldung jetzt einmal damit.",
+  "Confirm with the passkey": "Mit dem Passkey bestätigen",
   "Later": "Später",
   "Create a passkey": "Passkey erstellen",
   "Use an authenticator app": "Authenticator-App verwenden",

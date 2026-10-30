@@ -81,11 +81,29 @@ export function showSetup(done: () => Promise<void>, relogin: () => void): void 
         kind: "primary",
         run: guard(async () => {
           await client.registerPasskey(deviceName());
+          showConfirmPasskey(done, guard);
+        }),
+      },
+      { label: t("Use an authenticator app"), run: guard(async () => showTotpSetup(async () => showRecoveryCodes(done))) },
+    ],
+  });
+}
+
+/** The new passkey confirms this login – asked for on a click of its own: browsers allow a passkey request only right
+ * after something the person did, not after the request that created it. */
+function showConfirmPasskey(done: () => Promise<void>, guard: (run: () => Promise<void>) => () => Promise<void>): void {
+  show(Choice, {
+    title: t("Passkey created"),
+    notice: { text: t("Now confirm this login with it once."), kind: "info" },
+    actions: [
+      {
+        label: t("Confirm with the passkey"),
+        kind: "primary",
+        run: guard(async () => {
           await client.checkPasskey();
           await showRecoveryCodes(done);
         }),
       },
-      { label: t("Use an authenticator app"), run: guard(async () => showTotpSetup(async () => showRecoveryCodes(done))) },
     ],
   });
 }
