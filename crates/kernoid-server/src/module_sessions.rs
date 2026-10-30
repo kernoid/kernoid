@@ -23,7 +23,7 @@ impl Sessions for ModuleSessions {
             let client = request.extensions.get::<Client>();
             let instance = of_request(&state.identity, client).await.ok()??;
             let token = crate::cookie::session_token(state, &request.method, &request.headers, Some(&instance)).ok()?;
-            let account = state.identity.session(instance.id, &token).await.ok()?.account;
+            let account = state.identity.data_session(instance.id, &token).await.ok()?.account;
             // An account of another instance does not use this one.
             (account.instance == instance.id).then(|| Caller {
                 account: account.id,

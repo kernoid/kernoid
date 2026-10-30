@@ -467,7 +467,7 @@ pub(crate) async fn queue(
 
 /// The account and tenant of a session.
 async fn own(state: &AppState, instance: Uuid, token: &str) -> Result<(Uuid, Uuid), MailAdminError> {
-    let session = state.identity.session(instance, token).await?;
+    let session = state.identity.data_session(instance, token).await?;
     Ok((session.account.id, session.account.tenant))
 }
 

@@ -85,7 +85,7 @@ async fn log_in(
     } else {
         let token = crate::cookie::session_token(state, &parts.method, &parts.headers, Some(&instance))
             .map_err(|_| unauthorized(&parts.headers))?;
-        state.identity.session(instance.id, &token).await.map_err(|_| unauthorized(&parts.headers))?.account
+        state.identity.data_session(instance.id, &token).await.map_err(|_| unauthorized(&parts.headers))?.account
     };
     // An account of another instance does not use this one.
     if account.instance != instance.id {

@@ -38,7 +38,9 @@ openapi-fetch – `pnpm --filter @kernoid/app run api`, checked in CI), both Vit
 embeds the builds (rust-embed, `login_ui.rs`) and serves them at `/login` and `/app`; `http.login_ui`/`http.web_app`
 name a directory to serve instead (development). The image builds them in a Node stage before the binary. They talk to the server only through the API – never import
 server code, and keep dependencies exact (`package.json` without ranges, `pnpm-lock.yaml`), at least two weeks old
-(`minimumReleaseAge` in `pnpm-workspace.yaml`), without install scripts of dependencies (pnpm's default).
+(`minimumReleaseAge` in `pnpm-workspace.yaml`) – except the smallest version that fixes a security advisory, taken at
+once as for crates (an `overrides` entry, named with the advisory in the commit) –, without install scripts of
+dependencies (pnpm's default).
 
 `apps/tui` (MIT) is the terminal app `kernoid-tui` (Rust, ratatui; `docs/tui.md`): the protocol layer (`src/jmap/`:
 the session, method calls, uploads, downloads, push; mail with threads, files with versions and sharing, calendars with

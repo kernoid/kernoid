@@ -90,7 +90,9 @@ does with `x-zitadel-orgid`. For anyone without an instance role, another tenant
   group –, so kernoid also refuses to deactivate an account, remove a group member or deactivate a tenant if that
   would leave nobody active in charge. An instance administrator cannot deactivate their own tenant.
 - **Second factor.** If a tenant requires a second factor, administration does too – for its own administrators and
-  for instance administrators acting on it.
+  for instance administrators acting on it – and so do mail, calendars, contacts and files of its accounts: a session
+  from a password alone opens only the account page, which asks for the factor (or has one set up). App passwords
+  can only be added with the factor.
 - **Everything is recorded.** Every change is an event naming the administrator (`account:<id>`).
 
 ## Projects

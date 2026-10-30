@@ -56,7 +56,7 @@ pub(crate) async fn list(
     CurrentInstance(instance): CurrentInstance,
     SessionToken(token): SessionToken,
 ) -> Response {
-    let session = match state.identity.session(instance.id, &token).await {
+    let session = match state.identity.data_session(instance.id, &token).await {
         Ok(session) => session,
         Err(error) => return problem(error),
     };
@@ -102,7 +102,7 @@ pub(crate) async fn get(
     SessionToken(token): SessionToken,
     Path(account): Path<Uuid>,
 ) -> Response {
-    let session = match state.identity.session(instance.id, &token).await {
+    let session = match state.identity.data_session(instance.id, &token).await {
         Ok(session) => session,
         Err(error) => return problem(error),
     };
@@ -158,7 +158,7 @@ pub(crate) async fn set(
     SessionToken(token): SessionToken,
     body: Bytes,
 ) -> Response {
-    let session = match state.identity.session(instance.id, &token).await {
+    let session = match state.identity.data_session(instance.id, &token).await {
         Ok(session) => session,
         Err(error) => return problem(error),
     };
@@ -211,7 +211,7 @@ pub(crate) async fn remove(
     CurrentInstance(instance): CurrentInstance,
     SessionToken(token): SessionToken,
 ) -> Response {
-    let session = match state.identity.session(instance.id, &token).await {
+    let session = match state.identity.data_session(instance.id, &token).await {
         Ok(session) => session,
         Err(error) => return problem(error),
     };

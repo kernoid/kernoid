@@ -324,10 +324,13 @@ running (`pg_snapshot_xmin`), which needs no locks between writers and readers.
   is refreshing, so a requirement switched on later reaches existing logins. Managing one's own account stays
   possible with a password session; otherwise nobody could set up the required factor. The login UI's account page
   asks for the second factor, or has one set up, when the tenant requires it (since 0.2).
-- **OPEN:** whether a session must meet the tenant's requirement of a second factor for JMAP (and so the web app's
-  mail, calendar and files) and the other protocols that take a session. Today they do not check it: a session from a
-  password alone reaches them. Logins with a password over HTTP Basic and the mail protocols need an app password
-  when the account needs a second factor (`program_login`, RFC 0002, 10.1). Not decided yet.
+- **Sessions and data** (decided for 0.2): a session reaches the account's data – JMAP (and so the web app's mail,
+  calendar, contacts and files), CalDAV and CardDAV, WebDAV, the routes of modules, one's own mail settings, avatars
+  and shares – only with the second factor its tenant requires (`Identity::data_session`, after the grace period);
+  otherwise `401` with `urn:kernoid:problem:mfa-required`, and the web app sends the browser to the account page,
+  which asks for the factor. So does adding an app password, which outlives the session. Logins with a password
+  over HTTP Basic and the mail protocols need an app password when the account needs a second factor
+  (`program_login`, RFC 0002, 10.1).
 - **Recovery codes**: ten at a time (`xxxx-xxxx-xxxx-xxxx` from 31 unambiguous characters, about 79 bits), shown once,
   stored only as SHA-256 bound to the account; each works once as a further check (`recovery`, `amr` `otp`); new
   ones replace all earlier ones and need a recent session; guesses are limited. `GET /v1/account/factors` tells the

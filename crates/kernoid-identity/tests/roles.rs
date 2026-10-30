@@ -196,6 +196,11 @@ async fn administrators_need_their_permissions(pool: PgPool) {
     assert!(identity.admin_tenant(&admin).await.unwrap().mfa_required);
     let token = login(&identity, instance, "alice@firma.de").await;
     assert!(matches!(identity.admin(instance, &token, None).await, Err(IdentityError::MfaRequired)));
+    // So do the account's data and app passwords; the session itself still opens the account page, where the
+    // factor is set up.
+    assert!(matches!(identity.data_session(instance, &token).await, Err(IdentityError::MfaRequired)));
+    assert!(matches!(identity.add_own_app_password(instance, &token, "Mail").await, Err(IdentityError::MfaRequired)));
+    identity.session(instance, &token).await.unwrap();
 }
 
 #[sqlx::test(migrator = "kernoid_store::MIGRATOR")]

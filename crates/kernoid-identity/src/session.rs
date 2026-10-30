@@ -422,6 +422,18 @@ impl Identity {
         })
     }
 
+    /// Like [`Identity::session`], for a session that reaches the account's data – mail, files, calendars and
+    /// contacts, whatever is shared with it: if its tenant requires a second factor (after the grace period), the
+    /// session must have been logged in with one. The account page takes plain sessions, so that the factor can be
+    /// asked for or set up there.
+    pub async fn data_session(&self, instance: Uuid, token: &str) -> Result<SessionInfo> {
+        let session = self.session(instance, token).await?;
+        if !is_multi_factor(&session.checks) && self.mfa_required_now(session.account.id).await? {
+            return Err(IdentityError::MfaRequired);
+        }
+        Ok(session)
+    }
+
     /// Ends the session of a valid token (logout).
     pub async fn terminate_session(&self, instance: Uuid, token: &str) -> Result<()> {
         let session = self.session(instance, token).await?;

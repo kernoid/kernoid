@@ -156,6 +156,10 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 ### Changed
 
+- A tenant's requirement of a second factor now holds for its accounts' data too: JMAP (the web app's mail,
+  calendar, contacts and files), CalDAV, CardDAV, WebDAV and the modules' routes take a session only with the factor
+  (after the grace period), and an app password can only be added with it. A session from a password alone opens the
+  account page, which asks for the factor.
 - The web app and the login UI are written in Svelte 5 (they were Solid and plain TypeScript); they look and behave
   as before. The administration's requests are typed from the OpenAPI document.
 - kernoid carries the login UI and the web app in its binary. `http.login_ui` and `http.web_app` have no default any

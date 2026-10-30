@@ -159,8 +159,10 @@ impl Identity {
         .map_err(store_error)
     }
 
-    /// An app password for the session's own account (needs a recent login).
+    /// An app password for the session's own account (needs a recent login, and the second factor the tenant
+    /// requires – an app password outlives the session).
     pub async fn add_own_app_password(&self, instance: Uuid, token: &str, name: &str) -> Result<(Uuid, String)> {
+        self.data_session(instance, token).await?;
         let session = self.recent_session(instance, token).await?;
         let account = session.account.id;
         self.add_app_password(account, name, &format!("account:{account}")).await

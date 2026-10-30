@@ -52,7 +52,7 @@ pub(crate) async fn get(
     SessionToken(token): SessionToken,
 ) -> Response {
     let result = async {
-        let session = state.identity.session(instance.id, &token).await?;
+        let session = state.identity.data_session(instance.id, &token).await?;
         let settings = mail(&state)?.settings(session.account.id).await?;
         Ok::<_, MailAdminError>(MailSettingsView {
             trash_retention_days: settings.trash_retention_days,
@@ -82,7 +82,7 @@ pub(crate) async fn set(
     Json(body): Json<MailSettingsChange>,
 ) -> Response {
     let result = async {
-        let session = state.identity.session(instance.id, &token).await?;
+        let session = state.identity.data_session(instance.id, &token).await?;
         mail(&state)?
             .set_settings(
                 session.account.id,
@@ -123,7 +123,7 @@ pub(crate) async fn name_mailbox(
     Json(body): Json<MailboxName>,
 ) -> Response {
     let result = async {
-        let session = state.identity.session(instance.id, &token).await?;
+        let session = state.identity.data_session(instance.id, &token).await?;
         mail(&state)?.set_mailbox_name(session.account.id, store, &body.name).await?;
         Ok::<_, MailAdminError>(())
     }

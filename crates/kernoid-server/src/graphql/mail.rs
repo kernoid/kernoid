@@ -56,7 +56,7 @@ fn mailbox(value: Option<&str>) -> async_graphql::Result<Option<Uuid>> {
 /// The account and tenant of the session.
 async fn own(context: &Context<'_>) -> async_graphql::Result<(Uuid, Uuid)> {
     let identity = context.data::<Identity>()?;
-    let session = identity.session(instance(context)?.id, token(context)?).await.map_err(error)?;
+    let session = identity.data_session(instance(context)?.id, token(context)?).await.map_err(error)?;
     Ok((session.account.id, session.account.tenant))
 }
 

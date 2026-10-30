@@ -225,7 +225,7 @@ async fn own(
     instance: uuid::Uuid,
     token: &str,
 ) -> Result<(uuid::Uuid, uuid::Uuid), GroupwareAdminError> {
-    let session = state.identity.session(instance, token).await?;
+    let session = state.identity.data_session(instance, token).await?;
     Ok((session.account.id, session.account.tenant))
 }
 
