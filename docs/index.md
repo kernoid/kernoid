@@ -15,8 +15,9 @@ object storage and is free software under the AGPL.
 
 **Status:** 0.1, a pre-release – identity and single sign-on, mail, calendars and contacts, files, the web app and the
 terminal app are there to try out and test ([changelog](https://github.com/kernoid/kernoid/blob/main/CHANGELOG.md)).
-Nothing here is ready for production yet: the first stable release is planned for summer 2027, after 0.2 (public
-links, LDAP, a Kubernetes operator, the first modules) and an external security audit.
+Nothing here is ready for production yet: the first stable release comes after 0.2 (public links, LDAP, a Kubernetes
+operator, the first modules) and an external security audit, together with the app for desktop and mobile, once
+falkOSS is incorporated and holds the app stores' developer accounts.
 {: .warning }
 
 | Page | What it covers |

@@ -1,8 +1,15 @@
 <!-- SPDX-License-Identifier: CC-BY-4.0 -->
 # RFC 0001 – Data and event model
 
-- **Status:** draft, 2026-10-23; implemented: sections 1–3 (instances, tenants, accounts), the password login and the
-  OpenID Connect code flow, TOTP and passkeys of section 7 (`kernoid-identity`, `kernoid-oidc`, `kernoid-server`)
+- **Status:** draft, 2026-10-23; implemented: sections 1–3 (instances, tenants, accounts; migrations 0006–0007)
+  except the `resource` and `service_account` aggregates (**OPEN**), sections 4–6 (public events come with section
+  8), sections 7.1–7.8 (sessions, OpenID Connect, TOTP and passkeys, groups and roles, projects and grants, the
+  login UI and SDK, external identity providers, SCIM; migrations 0008–0021; `kernoid-identity`, `kernoid-oidc`, `kernoid-server`, `web/login`,
+  `web/sdk`), section 9 (ACME and several workers, migration 0022), the session cookie and the web app's account
+  area (7.6). Since 0.2: changing kernoid's SAML key and single logout by POST and at end-session (7.7, migration
+  0037), the login UI and the web app in Svelte built into kernoid (7.6), modules of the installation and their list
+  for tenants (3.2, `kernoid-module`, `kernoid-clamav`, `kernoid-jitsi`), pictures of accounts (7.4, migration 0045).
+  Section 8 is planned before 1.0.
 - **Scope:** the objects kernoid is built from, how they are stored as events, how requests find their instance and
   tenant, and the decisions that follow for consistency, keys, APIs and the login. It is the basis for everything
   else (identity first, then mail).
@@ -25,8 +32,8 @@ members, without separate deployments.
 This mirrors ZITADEL, where an instance "normally runs on one domain and represents one issuer" and holds
 organizations, which hold users, projects and applications
 ([instance](https://zitadel.com/docs/concepts/structure/instance)). kernoid's tenant corresponds to ZITADEL's
-organization, but is more: it owns mail domains, and an account is at the same time login, mailbox and owner of
-files.
+organization, but is more: it owns mail domains, and an account can be at the same time login, mailbox and owner of
+files – it need not be (RFC 0003).
 
 ### Access across tenants
 
@@ -42,11 +49,12 @@ chosen roles to another tenant of the same instance, whose administrators then a
   connection, or from `Forwarded` / `X-Forwarded-Host` **only if the connection comes from a configured trusted
   proxy** (`http.trusted_proxies`). ZITADEL resolves instances by host as well, and had several vulnerabilities from
   trusting forwarded host headers (e.g. [GHSA-pfrf-9r5f-73f5](https://osv.dev/vulnerability/GHSA-pfrf-9r5f-73f5)).
-  Links kernoid sends (password reset, invitations) are built from the instance's configured domain, never from the
-  request.
-- **Tenant – by address.** An account's login name is its mail address, so the domain part names the tenant:
-  `alice@firma.de` belongs to the tenant that owns `firma.de`. Mail follows the same rule (recipient domain for SMTP,
-  login name for IMAP and JMAP). Any tenant may claim a domain; it is used only once verified by a DNS TXT record
+  Links kernoid sends (invitations, notices; password resets once they exist – **OPEN**: there is no password reset
+  yet) are built from the instance's configured domain, never from the request.
+- **Tenant – by address.** A native address names its tenant by the domain part: `alice@firma.de` belongs to the
+  tenant that owns `firma.de`. Other logins – a username, a verified contact address, a linked provider – find the
+  account, and with it its tenant, within the instance (RFC 0003, 2). Mail follows the domain rule (recipient
+  domain for SMTP, login name for IMAP and JMAP). Any tenant may claim a domain; it is used only once verified by a DNS TXT record
   `_kernoid-challenge.<domain>` with the value `kernoid-verification=<token>`, and **one tenant in the whole
   installation** can have it verified – incoming mail reaches the installation, not an instance, and must find exactly
   one recipient. A verified domain stays with its tenant until that tenant removes it.
@@ -60,11 +68,12 @@ chosen roles to another tenant of the same instance, whose administrators then a
 |---|---|---|
 | `instance` | installation | domains, defaults, policies |
 | `tenant` | instance | name, active state, mail domains (claimed, verified), module switches, policies, cross-tenant grants |
-| `account` | tenant | login name = primary address, aliases, display name, active state; credentials apart (see 3.1); who may use its mail (RFC 0002, 12.2) |
-| `group` | tenant | members and addresses; at the same time distribution list (RFC 0002, 9.2) and owner of shared folders and calendars |
+| `account` | tenant | the id; logins (primary address and aliases, username, verified contact address, links – RFC 0003, 2), display name, active state, services; credentials apart (see 3.1); who may use its mail (RFC 0002, 12.2) |
+| `group` | tenant | members and addresses; at the same time distribution list (RFC 0002, 9.2) and grantee: grants on mailboxes, calendars, address books and files may go to a group (RFC 0002, 12.2; RFC 0004; RFC 0005, 11). A group owns no store of its own |
 | `shared_mailbox` | tenant | an account of the kind `shared` (`account.shared_added`): addresses and mail without a person and without any login; access through the grants of RFC 0002, 12.2 |
-| `resource` | tenant | room or device with address and calendar |
-| `service_account` | tenant | keys instead of a login; for machines and integrations |
+| `drive` | tenant | an account of the kind `drive` (`account.drive_added`): a file store of the tenant, without address or login; people reach it through grants (RFC 0005, 12). It takes the place of a group as owner of shared folders |
+| `resource` | tenant | room or device with address and calendar. **OPEN:** planned, not built yet |
+| `service_account` | tenant | keys instead of a login; for machines and integrations. **OPEN:** planned, not built yet |
 | `role` | tenant | permissions for administration – built in or the tenant's own – held as tenant events, instance roles as instance events (7.4); access to mail is granted per store and mailbox with IMAP's rights instead (RFC 0002, 12.2) |
 | `project` | tenant | applications and the roles they know, settings (7.5) |
 | `authorization` | tenant | the project roles of one account or group in one project (7.5) |
@@ -117,6 +126,16 @@ to **one account or group in the whole installation**. A domain cannot be remove
   the right password.
 - Failed attempts are limited – see section 7.
 
+### 3.2 Modules (implemented; the configuration and the list since 0.2)
+
+A module connects kernoid to one particular outside service (e.g. `clamav`, `jitsi`). Modules are compiled in and
+off by default (`kernoid-module`; docs: Modules).
+
+- **The installation** switches a module on in its configuration: `[modules.<name>]` with `enabled = true`, and the
+  module's own settings in the same table. A module that is off gets no routes and runs no jobs.
+- **A tenant** switches on the modules the installation offers (`tenant.module_enabled`, `tenant.module_disabled`,
+  read model `tenant_modules`). `GET /v1/tenant/modules` lists them and whether the tenant uses each (needs
+  `directory.read`; GraphQL `tenantModules`); `PUT /v1/tenant/modules/{module}` switches one (needs `tenant.manage`).
 
 ## 4. Events
 
@@ -179,11 +198,13 @@ running (`pg_snapshot_xmin`), which needs no locks between writers and readers.
   service account can do this – kernoid's own app is just the first.
 - **Sessions always expire.** ZITADEL sessions without an explicit lifetime never expire
   ([session API](https://github.com/zitadel/zitadel/blob/main/proto/zitadel/session/v2/session_service.proto)); in
-  kernoid every session has a lifetime, set by the tenant's policy within the instance's limits.
+  kernoid every session has a lifetime: the one the login asks for, 8 hours by default, at most 30 days (7.1).
+  **OPEN:** a lifetime set by the tenant's policy within the instance's limits.
 
 ### 7.1 Sessions (implemented for passwords)
 
-- A session is created **only after a successful check** (`POST /v1/sessions` with address and password; GraphQL
+- A session is created **only after a successful check** (`POST /v1/sessions` with a login name – RFC 0003, 2 –
+  and password; GraphQL
   `createSession`). Requests without valid credentials therefore never write events – nobody can fill the event log
   from outside. The events `session.created` and `session.terminated` are owned by the account's tenant, so a
   tenant's audit log shows its logins.
@@ -301,7 +322,12 @@ running (`pg_snapshot_xmin`), which needs no locks between writers and readers.
   or biometrics). It is enforced where it matters: finishing an auth request is refused with the problem type
   `urn:kernoid:problem:mfa-required` – the login UI asks for a factor, or has one set up, and finishes again – and so
   is refreshing, so a requirement switched on later reaches existing logins. Managing one's own account stays
-  possible with a password session; otherwise nobody could set up the required factor.
+  possible with a password session; otherwise nobody could set up the required factor. The login UI's account page
+  asks for the second factor, or has one set up, when the tenant requires it (since 0.2).
+- **OPEN:** whether a session must meet the tenant's requirement of a second factor for JMAP (and so the web app's
+  mail, calendar and files) and the other protocols that take a session. Today they do not check it: a session from a
+  password alone reaches them. Logins with a password over HTTP Basic and the mail protocols need an app password
+  when the account needs a second factor (`program_login`, RFC 0002, 10.1). Not decided yet.
 - **Recovery codes**: ten at a time (`xxxx-xxxx-xxxx-xxxx` from 31 unambiguous characters, about 79 bits), shown once,
   stored only as SHA-256 bound to the account; each works once as a further check (`recovery`, `amr` `otp`); new
   ones replace all earlier ones and need a recent session; guesses are limited. `GET /v1/account/factors` tells the
@@ -316,11 +342,13 @@ running (`pg_snapshot_xmin`), which needs no locks between writers and readers.
 ### 7.4 Groups, roles and administration (implemented)
 
 - **Groups** (`group` aggregate, owned by the tenant): a name, members (accounts of the same tenant) and addresses.
-  They hold roles and are distribution lists (RFC 0002, 9.2); owner of shared folders follows with files. A group
+  They hold roles, are distribution lists (RFC 0002, 9.2) and receive grants on mail, calendars, address books and
+  files; shared folders belong to drives, not groups (RFC 0005, 12). A group
   that holds roles cannot be removed until they are revoked, so that no permission disappears unnoticed.
 - **Permissions** say what kind of administration is allowed. Tenant permissions: `directory.read`, `tenant.manage`
   (name, modules), `domains.manage`, `policies.manage`, `accounts.manage`, `groups.manage`, `roles.manage`,
-  `projects.manage`, `applications.manage`, `authorizations.manage` (project roles). Instance permissions:
+  `projects.manage`, `applications.manage`, `authorizations.manage` (project roles), `identity_providers.manage`
+  (7.7), `provisioning.manage` (SCIM tokens, 7.8). Instance permissions:
   `instance.read`, `instance.manage` (name, domains, signing keys), `tenants.manage`, `instance_roles.manage`.
 - **Built-in tenant roles:** `tenant_admin` (all tenant permissions), `user_manager` (directory, accounts, groups,
   authorizations), `application_manager` (directory, projects, applications), `auditor` (directory). This follows
@@ -362,8 +390,13 @@ running (`pg_snapshot_xmin`), which needs no locks between writers and readers.
   instance grant`).
 - **Own account:** everyone lists and ends their own sessions, changes their display name and – with the current
   password and a recent session – their password, which ends their other sessions.
-- **Mail:** access to other accounts' mail is RFC 0002, 12. **OPEN:** permissions on calendars and folders (with
-  files).
+- **Pictures of accounts** (since 0.2, migration 0045): an account sets, replaces and removes its own picture
+  (`PUT`/`DELETE /v1/account/avatar`): PNG, JPEG or WebP, told by its first bytes, never SVG, up to 1 MiB. A picture
+  is content, not an event: sealed with the tenant's key in object storage under a new version each time, named in
+  `account_avatars`. Everyone logged in to the tenant lists them (`GET /v1/avatars`) and loads them
+  (`GET /v1/avatars/{account}`, with `nosniff` and a sandboxing Content-Security-Policy).
+- **Mail, calendars, files:** access to other accounts' mail is RFC 0002, 12; to calendars and address books RFC 0004
+  (`collection_access`); to files RFC 0005, 11 (`file_access`).
 
 ### 7.5 Projects (implemented)
 
@@ -398,6 +431,10 @@ As in ZITADEL, a project is "the vessel that holds your Applications and Roles"
   passkey, ask for a second factor or have one set up when it is required, honour `prompt` and `max_age`, offer
   another account, decline. `/login/account` is the account page: name, password, TOTP, passkeys, recovery codes,
   sessions.
+- **The web app's account area** (`web/app`, `#/account`): the same for someone using the web app, with
+  the session cookie – name and picture, the language of kernoid's emails (RFC 0003, 1), password, TOTP, passkeys,
+  recovery codes, linked providers (RFC 0003, 3), app passwords, consents, sessions – and the account's mail settings
+  (RFC 0002). It changes nothing beyond the account itself.
 - **The session lives in an HttpOnly cookie** (decided 2026-10-24), so that one login serves every application of the
   instance and no script – not even the login UI's own – can read the token. A login with `"cookie": true` sets
   `__Host-kernoid-session` (`kernoid-session` without HTTPS) – `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`, as long
@@ -575,5 +612,7 @@ Third-party services integrate from outside. The shape follows ZITADEL's Actions
 - **Recovery** of an instance whose administrators have all lost access is the operator's CLI, by design: it talks to
   the database directly, its changes are events naming `operator`, and kernoid itself refuses changes that would
   leave nobody active in charge. Whoever can run it holds the installation anyway (database and main key).
-- **OPEN:** whether SAML responses and LDAP binds go through the same session API.
+- SAML responses end, like OpenID Connect logins of other providers, in a session of the session API (7.7: a
+  one-time code exchanged at `POST /v1/idp-logins/session`). LDAP binds do not: they log in as mail programs do,
+  with `program_login` (RFC 0003, 8).
 - **OPEN:** wildcard certificates (need DNS-01); ACME Renewal Information (RFC 9773) to renew when the CA asks.

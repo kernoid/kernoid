@@ -1,7 +1,10 @@
 <!-- SPDX-License-Identifier: CC-BY-4.0 -->
 # RFC 0003 – Accounts, logins and services
 
-- **Status:** draft, 2026-10-24; implemented (migration 0030; the language in section 1, migration 0044, since 0.2)
+- **Status:** draft, 2026-10-24; implemented: sections 1–6 (migration 0030; `kernoid-identity`: `login`, `services`,
+  `registration`; `kernoid-server`). Since 0.2: the language in section 1 (migration 0044), the account page's
+  linking and unlinking of providers with a recent login in section 3, and the directory over LDAP in section 8
+  (`kernoid-ldap`, process role `ldap`).
 - **Scope:** what an account is apart from its mail address; how people log in (addresses, usernames, verified
   email addresses, external providers) and register; how one person's logins are linked; which services
   (mail, files) an account uses and who decides. It changes RFC 0001 (3.1, 7.7, 7.8) and RFC 0002 (2, 9.2, 11).
@@ -24,7 +27,8 @@ projects, roles and authorizations, as in kernoid (RFC 0001, 7.5).
 
 - An account is its **id** (UUIDv7) – never an address. Two accounts of one person (one with a mailbox
   `max.mustermann@mandant.org`, one that logs in only with Microsoft) are possible and stay apart unless linked.
-- **Kinds:** `person` and `shared` (a shared mailbox, RFC 0002 12.1); service accounts come later.
+- **Kinds:** `person`, `shared` (a shared mailbox, RFC 0002 12.1) and `drive` (a file store of the tenant, RFC 0005
+  12); neither of the last two logs in. **OPEN:** service accounts (RFC 0001, 3).
 - A person's account is **native** when it has a primary address: an address on a verified domain of its tenant,
   which kernoid serves (MX). Only native accounts can have a mailbox. An account without one is **external**: it
   exists for logins – and files, if granted – only.

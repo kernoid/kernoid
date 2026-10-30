@@ -15,8 +15,9 @@ time the mailbox, the login for single sign-on and the owner of files. Free soft
 > (SMTP, JMAP, IMAP), calendars and contacts (CalDAV, CardDAV, JMAP), files (JMAP, WebDAV, team folders), a web app
 > with administration and a terminal app. For trying out and testing: no external security audit yet, and formats
 > may still change ([changelog](CHANGELOG.md)). Next is 0.2 – public links, LDAP, a Kubernetes operator, the core
-> completed, virus scanning and Jitsi as the first modules; the first stable release, ready for production, is planned
-> for summer 2027. The design is in the [whitepaper](https://github.com/kernoid/whitepaper).
+> completed, virus scanning and Jitsi as the first modules; the first stable release, ready for production, comes with
+> the app for desktop and mobile once falkOSS is incorporated and holds the app stores' developer accounts. The design
+> is in the [whitepaper](https://github.com/kernoid/whitepaper).
 
 **Documentation:** [kernoid.dev](https://kernoid.dev) – built from [`docs/`](docs/). **Website:** [kernoid.org](https://kernoid.org).
 

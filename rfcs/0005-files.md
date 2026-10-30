@@ -2,7 +2,9 @@
 # RFC 0005 – Files
 
 - **Status:** draft, 2026-10-28; implemented: all sections (`kernoid-files`, migration 0032; `kernoid-jmap`;
-  `kernoid-server`'s `webdav`); links (11.3, migrations 0038, 0042 and 0043) since 0.2.
+  `kernoid-server`'s `webdav`); since 0.2: links (11.3, migrations 0038, 0042 and 0043), trash retention and content
+  search (4, 8; migration 0039), uploads in pieces (5), the malware scan (5), `FileNode/copy` (8) and WebDAV `COPY`
+  and `MOVE` between stores (9).
 - **Scope:** how files and directories are stored (sections 1–7), how programs reach them (JMAP: 8, WebDAV: 9, the
   web app: 10), how they are counted (13), shared (11) and kept by the tenant rather than a person (drives, 12).
 
@@ -95,7 +97,8 @@ media type. A part missing or cut off fails to open.
   pieces); joining without reading the pieces again.
 - **Malware:** where the tenant switched on a scanning module (`clamav`, docs: Modules), `parts::put` hands the
   content to the scanner while it stores it – uploads, joined pieces, direct writes, WebDAV – up to the scanner's
-  size; refused content fails the request, and its parts are garbage at once. A file made from an upload is not
+  size; refused content fails the request – HTTP 422 with the malware's name, WebDAV 403 – and its parts are garbage
+  at once. If the scanner cannot be reached, the request fails with 503: nothing is stored unscanned. A file made from an upload is not
   scanned again. **OPEN:** scanning what was stored before the module was switched on, and content larger than the
   scanner takes.
 
@@ -130,7 +133,10 @@ files; mail, calendar and contact methods answer `accountNotSupportedByMethod`, 
 Logging in is as for mail programs (RFC 0002, 11): a kernoid session, or HTTP Basic with a login name and an app
 password – or the password, if the account needs no second factor. Over HTTP the request names the instance, so the
 login name is found as at the login page: an address, or a username or verified contact address where the tenant
-allows them (RFC 0003, 2) – accounts without a native address log in too. **OPEN:** OAuth for programs. Uploads (RFC 8620,
+allows them (RFC 0003, 2) – accounts without a native address log in too. A request without a login is asked for
+HTTP Basic – unless it comes from a page's script (`Sec-Fetch-Mode` other than `navigate`, or the header
+`kernoid-csrf`), which is asked for a session (`Bearer`), so that the browser opens no login box of its own.
+**OPEN:** OAuth for programs. Uploads (RFC 8620,
 6.1) go to an account whose files the caller may add to or write, and may be as large as the larger of
 `mail.max_message_size` and `files.max_file_size`.
 
@@ -194,8 +200,14 @@ the draft means to replace, but what many programs speak today. Logging in is as
 The web app (`web/app`) has a view **Files**: the stores the user reaches on the side (their own, drives, what others
 share), browsing, uploading with progress (a file of the same name gets new content and the old becomes a version),
 downloading, new folders, renaming, the trash, sharing folders with people and groups (at three levels: view; edit;
-edit and share) and a file's versions with restoring. It speaks only JMAP, like the rest of the app, and shows only
-what the rights allow.
+edit and share) and a file's versions with restoring. It also views files in place (text, images, audio, video,
+PDF), searches names and content (`text`, section 8), copies and moves files and folders between stores
+(`FileNode/copy`), uploads files over 16 MiB in pieces (section 5), and makes links (section 11.3) – to view, to view
+and add, or a drop box – which its page `link.html` opens, with an upload with progress for links that add. It
+speaks only JMAP, like the rest of the app, and shows only what the rights allow. Docs: Web app.
+
+The terminal app (`apps/tui`, docs: Terminal app) speaks the same JMAP: browsing, versions, sharing, links, search,
+and copying and moving between stores.
 
 ## 11. Sharing
 

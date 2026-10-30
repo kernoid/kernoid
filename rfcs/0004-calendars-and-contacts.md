@@ -2,7 +2,8 @@
 # RFC 0004 – Calendars and contacts
 
 - **Status:** draft, 2026-10-24; implemented: sections 1–7 (`kernoid-groupware`, migration 0031), 8.1 (`kernoid-dav`),
-  8.2 (`kernoid-jmap`) and 9
+  8.2 (`kernoid-jmap`) and 9; since 0.2: invitations in the sender's language (7, migration 0044), overrides that
+  keep their recurrence id and take the series' duration (8.2)
 - **Scope:** how calendars, events, address books and contacts are stored (sections 1–6), how invitations travel
   (scheduling, section 7), how programs reach them (CalDAV, CardDAV, JMAP: section 8), and how they are shared and
   administered (section 9).
@@ -138,14 +139,18 @@ JMAP (`sendSchedulingMessages`) expect.
   an older version is refused (`If-Schedule-Tag-Match`).
 - **Free/busy:** CalDAV's `free-busy-query` report on one's own calendars, and the scheduling outbox's free/busy
   request for accounts of the same tenant whose calendars the asking account may see free/busy of (section 9).
+- **Language:** the subject and text of an invitation email are in the sender's language – the account's, else its
+  tenant's, else English (RFC 0003, 1; German or English, since 0.2).
 - **OPEN:** answers by link in the email (RSVP over HTTP), the scheduling inbox listing received messages (they are
-  applied at once instead), texts of the invitation email in other languages, alarms by email (`VALARM` with
-  `ACTION:EMAIL`; display alarms are the clients').
+  applied at once instead), alarms by email (`VALARM` with `ACTION:EMAIL`; display alarms are the clients').
 
 ## 8. Access protocols
 
 All protocols log in like mail programs (RFC 0002, 11): an app password, or the account's password if it needs no
-second factor; JMAP also takes a kernoid session.
+second factor; JMAP also takes a kernoid session. The login name is an address, or a username or verified contact
+address where the tenant allows them (RFC 0003, 2). A request without a login is asked for HTTP Basic – unless it
+comes from a page's script (`Sec-Fetch-Mode` other than `navigate`, or the header `kernoid-csrf`), which is asked
+for a session (`Bearer`), so that the browser opens no login box of its own.
 
 ### 8.1 CalDAV and CardDAV
 
@@ -188,7 +193,20 @@ with the same states (one `modseq` per account) and push.
     answers it with the event's properties, its override applied, `recurrenceId`, `baseEventId`, `utcStart` and
     `utcEnd`. Instances are read-only (**OPEN:** changing one instance; for now through the event's
     `recurrenceOverrides`);
+  - an instance an override moved keeps the recurrence id it was moved from, not its new start, so `CalendarEvent/get`
+    shows it with the override's changes;
+  - calcard writes an override as a component with only what it changes, so an override without a duration of its
+    own takes the series' duration when it is stored – otherwise a moved instance would last to the end of its day;
+  - a video meeting (the module `jitsi`, docs: Modules) is a `virtualLocations` entry, iCalendar `CONFERENCE`, which
+    the web app also adds as a line in the description for calendar programs that show no conference. calcard
+    writes `CONFERENCE` without `VALUE=URI` (**OPEN:** report upstream);
   - `shareWith` is null: sharing is changed through the administration API (section 9). **OPEN:** JMAP Sharing.
+
+### 8.3 The web app
+
+The web app (`web/app`, docs: Web app) shows a calendar by month, week or day, and changes or deletes one event of a
+series on its own – an override in the event's `recurrenceOverrides`, an excluded one for deleting (RFC 8984,
+4.3.5). It speaks only JMAP.
 
 ## 9. Sharing and administration
 
@@ -217,5 +235,6 @@ JMAP's `myRights` follow from the level (`mayReadFreeBusy`, `mayReadItems`, `may
 - **Administration API and CLI:** listing an account's calendars and address books, grants, and import and export
   of whole collections as iCalendar (`.ics`) and vCard (`.vcf`) files – `accounts.manage`, like mail (RFC 0002,
   12.3).
-- **OPEN:** the tenant's directory as a read-only address book (JMAP principals, [RFC 9670](https://www.rfc-editor.org/rfc/rfc9670)),
-  free/busy visible to the whole tenant by default, resources (rooms) that accept invitations on their own.
+- **Partly done:** JMAP principals ([RFC 9670](https://www.rfc-editor.org/rfc/rfc9670)) – `Principal/get` and
+  `Principal/query` list the people and groups of the caller's tenant (RFC 0005, 8). **OPEN:** the tenant's
+  directory as a read-only address book, free/busy visible to the whole tenant by default, resources (rooms) that accept invitations on their own.

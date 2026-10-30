@@ -2,7 +2,11 @@
 # RFC 0002 – Mail data model
 
 - **Status:** draft, 2026-10-24; implemented: sections 1–8 (`kernoid-mail`, migration 0023), 9 (`kernoid-smtp`,
-  migration 0024), 10 (migrations 0025 and 0026), 11 (`kernoid-jmap`, `kernoid-imap`, migration 0027), 12 (migration 0028) and 13 (migration 0029)
+  migration 0024), 10 (migrations 0025 and 0026), 11 (`kernoid-jmap`, `kernoid-imap`, migration 0027), 12 (migration 0028) and 13 (migration 0029);
+  the grant on `mailbox_expunged` (6, migration 0033). Since 0.2: sending as a group (10.1, migration 0034), SRS
+  (10.6, migration 0035), DKIM with Ed25519 and changing keys (10.3, migration 0036), the vacation response (9.1,
+  migration 0041), the settings of a mail store (2, 13.2, migrations 0045 and 0047), held submissions (11.1,
+  migration 0046), and the malware check through the hook of the module `clamav` (9.1, `kernoid-clamav`)
 - **Scope:** how mailboxes, emails and threads are stored, how changes are tracked for JMAP and IMAP, where content
   lives, how quotas are counted, how mail from other servers arrives (SMTP, section 9), how mail is sent (section
   10), how mail programs reach it (JMAP, IMAP, POP3: section 11), how mail is shared and administered
@@ -36,6 +40,16 @@ database as well – it would rule out sorting and searching in PostgreSQL.
 
 Every account with the service `mail` (RFC 0003, 4) has one mail store, created when it is first used: `mail_accounts` holds its tenant,
 the **modification sequence** (`modseq`) and the bytes used. The first use also creates the default mailboxes.
+
+The row also holds the store's **settings**, changed by its owner (`GET`/`PUT /v1/account/mail-settings`) – data,
+not events:
+
+- `trash_retention_days`: how long its Trash keeps emails; none means the tenant's days (13.2).
+- `default_from`: the address new emails come from in the web app; it must be one the account may send from (10.1).
+- `undo_send_seconds`: how long the web app holds what it sends so that it can be taken back (0–30, 0 by default;
+  11.1).
+- `mailbox_names`: names the account gives the stores it reaches – its own and shared ones – shown instead of their
+  addresses; each account names them for itself (`PUT /v1/account/mail-settings/mailbox-names/{account}`).
 
 All changes to an account's mail take its `mail_accounts` row (`FOR UPDATE`) first. Changes to one account are thus
 one after another; changes to different accounts do not wait for each other. A delivery to many recipients changes
@@ -130,6 +144,10 @@ stays behind without an email:
 If kernoid stops between 1 and 3, the worker removes the object an hour later. Destroying an email writes the row
 with its object due at once, in the transaction that removes the email. The worker (`collect_garbage`, one process
 at a time) deletes due objects and their rows. Files use the same table (RFC 0005, 5).
+
+A **held submission** (11.1) works the same way: its message (`submissions/<id>`) is named in `blob_garbage` before
+it is written, and the transaction that records the submission takes it back. Taking the submission back or sending
+it marks the object due at once, in the transaction that changes its state.
 
 ## 8. Quotas
 
@@ -247,6 +265,8 @@ process stops.
 - **Bounces:** a recipient that fails for good is reported to the sender as a delivery status notification
   ([RFC 3464](https://www.rfc-editor.org/rfc/rfc3464)) in their inbox. Mail with an empty `MAIL FROM` gets no bounce.
   **OPEN:** warnings for mail still waiting after hours.
+- **Log:** the worker logs every attempt – delivered, deferred, or failed for good and bounced – with the recipient's domain
+  only, never the address.
 - **Routes:** the domain's MX records in order of preference, or the domain itself without them; a null MX
   ([RFC 7505](https://www.rfc-editor.org/rfc/rfc7505)) refuses mail for good. With `[smtp.relay]`, all mail for other
   servers goes to that relay instead, over TLS and with `AUTH` – for operators whose network cannot send on port 25.
@@ -280,6 +300,8 @@ next keys – are part of the DNS check (10.5). **OPEN:** rotating on a schedule
   with DNSSEC and the matching of certificates are taken over from Stalwart
   (`crates/smtp/src/outbound/dane`).
 - The relay is always reached over TLS with a valid certificate.
+- Every TLS connection – outgoing and incoming, SMTP, IMAP and POP3 alike – prefers a post-quantum key exchange
+  (RFC 0006, 2).
 
 ### 10.5 DNS checks
 
@@ -311,30 +333,53 @@ as seen before.
 
 Every protocol logs in the same way as submission (10.1): an app password, or the account's password if it needs
 no second factor; IMAP and submission also take an access token with the scope `mail` (`OAUTHBEARER`, `XOAUTH2`),
-JMAP also takes a kernoid session. **OPEN:** JMAP with kernoid's OpenID Connect tokens. Each protocol sees the account's own mail store and
-the stores shared with it (section 12).
+JMAP also takes a kernoid session. Programs over HTTP (JMAP, and CalDAV, CardDAV and WebDAV, RFC 0004 and 0005) may
+also log in with a username or a verified contact address where the tenant allows them (RFC 0003); IMAP, POP3 and
+submission take addresses only. Without a login, JMAP and DAV answer `401` with a `Basic` challenge, so that
+programs ask for an address and an app password – but a request from a page's script (`Sec-Fetch-Mode` other than
+`navigate`, or the header `kernoid-csrf`) gets a `Bearer` challenge, so that the browser does not open its own login
+box. **OPEN:** JMAP with kernoid's OpenID Connect tokens. Each protocol sees the account's own mail store and the
+stores shared with it (section 12).
 
 ### 11.1 JMAP
 
 [RFC 8620](https://www.rfc-editor.org/rfc/rfc8620) and [RFC 8621](https://www.rfc-editor.org/rfc/rfc8621), at
 `/.well-known/jmap` of every instance host, in `kernoid-jmap` – kernoid's own code on `serde_json`.
 
-- **Capabilities:** core, mail, submission. Methods: `Core/echo`; `Mailbox/get`, `/changes`, `/query`, `/set`;
-  `Email/get`, `/changes`, `/query`, `/set`, `/import`, `/parse`; `Thread/get`, `/changes`; `Identity/get`;
-  `EmailSubmission/set`, `/get`; `SearchSnippet/get`. Result references (`#…`) follow RFC 8620, 3.7.
-- **States** are the account's modification sequence (section 6), one for all types. `*/queryChanges` answers
-  `cannotCalculateChanges`; clients query again.
+- **Capabilities** for mail: core, mail, submission, vacationresponse, websocket, blob
+  ([RFC 9404](https://www.rfc-editor.org/rfc/rfc9404)) and principals ([RFC 9670](https://www.rfc-editor.org/rfc/rfc9670));
+  calendars, contacts and files are in RFC 0004 and 0005. Methods: `Core/echo`; `Mailbox/get`, `/changes`, `/query`,
+  `/queryChanges`, `/set`; `Email/get`, `/changes`, `/query`, `/queryChanges`, `/set`, `/import`, `/parse`;
+  `Thread/get`, `/changes`; `Identity/get`, `/changes`; `EmailSubmission/set`, `/get`; `SearchSnippet/get`;
+  `VacationResponse/get`, `/set`; `Blob/upload`, `/get`, `/lookup`; `Principal/get`, `/query`. Result references
+  (`#…`) follow RFC 8620, 3.7.
+- **States** are the account's modification sequence (section 6), one for all types. `*/queryChanges` and
+  `Identity/changes` answer `cannotCalculateChanges`; clients query or get again.
 - **Queries** filter and sort the account's emails in kernoid; text in messages is found through the index of
   13.1. **OPEN:** moving the whole query into SQL for very large mailboxes.
 - **Blobs:** an email's blob is its raw message; each body part has a blob of its own. Uploads stay a day
   (`jmap_uploads`, in object storage like everything else).
-- **Identities** are the account's addresses, with its display name; they cannot be changed yet (**OPEN**).
-  **EmailSubmission** sends a stored email through the queue with the checks of 10.1.
-- **Push:** an EventSource stream (`/jmap/eventsource`) sends a `StateChange` whenever the account's state moves. Every
-  change to an account's mail notifies PostgreSQL's channel `kernoid_mail` (`NOTIFY`) in its transaction, so that
-  any process serving the stream hears of it – no further service. **OPEN:** WebSocket
-  ([RFC 8887](https://www.rfc-editor.org/rfc/rfc8887)) and push subscriptions to a URL (RFC 8620, 7.2), and
-  `VacationResponse` (vacation is Sieve's, section 9.4, for now).
+- **Identities** are the account's addresses, with its display name, and in the account's own store also the
+  addresses of groups whose members may send as them (`group.send_as_set`, 10.1), with the group's name. They cannot
+  be changed yet (**OPEN**).
+- **EmailSubmission** sends a stored email with the checks of 10.1: to local recipients at once, to everyone else
+  through the queue. Each submission is a row in `email_submissions` with its `send_at` and `undo_status`.
+- **Held submissions** (since 0.2; RFC 8621, 7): a submission with `HOLDFOR` or `HOLDUNTIL`
+  ([RFC 4865](https://www.rfc-editor.org/rfc/rfc4865), `FUTURERELEASE` in `submissionExtensions`) is held for at most
+  60 seconds (`maxDelayedSend`). It is checked at once, its message is kept sealed in object storage
+  (`submissions/<id>`, section 7), and it is `pending` until `send_at` – nothing is delivered or queued. Until then
+  the owner may set `undoStatus` to `canceled`; then it is `canceled` and the message is garbage. The worker sends
+  due submissions (every two seconds, `FOR UPDATE SKIP LOCKED`, so no submission goes out twice) and sets them
+  `final`; one sent at once is `final` from the start. The account's `undo_send_seconds` (0–30, section 2) is the web
+  app's setting: how long it holds what it sends, offering to take it back; JMAP itself allows up to 60 seconds.
+- **Push:** an EventSource stream (`/jmap/eventsource`) sends a `StateChange` whenever the account's state moves; so
+  does JMAP over WebSocket ([RFC 8887](https://www.rfc-editor.org/rfc/rfc8887), `/jmap/ws`, since 0.2), which also
+  carries requests. Every change to an account's mail notifies PostgreSQL's channel `kernoid_mail` (`NOTIFY`) in its
+  transaction, so that any process serving the stream hears of it – no further service. **OPEN:** push
+  subscriptions to a URL (`PushSubscription`, RFC 8620, 7.2).
+- **VacationResponse** (RFC 8621, 8, since 0.2) reads and changes the account's vacation response (9.1).
+- **Original view:** `/jmap/view/{account}/{blob}` serves an HTML email as its sender laid it out, as a page of its
+  own in a sandbox – its styles and embedded images, no scripts, no forms, nothing loaded from elsewhere.
 
 ### 11.2 IMAP
 
@@ -348,7 +393,9 @@ the process role `imap` (part of `all`) when `[imap]` is configured, in `kernoid
   server is kernoid's own, on the mail store.
 - **Extensions:** `IDLE`, `MOVE`, `UIDPLUS`, `CONDSTORE`, `QRESYNC`, `ENABLE`, `NAMESPACE`, `SPECIAL-USE`,
   `LIST-EXTENDED`, `LIST-STATUS`, `ESEARCH`, `SEARCHRES`, `WITHIN`, `BINARY`, `MULTIAPPEND`, `LITERAL+`, `SASL-IR`,
-  `UTF8=ACCEPT`, `ID`, `UNSELECT`, `STATUS=SIZE`, `CHILDREN`.
+  `UTF8=ACCEPT`, `ID`, `UNSELECT`, `STATUS=SIZE`, `CHILDREN`, `ACL` and `RIGHTS=` (12.2), `SORT`, `SORT=DISPLAY`,
+  `THREAD`, `QUOTA` and `QUOTA=RES-STORAGE`. Before login: `AUTH=PLAIN`, `AUTH=OAUTHBEARER` and `AUTH=XOAUTH2` over
+  TLS, `STARTTLS` and `LOGINDISABLED` without.
 - **Mailboxes:** the hierarchy separator is `/`; a mailbox's name is its path in the tree, and the inbox is `INBOX`
   wherever JMAP put it. `CREATE` makes missing parents; `DELETE` removes the emails of the mailbox (an email in no
   other mailbox is destroyed) and refuses a mailbox with children.
@@ -453,10 +500,11 @@ Searching message text uses PostgreSQL's full-text search – no further service
 ### 13.2 Retention
 
 A tenant may have emails in its accounts' Trash and Junk removed after some days (`tenant.mail_retention_set`, per
-role; none by default). The days count from when an email entered the mailbox (`email_mailboxes.added_at`). The
-worker (`apply_retention`, one process at a time) removes such emails from the mailbox; an email in no other mailbox
-is destroyed. **OPEN:** retention for other mailboxes and per account, and holding mail against removal (legal
-hold).
+role; none by default). Since 0.2 an account may set its own days for its Trash (`trash_retention_days`, section
+2); they go before the tenant's. The days count from when an email entered the mailbox (`email_mailboxes.added_at`).
+The worker (`apply_retention`, one process at a time) removes such emails from the mailbox; an email in no other
+mailbox is destroyed. **OPEN:** retention for other mailboxes, per account for Junk, and holding mail against removal
+(legal hold).
 
 ### 13.3 Import and export
 
