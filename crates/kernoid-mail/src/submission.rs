@@ -6,6 +6,8 @@
 
 use bytes::Bytes;
 use chrono::Duration;
+use kernoid_store::garbage;
+use sqlx::PgConnection;
 use uuid::Uuid;
 
 use crate::{Delivered, Delivery, Mail, MailError, Outgoing, Recipient, Result};
@@ -79,14 +81,25 @@ impl Mail {
         Ok(())
     }
 
-    /// Keeps a submission's message until it is sent or taken back.
+    /// Keeps a submission's message until it is sent or taken back. [`Mail::keep_held`] takes it into the transaction
+    /// that records the submission; without that it is garbage within the hour (RFC 0002, 7).
     pub async fn hold(&self, account: Uuid, submission: Uuid, raw: Bytes) -> Result<()> {
         let tenant = self.account_tenant(account).await?;
-        Ok(self.blobs.put(tenant, &held_key(submission), raw).await?)
+        let key = held_key(submission);
+        garbage::pending(&self.pool, tenant, &key).await?;
+        Ok(self.blobs.put(tenant, &key, raw).await?)
+    }
+
+    /// Takes a held message into the transaction that records its submission; `false` if that came too late.
+    pub async fn keep_held(&self, tx: &mut PgConnection, account: Uuid, submission: Uuid) -> Result<bool> {
+        let tenant = self.account_tenant(account).await?;
+        Ok(garbage::keep(tx, tenant, &held_key(submission)).await?)
     }
 
     /// Takes back a held submission that is not due yet; whether it was.
     pub async fn cancel_held(&self, account: Uuid, submission: Uuid) -> Result<bool> {
+        let tenant = self.account_tenant(account).await?;
+        let mut tx = self.pool.begin().await?;
         let canceled = sqlx::query_scalar!(
             "UPDATE email_submissions SET undo_status = 'canceled'
              WHERE id = $1 AND account_id = $2 AND undo_status = 'pending' AND send_at > now()
@@ -94,15 +107,13 @@ impl Mail {
             submission,
             account,
         )
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut *tx)
         .await?
         .is_some();
         if canceled {
-            let tenant = self.account_tenant(account).await?;
-            if let Err(error) = self.blobs.delete(tenant, &held_key(submission)).await {
-                tracing::warn!(%error, %submission, "removing a held message taken back");
-            }
+            garbage::mark_now(&mut tx, tenant, &held_key(submission)).await?;
         }
+        tx.commit().await?;
         Ok(canceled)
     }
 
@@ -143,10 +154,8 @@ impl Mail {
             sqlx::query!("UPDATE email_submissions SET undo_status = 'final' WHERE id = $1", row.id)
                 .execute(&mut *tx)
                 .await?;
+            garbage::mark_now(&mut tx, tenant, &key).await?;
             tx.commit().await?;
-            if let Err(error) = self.blobs.delete(tenant, &key).await {
-                tracing::warn!(%error, submission = %row.id, "removing a sent held message");
-            }
             released += 1;
         }
         Ok(released)

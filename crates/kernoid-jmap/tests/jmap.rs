@@ -394,6 +394,14 @@ async fn held_submissions_wait_and_may_be_taken_back(pool: PgPool) {
     assert_eq!(first["undoStatus"], "pending", "{first}");
     assert_eq!(in_bobs_inbox().await, 0);
     assert!(sqlx::query_scalar!("SELECT address FROM outbound_recipients").fetch_all(&pool).await.unwrap().is_empty());
+    // The held message belongs to its submission: nothing marks it as left behind.
+    let marks = || async {
+        sqlx::query_scalar!(r#"SELECT count(*) AS "n!" FROM blob_garbage WHERE key LIKE 'submissions/%'"#)
+            .fetch_one(&pool)
+            .await
+            .unwrap()
+    };
+    assert_eq!(marks().await, 0);
 
     // Taken back: canceled, and never sent – once due either.
     let (_, canceled) = setup
@@ -410,6 +418,8 @@ async fn held_submissions_wait_and_may_be_taken_back(pool: PgPool) {
     assert_eq!(in_bobs_inbox().await, 1);
     let queued = sqlx::query_scalar!("SELECT address FROM outbound_recipients").fetch_all(&pool).await.unwrap();
     assert_eq!(queued, ["carol@remote.example"]);
+    // What was taken back and what was sent are garbage now.
+    assert_eq!(marks().await, 2);
 
     // Once sent, it cannot be taken back.
     let (_, late) = setup

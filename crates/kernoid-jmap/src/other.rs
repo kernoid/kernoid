@@ -325,6 +325,11 @@ impl Context<'_> {
         }
         let send_at = chrono::Utc::now() + chrono::Duration::seconds(hold.unwrap_or(0));
         let undo_status = if hold.is_some() { "pending" } else { "final" };
+        let mut tx = mail.pool().begin().await.map_err(|error| set_error(&MailError::Store(error)))?;
+        // A held message counts as left behind until the submission that needs it is recorded (RFC 0002, 7).
+        if hold.is_some() && !mail.keep_held(&mut tx, account, id).await.map_err(|error| set_error(&error))? {
+            return Err(set_error(&MailError::Invalid("holding the email took too long".into())));
+        }
         sqlx::query!(
             "INSERT INTO email_submissions (id, account_id, email_id, identity_id, envelope_from, recipients, send_at,
                                             undo_status)
@@ -338,9 +343,10 @@ impl Context<'_> {
             send_at,
             undo_status,
         )
-        .execute(mail.pool())
+        .execute(&mut *tx)
         .await
         .map_err(|error| set_error(&MailError::Store(error)))?;
+        tx.commit().await.map_err(|error| set_error(&MailError::Store(error)))?;
         Ok((id, email, send_at, undo_status))
     }
 
