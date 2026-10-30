@@ -39,7 +39,8 @@ async fn a_file_up_down_changed_and_seen_by_push() {
     let path = dir.join("hello.txt");
     tokio::fs::write(&path, "hello, kernoid").await.unwrap();
     files::upload_file(&client, &account, None, &path, None, |_, _| {}).await.unwrap();
-    let node = files::children(&client, &account, None).await.unwrap().into_iter().find(|n| n.name == "hello.txt").unwrap();
+    let node =
+        files::children(&client, &account, None).await.unwrap().into_iter().find(|n| n.name == "hello.txt").unwrap();
     let mut out = Vec::new();
     let size = client
         .download(&account, node.blob_id.as_deref().unwrap(), "hello.txt", "text/plain", &mut out, &mut |_, _| {})
