@@ -711,3 +711,60 @@ async fn the_language_of_kernoids_emails(pool: PgPool) {
     assert_eq!(alice.graphql("{ tenantLanguage }").await["data"]["tenantLanguage"], Value::Null);
     assert_eq!(bob.get("/v1/account/language").await.1["used"], "en");
 }
+
+#[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
+async fn accounts_set_pictures_the_tenant_sees(pool: PgPool) {
+    let s = setup(&pool).await;
+    let alice = login(&s.app, "alice@firma.de").await;
+    let bob = login(&s.app, "bob@firma.de").await;
+    let dave = login(&s.app, "dave@other.de").await;
+    let picture = |token: &str, body: Vec<u8>| {
+        let request = Request::builder()
+            .method("PUT")
+            .uri("/v1/account/avatar")
+            .header("host", HOST)
+            .header(header::AUTHORIZATION, format!("Bearer {token}"))
+            .header("content-type", "image/png")
+            .body(Body::from(body))
+            .unwrap();
+        let app = s.app.clone();
+        async move { app.oneshot(request).await.unwrap().status() }
+    };
+    let png = [b"\x89PNG\r\n\x1a\n".as_slice(), &[0u8; 64]].concat();
+
+    // Only PNG, JPEG or WebP – never SVG, which could run script –, and not too large.
+    assert_eq!(picture(&alice, b"<svg xmlns='http://www.w3.org/2000/svg'/>".to_vec()).await, StatusCode::BAD_REQUEST);
+    assert_eq!(picture(&alice, [png.clone(), vec![0; 1024 * 1024]].concat()).await, StatusCode::PAYLOAD_TOO_LARGE);
+    assert_eq!(picture(&alice, png.clone()).await, StatusCode::NO_CONTENT);
+
+    // Bob, in the same tenant, finds it by Alice's address and loads it; Dave, in another tenant, does not.
+    let (status, list) = Call::new(&s.app, &bob).get("/v1/avatars").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(list[0]["account"], s.alice.to_string());
+    assert_eq!(list[0]["addresses"], json!(["alice@firma.de"]));
+    let version = list[0]["version"].as_str().unwrap().to_owned();
+    let load = |token: &str| {
+        let request = Request::builder()
+            .uri(format!("/v1/avatars/{}?v={version}", s.alice))
+            .header("host", HOST)
+            .header(header::AUTHORIZATION, format!("Bearer {token}"))
+            .body(Body::empty())
+            .unwrap();
+        let app = s.app.clone();
+        async move { app.oneshot(request).await.unwrap() }
+    };
+    let response = load(&bob).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()[header::CONTENT_TYPE], "image/png");
+    assert_eq!(response.headers()[header::X_CONTENT_TYPE_OPTIONS], "nosniff");
+    assert_eq!(response.into_body().collect().await.unwrap().to_bytes(), png);
+    assert_eq!(load(&dave).await.status(), StatusCode::NOT_FOUND);
+    assert_eq!(Call::new(&s.app, &dave).get("/v1/avatars").await.1, json!([]));
+
+    // A new picture is a new version; removing it brings the initials back.
+    assert_eq!(picture(&alice, png.clone()).await, StatusCode::NO_CONTENT);
+    let (_, list) = Call::new(&s.app, &bob).get("/v1/avatars").await;
+    assert_ne!(list[0]["version"], version);
+    assert_eq!(Call::new(&s.app, &alice).status("DELETE", "/v1/account/avatar", None).await, 204);
+    assert_eq!(Call::new(&s.app, &bob).get("/v1/avatars").await.1, json!([]));
+}

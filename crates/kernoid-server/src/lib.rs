@@ -8,6 +8,7 @@ pub mod acme;
 pub mod admin;
 mod app_passwords;
 mod autoconfig;
+mod avatars;
 pub mod certificate_files;
 mod consents;
 mod cookie;
@@ -24,6 +25,7 @@ mod jmap;
 mod jmap_ws;
 mod login_ui;
 mod mail_admin;
+mod mail_settings;
 pub mod metrics;
 mod mfa;
 mod module_sessions;
@@ -202,6 +204,10 @@ fn rest() -> OpenApiRouter<AppState> {
         .routes(routes!(sessions::change_password))
         .routes(routes!(sessions::change_profile))
         .routes(routes!(sessions::language, sessions::set_language))
+        .routes(routes!(avatars::set, avatars::remove))
+        .routes(routes!(avatars::list))
+        .routes(routes!(avatars::get))
+        .routes(routes!(mail_settings::get, mail_settings::set))
         .routes(routes!(consents::own))
         .routes(routes!(consents::revoke_own))
         .routes(routes!(admin::tenant::get, admin::tenant::rename))

@@ -41,7 +41,7 @@ pub(crate) struct MailOverview {
     pub mailboxes: Vec<MailboxInfo>,
 }
 
-fn mail(state: &AppState) -> Result<&Mail> {
+pub(crate) fn mail(state: &AppState) -> Result<&Mail> {
     state.jmap.as_ref().map(kernoid_jmap::Jmap::mail).ok_or(MailAdminError::NoMail)
 }
 

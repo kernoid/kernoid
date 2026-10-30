@@ -93,6 +93,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/account/avatar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Sets one's own picture: the body is the image, PNG, JPEG or WebP, up to 1 MiB. */
+        put: operations["put_v1_account_avatar"];
+        post?: never;
+        /** Removes one's own picture; the initials show again. */
+        delete: operations["delete_v1_account_avatar"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/account/collections": {
         parameters: {
             query?: never;
@@ -243,6 +261,22 @@ export interface paths {
         get: operations["get_v1_account_language"];
         /** Chooses that language; null follows the tenant's. */
         put: operations["put_v1_account_language"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/mail-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_v1_account_mail_settings"];
+        put: operations["put_v1_account_mail_settings"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1157,6 +1191,40 @@ export interface paths {
          *     URL that tells the application.
          */
         post: operations["post_v1_auth_requests_id_decline"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/avatars": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The pictures of the caller's tenant – which accounts have one, and their addresses. */
+        get: operations["get_v1_avatars"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/avatars/{account}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The picture of an account of the caller's tenant. */
+        get: operations["get_v1_avatars_account"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2919,6 +2987,13 @@ export interface components {
             /** @description The tenant that gave it: the project's own, or one it is granted to. */
             tenant: string;
         };
+        AvatarView: {
+            account: string;
+            /** @description The account's addresses, to find the picture of someone who wrote an email. */
+            addresses: string[];
+            /** @description Changes with every new picture: `GET /v1/avatars/{account}?v=<version>` may be cached for good. */
+            version: string;
+        };
         ChallengeView: {
             /** @description Send it back with the answer. */
             challenge_id: string;
@@ -3298,6 +3373,29 @@ export interface components {
             shared: boolean;
             /** Format: int64 */
             used_bytes: number;
+        };
+        MailSettingsChange: {
+            /** @description An address the account may send from; null is its primary address. */
+            default_from?: string | null;
+            /**
+             * Format: int32
+             * @description 1 to 3650; null follows the tenant.
+             */
+            trash_retention_days?: number | null;
+        };
+        MailSettingsView: {
+            /** @description The address new emails come from; null is the account's primary address. */
+            default_from?: string | null;
+            /**
+             * Format: int32
+             * @description The tenant's days; null keeps emails in the Trash until they are deleted.
+             */
+            tenant_trash_retention_days?: number | null;
+            /**
+             * Format: int32
+             * @description Days the Trash keeps an email; null follows the tenant.
+             */
+            trash_retention_days?: number | null;
         };
         MailboxView: {
             id: string;
@@ -4018,6 +4116,80 @@ export interface operations {
             };
         };
     };
+    put_v1_account_avatar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "image/*": number[];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description not a PNG, JPEG or WebP image */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description no valid session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description larger than 1 MiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    delete_v1_account_avatar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description no valid session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     get_v1_account_collections: {
         parameters: {
             query?: never;
@@ -4459,6 +4631,91 @@ export interface operations {
             };
             /** @description no valid session */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_v1_account_mail_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailSettingsView"];
+                };
+            };
+            /** @description no valid session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description the account has no mail */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    put_v1_account_mail_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MailSettingsChange"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description days out of range, or an address the account may not send from */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description no valid session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description the account has no mail */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6677,6 +6934,72 @@ export interface operations {
                 };
             };
             /** @description unknown, expired or already finished */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_v1_avatars: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AvatarView"][];
+                };
+            };
+            /** @description no valid session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_v1_avatars_account: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                account: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the picture (PNG, JPEG or WebP) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description no valid session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description no picture */
             404: {
                 headers: {
                     [name: string]: unknown;

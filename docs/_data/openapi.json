@@ -189,6 +189,83 @@
         }
       }
     },
+    "/v1/account/avatar": {
+      "put": {
+        "tags": [
+          "account"
+        ],
+        "summary": "Sets one's own picture: the body is the image, PNG, JPEG or WebP, up to 1 MiB.",
+        "operationId": "put_v1_account_avatar",
+        "requestBody": {
+          "content": {
+            "image/*": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "int32",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "description": "not a PNG, JPEG or WebP image",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "no valid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "larger than 1 MiB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "account"
+        ],
+        "summary": "Removes one's own picture; the initials show again.",
+        "operationId": "delete_v1_account_avatar",
+        "responses": {
+          "204": {},
+          "401": {
+            "description": "no valid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/account/collections": {
       "get": {
         "tags": [
@@ -731,6 +808,94 @@
           },
           "401": {
             "description": "no valid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/account/mail-settings": {
+      "get": {
+        "tags": [
+          "account"
+        ],
+        "operationId": "get_v1_account_mail_settings",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailSettingsView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "no valid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "the account has no mail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "account"
+        ],
+        "operationId": "put_v1_account_mail_settings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MailSettingsChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "description": "days out of range, or an address the account may not send from",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "no valid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "the account has no mail",
             "content": {
               "application/json": {
                 "schema": {
@@ -4197,6 +4362,83 @@
           },
           "404": {
             "description": "unknown, expired or already finished",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/avatars": {
+      "get": {
+        "tags": [
+          "account"
+        ],
+        "summary": "The pictures of the caller's tenant – which accounts have one, and their addresses.",
+        "operationId": "get_v1_avatars",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AvatarView"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "no valid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/avatars/{account}": {
+      "get": {
+        "tags": [
+          "account"
+        ],
+        "summary": "The picture of an account of the caller's tenant.",
+        "operationId": "get_v1_avatars_account",
+        "parameters": [
+          {
+            "name": "account",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "the picture (PNG, JPEG or WebP)"
+          },
+          "401": {
+            "description": "no valid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "no picture",
             "content": {
               "application/json": {
                 "schema": {
@@ -9898,6 +10140,30 @@
           }
         }
       },
+      "AvatarView": {
+        "type": "object",
+        "required": [
+          "account",
+          "version",
+          "addresses"
+        ],
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "addresses": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The account's addresses, to find the picture of someone who wrote an email."
+          },
+          "version": {
+            "type": "string",
+            "description": "Changes with every new picture: `GET /v1/avatars/{account}?v=<version>` may be cached for good."
+          }
+        }
+      },
       "ChallengeView": {
         "type": "object",
         "required": [
@@ -11063,6 +11329,54 @@
             "type": "integer",
             "format": "int64",
             "minimum": 0
+          }
+        }
+      },
+      "MailSettingsChange": {
+        "type": "object",
+        "properties": {
+          "default_from": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "An address the account may send from; null is its primary address."
+          },
+          "trash_retention_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "1 to 3650; null follows the tenant."
+          }
+        }
+      },
+      "MailSettingsView": {
+        "type": "object",
+        "properties": {
+          "default_from": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The address new emails come from; null is the account's primary address."
+          },
+          "tenant_trash_retention_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "The tenant's days; null keeps emails in the Trash until they are deleted."
+          },
+          "trash_retention_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Days the Trash keeps an email; null follows the tenant."
           }
         }
       },

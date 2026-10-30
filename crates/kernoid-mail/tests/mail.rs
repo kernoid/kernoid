@@ -594,3 +594,44 @@ async fn the_vacation_response_answers_while_it_is_on(pool: PgPool) {
     let backwards = kernoid_mail::VacationResponse { to_date: Some(now - chrono::Duration::days(1)), ..vacation };
     assert!(matches!(mail.set_vacation_response(alice, &backwards).await, Err(MailError::Invalid(_))));
 }
+
+#[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
+async fn an_account_keeps_its_trash_as_long_as_it_chooses_and_sends_from_its_address(pool: PgPool) {
+    let setup = setup(pool.clone(), Limits::default()).await;
+    let alice = setup.account("alice").await;
+    let mail = &setup.mail;
+    mail.ensure_account(alice).await.unwrap();
+    let trash = mail.mailbox_with_role(alice, Role::Trash).await.unwrap();
+    let into = |mailbox| NewEmail { mailbox_ids: vec![mailbox], ..NewEmail::default() };
+    let old = mail.import_email(alice, message("Old", "b@x", None, "Gone soon"), into(trash)).await.unwrap();
+    sqlx::query!("UPDATE email_mailboxes SET added_at = now() - interval '10 days' WHERE email_id = $1", old.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query!("UPDATE tenants SET trash_retention_days = 30 WHERE id = $1", setup.tenant)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    // The tenant's 30 days: kept.
+    let settings = mail.settings(alice).await.unwrap();
+    assert_eq!((settings.trash_retention_days, settings.tenant_trash_retention_days), (None, Some(30)));
+    assert_eq!(mail.apply_retention(100).await.unwrap(), 0);
+    // The account's own 7 days: gone.
+    mail.set_settings(alice, Some(7), None).await.unwrap();
+    assert_eq!(mail.apply_retention(100).await.unwrap(), 1);
+    assert!(matches!(mail.email(alice, old.id).await, Err(MailError::NotFound(_))));
+    assert!(matches!(mail.set_settings(alice, Some(0), None).await, Err(MailError::Invalid(_))));
+
+    // Sending from: only an address the account may send from.
+    let (_, own) = mail.account_addresses(alice).await.unwrap();
+    let address = own[0].to_uppercase();
+    mail.set_settings(alice, None, Some(&address)).await.unwrap();
+    assert_eq!(mail.settings(alice).await.unwrap().default_from, Some(own[0].to_lowercase()));
+    assert!(matches!(mail.set_settings(alice, None, Some("ceo@elsewhere.example")).await, Err(MailError::Invalid(_))));
+    mail.set_settings(alice, None, None).await.unwrap();
+    assert_eq!(
+        mail.settings(alice).await.unwrap(),
+        kernoid_mail::MailSettings { tenant_trash_retention_days: Some(30), ..Default::default() }
+    );
+}

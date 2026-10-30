@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Full-text search (RFC 0002, 13.1) – the words of each email's text in `emails.body_search`, indexed at import and
-//! by the worker for older emails – and retention (13.2): Trash and Junk emptied after a tenant's days.
+//! by the worker for older emails – and retention (13.2): Trash and Junk emptied after a tenant's days (the Trash after
+//! the account's own days where it chose some).
 
 use std::collections::{BTreeSet, HashSet};
 
@@ -62,7 +63,9 @@ impl Mail {
                JOIN mailboxes m ON m.id = em.mailbox_id
                JOIN accounts a ON a.id = m.account_id
                JOIN tenants t ON t.id = a.tenant_id
-               WHERE (m.role = 'trash' AND em.added_at < now() - make_interval(days => t.trash_retention_days))
+               JOIN mail_accounts ma ON ma.account_id = m.account_id
+               WHERE (m.role = 'trash'
+                      AND em.added_at < now() - make_interval(days => COALESCE(ma.trash_retention_days, t.trash_retention_days)))
                   OR (m.role = 'junk' AND em.added_at < now() - make_interval(days => t.junk_retention_days))
                ORDER BY m.account_id, em.mailbox_id
                LIMIT $1"#,

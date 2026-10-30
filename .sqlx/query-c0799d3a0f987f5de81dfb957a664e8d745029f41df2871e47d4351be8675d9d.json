@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE email_mailboxes SET added_at = now() - interval '10 days' WHERE email_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c0799d3a0f987f5de81dfb957a664e8d745029f41df2871e47d4351be8675d9d"
+}
