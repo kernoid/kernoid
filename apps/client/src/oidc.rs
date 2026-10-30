@@ -11,7 +11,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
@@ -30,6 +30,7 @@ pub struct Login {
     pub url: String,
     issuer: String,
     token_endpoint: String,
+    revocation_endpoint: Option<String>,
     client_id: String,
     redirect_uri: String,
     verifier: String,
@@ -46,6 +47,46 @@ pub struct Tokens {
     /// For the token endpoint and client id that renew them.
     pub token_endpoint: String,
     pub client_id: String,
+    /// Where [`revoke`] ends the login (RFC 7009), if the server has one.
+    pub revocation_endpoint: Option<String>,
+}
+
+/// What an app keeps of a login to resume it after a restart – in the system's key store, as it is a credential:
+/// the refresh token and where it is used, never the access token. kernoid rotates refresh tokens, so it is kept
+/// again after every [`refresh`]; presenting one used before ends the login (OAuth 2.0 Security BCP, 4.14).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Saved {
+    pub refresh_token: String,
+    pub token_endpoint: String,
+    pub client_id: String,
+    #[serde(default)]
+    pub revocation_endpoint: Option<String>,
+}
+
+impl Tokens {
+    /// What to keep of these tokens; none without a refresh token.
+    pub fn saved(&self) -> Option<Saved> {
+        Some(Saved {
+            refresh_token: self.refresh_token.clone()?,
+            token_endpoint: self.token_endpoint.clone(),
+            client_id: self.client_id.clone(),
+            revocation_endpoint: self.revocation_endpoint.clone(),
+        })
+    }
+}
+
+impl Saved {
+    /// Tokens to renew: the access token is empty until [`refresh`] gives one.
+    pub fn tokens(&self) -> Tokens {
+        Tokens {
+            access_token: String::new(),
+            refresh_token: Some(self.refresh_token.clone()),
+            expires_at: 0,
+            token_endpoint: self.token_endpoint.clone(),
+            client_id: self.client_id.clone(),
+            revocation_endpoint: self.revocation_endpoint.clone(),
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -53,6 +94,8 @@ struct Discovery {
     issuer: String,
     authorization_endpoint: String,
     token_endpoint: String,
+    #[serde(default)]
+    revocation_endpoint: Option<String>,
     #[serde(default)]
     kernoid_apps_client_id: Option<String>,
 }
@@ -118,6 +161,7 @@ pub async fn begin(server: &str, redirect_uri: &str, login_hint: Option<&str>, o
     };
     let (authorization_endpoint, token_endpoint) =
         (here(&discovery.authorization_endpoint)?, here(&discovery.token_endpoint)?);
+    let revocation_endpoint = discovery.revocation_endpoint.as_deref().map(here).transpose()?;
     let verifier = random(32)?;
     let state = random(16)?;
     let challenge = URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()));
@@ -140,6 +184,7 @@ pub async fn begin(server: &str, redirect_uri: &str, login_hint: Option<&str>, o
         url: url.into(),
         issuer: discovery.issuer,
         token_endpoint,
+        revocation_endpoint,
         client_id,
         redirect_uri: redirect_uri.to_owned(),
         verifier,
@@ -172,7 +217,7 @@ pub async fn finish(login: &Login, callback: &str, options: &Options) -> Result<
         ("code_verifier", login.verifier.as_str()),
         ("client_id", login.client_id.as_str()),
     ];
-    tokens(&login.token_endpoint, &login.client_id, &form, options).await
+    tokens(&login.token_endpoint, &login.client_id, login.revocation_endpoint.as_deref(), &form, options).await
 }
 
 /// New tokens for a refresh token; the one used is used up (kernoid rotates them).
@@ -181,7 +226,9 @@ pub async fn refresh(tokens: &Tokens, options: &Options) -> Result<Tokens> {
         tokens.refresh_token.as_deref().ok_or_else(|| Error::Protocol("the login has no refresh token".into()))?;
     let form =
         [("grant_type", "refresh_token"), ("refresh_token", refresh_token), ("client_id", tokens.client_id.as_str())];
-    let mut new = self::tokens(&tokens.token_endpoint, &tokens.client_id, &form, options).await?;
+    let mut new =
+        self::tokens(&tokens.token_endpoint, &tokens.client_id, tokens.revocation_endpoint.as_deref(), &form, options)
+            .await?;
     // A server may keep the refresh token as it is.
     if new.refresh_token.is_none() {
         new.refresh_token = tokens.refresh_token.clone();
@@ -189,7 +236,13 @@ pub async fn refresh(tokens: &Tokens, options: &Options) -> Result<Tokens> {
     Ok(new)
 }
 
-async fn tokens(endpoint: &str, client_id: &str, form: &[(&str, &str)], options: &Options) -> Result<Tokens> {
+async fn tokens(
+    endpoint: &str,
+    client_id: &str,
+    revocation_endpoint: Option<&str>,
+    form: &[(&str, &str)],
+    options: &Options,
+) -> Result<Tokens> {
     let (origin, _) = split_origin(endpoint).ok_or_else(|| Error::Protocol(format!("not a URL: {endpoint}")))?;
     let body = url::form_urlencoded::Serializer::new(String::new()).extend_pairs(form).finish();
     let response = http(origin, options)?
@@ -216,7 +269,30 @@ async fn tokens(endpoint: &str, client_id: &str, form: &[(&str, &str)], options:
         expires_at: now + answer.expires_in,
         token_endpoint: endpoint.to_owned(),
         client_id: client_id.to_owned(),
+        revocation_endpoint: revocation_endpoint.map(str::to_owned),
     })
+}
+
+/// Ends a login: revokes the refresh token – and with it its access tokens – at the server (RFC 7009). A login the
+/// server no longer knows counts as ended.
+pub async fn revoke(tokens: &Tokens, options: &Options) -> Result<()> {
+    let (Some(endpoint), Some(refresh_token)) = (&tokens.revocation_endpoint, &tokens.refresh_token) else {
+        return Ok(());
+    };
+    let (origin, _) = split_origin(endpoint).ok_or_else(|| Error::Protocol(format!("not a URL: {endpoint}")))?;
+    let form =
+        [("token", refresh_token.as_str()), ("token_type_hint", "refresh_token"), ("client_id", &tokens.client_id)];
+    let body = url::form_urlencoded::Serializer::new(String::new()).extend_pairs(form).finish();
+    let response = http(origin, options)?
+        .post(endpoint)
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(body)
+        .send()
+        .await?;
+    match response.status().as_u16() {
+        200 => Ok(()),
+        status => Err(Error::Status(status, None)),
+    }
 }
 
 #[cfg(test)]

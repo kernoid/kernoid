@@ -137,7 +137,25 @@ async fn an_app_logs_in_with_openid_connect() {
     assert_ne!(renewed.access_token, tokens.access_token);
     client.set_access_token(&renewed.access_token);
     mail::mailboxes(&client, &account).await.unwrap();
-    // The refresh token used is used up.
+    // Kept and resumed, as after a restart; revoked, the login is over.
+    let saved = renewed.saved().unwrap();
+    let text = serde_json::to_string(&saved).unwrap();
+    assert!(!text.contains(&renewed.access_token), "the access token is never kept");
+    let resumed = kernoid_client::oidc::refresh(
+        &serde_json::from_str::<kernoid_client::oidc::Saved>(&text).unwrap().tokens(),
+        &options,
+    )
+    .await
+    .unwrap();
+    client.set_access_token(&resumed.access_token);
+    mail::mailboxes(&client, &account).await.unwrap();
+    kernoid_client::oidc::revoke(&resumed, &options).await.unwrap();
+    assert!(matches!(
+        kernoid_client::oidc::refresh(&resumed, &options).await,
+        Err(kernoid_client::Error::Unauthorized)
+    ));
+    assert!(mail::mailboxes(&client, &account).await.is_err(), "its access token ends with it");
+    // A refresh token used before is used up (and presenting it again would end the login, were it still on).
     assert!(matches!(kernoid_client::oidc::refresh(&tokens, &options).await, Err(kernoid_client::Error::Unauthorized)));
     // A callback for another request is refused.
     let other = kernoid_client::oidc::begin(&server, "http://127.0.0.1:47613/oauth", None, &options).await.unwrap();
