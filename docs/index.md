@@ -44,5 +44,12 @@ The design decisions are written down as RFCs in the repository – [RFC 0001: d
 model](https://github.com/kernoid/kernoid/blob/main/rfcs/0001-data-and-event-model.md). The reasons behind kernoid –
 why one core, why free software – are in the [whitepaper](https://github.com/kernoid/whitepaper).
 
+## The name
+
+*Kern* is German for core, and *kerno* is Esperanto for core. Both are in the wordmark `kern0id`: read the 0 as
+an o and it says **kerno.id**, leave it out and it says **kern.id** – the core, with identity. kernoid joins the two:
+*kerno* and *id*. As an aside, it also nods to mathematics: the kernel of a map, and *-oid* as in monoid – kernel and
+monoid make kernoid.
+
 kernoid is a project of falkOSS – Falcon Lake Open Source Software gUG (haftungsbeschränkt) i. G. Source code:
 [kernoid/kernoid](https://github.com/kernoid/kernoid) (AGPL-3.0-or-later).
