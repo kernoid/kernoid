@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Settings from `~/.config/kernoid/tui.toml` (or `$XDG_CONFIG_HOME`, or `KERNOID_TUI_CONFIG`) and the command
 //! line, and the password: from `KERNOID_PASSWORD`, from a command (a password manager or the system keychain), or
 //! asked for – never from an argument; likewise the recovery code of the account's key (`KERNOID_RECOVERY_CODE`).

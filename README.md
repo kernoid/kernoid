@@ -41,7 +41,10 @@ time the mailbox, the login for single sign-on and the owner of files. Free soft
 | `crates/kernoid-module` | the interface for modules – connections to one particular outside service, off unless switched on |
 | `crates/kernoid-server` | the HTTP server: REST (OpenAPI at `/openapi.json`), GraphQL (`/graphql`), sessions (`/v1/sessions`), the administration API (tenants, accounts, groups, roles, projects, applications, the instance), SCIM 2.0 at `/scim/v2`, health checks, problem details, TLS or reverse proxy |
 | `web/` | the TypeScript SDK (`@kernoid/sdk`), the login UI served at `/login` and the web app at `/app` (mail, calendar, contacts, files, account, administration) – MIT, like every first-party app |
-| `apps/tui` | the terminal app `kernoid-tui` – mail, files, calendars and contacts over JMAP; MIT, a Cargo workspace of its own |
+| `apps/client` | kernoid's Rust SDK `kernoid-client` – JMAP for mail, files, calendars and contacts, push, end-to-end encryption; MIT, a Cargo workspace of its own, for kernoid's apps and anyone else's |
+| `apps/sync` | `kernoid-sync` – a folder kept in step with a file store (changes, transfers, conflicts, local state in SQLite); MIT, part of the Rust SDK |
+| `apps/e2e` | `kernoid-e2e`, the end-to-end encryption of the apps (RFC 0006) – MIT, also built as WebAssembly for the web app |
+| `apps/tui` | the terminal app `kernoid-tui` – mail, files, calendars and contacts, on the Rust SDK; AGPL, a Cargo workspace of its own |
 | `docs/` | the documentation site (GitHub Pages, Jekyll); `docs/_data/openapi.json` and `docs/api/schema.graphql` are generated |
 | `rfcs/` | design decisions open for discussion, starting with [the data and event model](rfcs/0001-data-and-event-model.md) and [the mail data model](rfcs/0002-mail-data-model.md) |
 | `deploy/compose` | Docker Compose: kernoid, PostgreSQL, [Garage](https://garagehq.deuxfleurs.fr) as object storage |
@@ -110,7 +113,8 @@ agreement. Security problems: [SECURITY.md](SECURITY.md).
 ## Licence
 
 - kernoid's own code: [GNU AGPL-3.0-or-later](LICENSE).
-- The SDK, the login UI and the web app in `web/`, the terminal app in `apps/tui/`: [MIT](LICENSES/MIT.txt).
+- The SDK, the login UI and the web app in `web/`, the Rust SDK in `apps/client/` and the end-to-end library in
+  `apps/e2e/`: [MIT](LICENSES/MIT.txt). The terminal app in `apps/tui/` is AGPL-3.0-or-later like the server.
 - The RFCs in `rfcs/` and the documentation's text in `docs/`: [CC BY 4.0](LICENSES/CC-BY-4.0.txt); the API
   descriptions (`docs/_data/openapi.json`, `docs/api/`) [MIT](LICENSES/MIT.txt), so that clients may be generated from
   them.

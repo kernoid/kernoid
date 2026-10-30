@@ -4,9 +4,14 @@
 //! and read by hickory-proto; no own DNS parsing.
 
 use std::{
-    io::{Read, Write},
-    net::{IpAddr, SocketAddr, TcpStream, UdpSocket},
+    net::{IpAddr, SocketAddr},
     time::Duration,
+};
+
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::{TcpStream, UdpSocket},
+    time::timeout,
 };
 
 use hickory_proto::{
@@ -83,14 +88,18 @@ pub fn targets(answer: &[u8], id: u16) -> Result<Option<Vec<Target>>, String> {
     Ok(Some(out))
 }
 
-fn ask(server: IpAddr, question: &[u8], id: u16) -> Result<Vec<Target>, String> {
+/// Waits at most three seconds for a step of a question.
+async fn within<T>(step: impl Future<Output = std::io::Result<T>>) -> Result<T, String> {
+    timeout(Duration::from_secs(3), step).await.map_err(|_| "no answer".to_owned())?.map_err(|e| e.to_string())
+}
+
+async fn ask(server: IpAddr, question: &[u8], id: u16) -> Result<Vec<Target>, String> {
     let address = SocketAddr::new(server, 53);
     let bind: SocketAddr = if server.is_ipv4() { ([0, 0, 0, 0], 0).into() } else { ([0u16; 8], 0).into() };
-    let socket = UdpSocket::bind(bind).map_err(|e| e.to_string())?;
-    socket.set_read_timeout(Some(Duration::from_secs(3))).map_err(|e| e.to_string())?;
-    socket.send_to(question, address).map_err(|e| e.to_string())?;
+    let socket = UdpSocket::bind(bind).await.map_err(|e| e.to_string())?;
+    socket.send_to(question, address).await.map_err(|e| e.to_string())?;
     let mut buffer = vec![0; 4096];
-    let (read, from) = socket.recv_from(&mut buffer).map_err(|e| e.to_string())?;
+    let (read, from) = within(socket.recv_from(&mut buffer)).await?;
     if from != address {
         return Err("an answer from elsewhere".into());
     }
@@ -98,20 +107,22 @@ fn ask(server: IpAddr, question: &[u8], id: u16) -> Result<Vec<Target>, String> 
         return Ok(targets);
     }
     // Cut: once more over TCP, with the length before each message (RFC 1035, 4.2.2).
-    let mut stream = TcpStream::connect_timeout(&address, Duration::from_secs(3)).map_err(|e| e.to_string())?;
-    stream.set_read_timeout(Some(Duration::from_secs(3))).map_err(|e| e.to_string())?;
+    let mut stream = within(TcpStream::connect(address)).await?;
     let length = u16::try_from(question.len()).map_err(|e| e.to_string())?;
-    stream.write_all(&length.to_be_bytes()).and_then(|()| stream.write_all(question)).map_err(|e| e.to_string())?;
+    let mut message = length.to_be_bytes().to_vec();
+    message.extend_from_slice(question);
+    within(stream.write_all(&message)).await?;
     let mut length = [0; 2];
-    stream.read_exact(&mut length).map_err(|e| e.to_string())?;
+    within(stream.read_exact(&mut length)).await?;
     let mut answer = vec![0; u16::from_be_bytes(length) as usize];
-    stream.read_exact(&mut answer).map_err(|e| e.to_string())?;
+    within(stream.read_exact(&mut answer)).await?;
     targets(&answer, id)?.ok_or_else(|| "the answer was cut over TCP too".into())
 }
 
 /// The JMAP servers of a domain, best first; empty if it names none.
-pub fn lookup(domain: &str) -> Result<Vec<Target>, String> {
-    let servers = name_servers(&std::fs::read_to_string("/etc/resolv.conf").unwrap_or_default());
+pub async fn lookup(domain: &str) -> Result<Vec<Target>, String> {
+    let resolv_conf = tokio::fs::read_to_string("/etc/resolv.conf").await.unwrap_or_default();
+    let servers = name_servers(&resolv_conf);
     if servers.is_empty() {
         return Err("no name server in /etc/resolv.conf".into());
     }
@@ -119,7 +130,7 @@ pub fn lookup(domain: &str) -> Result<Vec<Target>, String> {
     let question = query(domain, id)?;
     let mut last = String::new();
     for server in servers {
-        match ask(server, &question, id) {
+        match ask(server, &question, id).await {
             Ok(targets) => return Ok(targets),
             Err(error) => last = error,
         }
@@ -163,10 +174,10 @@ mod tests {
     }
 
     /// Asks the real DNS: `cargo test -- --ignored srv` (needs the network).
-    #[test]
+    #[tokio::test]
     #[ignore = "needs the network"]
-    fn live() {
-        let found = lookup("fastmail.com").unwrap();
+    async fn live() {
+        let found = lookup("fastmail.com").await.unwrap();
         assert!(!found.is_empty(), "fastmail.com publishes _jmap._tcp");
         println!("{found:?}");
     }

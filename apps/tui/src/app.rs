@@ -1,11 +1,10 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! What the app shows and how keys change it. Calls to the server run while the screen waits – they are short –;
-//! downloads and uploads run in threads of their own and report how far they got; push tells what to load again.
+//! downloads and uploads run in the background on the SDK's runtime and report how far they got; push tells what to load again.
 
 use std::{
     path::{Path, PathBuf},
     sync::mpsc::Sender,
-    thread,
 };
 
 use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, TimeZone, Timelike, Utc};
@@ -16,6 +15,7 @@ use ratatui::{
 };
 
 use kernoid_tui::{
+    RUNTIME, block,
     compose::{self, Kind, Message},
     forms,
     jmap::{
@@ -54,7 +54,7 @@ impl Tab {
     }
 }
 
-/// What arrives from other threads.
+/// What arrives from the background.
 #[derive(Debug)]
 pub enum Background {
     Push(Push),
@@ -555,7 +555,7 @@ impl App {
             Tab::Files => {
                 // Stores shared since the login appear in a new session.
                 let store = self.store().map(|s| s.id.clone());
-                if self.attempt(|app| app.client.refresh_session()).is_some() {
+                if self.attempt(|app| block(app.client.refresh_session())).is_some() {
                     self.files.stores = files::stores(&self.client);
                     match store.and_then(|id| self.files.stores.iter().position(|s| s.id == id)) {
                         Some(index) => self.files.store_list.select(Some(index)),
@@ -610,7 +610,7 @@ impl App {
 
     /// The account's keys for end-to-end encryption; unlocked with `KERNOID_RECOVERY_CODE` if it is set.
     fn load_keys(&mut self) {
-        match E2e::load(&self.client) {
+        match block(E2e::load(&self.client)) {
             Ok(e2e) => self.e2e = e2e,
             Err(error) => self.fail(format!("the keys for end-to-end encryption: {error}")),
         }
@@ -667,13 +667,13 @@ impl App {
         select(&mut self.mail.boxes, self.mail.mailboxes.len(), inbox);
         self.load_emails(true);
         let Some(account) = self.mail_account().map(str::to_owned) else { return };
-        self.mail.identities = mail::identities(&self.client, &account).unwrap_or_default();
+        self.mail.identities = block(mail::identities(&self.client, &account)).unwrap_or_default();
     }
 
     fn load_mailboxes(&mut self) {
         let Some(account) = self.mail_account().map(str::to_owned) else { return };
         let selected = self.mailbox().map(|m| m.id.clone());
-        if let Some(list) = self.attempt(|app| mail::mailboxes(&app.client, &account)) {
+        if let Some(list) = self.attempt(|app| block(mail::mailboxes(&app.client, &account))) {
             self.mail.mailboxes = list;
             let index = selected.and_then(|id| self.mail.mailboxes.iter().position(|m| m.id == id)).unwrap_or(0);
             select(&mut self.mail.boxes, self.mail.mailboxes.len(), index);
@@ -694,17 +694,18 @@ impl App {
         let mailbox = self.mailbox()?.id.clone();
         let search = self.mail.search.clone();
         if self.mail.threads {
-            self.attempt(|app| mail::conversations(&app.client, &account, Some(&mailbox), &search, position, limit))
+            self.attempt(|app| {
+                block(mail::conversations(&app.client, &account, Some(&mailbox), &search, position, limit))
+            })
         } else {
-            self.attempt(|app| mail::emails(&app.client, &account, Some(&mailbox), &search, position, limit)).map(
-                |(list, total)| {
+            self.attempt(|app| block(mail::emails(&app.client, &account, Some(&mailbox), &search, position, limit)))
+                .map(|(list, total)| {
                     let list = list
                         .into_iter()
                         .map(|email| Conversation { latest: email.clone(), emails: vec![email] })
                         .collect();
                     (list, total)
-                },
-            )
+                })
         }
     }
 
@@ -753,9 +754,11 @@ impl App {
         };
         let ids: Vec<&str> = conversation.emails.iter().map(|e| e.id.as_str()).collect();
         let Some(emails) = self.attempt(|app| {
-            let list = mail::full(&app.client, &account, &ids)?;
+            let list = block(mail::full(&app.client, &account, &ids))?;
             // Encrypted ones are decrypted here, if the key is unlocked.
-            list.into_iter().map(|email| app.e2e.open(&app.client, &account, email)).collect::<jmap::Result<Vec<_>>>()
+            list.into_iter()
+                .map(|email| block(app.e2e.open(&app.client, &account, email)))
+                .collect::<jmap::Result<Vec<_>>>()
         }) else {
             return;
         };
@@ -769,7 +772,7 @@ impl App {
         let unread: Vec<String> =
             emails.iter().filter(|e| !e.summary.is_seen()).map(|e| e.summary.id.clone()).collect();
         if !unread.is_empty()
-            && self.attempt(|app| mail::set_keywords(&app.client, &account, &unread, "$seen", true)).is_some()
+            && self.attempt(|app| block(mail::set_keywords(&app.client, &account, &unread, "$seen", true))).is_some()
         {
             if let Some(row) = self.mail.list.selected().and_then(|i| self.mail.emails.get_mut(i)) {
                 for email in row.emails.iter_mut().chain(std::iter::once(&mut row.latest)) {
@@ -821,7 +824,7 @@ impl App {
             .filter(|e| ids.contains(&e.id))
             .all(has);
         let on = !all;
-        if self.attempt(|app| mail::set_keywords(&app.client, &account, &ids, keyword, on)).is_some() {
+        if self.attempt(|app| block(mail::set_keywords(&app.client, &account, &ids, keyword, on))).is_some() {
             for email in
                 self.mail.emails.iter_mut().flat_map(|c| c.emails.iter_mut().chain(std::iter::once(&mut c.latest)))
             {
@@ -842,7 +845,7 @@ impl App {
         let in_trash = self.mailbox().map(|m| Some(&m.id) == trash.as_ref()).unwrap_or(false);
         match trash {
             Some(trash) if !in_trash => {
-                if self.attempt(|app| mail::move_all(&app.client, &account, &ids, &trash)).is_some() {
+                if self.attempt(|app| block(mail::move_all(&app.client, &account, &ids, &trash))).is_some() {
                     self.info(if ids.len() == 1 {
                         "moved to the trash".to_owned()
                     } else {
@@ -878,7 +881,7 @@ impl App {
             return;
         };
         let Some(mailbox) = self.mail.mailboxes.get(to).cloned() else { return };
-        if self.attempt(|app| mail::move_all(&app.client, &account, &emails, &mailbox.id)).is_some() {
+        if self.attempt(|app| block(mail::move_all(&app.client, &account, &emails, &mailbox.id))).is_some() {
             self.info(format!("moved to {}", mailbox.name));
             self.after_email_left(&emails);
         }
@@ -954,7 +957,7 @@ impl App {
                 }
             }
             Edit::Vacation(vacation) => match text.and_then(|text| forms::parse_vacation(&text)) {
-                Ok(new) => match mail::set_vacation(&self.client, &new) {
+                Ok(new) => match block(mail::set_vacation(&self.client, &new)) {
                     Ok(()) => {
                         self.info(if new.on { "the vacation response is on" } else { "the vacation response is off" })
                     }
@@ -969,7 +972,7 @@ impl App {
 
     /// Opens the vacation response in the editor.
     fn edit_vacation(&mut self) {
-        match self.attempt(|app| mail::vacation(&app.client)) {
+        match self.attempt(|app| block(mail::vacation(&app.client))) {
             Some(Some(vacation)) => self.edit = Some(Edit::Vacation(vacation)),
             Some(None) => self.fail("this server has no vacation response for you"),
             None => {}
@@ -981,7 +984,7 @@ impl App {
         let encryption = self.e2e.available.then(|| {
             let account = self.mail_account().map(str::to_owned).unwrap_or_default();
             match compose::chosen(&message.from, &self.mail.identities).cloned() {
-                Some(identity) => match self.e2e.plan(&self.client, &account, &identity, &message.draft) {
+                Some(identity) => match block(self.e2e.plan(&self.client, &account, &identity, &message.draft)) {
                     Plan::Sealed(_) => "end-to-end encrypted and signed".to_owned(),
                     Plan::Plain(reason) => format!("not end-to-end encrypted: {reason}"),
                 },
@@ -1008,7 +1011,7 @@ impl App {
         let plan = if keep {
             self.e2e.draft_plan(&self.client, &account, &identity, &draft)
         } else {
-            self.e2e.plan(&self.client, &account, &identity, &draft)
+            block(self.e2e.plan(&self.client, &account, &identity, &draft))
         };
         if let Plan::Sealed(keys) = plan {
             let outgoing = Outgoing {
@@ -1019,9 +1022,9 @@ impl App {
                 boxes: &boxes,
             };
             let result = if keep {
-                self.e2e.keep(&self.client, outgoing, &keys).map(|()| "kept in Drafts, end-to-end encrypted")
+                block(self.e2e.keep(&self.client, outgoing, &keys)).map(|()| "kept in Drafts, end-to-end encrypted")
             } else {
-                self.e2e.send(&self.client, outgoing, &keys).map(|()| "sent end-to-end encrypted")
+                block(self.e2e.send(&self.client, outgoing, &keys)).map(|()| "sent end-to-end encrypted")
             };
             match result {
                 Ok(done) => {
@@ -1034,7 +1037,7 @@ impl App {
             return;
         }
         for path in &message.files {
-            match mail::attach(&self.client, &account, path) {
+            match block(mail::attach(&self.client, &account, path)) {
                 Ok(attachment) => draft.attachments.push(attachment),
                 Err(error) => {
                     let error = format!("{}: {error}", path.display());
@@ -1048,9 +1051,9 @@ impl App {
                 name: (!identity.name.is_empty()).then(|| identity.name.clone()),
                 email: identity.email.clone(),
             });
-            mail::save_draft(&self.client, &account, &draft, &boxes).map(|_| "kept in Drafts")
+            block(mail::save_draft(&self.client, &account, &draft, &boxes)).map(|_| "kept in Drafts")
         } else {
-            mail::send(&self.client, &account, &identity, &draft, &boxes).map(|_| "sent")
+            block(mail::send(&self.client, &account, &identity, &draft, &boxes)).map(|_| "sent")
         };
         match result {
             Ok(done) => {
@@ -1096,7 +1099,7 @@ impl App {
         let selected = self.selected_node().map(|n| n.id.clone());
         if !self.files.search.is_empty() {
             let text = self.files.search.clone();
-            if let Some(found) = self.attempt(|app| files::search(&app.client, &store, &text)) {
+            if let Some(found) = self.attempt(|app| block(files::search(&app.client, &store, &text))) {
                 self.files.nodes = found.iter().map(|hit| hit.node.clone()).collect();
                 self.files.found = found;
                 let index = selected.and_then(|id| self.files.nodes.iter().position(|n| n.id == id)).unwrap_or(0);
@@ -1106,7 +1109,7 @@ impl App {
         }
         self.files.found.clear();
         let parent = self.files.path.last().map(|n| n.id.clone());
-        if let Some(nodes) = self.attempt(|app| files::children(&app.client, &store, parent.as_deref())) {
+        if let Some(nodes) = self.attempt(|app| block(files::children(&app.client, &store, parent.as_deref()))) {
             self.files.nodes = nodes;
             let index = selected.and_then(|id| self.files.nodes.iter().position(|n| n.id == id)).unwrap_or(0);
             select(&mut self.files.list, self.files.nodes.len(), index);
@@ -1164,7 +1167,7 @@ impl App {
         if node.is_directory() {
             return;
         }
-        if let Some(list) = self.attempt(|app| files::versions(&app.client, &store, &node.id)) {
+        if let Some(list) = self.attempt(|app| block(files::versions(&app.client, &store, &node.id))) {
             self.popup = Some(Popup::Versions { node, list, selected: 0 });
         }
     }
@@ -1202,7 +1205,7 @@ impl App {
         }
         if let Some(shared) = node.share_with.as_ref().filter(|s| !s.is_empty()) {
             let ids: Vec<&str> = shared.keys().map(String::as_str).collect();
-            let people = files::principals(&self.client, &ids).unwrap_or_default();
+            let people = block(files::principals(&self.client, &ids)).unwrap_or_default();
             text.push_str("Shared with:\n");
             for (id, rights) in shared {
                 let who = people
@@ -1231,11 +1234,14 @@ impl App {
             return;
         };
         let in_trash = self.files.path.iter().any(|n| n.role.as_deref() == Some("trash"));
-        let trash =
-            if in_trash || node.role.is_some() { None } else { files::trash(&self.client, &store).ok().flatten() };
+        let trash = if in_trash || node.role.is_some() {
+            None
+        } else {
+            block(files::trash(&self.client, &store)).ok().flatten()
+        };
         match trash {
             Some(trash) => {
-                if self.attempt(|app| files::move_to(&app.client, &store, &node.id, Some(&trash.id))).is_some() {
+                if self.attempt(|app| block(files::move_to(&app.client, &store, &node.id, Some(&trash.id)))).is_some() {
                     self.info(format!("{} moved to the trash", node.name));
                     self.load_nodes();
                 }
@@ -1249,7 +1255,7 @@ impl App {
         }
     }
 
-    /// Starts a download in a thread of its own.
+    /// Starts a download in the background.
     fn download(&mut self, account: String, blob: String, name: String, kind: String, path: PathBuf) {
         let id = self.next_transfer;
         self.next_transfer += 1;
@@ -1257,32 +1263,39 @@ impl App {
         self.transfers.push(Transfer { id, label, done: 0, total: None, reload_files: false });
         let client = self.client.clone();
         let out = self.background.clone();
-        thread::spawn(move || {
-            let result = (|| -> Result<String, String> {
+        RUNTIME.spawn(async move {
+            let result = async {
                 if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
-                    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+                    tokio::fs::create_dir_all(dir).await.map_err(|e| e.to_string())?;
                 }
                 let partial = path.with_extension(match path.extension() {
                     Some(extension) => format!("{}.part", extension.to_string_lossy()),
                     None => "part".into(),
                 });
-                let mut file = std::fs::File::create(&partial).map_err(|e| format!("{}: {e}", partial.display()))?;
+                let mut file =
+                    tokio::fs::File::create(&partial).await.map_err(|e| format!("{}: {e}", partial.display()))?;
                 let mut last = std::time::Instant::now();
-                let done = client
+                let progress = out.clone();
+                let done = match client
                     .download(&account, &blob, &name, &kind, &mut file, &mut |done, total| {
                         if last.elapsed().as_millis() > 100 {
                             last = std::time::Instant::now();
-                            let _ = out.send(Background::Progress { id, done, total });
+                            let _ = progress.send(Background::Progress { id, done, total });
                         }
                     })
-                    .map_err(|e| {
-                        let _ = std::fs::remove_file(&partial);
-                        e.to_string()
-                    })?;
-                file.sync_all().map_err(|e| e.to_string())?;
-                std::fs::rename(&partial, &path).map_err(|e| e.to_string())?;
-                Ok(format!("saved {} ({})", path.display(), size_text(done)))
-            })();
+                    .await
+                {
+                    Ok(done) => done,
+                    Err(error) => {
+                        let _ = tokio::fs::remove_file(&partial).await;
+                        return Err(error.to_string());
+                    }
+                };
+                file.sync_all().await.map_err(|e| e.to_string())?;
+                tokio::fs::rename(&partial, &path).await.map_err(|e| e.to_string())?;
+                Ok::<_, String>(format!("saved {} ({})", path.display(), size_text(done)))
+            }
+            .await;
             let _ = out.send(Background::Finished { id, result });
         });
     }
@@ -1301,15 +1314,17 @@ impl App {
         self.transfers.push(Transfer { id, label: format!("↑ {name}"), done: 0, total: None, reload_files: true });
         let client = self.client.clone();
         let out = self.background.clone();
-        thread::spawn(move || {
+        RUNTIME.spawn(async move {
             let mut last = std::time::Instant::now();
+            let progress = out.clone();
             let result =
-                files::upload_file(&client, &store, parent.as_deref(), &path, existing.as_ref(), &mut |done, total| {
+                files::upload_file(&client, &store, parent.as_deref(), &path, existing.as_ref(), move |done, total| {
                     if last.elapsed().as_millis() > 100 {
                         last = std::time::Instant::now();
-                        let _ = out.send(Background::Progress { id, done, total: Some(total) });
+                        let _ = progress.send(Background::Progress { id, done, total: Some(total) });
                     }
-                });
+                })
+                .await;
             let result = result
                 .map(|()| match existing {
                     Some(_) => format!("uploaded {name} as a new version"),
@@ -1324,7 +1339,7 @@ impl App {
 
     fn load_calendar(&mut self) {
         self.calendar.loaded = true;
-        if let Some(list) = self.attempt(|app| calendars::calendars(&app.client)) {
+        if let Some(list) = self.attempt(|app| block(calendars::calendars(&app.client))) {
             self.calendar.calendars = list;
         }
         if self.calendar.from.is_none() {
@@ -1347,7 +1362,7 @@ impl App {
         let (after, before) = self.calendar_window();
         let calendars = self.calendar.calendars.clone();
         let selected = self.selected_event().map(|e| e.id.clone());
-        if let Some(events) = self.attempt(|app| calendars::instances(&app.client, &calendars, after, before)) {
+        if let Some(events) = self.attempt(|app| block(calendars::instances(&app.client, &calendars, after, before))) {
             self.calendar.events = events;
             let index = selected.and_then(|id| self.calendar.events.iter().position(|e| e.id == id)).unwrap_or(0);
             select(&mut self.calendar.list, self.calendar.events.len(), index);
@@ -1422,7 +1437,7 @@ impl App {
         if self.mail.identities.is_empty()
             && let Some(account) = self.client.session.primary(MAIL).map(str::to_owned)
         {
-            self.mail.identities = mail::identities(&self.client, &account).unwrap_or_default();
+            self.mail.identities = block(mail::identities(&self.client, &account)).unwrap_or_default();
         }
         let mut out: Vec<String> = self.mail.identities.iter().map(|i| i.email.clone()).collect();
         out.push(self.client.session.username.clone());
@@ -1485,7 +1500,8 @@ impl App {
     /// The event an instance is of, as stored, with the index of its calendar.
     fn stored_event(&mut self) -> Option<(Event, usize)> {
         let instance = self.selected_event()?.clone();
-        let stored = self.attempt(|app| calendars::event(&app.client, &instance.account, instance.event_id()))??;
+        let stored =
+            self.attempt(|app| block(calendars::event(&app.client, &instance.account, instance.event_id())))??;
         let index = self
             .calendar
             .calendars
@@ -1540,9 +1556,9 @@ impl App {
         let own = self.own_addresses().into_iter().next().unwrap_or_default();
         let Some(calendar) = self.calendar.calendars.get(index).cloned() else { return };
         let result = match (&id, &instance) {
-            (Some((account, event)), Some(recurrence_id)) => calendars::event(&self.client, account, event)
+            (Some((account, event)), Some(recurrence_id)) => block(calendars::event(&self.client, account, event))
                 .and_then(|series| series.ok_or_else(|| jmap::Error::Protocol("the series is gone".into())))
-                .and_then(|series| calendars::update_instance(&self.client, &series, recurrence_id, &form, &own))
+                .and_then(|series| block(calendars::update_instance(&self.client, &series, recurrence_id, &form, &own)))
                 .map(|()| "this event of the series changed"),
             _ => self.save_whole_event(&calendar, &form, &id, &own),
         };
@@ -1576,10 +1592,10 @@ impl App {
     ) -> jmap::Result<&'static str> {
         match id {
             Some((account, event)) if *account == calendar.account => {
-                calendars::update(&self.client, calendar, event, form, own).map(|()| "event changed")
+                block(calendars::update(&self.client, calendar, event, form, own)).map(|()| "event changed")
             }
             Some(_) => Err(jmap::Error::Protocol("an event moves only between calendars of one account".into())),
-            None => calendars::create(&self.client, calendar, form, own).map(|_| "event made"),
+            None => block(calendars::create(&self.client, calendar, form, own)).map(|_| "event made"),
         }
     }
 
@@ -1625,7 +1641,7 @@ impl App {
         }
         let key = key.to_owned();
         if self
-            .attempt(|app| calendars::answer(&app.client, &instance.account, instance.event_id(), &key, status))
+            .attempt(|app| block(calendars::answer(&app.client, &instance.account, instance.event_id(), &key, status)))
             .is_some()
         {
             self.info(format!("answered: {status}"));
@@ -1637,7 +1653,7 @@ impl App {
 
     fn load_contacts(&mut self) {
         self.contacts.loaded = true;
-        if let Some(books) = self.attempt(|app| contacts::address_books(&app.client)) {
+        if let Some(books) = self.attempt(|app| block(contacts::address_books(&app.client))) {
             self.contacts.books = books;
         }
         self.load_cards();
@@ -1646,7 +1662,7 @@ impl App {
     fn load_cards(&mut self) {
         let search = self.contacts.search.clone();
         let selected = self.selected_card().map(|c| c.id.clone());
-        if let Some(cards) = self.attempt(|app| contacts::cards(&app.client, &search)) {
+        if let Some(cards) = self.attempt(|app| block(contacts::cards(&app.client, &search))) {
             self.contacts.cards = cards;
             let index = selected.and_then(|id| self.contacts.cards.iter().position(|c| c.id == id)).unwrap_or(0);
             select(&mut self.contacts.list, self.contacts.cards.len(), index);
@@ -1676,7 +1692,7 @@ impl App {
     }
 
     fn export_event(&mut self, account: &str, id: &str, path: PathBuf) {
-        let Some(event) = self.attempt(|app| calendars::raw_event(&app.client, account, id)) else { return };
+        let Some(event) = self.attempt(|app| block(calendars::raw_event(&app.client, account, id))) else { return };
         match transfer::ics_from_events(&[event]).and_then(|text| write_new(&path, &text)) {
             Ok(()) => self.info(format!("saved as {}", path.display())),
             Err(error) => self.fail(error),
@@ -1695,7 +1711,7 @@ impl App {
             Ok(events) => events,
             Err(error) => return self.fail(format!("{}: {error}", path.display())),
         };
-        if let Some((made, refused)) = self.attempt(|app| calendars::import(&app.client, &calendar, events)) {
+        if let Some((made, refused)) = self.attempt(|app| block(calendars::import(&app.client, &calendar, events))) {
             self.report_import(made, &refused, &calendar_name(&calendar));
             self.load_events();
         }
@@ -1708,7 +1724,9 @@ impl App {
         for account in accounts {
             let ids: Vec<String> =
                 self.contacts.cards.iter().filter(|card| card.account == account).map(|card| card.id.clone()).collect();
-            let Some(found) = self.attempt(|app| contacts::raw_cards(&app.client, &account, &ids)) else { return };
+            let Some(found) = self.attempt(|app| block(contacts::raw_cards(&app.client, &account, &ids))) else {
+                return;
+            };
             cards.extend(found);
         }
         if cards.is_empty() {
@@ -1732,7 +1750,7 @@ impl App {
             Ok(cards) => cards,
             Err(error) => return self.fail(format!("{}: {error}", path.display())),
         };
-        if let Some((made, refused)) = self.attempt(|app| contacts::import(&app.client, &book, cards)) {
+        if let Some((made, refused)) = self.attempt(|app| block(contacts::import(&app.client, &book, cards))) {
             self.report_import(made, &refused, &book_name(&book));
             self.load_cards();
         }
@@ -1776,10 +1794,10 @@ impl App {
         let Some(book) = self.contacts.books.get(index).cloned() else { return };
         let result = match &id {
             Some((account, card)) if *account == book.account => {
-                contacts::update(&self.client, &book, card, &form).map(|()| "contact changed")
+                block(contacts::update(&self.client, &book, card, &form)).map(|()| "contact changed")
             }
             Some(_) => Err(jmap::Error::Protocol("a contact moves only between address books of one account".into())),
-            None => contacts::create(&self.client, &book, &form).map(|()| "contact made"),
+            None => block(contacts::create(&self.client, &book, &form)).map(|()| "contact made"),
         };
         match result {
             Ok(done) => {
@@ -1812,7 +1830,7 @@ impl App {
         }
         let shared = node.share_with.clone().unwrap_or_default();
         let ids: Vec<&str> = shared.keys().map(String::as_str).collect();
-        let Some(people) = self.attempt(|app| files::principals(&app.client, &ids)) else { return };
+        let Some(people) = self.attempt(|app| block(files::principals(&app.client, &ids))) else { return };
         let entries = shared
             .iter()
             .map(|(id, rights)| {
@@ -1855,7 +1873,7 @@ impl App {
     fn load_folders(&mut self, destination: &mut Destination) {
         let Some(store) = self.files.stores.get(destination.store).map(|s| s.id.clone()) else { return };
         let parent = destination.path.last().map(|n| n.id.clone());
-        if let Some(nodes) = self.attempt(|app| files::children(&app.client, &store, parent.as_deref())) {
+        if let Some(nodes) = self.attempt(|app| block(files::children(&app.client, &store, parent.as_deref()))) {
             destination.folders = nodes
                 .into_iter()
                 .filter(|n| n.is_directory() && n.role.is_none() && n.id != destination.node.id)
@@ -1882,9 +1900,9 @@ impl App {
         }
         let done = self.attempt(|app| {
             if same {
-                files::move_to(&app.client, &to, &node.id, parent.as_deref())
+                block(files::move_to(&app.client, &to, &node.id, parent.as_deref()))
             } else {
-                files::copy_to(&app.client, &destination.from, &to, &node.id, parent.as_deref(), move_it)
+                block(files::copy_to(&app.client, &destination.from, &to, &node.id, parent.as_deref(), move_it))
             }
         });
         match done {
@@ -1917,7 +1935,7 @@ impl App {
             self.fail("you may not share this");
             return;
         }
-        let Some(list) = self.attempt(|app| files::links(&app.client, &store.id, &node.id)) else { return };
+        let Some(list) = self.attempt(|app| block(files::links(&app.client, &store.id, &node.id))) else { return };
         self.popup = Some(Popup::Links(Linking {
             account: store.id,
             node,
@@ -1929,7 +1947,7 @@ impl App {
     }
 
     fn find_people(&mut self, mut sharing: Sharing, text: &str) {
-        let Some(found) = self.attempt(|app| files::find_principals(&app.client, text)) else {
+        let Some(found) = self.attempt(|app| block(files::find_principals(&app.client, text))) else {
             self.popup = Some(Popup::Share(sharing));
             return;
         };
@@ -1956,7 +1974,7 @@ impl App {
     fn save_sharing(&mut self, sharing: Sharing) {
         let Some(store) = self.store().map(|s| s.id.clone()) else { return };
         let with: Vec<(String, Level)> = sharing.entries.iter().map(|(p, level)| (p.id.clone(), *level)).collect();
-        match files::share(&self.client, &store, &sharing.node.id, &with) {
+        match block(files::share(&self.client, &store, &sharing.node.id, &with)) {
             Ok(()) => {
                 self.info(if with.is_empty() {
                     format!("{} is shared with nobody", sharing.node.name)
@@ -2292,7 +2310,9 @@ impl App {
             Prompt::NewFolder if !text.is_empty() => {
                 let Some(store) = self.store().map(|s| s.id.clone()) else { return };
                 let parent = self.files.path.last().map(|n| n.id.clone());
-                if self.attempt(|app| files::create_directory(&app.client, &store, parent.as_deref(), &text)).is_some()
+                if self
+                    .attempt(|app| block(files::create_directory(&app.client, &store, parent.as_deref(), &text)))
+                    .is_some()
                 {
                     self.load_nodes();
                     if let Some(index) = self.files.nodes.iter().position(|n| n.name == text) {
@@ -2313,11 +2333,11 @@ impl App {
                 // Not trimmed: a password is taken as typed.
                 let password = Some(input.text.as_str()).filter(|password| !password.is_empty());
                 let (account, node, mode) = (linking.account.clone(), linking.node.id.clone(), linking.mode);
-                if let Some(url) = self
-                    .attempt(|app| files::create_link(&app.client, &account, &node, mode, expires.as_deref(), password))
-                {
+                if let Some(url) = self.attempt(|app| {
+                    block(files::create_link(&app.client, &account, &node, mode, expires.as_deref(), password))
+                }) {
                     linking.made = Some(url);
-                    if let Some(list) = self.attempt(|app| files::links(&app.client, &account, &node)) {
+                    if let Some(list) = self.attempt(|app| block(files::links(&app.client, &account, &node))) {
                         linking.list = list;
                     }
                     self.info("link made – copy its address now; it is not shown again");
@@ -2345,7 +2365,7 @@ impl App {
             }
             Prompt::Rename { id } if !text.is_empty() => {
                 let Some(store) = self.store().map(|s| s.id.clone()) else { return };
-                if self.attempt(|app| files::rename(&app.client, &store, &id, &text)).is_some() {
+                if self.attempt(|app| block(files::rename(&app.client, &store, &id, &text))).is_some() {
                     self.load_nodes();
                 }
             }
@@ -2451,7 +2471,10 @@ impl App {
                     if version.is_current {
                         self.popup = Some(Popup::Versions { node, list, selected });
                         self.info("this is the current version");
-                    } else if self.attempt(|app| files::restore(&app.client, &store, &node.id, &version)).is_some() {
+                    } else if self
+                        .attempt(|app| block(files::restore(&app.client, &store, &node.id, &version)))
+                        .is_some()
+                    {
                         self.info(format!("{} restored", node.name));
                         self.load_nodes();
                     }
@@ -2514,7 +2537,7 @@ impl App {
                 KeyCode::Char('x') | KeyCode::Char('-') | KeyCode::Delete => {
                     if let Some(link) = linking.list.get(linking.selected).cloned() {
                         let account = linking.account.clone();
-                        if self.attempt(|app| files::remove_link(&app.client, &account, &link.id)).is_some() {
+                        if self.attempt(|app| block(files::remove_link(&app.client, &account, &link.id))).is_some() {
                             linking.list.remove(linking.selected);
                             linking.selected = linking.selected.min(linking.list.len().saturating_sub(1));
                             self.info("link removed – its address no longer works");
@@ -2577,9 +2600,9 @@ impl App {
                 KeyCode::Char('o') if matches!(what, Destroy::Event { instance: Some(_), .. }) => {
                     let Destroy::Event { account, id, title, instance: Some(recurrence_id) } = what else { return };
                     let removed = self.attempt(|app| {
-                        let series = calendars::event(&app.client, &account, &id)?
+                        let series = block(calendars::event(&app.client, &account, &id))?
                             .ok_or_else(|| jmap::Error::Protocol("the series is gone".into()))?;
-                        calendars::destroy_instance(&app.client, &series, &recurrence_id)
+                        block(calendars::destroy_instance(&app.client, &series, &recurrence_id))
                     });
                     if removed.is_some() {
                         self.info(format!("{title}: this event of the series deleted"));
@@ -2589,26 +2612,26 @@ impl App {
                 KeyCode::Char('y') | KeyCode::Char('j') => match what {
                     Destroy::Emails { ids } => {
                         let Some(account) = self.mail_account().map(str::to_owned) else { return };
-                        if self.attempt(|app| mail::destroy_all(&app.client, &account, &ids)).is_some() {
+                        if self.attempt(|app| block(mail::destroy_all(&app.client, &account, &ids))).is_some() {
                             self.info("deleted");
                             self.after_email_left(&ids);
                         }
                     }
                     Destroy::Event { account, id, title, .. } => {
-                        if self.attempt(|app| calendars::destroy(&app.client, &account, &id)).is_some() {
+                        if self.attempt(|app| block(calendars::destroy(&app.client, &account, &id))).is_some() {
                             self.info(format!("{title} deleted"));
                             self.load_events();
                         }
                     }
                     Destroy::Card { account, id, name } => {
-                        if self.attempt(|app| contacts::destroy(&app.client, &account, &id)).is_some() {
+                        if self.attempt(|app| block(contacts::destroy(&app.client, &account, &id))).is_some() {
                             self.info(format!("{name} deleted"));
                             self.load_cards();
                         }
                     }
                     Destroy::Node { id, name } => {
                         let Some(store) = self.store().map(|s| s.id.clone()) else { return };
-                        if self.attempt(|app| files::destroy(&app.client, &store, &id)).is_some() {
+                        if self.attempt(|app| block(files::destroy(&app.client, &store, &id))).is_some() {
                             self.info(format!("{name} deleted"));
                             self.load_nodes();
                         }

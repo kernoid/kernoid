@@ -7,8 +7,9 @@ permalink: /tui/
 # Terminal app
 
 `kernoid-tui` is kernoid's app for the terminal: mail, files, calendars and contacts, by keyboard. Like the
-[web app]({{ '/app/' | relative_url }}) it is a first-party app under the MIT licence and talks to kernoid only
-through JMAP – it shares no code with the server and works against any kernoid installation.
+[web app]({{ '/app/' | relative_url }}) it talks to kernoid only through JMAP – it shares no code with the server and
+works against any kernoid installation. It is under the AGPL-3.0-or-later like the server, and built on kernoid's
+Rust SDK (`kernoid-client`, MIT), which other apps can use as well.
 
 Everything works with the keyboard, and with the mouse: a click chooses a tab or a row – a second click on it opens
 it, as Enter does –, the wheel moves through a list or scrolls a message. While the app has the mouse, Shift and drag
@@ -32,7 +33,8 @@ password, revocable on its own and limited to programs, is the way until then.
 
 ## Building
 
-It lives in `apps/tui/` – a Cargo workspace of its own, apart from the server's, with its own `Cargo.lock`. Rust from
+It lives in `apps/tui/` – a Cargo workspace of its own, apart from the server's, with its own `Cargo.lock`; the SDK it
+uses in `apps/client/`, the end-to-end library in `apps/e2e/`. Rust from
 `rust-toolchain.toml`; no OpenSSL (TLS through rustls, certificates checked by the operating system's verifier).
 
 ```sh

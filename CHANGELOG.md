@@ -153,9 +153,16 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 - The tenant's policy for end-to-end encryption – mail, vaults, calendars and address books each allowed, required or
   forbidden – and recovery through the tenant's recovery key, made in the administrator's browser
   (`GET /v1/accounts/{id}/e2e-recovery-copy`; REST, GraphQL, CLI and the administration).
+- kernoid's Rust SDK, `kernoid-client` (`apps/client`, MIT): JMAP for mail, files, calendars and contacts, push,
+  end-to-end encrypted mail, finding a server through DNS and `.ics`/`.vcf` files – async on tokio, made from the
+  terminal app's protocol layer. The terminal app and kernoid's apps use it.
+- `kernoid-sync` (`apps/sync`, MIT): a folder kept in step with a file store – changes read from the journal, the
+  folder scanned, a change on both sides kept as a copy, deletions carried over to the trash; the state in SQLite.
 
 ### Changed
 
+- The terminal app is licensed under the AGPL-3.0-or-later like the server (it was MIT) and built on the Rust SDK;
+  its MIT code lives on in the SDK. It goes into no app store, so the AGPL costs it nothing.
 - A tenant's requirement of a second factor now holds for its accounts' data too: JMAP (the web app's mail,
   calendar, contacts and files), CalDAV, CardDAV, WebDAV and the modules' routes take a session only with the factor
   (after the grace period), and an app password can only be added with it. A session from a password alone opens the

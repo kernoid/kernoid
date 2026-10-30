@@ -8,15 +8,15 @@ mod support;
 use std::sync::{Arc, OnceLock};
 
 use base64::{Engine, engine::general_purpose::STANDARD};
+use kernoid_client::{
+    Client, Options,
+    e2e::{E2e, OPENPGP, Outgoing, Plan},
+    mail::{self, Draft, Identity, parse_addresses},
+};
 use kernoid_e2e::{
     Kind, PublicKey, SecretKey, compose,
     keys::{normalize_recovery_code, recovery_code},
     mime,
-};
-use kernoid_tui::jmap::{
-    self, Client, Options,
-    e2e::{E2e, OPENPGP, Outgoing, Plan},
-    mail::{self, Draft, Identity, parse_addresses},
 };
 use serde_json::{Value, json};
 use support::{Answer, Request, Server};
@@ -104,6 +104,9 @@ fn method(name: &str, arguments: &Value, stored: &Stored) -> Value {
               "created": "2026-10-30T09:00:00Z", "retired": null, "copies": { "recovery": stored.alice_copy } },
             { "id": keys.retired.fingerprint(), "kind": "compatible", "publicKey": b64(&keys.retired.public().to_bytes().unwrap()),
               "created": "2026-10-01T09:00:00Z", "retired": "2026-10-30T09:00:00Z", "copies": { "recovery": stored.retired_copy } },
+        ] }),
+        "E2eSettings/get" => json!({ "accountId": account, "list": [
+            { "id": "singleton", "mail": false, "policy": { "mail": "allowed", "recovery": false }, "recoveryKey": null },
         ] }),
         "OpenPgpKey/lookup" => {
             let list: Vec<Value> = arguments["emails"]
@@ -196,22 +199,26 @@ fn server() -> Server {
     })
 }
 
-fn connect(server: &Server) -> Client {
-    let url = jmap::session_url(Some(&server.origin), "alice@firma.example").unwrap();
-    Client::connect(&url, "alice@firma.example", "app-password", &Options::default()).unwrap()
+async fn connect(server: &Server) -> Client {
+    let url = kernoid_client::session_url(Some(&server.origin), "alice@firma.example").unwrap();
+    Client::connect(&url, "alice@firma.example", "app-password", &Options::default()).await.unwrap()
 }
 
 fn identity() -> Identity {
     Identity { id: "i1".into(), name: "Alice".into(), email: "alice@firma.example".into() }
 }
 
-#[test]
-fn unlocking_with_the_recovery_code() {
+#[tokio::test(flavor = "multi_thread")]
+async fn unlocking_with_the_recovery_code() {
     let server = server();
-    let client = connect(&server);
-    let mut e2e = E2e::load(&client).unwrap();
+    let client = connect(&server).await;
+    let mut e2e = E2e::load(&client).await.unwrap();
     assert!(e2e.available && e2e.has_key() && !e2e.is_unlocked());
     assert_eq!(e2e.current_key().unwrap().id, keys().alice.fingerprint());
+    assert_eq!((e2e.settings.policy.mail.as_str(), e2e.settings.policy.recovery), ("allowed", false));
+    // An account with a key gets no second one here.
+    let error = e2e.setup(&client, kernoid_e2e::Kind::Pqc).await.unwrap_err();
+    assert!(error.to_string().contains("has a key already"), "{error}");
     let error = e2e.unlock("0000-0000-0000-0000-0000-0000-0000-0000").unwrap_err();
     assert!(error.to_string().contains("wrong passphrase"), "{error}");
     assert!(!e2e.is_unlocked());
@@ -223,16 +230,16 @@ fn unlocking_with_the_recovery_code() {
     assert!(!e2e.is_unlocked());
 }
 
-#[test]
-fn the_list_shows_decrypted_summaries() {
+#[tokio::test(flavor = "multi_thread")]
+async fn the_list_shows_decrypted_summaries() {
     let server = server();
-    let client = connect(&server);
-    let (mut list, _) = mail::emails(&client, "A", Some("m1"), "", 0, 50).unwrap();
+    let client = connect(&server).await;
+    let (mut list, _) = mail::emails(&client, "A", Some("m1"), "", 0, 50).await.unwrap();
     let request = server.api_requests().pop().unwrap();
     assert_eq!(request.json()["using"], json!(["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail", OPENPGP]));
     let properties = &request.calls()[1].1["properties"];
     assert!(properties.as_array().unwrap().contains(&json!("kernoid:encryptedSummary")), "{properties}");
-    let mut e2e = E2e::load(&client).unwrap();
+    let mut e2e = E2e::load(&client).await.unwrap();
     // Locked: as the server has them.
     for email in &mut list {
         e2e.open_summary(email);
@@ -252,20 +259,20 @@ fn the_list_shows_decrypted_summaries() {
     assert_eq!(list[2].subject.as_deref(), Some("Plain"));
 }
 
-#[test]
-fn reading_an_encrypted_email() {
+#[tokio::test(flavor = "multi_thread")]
+async fn reading_an_encrypted_email() {
     let server = server();
-    let client = connect(&server);
-    let mut e2e = E2e::load(&client).unwrap();
-    let email = mail::email(&client, "A", "e1").unwrap().unwrap();
+    let client = connect(&server).await;
+    let mut e2e = E2e::load(&client).await.unwrap();
+    let email = mail::email(&client, "A", "e1").await.unwrap().unwrap();
     // Locked: nothing of the outer message is shown, nothing downloaded.
-    let locked = e2e.open(&client, "A", email.clone()).unwrap();
+    let locked = e2e.open(&client, "A", email.clone()).await.unwrap();
     assert!(locked.sealed.unwrap().locked);
     assert!(locked.attachments.is_empty() && locked.text(80).is_empty());
     assert!(!server.requests().iter().any(|r| r.path.starts_with("/jmap/download/")));
 
     e2e.unlock(&keys().code).unwrap();
-    let read = e2e.open(&client, "A", email).unwrap();
+    let read = e2e.open(&client, "A", email).await.unwrap();
     let sealed = read.sealed.unwrap();
     assert!(!sealed.locked && sealed.signed && sealed.verified, "{sealed:?}");
     assert_eq!(read.summary.subject.as_deref(), Some("The secret plan"));
@@ -281,12 +288,12 @@ fn reading_an_encrypted_email() {
     assert!(!server.api_requests().iter().flat_map(|r| r.calls()).any(|(name, _)| name == "Email/parse"));
 }
 
-#[test]
-fn sending_encrypted_to_recipients_with_keys() {
+#[tokio::test(flavor = "multi_thread")]
+async fn sending_encrypted_to_recipients_with_keys() {
     let server = server();
-    let client = connect(&server);
-    let boxes = mail::mailboxes(&client, "A").unwrap();
-    let mut e2e = E2e::load(&client).unwrap();
+    let client = connect(&server).await;
+    let boxes = mail::mailboxes(&client, "A").await.unwrap();
+    let mut e2e = E2e::load(&client).await.unwrap();
     let draft = Draft {
         to: parse_addresses("Bob <bob@x.example>"),
         subject: "Re: The secret plan".into(),
@@ -296,25 +303,27 @@ fn sending_encrypted_to_recipients_with_keys() {
     };
     let identity = identity();
     // Locked: plain, and why.
-    let Plan::Plain(reason) = e2e.plan(&client, "A", &identity, &draft) else { panic!("sealed while locked") };
+    let Plan::Plain(reason) = e2e.plan(&client, "A", &identity, &draft).await else { panic!("sealed while locked") };
     assert!(reason.contains("locked"), "{reason}");
     e2e.unlock(&keys().code).unwrap();
     // A recipient without a key, or Bcc: plain.
     let carol = Draft { cc: parse_addresses("carol@y.example"), ..draft.clone() };
-    let Plan::Plain(reason) = e2e.plan(&client, "A", &identity, &carol) else { panic!("sealed without Carol's key") };
+    let Plan::Plain(reason) = e2e.plan(&client, "A", &identity, &carol).await else {
+        panic!("sealed without Carol's key")
+    };
     assert!(reason.contains("carol@y.example has no key"), "{reason}");
     let hidden = Draft { bcc: parse_addresses("dave@x.example"), ..draft.clone() };
-    assert!(matches!(e2e.plan(&client, "A", &identity, &hidden), Plan::Plain(_)));
-    let Plan::Sealed(recipients) = e2e.plan(&client, "A", &identity, &draft) else { panic!("not sealed") };
+    assert!(matches!(e2e.plan(&client, "A", &identity, &hidden).await, Plan::Plain(_)));
+    let Plan::Sealed(recipients) = e2e.plan(&client, "A", &identity, &draft).await else { panic!("not sealed") };
     assert_eq!(recipients.len(), 2, "Bob's key and Alice's own");
 
-    let directory = std::env::temp_dir().join(format!("kernoid-tui-e2e-{}", std::process::id()));
+    let directory = std::env::temp_dir().join(format!("kernoid-client-e2e-{}", std::process::id()));
     std::fs::create_dir_all(&directory).unwrap();
     let file = directory.join("notes.txt");
     std::fs::write(&file, "bring cake").unwrap();
     let files = [file];
     let outgoing = Outgoing { account: "A", identity: &identity, draft: &draft, files: &files, boxes: &boxes };
-    e2e.send(&client, outgoing, &recipients).unwrap();
+    e2e.send(&client, outgoing, &recipients).await.unwrap();
     std::fs::remove_dir_all(&directory).unwrap();
 
     // The upload is the PGP/MIME message; Bob reads it, signed by Alice; the file is inside.
@@ -362,17 +371,17 @@ fn sending_encrypted_to_recipients_with_keys() {
     assert!(!server.api_requests().iter().flat_map(|r| r.calls()).any(|(name, _)| name == "Email/set"));
 }
 
-#[test]
-fn drafts_kept_encrypted_to_the_own_key() {
+#[tokio::test(flavor = "multi_thread")]
+async fn drafts_kept_encrypted_to_the_own_key() {
     let server = server();
-    let client = connect(&server);
-    let boxes = mail::mailboxes(&client, "A").unwrap();
-    let mut e2e = E2e::load(&client).unwrap();
+    let client = connect(&server).await;
+    let boxes = mail::mailboxes(&client, "A").await.unwrap();
+    let mut e2e = E2e::load(&client).await.unwrap();
     e2e.unlock(&keys().code).unwrap();
     let draft = Draft { to: parse_addresses("carol@y.example"), subject: "Later".into(), ..Draft::default() };
     let Plan::Sealed(own) = e2e.draft_plan(&client, "A", &identity(), &draft) else { panic!("not sealed") };
     let outgoing = Outgoing { account: "A", identity: &identity(), draft: &draft, files: &[], boxes: &boxes };
-    e2e.keep(&client, outgoing, &own).unwrap();
+    e2e.keep(&client, outgoing, &own).await.unwrap();
     let calls = server.api_requests().pop().unwrap().calls();
     assert_eq!(calls.len(), 1, "kept, not submitted");
     let upload = server.requests().into_iter().find(|r| r.path == "/jmap/upload/A/").unwrap();

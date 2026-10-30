@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Writing messages in the user's editor: a template with header lines, a blank line and the text; replies quote
 //! the text they answer and keep the thread (`In-Reply-To`, `References`), forwards carry the attachments along.
 

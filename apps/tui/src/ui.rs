@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Drawing the app: tabs on top, the tab's panes, a status line, and a popup or input line over them.
 
 use chrono::{Local, NaiveDate};

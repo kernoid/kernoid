@@ -1,17 +1,13 @@
 // SPDX-License-Identifier: MIT
-//! Push over EventSource (RFC 8620, 7.3): a thread that listens to the stream and tells which types changed;
-//! after a break it connects again, waiting longer each time (up to a minute).
+//! Push over EventSource (RFC 8620, 7.3): a task that listens to the stream and tells which types changed; after a
+//! break it connects again, waiting longer each time (up to a minute).
 
-use std::{
-    collections::BTreeSet,
-    io::{BufRead, BufReader, Read},
-    thread,
-    time::Duration,
-};
+use std::{collections::BTreeSet, time::Duration};
 
 use serde_json::Value;
+use tokio::io::{AsyncBufReadExt, AsyncRead, BufReader};
 
-use super::Client;
+use crate::Client;
 
 /// What the stream tells.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -30,21 +26,18 @@ pub struct Events<R> {
     reader: BufReader<R>,
 }
 
-impl<R: Read> Events<R> {
+impl<R: AsyncRead + Unpin> Events<R> {
     pub fn new(reader: R) -> Self {
         Self { reader: BufReader::new(reader) }
     }
-}
 
-impl<R: Read> Iterator for Events<R> {
-    type Item = std::io::Result<(String, String)>;
-
-    fn next(&mut self) -> Option<Self::Item> {
+    /// The next event; `None` when the stream ends.
+    pub async fn next(&mut self) -> Option<std::io::Result<(String, String)>> {
         let (mut name, mut data) = (String::new(), Vec::<String>::new());
         let mut line = String::new();
         loop {
             line.clear();
-            match self.reader.read_line(&mut line) {
+            match self.reader.read_line(&mut line).await {
                 Ok(0) => return None,
                 Ok(_) => {}
                 Err(error) => return Some(Err(error)),
@@ -84,18 +77,19 @@ pub fn changed_types(data: &str) -> BTreeSet<String> {
         .collect()
 }
 
-/// Listens in a thread of its own until `out` returns false.
-pub fn listen(client: Client, out: impl Fn(Push) -> bool + Send + 'static) {
-    thread::spawn(move || {
+/// Listens in a task of its own (on the current tokio runtime) until `out` returns false.
+pub fn listen(client: Client, out: impl Fn(Push) -> bool + Send + 'static) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
         let mut wait = Duration::from_secs(2);
         loop {
-            match client.event_source(60) {
+            match client.event_source(60).await {
                 Ok(stream) => {
                     if !out(Push::Connected) {
                         return;
                     }
                     wait = Duration::from_secs(2);
-                    for event in Events::new(stream) {
+                    let mut events = Events::new(tokio_util::io::StreamReader::new(stream));
+                    while let Some(event) = events.next().await {
                         let Ok((name, data)) = event else { break };
                         if name != "state" {
                             continue;
@@ -115,20 +109,24 @@ pub fn listen(client: Client, out: impl Fn(Push) -> bool + Send + 'static) {
                     }
                 }
             }
-            thread::sleep(wait);
+            tokio::time::sleep(wait).await;
             wait = (wait * 2).min(Duration::from_secs(60));
         }
-    });
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn events() {
+    #[tokio::test]
+    async fn events() {
         let stream = ": hello\n\nevent: state\ndata: {\"@type\":\"StateChange\",\ndata: \"changed\":{\"a\":{\"Email\":\"1\",\"Mailbox\":\"2\"}}}\n\nevent: ping\ndata: {\"interval\":60}\n\n";
-        let events: Vec<_> = Events::new(stream.as_bytes()).map(Result::unwrap).collect();
+        let mut reader = Events::new(stream.as_bytes());
+        let mut events = Vec::new();
+        while let Some(event) = reader.next().await {
+            events.push(event.unwrap());
+        }
         assert_eq!(events.len(), 2);
         assert_eq!(events[0].0, "state");
         let types: Vec<_> = changed_types(&events[0].1).into_iter().collect();

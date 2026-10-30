@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `kernoid-tui`: logs in with an address and an app password over JMAP and opens the app in the terminal.
 
 mod app;
@@ -14,7 +14,7 @@ use std::{
 
 use clap::Parser;
 use kernoid_tui::{
-    config,
+    block, config,
     jmap::{self, Client, push},
 };
 use ratatui::crossterm::{
@@ -72,7 +72,10 @@ fn run(args: Args) -> Result<(), String> {
     let server = args.server.or(file.server);
     let session_url = jmap::session_url(server.as_deref(), &address).map_err(|e| e.to_string())?;
     let password = config::password(args.password_command.as_deref().or(file.password_command.as_deref()), &address)?;
-    let options = jmap::Options { allow_http: args.allow_http || file.allow_http };
+    let options = jmap::Options {
+        allow_http: args.allow_http || file.allow_http,
+        user_agent: concat!("kernoid-tui/", env!("CARGO_PKG_VERSION")).into(),
+    };
     let client = log_in(&session_url, server.is_none(), &address, &password, &options)?;
     drop(password);
     if args.check {
@@ -92,7 +95,10 @@ fn run(args: Args) -> Result<(), String> {
     let downloads = config::downloads(args.downloads.or(file.downloads));
     let (sender, receiver) = mpsc::channel();
     let pushed = sender.clone();
-    push::listen(client.clone(), move |event| pushed.send(Background::Push(event)).is_ok());
+    {
+        let _runtime = kernoid_tui::RUNTIME.enter();
+        push::listen(client.clone(), move |event| pushed.send(Background::Push(event)).is_ok());
+    }
     let mut app = App::new(client, downloads, sender, config::recovery_code());
     let mut terminal = ratatui::try_init().map_err(|e| e.to_string())?;
     // Clicks and the wheel (app.rs, `mouse`); while it is on, Shift and drag selects text in most terminals.
@@ -145,14 +151,14 @@ fn log_in(
         jmap::Error::Unauthorized => format!("{address}: the address or app password was not accepted"),
         error => format!("{url}: {error}"),
     };
-    let first = match Client::connect(session_url, address, password, options) {
+    let first = match block(Client::connect(session_url, address, password, options)) {
         Ok(client) => return Ok(client),
         Err(jmap::Error::Unauthorized) => return Err(refused(session_url, jmap::Error::Unauthorized)),
         Err(error) if !discover => return Err(refused(session_url, error)),
         Err(error) => refused(session_url, error),
     };
     let domain = address.rsplit_once('@').map(|(_, domain)| domain).unwrap_or_default();
-    let targets = match jmap::srv::lookup(domain) {
+    let targets = match block(jmap::srv::lookup(domain)) {
         Ok(targets) if !targets.is_empty() => targets,
         Ok(_) => return Err(format!("{first}; and _jmap._tcp.{domain} names no server")),
         Err(error) => return Err(format!("{first}; and _jmap._tcp.{domain}: {error}")),
@@ -160,7 +166,7 @@ fn log_in(
     let mut errors = vec![first];
     for target in targets {
         let url = target.session_url();
-        match Client::connect(&url, address, password, options) {
+        match block(Client::connect(&url, address, password, options)) {
             Ok(client) => return Ok(client),
             Err(jmap::Error::Unauthorized) => return Err(refused(&url, jmap::Error::Unauthorized)),
             Err(error) => errors.push(refused(&url, error)),

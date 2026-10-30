@@ -54,7 +54,7 @@ pub fn events_from_ics(text: &str) -> Result<Vec<Map<String, Value>>, String> {
 /// Events as one iCalendar text. calcard converts times and time zones only inside a Group.
 pub fn ics_from_events(events: &[Map<String, Value>]) -> Result<String, String> {
     let entries: Vec<Value> = events.iter().cloned().map(|event| Value::Object(own_properties(event))).collect();
-    let group = json!({ "@type": "Group", "prodId": "-//kernoid//kernoid-tui//EN", "entries": entries });
+    let group = json!({ "@type": "Group", "prodId": "-//kernoid//kernoid-client//EN", "entries": entries });
     let text = serde_json::to_string(&group).map_err(|error| error.to_string())?;
     let calendar: JSCalendar<'_, String, String> = JSCalendar::parse(&text)?;
     Ok(calendar.into_icalendar().ok_or("not a calendar")?.to_string())

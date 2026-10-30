@@ -6,8 +6,8 @@ mod support;
 
 use std::{collections::BTreeSet, io::Cursor};
 
-use kernoid_tui::jmap::{
-    self, Client, Error, Options, calendars, contacts, files,
+use kernoid_client::{
+    Client, Error, Options, calendars, contacts, files,
     mail::{self, Draft, Identity, parse_addresses},
     push::{Events, changed_types},
 };
@@ -101,13 +101,16 @@ fn method(name: &str, arguments: &Value) -> Value {
             json!({ "accountId": account, "ids": ["n5", "n2"] })
         }
         "FileNode/query" => json!({ "accountId": account, "ids": ["n1", "n2", "n3"] }),
+        "FileNode/changes" if arguments["sinceState"] == "0" => json!({ "type": "cannotCalculateChanges" }),
+        "FileNode/changes" => json!({ "accountId": account, "oldState": "4", "newState": "6", "hasMoreChanges": false,
+            "created": ["n1"], "updated": ["n3"], "destroyed": ["n9"] }),
         // A search's hits with their parents (fetchParents): n5 lies in Projects / 2026.
         "FileNode/get" if arguments["fetchParents"] == true => json!({ "accountId": account, "list": [
             { "@type": "File", "id": "n5", "parentId": "n6", "name": "plan.txt", "blobId": "F5", "size": 4 },
             { "@type": "Directory", "id": "n2", "parentId": null, "name": "Projects" },
             { "@type": "Directory", "id": "n6", "parentId": "n2", "name": "2026" },
         ] }),
-        "FileNode/get" => json!({ "accountId": account, "list": [
+        "FileNode/get" => json!({ "accountId": account, "state": "6", "list": [
             { "@type": "File", "id": "n1", "parentId": null, "name": "b.txt", "blobId": "F1", "size": 5,
               "mediaType": "text/plain", "myRights": { "mayRead": true } },
             { "@type": "Directory", "id": "n2", "parentId": null, "name": "Projects", "shareWith": { "p2": { "mayRead": true } } },
@@ -225,17 +228,17 @@ fn server() -> Server {
     })
 }
 
-fn connect(server: &Server) -> Client {
-    let url = jmap::session_url(Some(&server.origin), "alice@firma.example").unwrap();
-    Client::connect(&url, "alice@firma.example", PASSWORD, &Options::default()).unwrap()
+async fn connect(server: &Server) -> Client {
+    let url = kernoid_client::session_url(Some(&server.origin), "alice@firma.example").unwrap();
+    Client::connect(&url, "alice@firma.example", PASSWORD, &Options::default()).await.unwrap()
 }
 
-#[test]
-fn logs_in_through_the_well_known_redirect() {
+#[tokio::test(flavor = "multi_thread")]
+async fn logs_in_through_the_well_known_redirect() {
     let server = server();
-    let client = connect(&server);
+    let client = connect(&server).await;
     assert_eq!(client.session.username, "alice@firma.example");
-    assert_eq!(client.primary(jmap::MAIL).unwrap(), "A");
+    assert_eq!(client.primary(kernoid_client::MAIL).unwrap(), "A");
     // The redirect kept the credentials (same host), and both requests were made.
     let paths: Vec<_> = server.requests().iter().map(|r| r.path.clone()).collect();
     assert_eq!(paths, ["/.well-known/jmap", "/jmap/session"]);
@@ -248,27 +251,28 @@ fn logs_in_through_the_well_known_redirect() {
     );
 }
 
-#[test]
-fn a_wrong_password_is_unauthorized() {
+#[tokio::test(flavor = "multi_thread")]
+async fn a_wrong_password_is_unauthorized() {
     let server = server();
     let url = format!("{}/.well-known/jmap", server.origin);
-    let error = Client::connect(&url, "alice@firma.example", "wrong", &Options::default()).unwrap_err();
+    let error = Client::connect(&url, "alice@firma.example", "wrong", &Options::default()).await.unwrap_err();
     assert!(matches!(error, Error::Unauthorized), "{error}");
 }
 
-#[test]
-fn plain_http_only_to_this_machine() {
-    let error = Client::connect("http://example.org/.well-known/jmap", "a", "b", &Options::default()).unwrap_err();
+#[tokio::test(flavor = "multi_thread")]
+async fn plain_http_only_to_this_machine() {
+    let error =
+        Client::connect("http://example.org/.well-known/jmap", "a", "b", &Options::default()).await.unwrap_err();
     assert!(error.to_string().contains("not HTTPS"), "{error}");
 }
 
-#[test]
-fn method_errors_and_set_errors() {
+#[tokio::test(flavor = "multi_thread")]
+async fn method_errors_and_set_errors() {
     let server = server();
-    let client = connect(&server);
-    let error = client.call(&[], "Fail/now", json!({})).unwrap_err();
+    let client = connect(&server).await;
+    let error = client.call(&[], "Fail/now", json!({})).await.unwrap_err();
     assert!(matches!(&error, Error::Method { kind, .. } if kind == "invalidArguments"), "{error}");
-    let error = mail::move_to(&client, "A", "forbidden", "m1").unwrap_err();
+    let error = mail::move_to(&client, "A", "forbidden", "m1").await.unwrap_err();
     assert!(matches!(&error, Error::Set { kind, .. } if kind == "forbidden"), "{error}");
     assert_eq!(error.to_string(), "forbidden: not yours");
     // Every request says which capabilities it uses, core first.
@@ -276,14 +280,14 @@ fn method_errors_and_set_errors() {
     assert_eq!(request.json()["using"], json!(["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"]));
 }
 
-#[test]
-fn mailboxes_emails_and_one_email() {
+#[tokio::test(flavor = "multi_thread")]
+async fn mailboxes_emails_and_one_email() {
     let server = server();
-    let client = connect(&server);
-    let boxes = mail::mailboxes(&client, "A").unwrap();
+    let client = connect(&server).await;
+    let boxes = mail::mailboxes(&client, "A").await.unwrap();
     let names: Vec<_> = boxes.iter().map(|m| m.name.as_str()).collect();
     assert_eq!(names, ["Inbox", "Drafts", "Sent", "Archive"]);
-    let (emails, total) = mail::emails(&client, "A", Some("m1"), " plans ", 0, 50).unwrap();
+    let (emails, total) = mail::emails(&client, "A", Some("m1"), " plans ", 0, 50).await.unwrap();
     assert_eq!(total, 2);
     assert_eq!(emails.len(), 2);
     assert!(emails[0].is_seen() && !emails[1].is_seen());
@@ -292,21 +296,21 @@ fn mailboxes_emails_and_one_email() {
     assert_eq!(calls[0].1["filter"], json!({ "inMailbox": "m1", "text": "plans" }));
     assert_eq!(calls[0].1["limit"], 50);
     assert_eq!(calls[1].1["#ids"], json!({ "resultOf": "q", "name": "Email/query", "path": "/ids" }));
-    let email = mail::email(&client, "A", "e1").unwrap().unwrap();
+    let email = mail::email(&client, "A", "e1").await.unwrap().unwrap();
     assert_eq!(email.text(80), "Hi Alice");
     assert_eq!(email.message_id.as_deref(), Some(&["m1@firma.example".to_owned()][..]));
-    mail::set_keyword(&client, "A", "e2", "$seen", true).unwrap();
+    mail::set_keyword(&client, "A", "e2", "$seen", true).await.unwrap();
     let calls = server.api_requests().pop().unwrap().calls();
     assert_eq!(calls[0].1["update"], json!({ "e2": { "keywords/$seen": true } }));
-    mail::destroy(&client, "A", "e2").unwrap();
+    mail::destroy(&client, "A", "e2").await.unwrap();
     assert_eq!(server.api_requests().pop().unwrap().calls()[0].1["destroy"], json!(["e2"]));
 }
 
-#[test]
-fn sending_goes_through_drafts_to_sent() {
+#[tokio::test(flavor = "multi_thread")]
+async fn sending_goes_through_drafts_to_sent() {
     let server = server();
-    let client = connect(&server);
-    let boxes = mail::mailboxes(&client, "A").unwrap();
+    let client = connect(&server).await;
+    let boxes = mail::mailboxes(&client, "A").await.unwrap();
     let identity = Identity { id: "i1".into(), name: "Alice".into(), email: "alice@firma.example".into() };
     let draft = Draft {
         to: parse_addresses("Bob <bob@firma.example>"),
@@ -316,7 +320,7 @@ fn sending_goes_through_drafts_to_sent() {
         references: vec!["m1@firma.example".into()],
         ..Draft::default()
     };
-    mail::send(&client, "A", &identity, &draft, &boxes).unwrap();
+    mail::send(&client, "A", &identity, &draft, &boxes).await.unwrap();
     let calls = server.api_requests().pop().unwrap().calls();
     let email = &calls[0].1["create"]["draft"];
     assert_eq!(email["mailboxIds"], json!({ "m2": true }));
@@ -329,30 +333,31 @@ fn sending_goes_through_drafts_to_sent() {
         calls[1].1["onSuccessUpdateEmail"]["#send"],
         json!({ "keywords/$draft": null, "mailboxIds": { "m3": true } })
     );
-    assert_eq!(mail::save_draft(&client, "A", &draft, &boxes).unwrap(), "e9");
+    assert_eq!(mail::save_draft(&client, "A", &draft, &boxes).await.unwrap(), "e9");
 }
 
-#[test]
-fn stores_directories_and_downloads() {
+#[tokio::test(flavor = "multi_thread")]
+async fn stores_directories_and_downloads() {
     let server = server();
-    let client = connect(&server);
+    let client = connect(&server).await;
     let stores = files::stores(&client);
     let kinds: Vec<_> = stores.iter().map(|s| (s.id.as_str(), s.kind)).collect();
     assert_eq!(kinds, [("A", files::StoreKind::Own), ("D", files::StoreKind::Drive), ("S", files::StoreKind::Shared)]);
-    let nodes = files::children(&client, "D", None).unwrap();
+    let nodes = files::children(&client, "D", None).await.unwrap();
     let names: Vec<_> = nodes.iter().map(|n| n.name.as_str()).collect();
     assert_eq!(names, ["Projects", "a.pdf", "b.txt"]);
     assert!(nodes[0].is_directory() && nodes[2].rights().may_read);
     let calls = server.api_requests().pop().unwrap().calls();
     assert_eq!(calls[0].1["filter"], json!({ "isTopLevel": true }));
     assert_eq!(calls[0].1["accountId"], "D");
-    files::children(&client, "D", Some("n2")).unwrap();
+    files::children(&client, "D", Some("n2")).await.unwrap();
     assert_eq!(server.api_requests().pop().unwrap().calls()[0].1["filter"], json!({ "parentId": "n2" }));
 
     let mut out = Vec::new();
     let mut seen = Vec::new();
     let size = client
         .download("D", "F1", "b.txt", "text/plain", &mut out, &mut |done, total| seen.push((done, total)))
+        .await
         .unwrap();
     assert_eq!((size, out.as_slice()), (5, &b"hello"[..]));
     assert_eq!(seen.last(), Some(&(5, Some(5))));
@@ -360,26 +365,31 @@ fn stores_directories_and_downloads() {
     assert_eq!(download.path, "/jmap/download/D/F1/b.txt?accept=text%2Fplain");
     assert!(authorized(&download));
 
-    let people = files::principals(&client, &["p2"]).unwrap();
+    let people = files::principals(&client, &["p2"]).await.unwrap();
     assert_eq!(people[0].email.as_deref(), Some("bob@firma.example"));
 }
 
-#[test]
-fn uploads_new_files_and_new_versions() {
+#[tokio::test(flavor = "multi_thread")]
+async fn uploads_new_files_and_new_versions() {
     let server = server();
-    let client = connect(&server);
-    let dir = std::env::temp_dir().join(format!("kernoid-tui-upload-{}", std::process::id()));
+    let client = connect(&server).await;
+    let dir = std::env::temp_dir().join(format!("kernoid-client-upload-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("notes.txt");
     std::fs::write(&path, "some notes").unwrap();
 
-    let mut progress = Vec::new();
-    files::upload_file(&client, "D", Some("n2"), &path, None, &mut |done, total| progress.push((done, total))).unwrap();
+    let progress = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let heard = progress.clone();
+    files::upload_file(&client, "D", Some("n2"), &path, None, move |done, total| {
+        heard.lock().unwrap().push((done, total))
+    })
+    .await
+    .unwrap();
     let upload = server.requests().into_iter().find(|r| r.path == "/jmap/upload/D/").unwrap();
     assert_eq!(upload.body, b"some notes");
     assert_eq!(upload.header("content-type"), Some("text/plain"));
     assert_eq!(upload.header("content-length"), Some("10"));
-    assert_eq!(progress.last(), Some(&(10, 10)));
+    assert_eq!(progress.lock().unwrap().last(), Some(&(10, 10)));
     let calls = server.api_requests().pop().unwrap().calls();
     let created = &calls[0].1["create"]["f"];
     assert_eq!(created["@type"], "File");
@@ -390,42 +400,42 @@ fn uploads_new_files_and_new_versions() {
     assert_eq!(calls[0].1["onExists"], "rename");
 
     // A file of that name gets the upload as its new content.
-    let existing = files::children(&client, "D", None).unwrap().into_iter().find(|n| n.name == "b.txt").unwrap();
-    files::upload_file(&client, "D", None, &path, Some(&existing), &mut |_, _| {}).unwrap();
+    let existing = files::children(&client, "D", None).await.unwrap().into_iter().find(|n| n.name == "b.txt").unwrap();
+    files::upload_file(&client, "D", None, &path, Some(&existing), |_, _| {}).await.unwrap();
     let calls = server.api_requests().pop().unwrap().calls();
     assert_eq!(calls[0].1["update"]["n1"]["blobId"], "U1");
     std::fs::remove_dir_all(&dir).unwrap();
 
-    let versions = files::versions(&client, "D", "n1").unwrap();
+    let versions = files::versions(&client, "D", "n1").await.unwrap();
     assert_eq!(versions.len(), 2);
     assert!(versions[0].is_current);
     let using = server.api_requests().pop().unwrap().json()["using"].clone();
     assert!(using.as_array().unwrap().contains(&json!("https://kernoid.dev/jmap/file-versions")));
-    files::restore(&client, "D", "n1", &versions[1]).unwrap();
+    files::restore(&client, "D", "n1", &versions[1]).await.unwrap();
     assert_eq!(server.api_requests().pop().unwrap().calls()[0].1["update"], json!({ "n1": { "blobId": "V1" } }));
-    files::destroy(&client, "D", "n2").unwrap();
+    files::destroy(&client, "D", "n2").await.unwrap();
     let calls = server.api_requests().pop().unwrap().calls();
     assert_eq!(
         (calls[0].1["destroy"].clone(), calls[0].1["onDestroyRemoveChildren"].clone()),
         (json!(["n2"]), json!(true))
     );
-    files::create_directory(&client, "D", None, "New").unwrap();
+    files::create_directory(&client, "D", None, "New").await.unwrap();
     assert_eq!(
         server.api_requests().pop().unwrap().calls()[0].1["create"]["d"],
         json!({ "@type": "Directory", "parentId": null, "name": "New" })
     );
 }
 
-#[test]
-fn calendars_and_contacts_of_all_accounts() {
+#[tokio::test(flavor = "multi_thread")]
+async fn calendars_and_contacts_of_all_accounts() {
     let server = server();
-    let client = connect(&server);
-    let list = calendars::calendars(&client).unwrap();
+    let client = connect(&server).await;
+    let list = calendars::calendars(&client).await.unwrap();
     assert_eq!(list.len(), 2);
     let shared = list.iter().find(|c| c.account == "S").unwrap();
     assert_eq!(shared.shared.as_deref(), Some("bob@firma.example"));
     let after = chrono::DateTime::parse_from_rfc3339("2026-11-01T00:00:00Z").unwrap().to_utc();
-    let events = calendars::instances(&client, &list, after, after + chrono::Duration::days(14)).unwrap();
+    let events = calendars::instances(&client, &list, after, after + chrono::Duration::days(14)).await.unwrap();
     let titles: Vec<_> = events.iter().map(|e| e.title.as_deref().unwrap_or_default()).collect();
     assert_eq!(titles, ["Sooner", "Later"]);
     assert_eq!(events[1].location().as_deref(), Some("Room 1"));
@@ -434,26 +444,26 @@ fn calendars_and_contacts_of_all_accounts() {
     assert_eq!(query.1["filter"], json!({ "after": "2026-11-01T00:00:00Z", "before": "2026-11-15T00:00:00Z" }));
     assert_eq!(query.1["expandRecurrences"], true);
 
-    let cards = contacts::cards(&client, "ann").unwrap();
+    let cards = contacts::cards(&client, "ann").await.unwrap();
     let names: Vec<_> = cards.iter().map(|c| c.full_name()).collect();
     assert_eq!(names, ["Anna A", "Zoe Z"]);
     assert_eq!(cards[0].phones(), ["+49 1"]);
     assert_eq!(server.api_requests().pop().unwrap().calls()[0].1["filter"], json!({ "text": "ann" }));
 }
 
-#[test]
-fn push_events() {
+#[tokio::test(flavor = "multi_thread")]
+async fn push_events() {
     let stream = "event: state\ndata: {\"@type\":\"StateChange\",\"changed\":{\"A\":{\"FileNode\":\"7\"}}}\n\n";
-    let (name, data) = Events::new(Cursor::new(stream)).next().unwrap().unwrap();
+    let (name, data) = Events::new(Cursor::new(stream)).next().await.unwrap().unwrap();
     assert_eq!(name, "state");
     assert_eq!(changed_types(&data), BTreeSet::from(["FileNode".to_owned()]));
 }
 
-#[test]
-fn conversations_through_threads() {
+#[tokio::test(flavor = "multi_thread")]
+async fn conversations_through_threads() {
     let server = server();
-    let client = connect(&server);
-    let (rows, total) = mail::conversations(&client, "A", Some("m1"), "", 0, 50).unwrap();
+    let client = connect(&server).await;
+    let (rows, total) = mail::conversations(&client, "A", Some("m1"), "", 0, 50).await.unwrap();
     assert_eq!((rows.len(), total), (2, 2));
     let first = &rows[0];
     let ids: Vec<_> = first.emails.iter().map(|e| e.id.as_str()).collect();
@@ -467,48 +477,48 @@ fn conversations_through_threads() {
     assert_eq!(calls[0].1["collapseThreads"], true);
     assert_eq!(calls[2].1["#ids"]["path"], "/list/*/threadId");
     assert_eq!(calls[3].1["#ids"]["path"], "/list/*/emailIds");
-    let emails = mail::full(&client, "A", &["e3", "e1"]).unwrap();
+    let emails = mail::full(&client, "A", &["e3", "e1"]).await.unwrap();
     let order: Vec<_> = emails.iter().map(|e| e.summary.id.as_str()).collect();
     assert_eq!(order, ["e1", "e3"]);
-    mail::set_keywords(&client, "A", &["e1".into(), "e3".into()], "$flagged", true).unwrap();
+    mail::set_keywords(&client, "A", &["e1".into(), "e3".into()], "$flagged", true).await.unwrap();
     let update = &server.api_requests().pop().unwrap().calls()[0].1["update"];
     assert_eq!(update, &json!({ "e1": { "keywords/$flagged": true }, "e3": { "keywords/$flagged": true } }));
-    mail::move_all(&client, "A", &["e1".into()], "m9").unwrap();
+    mail::move_all(&client, "A", &["e1".into()], "m9").await.unwrap();
     assert_eq!(
         server.api_requests().pop().unwrap().calls()[0].1["update"],
         json!({ "e1": { "mailboxIds": { "m9": true } } })
     );
 }
 
-#[test]
-fn sharing_a_directory() {
+#[tokio::test(flavor = "multi_thread")]
+async fn sharing_a_directory() {
     let server = server();
-    let client = connect(&server);
-    let found = files::find_principals(&client, " bo ").unwrap();
+    let client = connect(&server).await;
+    let found = files::find_principals(&client, " bo ").await.unwrap();
     assert_eq!(found[0].name, "Bob");
     let calls = server.api_requests().pop().unwrap().calls();
     assert_eq!((calls[0].0.as_str(), calls[0].1["filter"].clone()), ("Principal/query", json!({ "text": "bo" })));
     let with = vec![("p2".to_owned(), files::Level::Edit), ("g1".to_owned(), files::Level::Full)];
-    files::share(&client, "A", "n2", &with).unwrap();
+    files::share(&client, "A", "n2", &with).await.unwrap();
     let update = &server.api_requests().pop().unwrap().calls()[0].1["update"]["n2"]["shareWith"];
     assert_eq!(update["p2"]["mayModifyContent"], true);
     assert_eq!(update["p2"]["mayShare"], false);
     assert_eq!(update["g1"]["mayShare"], true);
-    files::share(&client, "A", "n2", &[]).unwrap();
+    files::share(&client, "A", "n2", &[]).await.unwrap();
     assert_eq!(server.api_requests().pop().unwrap().calls()[0].1["update"]["n2"]["shareWith"], json!({}));
     assert_eq!(files::Level::of(&files::Level::Edit.rights()), files::Level::Edit);
 }
 
-#[test]
-fn the_vacation_response_read_and_set() {
+#[tokio::test(flavor = "multi_thread")]
+async fn the_vacation_response_read_and_set() {
     let server = server();
-    let client = connect(&server);
-    let mut vacation = mail::vacation(&client).unwrap().unwrap();
+    let client = connect(&server).await;
+    let mut vacation = mail::vacation(&client).await.unwrap().unwrap();
     assert_eq!((vacation.on, vacation.subject.as_str(), vacation.until), (true, "Away", None));
     // 07:00 UTC, in the local time of whoever runs the test – and back.
     vacation.on = false;
     vacation.subject.clear();
-    mail::set_vacation(&client, &vacation).unwrap();
+    mail::set_vacation(&client, &vacation).await.unwrap();
     let update = &server.api_requests().pop().unwrap().calls()[0].1["update"]["singleton"];
     assert_eq!(update["isEnabled"], false);
     assert_eq!(update["fromDate"], "2026-11-02T07:00:00Z");
@@ -516,11 +526,11 @@ fn the_vacation_response_read_and_set() {
     assert_eq!(update["textBody"], "Back on Monday.");
 }
 
-#[test]
-fn files_searched_and_copied_between_stores() {
+#[tokio::test(flavor = "multi_thread")]
+async fn files_searched_and_copied_between_stores() {
     let server = server();
-    let client = connect(&server);
-    let found = files::search(&client, "A", "plan").unwrap();
+    let client = connect(&server).await;
+    let found = files::search(&client, "A", "plan").await.unwrap();
     let calls = server.api_requests().pop().unwrap().calls();
     assert_eq!(calls[0].1["filter"], json!({ "text": "plan" }));
     assert_eq!(calls[1].1["fetchParents"], true);
@@ -530,7 +540,7 @@ fn files_searched_and_copied_between_stores() {
         .collect();
     assert_eq!(places, [("plan.txt".into(), vec!["Projects".into(), "2026".into()]), ("Projects".into(), vec![])]);
 
-    files::copy_to(&client, "A", "D", "n1", Some("d9"), false).unwrap();
+    files::copy_to(&client, "A", "D", "n1", Some("d9"), false).await.unwrap();
     let copy = &server.api_requests().pop().unwrap().calls()[0];
     assert_eq!(copy.0, "FileNode/copy");
     assert_eq!((copy.1["fromAccountId"].clone(), copy.1["accountId"].clone()), (json!("A"), json!("D")));
@@ -539,16 +549,16 @@ fn files_searched_and_copied_between_stores() {
         (copy.1["onSuccessDestroyOriginal"].clone(), copy.1["onExists"].clone()),
         (json!(false), json!("rename"))
     );
-    let refused = files::copy_to(&client, "A", "D", "locked", None, true).unwrap_err();
+    let refused = files::copy_to(&client, "A", "D", "locked", None, true).await.unwrap_err();
     assert!(matches!(refused, Error::Set { ref kind, .. } if kind == "forbidden"), "{refused:?}");
 }
 
-#[test]
-fn links_listed_made_and_removed() {
+#[tokio::test(flavor = "multi_thread")]
+async fn links_listed_made_and_removed() {
     let server = server();
-    let client = connect(&server);
+    let client = connect(&server).await;
     assert!(files::links_available(&client));
-    let list = files::links(&client, "A", "n2").unwrap();
+    let list = files::links(&client, "A", "n2").await.unwrap();
     assert_eq!(
         list.iter().map(files::LinkMode::of).collect::<Vec<_>>(),
         [files::LinkMode::Drop, files::LinkMode::View]
@@ -559,6 +569,7 @@ fn links_listed_made_and_removed() {
 
     // A drop box with an expiry and a password; its address from the session's template, as the server names it.
     let url = files::create_link(&client, "A", "n2", files::LinkMode::Drop, Some("2099-12-31T22:59:59Z"), Some("pw"))
+        .await
         .unwrap();
     assert_eq!(url, "https://login.firma.example/app/link.html#T0K3N");
     let created = &server.api_requests().pop().unwrap().calls()[0].1["create"]["l"];
@@ -568,16 +579,16 @@ fn links_listed_made_and_removed() {
     );
     assert_eq!(created["expires"], "2099-12-31T22:59:59Z");
 
-    files::remove_link(&client, "A", "l1").unwrap();
+    files::remove_link(&client, "A", "l1").await.unwrap();
     assert_eq!(server.api_requests().pop().unwrap().calls()[0].1["destroy"], json!(["l1"]));
     assert_eq!(files::LinkMode::Drop.next(false), files::LinkMode::View, "a file has only the one");
 }
 
-#[test]
-fn events_made_changed_answered_and_removed() {
+#[tokio::test(flavor = "multi_thread")]
+async fn events_made_changed_answered_and_removed() {
     let server = server();
-    let client = connect(&server);
-    let list = calendars::calendars(&client).unwrap();
+    let client = connect(&server).await;
+    let list = calendars::calendars(&client).await.unwrap();
     let calendar = list.iter().find(|c| c.account == "A").unwrap();
     let at = |s: &str| chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M").unwrap();
     let form = calendars::EventForm {
@@ -593,28 +604,28 @@ fn events_made_changed_answered_and_removed() {
         answers: Vec::new(),
         was: None,
     };
-    assert_eq!(calendars::create(&client, calendar, &form, "alice@firma.example").unwrap(), "ev9");
+    assert_eq!(calendars::create(&client, calendar, &form, "alice@firma.example").await.unwrap(), "ev9");
     let calls = server.api_requests().pop().unwrap().calls();
     assert_eq!(calls[0].1["sendSchedulingMessages"], true);
     let created = &calls[0].1["create"]["e"];
     assert_eq!(created["calendarIds"], json!({ "c-A": true }));
     assert_eq!(created["participants"]["p1"]["calendarAddress"], "mailto:bob@firma.example");
-    calendars::update(&client, calendar, "ev9", &form, "alice@firma.example").unwrap();
+    calendars::update(&client, calendar, "ev9", &form, "alice@firma.example").await.unwrap();
     assert_eq!(server.api_requests().pop().unwrap().calls()[0].1["update"]["ev9"]["title"], "Plans");
-    calendars::answer(&client, "A", "ev2", "p3", "accepted").unwrap();
+    calendars::answer(&client, "A", "ev2", "p3", "accepted").await.unwrap();
     let calls = server.api_requests().pop().unwrap().calls();
     assert_eq!(calls[0].1["update"], json!({ "ev2": { "participants/p3/participationStatus": "accepted" } }));
     assert_eq!(calls[0].1["sendSchedulingMessages"], true);
-    calendars::destroy(&client, "A", "ev2").unwrap();
+    calendars::destroy(&client, "A", "ev2").await.unwrap();
     assert_eq!(server.api_requests().pop().unwrap().calls()[0].1["destroy"], json!(["ev2"]));
-    let event = calendars::event(&client, "A", "ev2.1").unwrap().unwrap();
+    let event = calendars::event(&client, "A", "ev2.1").await.unwrap().unwrap();
     assert_eq!(event.title.as_deref(), Some("Later"));
 }
 
-#[test]
-fn one_instance_of_a_series_changed_and_left_out() {
+#[tokio::test(flavor = "multi_thread")]
+async fn one_instance_of_a_series_changed_and_left_out() {
     let server = server();
-    let client = connect(&server);
+    let client = connect(&server).await;
     let mut series: calendars::Event = serde_json::from_value(json!({
         "id": "ev7", "title": "Weekly", "start": "2026-11-02T10:00:00", "timeZone": "Europe/Berlin",
         "duration": "PT1H", "recurrenceRule": { "frequency": "weekly" },
@@ -636,45 +647,45 @@ fn one_instance_of_a_series_changed_and_left_out() {
         answers: Vec::new(),
         was: None,
     };
-    calendars::update_instance(&client, &series, "2026-11-09T10:00:00", &form, "alice@firma.example").unwrap();
+    calendars::update_instance(&client, &series, "2026-11-09T10:00:00", &form, "alice@firma.example").await.unwrap();
     let calls = server.api_requests().pop().unwrap().calls();
     let overrides = &calls[0].1["update"]["ev7"]["recurrenceOverrides"];
     assert_eq!(overrides["2026-11-16T10:00:00"], json!({ "excluded": true }), "earlier overrides stay");
     let moved = &overrides["2026-11-09T10:00:00"];
     assert_eq!((moved["title"].as_str(), moved["start"].as_str()), (Some("Moved"), Some("2026-11-10T11:00:00")));
     assert!(moved.get("recurrenceRule").is_none() && moved.get("timeZone").is_none(), "{moved}");
-    calendars::destroy_instance(&client, &series, "2026-11-23T10:00:00").unwrap();
+    calendars::destroy_instance(&client, &series, "2026-11-23T10:00:00").await.unwrap();
     let calls = server.api_requests().pop().unwrap().calls();
     assert_eq!(calls[0].1["update"]["ev7"]["recurrenceOverrides"]["2026-11-23T10:00:00"], json!({ "excluded": true }));
 }
 
-#[test]
-fn files_imported_into_a_calendar_and_an_address_book() {
-    use kernoid_tui::jmap::transfer;
+#[tokio::test(flavor = "multi_thread")]
+async fn files_imported_into_a_calendar_and_an_address_book() {
+    use kernoid_client::transfer;
     let server = server();
-    let client = connect(&server);
-    let list = calendars::calendars(&client).unwrap();
+    let client = connect(&server).await;
+    let list = calendars::calendars(&client).await.unwrap();
     let calendar = list.iter().find(|c| c.account == "A").unwrap();
     let ics = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//t//EN\r\nBEGIN:VEVENT\r\nUID:a@x\r\nDTSTART:20261103T100000Z\r\nSUMMARY:Plans\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
-    calendars::import(&client, calendar, transfer::events_from_ics(ics).unwrap()).unwrap();
+    calendars::import(&client, calendar, transfer::events_from_ics(ics).unwrap()).await.unwrap();
     let calls = server.api_requests().pop().unwrap().calls();
     assert_eq!(calls[0].1["sendSchedulingMessages"], false, "importing is not inviting");
     let created = &calls[0].1["create"]["i0"];
     assert_eq!((created["title"].as_str(), created["calendarIds"].clone()), (Some("Plans"), json!({ "c-A": true })));
 
-    let books = contacts::address_books(&client).unwrap();
+    let books = contacts::address_books(&client).await.unwrap();
     let vcf = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Dora\r\nEND:VCARD\r\n";
-    contacts::import(&client, &books[0], transfer::cards_from_vcf(vcf).unwrap()).unwrap();
+    contacts::import(&client, &books[0], transfer::cards_from_vcf(vcf).unwrap()).await.unwrap();
     let created = &server.api_requests().pop().unwrap().calls()[0].1["create"]["i0"];
     assert_eq!(created["name"]["full"], "Dora");
     assert_eq!(created["addressBookIds"], json!({ "b1": true }));
 }
 
-#[test]
-fn contacts_made_changed_and_removed() {
+#[tokio::test(flavor = "multi_thread")]
+async fn contacts_made_changed_and_removed() {
     let server = server();
-    let client = connect(&server);
-    let books = contacts::address_books(&client).unwrap();
+    let client = connect(&server).await;
+    let books = contacts::address_books(&client).await.unwrap();
     let names: Vec<_> = books.iter().map(|b| (b.name.as_str(), b.writable())).collect();
     assert_eq!(names, [("Contacts", true), ("Work", false)]);
     let form = contacts::CardForm {
@@ -686,7 +697,7 @@ fn contacts_made_changed_and_removed() {
         phones: vec![contacts::Labelled { value: "+49 170 1".into(), labels: vec!["mobile".into()] }],
         ..Default::default()
     };
-    contacts::create(&client, &books[0], &form).unwrap();
+    contacts::create(&client, &books[0], &form).await.unwrap();
     let created = &server.api_requests().pop().unwrap().calls()[0].1["create"]["c"];
     assert_eq!(created["@type"], "Card");
     assert_eq!(created["addressBookIds"], json!({ "b1": true }));
@@ -696,8 +707,29 @@ fn contacts_made_changed_and_removed() {
     assert_eq!(created["phones"]["p1"]["features"], json!({ "mobile": true }));
     assert_eq!(created["phones"]["p1"]["contexts"], Value::Null);
     assert_eq!(created["organizations"], Value::Null);
-    contacts::update(&client, &books[0], "k2", &form).unwrap();
+    contacts::update(&client, &books[0], "k2", &form).await.unwrap();
     assert_eq!(server.api_requests().pop().unwrap().calls()[0].1["update"]["k2"]["name"], json!({ "full": "Dora" }));
-    contacts::destroy(&client, "A", "k2").unwrap();
+    contacts::destroy(&client, "A", "k2").await.unwrap();
     assert_eq!(server.api_requests().pop().unwrap().calls()[0].1["destroy"], json!(["k2"]));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_store_whole_and_its_changes() {
+    let server = server();
+    let client = connect(&server).await;
+    let snapshot = files::snapshot(&client, "D").await.unwrap();
+    assert_eq!((snapshot.state.as_str(), snapshot.nodes.len()), ("6", 3));
+    let calls = server.api_requests().pop().unwrap().calls();
+    assert_eq!(calls[0].1, json!({ "accountId": "D" }), "no filter: the whole store");
+
+    let changes = files::changes(&client, "D", "4", 500).await.unwrap();
+    assert_eq!((changes.old_state.as_str(), changes.new_state.as_str()), ("4", "6"));
+    assert_eq!(changes.destroyed, ["n9"]);
+    let calls = server.api_requests().pop().unwrap().calls();
+    assert_eq!(calls[0].1["maxChanges"], 500);
+    assert_eq!(calls[1].1["#ids"]["path"], "/created");
+    assert_eq!(calls[2].1["#ids"]["path"], "/updated");
+    // Too old a state: the caller takes a snapshot.
+    let error = files::changes(&client, "D", "0", 500).await.unwrap_err();
+    assert!(matches!(error, Error::Method { ref kind, .. } if kind == "cannotCalculateChanges"), "{error}");
 }

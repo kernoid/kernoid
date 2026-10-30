@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: MIT
+# kernoid-sync: a folder kept in step with a file store of kernoid (RFC 0005) – changes, transfers, conflicts and the
+# local state in SQLite; part of kernoid's Rust SDK beside kernoid-client, which it talks through. MIT and a workspace
+# of its own like the SDK; its requirements are minimum versions, its Cargo.lock pins them, each at least two weeks old
+# when taken (`../tui/scripts/check-age.py --dir=apps/sync`).
+[workspace]
+
+[package]
+name = "kernoid-sync"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.94"
+license = "MIT"
+repository = "https://github.com/kernoid/kernoid"
+description = "kernoid's file sync: a folder kept in step with a file store over JMAP"
+keywords = ["kernoid", "jmap", "sync", "files"]
+categories = ["filesystem", "network-programming"]
+publish = false
+
+[dependencies]
+chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
+kernoid-client = { path = "../client" }
+# SQLite built in (its code is in the public domain), so that every platform has the same.
+rusqlite = { version = "0.40.2", features = ["bundled"] }
+serde_json = "1.0.151"
+tokio = { version = "1.53.3", features = ["fs"] }
+
+[dev-dependencies]
+tokio = { version = "1.53.3", features = ["fs", "macros", "rt-multi-thread", "time"] }
+
+[profile.dev.package."*"]
+opt-level = 2
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }

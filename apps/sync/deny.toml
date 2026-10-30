@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: MIT
+# cargo-deny: what kernoid-sync's dependencies may be (CI, job `deps`). Known vulnerabilities fail the build,
+# licences must keep it usable under MIT, crates come only from crates.io. A finding that does not affect the
+# SDK is ignored below with a reason, never silently.
+
+[graph]
+all-features = true
+
+[advisories]
+# Unmaintained crates are reported, but only those the SDK depends on directly fail the build.
+unmaintained = "workspace"
+ignore = [
+    # The three below come with rpgp, through kernoid-e2e (end-to-end encryption, RFC 0006); `apps/e2e/deny.toml`
+    # ignores them for the same reasons.
+    # crypto-bigint 0.5 is not constant-time; the fix is 0.7.6, which rpgp 0.21's curves (elliptic-curve 0.13) do not
+    # take. It serves only RSA, the NIST curves and X448. kernoid's keys are Curve25519 and ML-KEM/ML-DSA (RFC 0006,
+    # 4.1), and kernoid-e2e refuses secret keys of other kinds – so no secret of the user's goes through it. Encrypting
+    # to someone else's NIST key uses it for an ephemeral scalar, on the user's own machine, where nobody can time it.
+    { id = "RUSTSEC-2026-0387", reason = "no secret key of kernoid's is on a curve crypto-bigint 0.5 computes" },
+    # ml-dsa 0.0.4 divides with a variable-time instruction while signing; the fix is 0.1, and rpgp 0.21 requires
+    # exactly 0.0.4. A client signs only the messages its user sends, on their own machine – it signs nothing on request
+    # for someone who could time it. Taken up again with rpgp's next version (RFC 0006, 11).
+    { id = "RUSTSEC-2025-0144", reason = "ML-DSA signs only the user's own messages on their machine, never on request" },
+    # RSA decryption is not constant-time (Marvin), and there is no fixed version. A client never decrypts or signs with
+    # an RSA key: the account's keys are Curve25519 and ML-KEM/ML-DSA. RSA serves only encrypting to and verifying
+    # someone else's key – public operations.
+    { id = "RUSTSEC-2023-0071", reason = "no RSA secret key is ever used; only public RSA operations" },
+]
+
+[licenses]
+confidence-threshold = 0.93
+# Permissive licences, so that the SDK stays usable under MIT – and MPL-2.0, whose copyleft covers only its own files
+# (option-ext, through dirs); they stay under the MPL.
+allow = ["0BSD", "MPL-2.0", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "BSL-1.0", "CC0-1.0", "CDLA-Permissive-2.0", "ISC", "MIT", "MIT-0", "Unicode-3.0", "Unlicense", "Zlib"]
+
+[bans]
+multiple-versions = "allow"
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

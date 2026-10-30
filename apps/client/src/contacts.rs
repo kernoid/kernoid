@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
-use super::{CONTACTS, Client, Error, Result, ids_of};
+use crate::{CONTACTS, Client, Error, Result, ids_of};
 
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct NameComponent {
@@ -118,20 +118,22 @@ struct List<T> {
 }
 
 /// The cards of every account with contacts, `text` searching them; sorted by name.
-pub fn cards(client: &Client, text: &str) -> Result<Vec<Card>> {
+pub async fn cards(client: &Client, text: &str) -> Result<Vec<Card>> {
     let mut out = Vec::new();
     for (account, _) in client.session.accounts_with(CONTACTS) {
         let mut filter = Map::new();
         if !text.trim().is_empty() {
             filter.insert("text".into(), text.trim().into());
         }
-        let responses = client.request(
-            &[CONTACTS],
-            vec![
-                ("ContactCard/query", json!({ "accountId": account, "filter": filter }), "q"),
-                ("ContactCard/get", json!({ "accountId": account, "#ids": ids_of("q", "ContactCard/query") }), "g"),
-            ],
-        )?;
+        let responses = client
+            .request(
+                &[CONTACTS],
+                vec![
+                    ("ContactCard/query", json!({ "accountId": account, "filter": filter }), "q"),
+                    ("ContactCard/get", json!({ "accountId": account, "#ids": ids_of("q", "ContactCard/query") }), "g"),
+                ],
+            )
+            .await?;
         let value = responses.get("g").cloned().unwrap_or(json!({ "list": [] }));
         let cards = serde_json::from_value::<List<Card>>(value).map_err(|error| Error::Protocol(error.to_string()))?;
         out.extend(cards.list.into_iter().map(|mut card| {
@@ -172,10 +174,10 @@ impl AddressBook {
 }
 
 /// The address books of every account with contacts; the user's default first.
-pub fn address_books(client: &Client) -> Result<Vec<AddressBook>> {
+pub async fn address_books(client: &Client) -> Result<Vec<AddressBook>> {
     let mut out = Vec::new();
     for (id, account) in client.session.accounts_with(CONTACTS) {
-        let result = client.call(&[CONTACTS], "AddressBook/get", json!({ "accountId": id }))?;
+        let result = client.call(&[CONTACTS], "AddressBook/get", json!({ "accountId": id })).await?;
         let books =
             serde_json::from_value::<List<AddressBook>>(result).map_err(|error| Error::Protocol(error.to_string()))?;
         out.extend(books.list.into_iter().map(|mut book| {
@@ -314,26 +316,26 @@ impl CardForm {
     }
 }
 
-pub fn create(client: &Client, book: &AddressBook, form: &CardForm) -> Result<()> {
+pub async fn create(client: &Client, book: &AddressBook, form: &CardForm) -> Result<()> {
     let mut object = form.object();
     object["@type"] = "Card".into();
     object["version"] = "1.0".into();
     object["addressBookIds"] = json!({ book.id.as_str(): true });
-    client.set(&[CONTACTS], "ContactCard", &book.account, json!({ "create": { "c": object } }), json!({}))?;
+    client.set(&[CONTACTS], "ContactCard", &book.account, json!({ "create": { "c": object } }), json!({})).await?;
     Ok(())
 }
 
 /// Changes a card, and moves it to `book` (of the same account).
-pub fn update(client: &Client, book: &AddressBook, id: &str, form: &CardForm) -> Result<()> {
+pub async fn update(client: &Client, book: &AddressBook, id: &str, form: &CardForm) -> Result<()> {
     let mut object = form.object();
     object["addressBookIds"] = json!({ book.id.as_str(): true });
-    client.set(&[CONTACTS], "ContactCard", &book.account, json!({ "update": { id: object } }), json!({}))?;
+    client.set(&[CONTACTS], "ContactCard", &book.account, json!({ "update": { id: object } }), json!({})).await?;
     Ok(())
 }
 
 /// Cards as stored – every property –, for writing them to a file.
-pub fn raw_cards(client: &Client, account: &str, ids: &[String]) -> Result<Vec<Map<String, Value>>> {
-    let result = client.call(&[CONTACTS], "ContactCard/get", json!({ "accountId": account, "ids": ids }))?;
+pub async fn raw_cards(client: &Client, account: &str, ids: &[String]) -> Result<Vec<Map<String, Value>>> {
+    let result = client.call(&[CONTACTS], "ContactCard/get", json!({ "accountId": account, "ids": ids })).await?;
     Ok(result
         .get("list")
         .and_then(Value::as_array)
@@ -342,7 +344,11 @@ pub fn raw_cards(client: &Client, account: &str, ids: &[String]) -> Result<Vec<M
 }
 
 /// Makes the cards read from a file in `book`; how many were made, and why the others were not.
-pub fn import(client: &Client, book: &AddressBook, cards: Vec<Map<String, Value>>) -> Result<(usize, Vec<String>)> {
+pub async fn import(
+    client: &Client,
+    book: &AddressBook,
+    cards: Vec<Map<String, Value>>,
+) -> Result<(usize, Vec<String>)> {
     let create: Map<String, Value> = cards
         .into_iter()
         .enumerate()
@@ -351,11 +357,12 @@ pub fn import(client: &Client, book: &AddressBook, cards: Vec<Map<String, Value>
             (format!("i{n}"), Value::Object(card))
         })
         .collect();
-    let result = client.call(&[CONTACTS], "ContactCard/set", json!({ "accountId": book.account, "create": create }))?;
-    Ok(super::calendars::made_and_refused(&result))
+    let result =
+        client.call(&[CONTACTS], "ContactCard/set", json!({ "accountId": book.account, "create": create })).await?;
+    Ok(crate::calendars::made_and_refused(&result))
 }
 
-pub fn destroy(client: &Client, account: &str, id: &str) -> Result<()> {
-    client.set(&[CONTACTS], "ContactCard", account, json!({ "destroy": [id] }), json!({}))?;
+pub async fn destroy(client: &Client, account: &str, id: &str) -> Result<()> {
+    client.set(&[CONTACTS], "ContactCard", account, json!({ "destroy": [id] }), json!({})).await?;
     Ok(())
 }

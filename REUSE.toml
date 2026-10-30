@@ -11,7 +11,7 @@ precedence = "aggregate"
 SPDX-FileCopyrightText = "falkOSS – Falcon Lake Open Source Software gUG (haftungsbeschränkt) i. G. and the kernoid contributors"
 
 [[annotations]]
-path = ["**/*.md", "Cargo.lock", "operator/Cargo.lock", "deploy/kubernetes/crd.json", "deploy/helm/kernoid-operator/crds/kernoids.kernoid.dev.json", ".sqlx/**", "**/.gitignore", ".dockerignore"]
+path = ["**/*.md", "Cargo.lock", "operator/Cargo.lock", "apps/tui/Cargo.lock", "deploy/kubernetes/crd.json", "deploy/helm/kernoid-operator/crds/kernoids.kernoid.dev.json", ".sqlx/**", "**/.gitignore", ".dockerignore"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "falkOSS – Falcon Lake Open Source Software gUG (haftungsbeschränkt) i. G. and the kernoid contributors"
 SPDX-License-Identifier = "AGPL-3.0-or-later"
@@ -39,10 +39,11 @@ precedence = "aggregate"
 SPDX-FileCopyrightText = "falkOSS – Falcon Lake Open Source Software gUG (haftungsbeschränkt) i. G. and the kernoid contributors"
 SPDX-License-Identifier = "MIT"
 
-# The terminal app and the end-to-end library are MIT as well (first-party; Cargo workspaces of their own, apps/tui
-# and apps/e2e).
+# The Rust SDK and the end-to-end library are MIT as well (Cargo workspaces of their own: apps/client, apps/sync,
+# apps/e2e).
 [[annotations]]
-path = ["apps/tui/Cargo.lock", "apps/tui/.gitignore", "apps/e2e/Cargo.lock", "apps/e2e/.gitignore"]
+path = ["apps/client/Cargo.lock", "apps/client/.gitignore", "apps/sync/Cargo.lock", "apps/sync/.gitignore",
+        "apps/e2e/Cargo.lock", "apps/e2e/.gitignore"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "falkOSS – Falcon Lake Open Source Software gUG (haftungsbeschränkt) i. G. and the kernoid contributors"
 SPDX-License-Identifier = "MIT"

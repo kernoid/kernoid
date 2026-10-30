@@ -16,15 +16,15 @@ use std::{
 
 use base64::{Engine, engine::general_purpose::STANDARD};
 use kernoid_e2e::{
-    PublicKey, SecretKey,
+    Kind, PublicKey, SecretKey,
     compose::{self, Mailbox as Address},
-    keys::normalize_recovery_code,
+    keys::{normalize_recovery_code, recovery_code},
     mime,
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use super::{
+use crate::{
     Client, Error, MAIL, Result, SUBMISSION,
     mail::{BodyPart, BodyValue, Draft, Email, EmailAddress, EmailSummary, Identity, Inner, Mailbox, Sealed, role},
     set_error,
@@ -57,6 +57,38 @@ pub struct Key {
     pub copies: BTreeMap<String, KeyCopy>,
 }
 
+/// The account's and its tenant's settings (`E2eSettings/get`, RFC 0006, 8).
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Settings {
+    /// Mail is encrypted on arrival (5.1).
+    #[serde(default)]
+    pub mail: bool,
+    #[serde(default)]
+    pub policy: Policy,
+    #[serde(default)]
+    pub recovery_key: Option<RecoveryKey>,
+}
+
+/// The tenant's policy (RFC 0006, 8.1).
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct Policy {
+    /// `allowed`, `required` or `forbidden`.
+    #[serde(default)]
+    pub mail: String,
+    /// The tenant can recover the account's keys (8.2).
+    #[serde(default)]
+    pub recovery: bool,
+}
+
+/// The tenant's recovery key: its public key, base64.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecoveryKey {
+    #[serde(default)]
+    pub public_key: String,
+}
+
 /// How a message goes out.
 #[derive(Debug, Clone)]
 pub enum Plan {
@@ -76,12 +108,13 @@ pub struct Outgoing<'a> {
     pub boxes: &'a [Mailbox],
 }
 
-/// What this run knows of end-to-end encryption: whether the server has it, the account's keys, those unlocked here,
-/// and the public keys of others looked up so far.
+/// What this run knows of end-to-end encryption: whether the server has it, the account's keys and settings, those
+/// unlocked here, and the public keys of others looked up so far.
 #[derive(Default)]
 pub struct E2e {
     pub available: bool,
     pub keys: Vec<Key>,
+    pub settings: Settings,
     /// The key in use, unlocked.
     current: Option<SecretKey>,
     /// Every key unlocked: the one in use and retired ones, for mail encrypted to them before.
@@ -110,14 +143,82 @@ fn list<T: serde::de::DeserializeOwned>(result: &Value) -> Result<Vec<T>> {
 }
 
 impl E2e {
-    /// Reads the account's keys – nothing if the server has no end-to-end extension.
-    pub fn load(client: &Client) -> Result<E2e> {
+    /// Reads the account's keys and settings – nothing if the server has no end-to-end extension.
+    pub async fn load(client: &Client) -> Result<E2e> {
         if !client.session.capabilities.contains_key(OPENPGP) {
             return Ok(E2e::default());
         }
         let account = client.primary(OPENPGP)?;
-        let result = client.call(&[OPENPGP], "OpenPgpKey/get", json!({ "accountId": account }))?;
-        Ok(E2e { available: true, keys: list(&result)?, ..E2e::default() })
+        let responses = client
+            .request(
+                &[OPENPGP],
+                vec![
+                    ("OpenPgpKey/get", json!({ "accountId": account }), "k"),
+                    ("E2eSettings/get", json!({ "accountId": account }), "s"),
+                ],
+            )
+            .await?;
+        let keys = list(responses.get("k").unwrap_or(&Value::Null))?;
+        let settings =
+            list::<Settings>(responses.get("s").unwrap_or(&Value::Null))?.into_iter().next().unwrap_or_default();
+        Ok(E2e { available: true, keys, settings, ..E2e::default() })
+    }
+
+    /// Reads keys and settings again, keeping what is unlocked.
+    pub async fn refresh(&mut self, client: &Client) -> Result<()> {
+        let fresh = E2e::load(client).await?;
+        self.available = fresh.available;
+        self.keys = fresh.keys;
+        self.settings = fresh.settings;
+        Ok(())
+    }
+
+    /// Makes the account's key here (RFC 0006, 4.2) for the addresses it sends from, stores it with a copy protected by
+    /// a new recovery code – and the tenant's copy when its policy recovers keys (8.2) – and keeps it unlocked. Returns
+    /// the recovery code, to be shown once.
+    pub async fn setup(&mut self, client: &Client, kind: Kind) -> Result<String> {
+        if !self.available {
+            return Err(Error::E2e("the server has no end-to-end encryption".into()));
+        }
+        if self.has_key() {
+            return Err(Error::E2e("the account has a key already".into()));
+        }
+        let account = client.primary(OPENPGP)?;
+        let mail_account = client.session.primary(MAIL).unwrap_or(&account).to_owned();
+        let mut addresses: Vec<String> =
+            match client.call(&[MAIL, SUBMISSION], "Identity/get", json!({ "accountId": mail_account })).await {
+                Ok(result) => list::<Identity>(&result)?.into_iter().map(|i| i.email.to_lowercase()).collect(),
+                Err(_) => Vec::new(),
+            };
+        addresses.push(client.session.username.to_lowercase());
+        addresses.sort();
+        addresses.dedup();
+        addresses.retain(|a| a.contains('@'));
+        // Making a post-quantum key takes a moment; it does not hold the runtime's other work.
+        let secret = tokio::task::spawn_blocking(move || {
+            let names: Vec<&str> = addresses.iter().map(String::as_str).collect();
+            SecretKey::generate(kind, &names)
+        })
+        .await
+        .map_err(|error| Error::E2e(error.to_string()))??;
+        let code = recovery_code();
+        let protected = STANDARD.encode(secret.protect(&normalize_recovery_code(&code))?);
+        let mut copies = json!({ "recovery": { "protected": protected, "salt": null } });
+        if self.settings.policy.recovery
+            && let Some(recovery) = &self.settings.recovery_key
+        {
+            let tenant = PublicKey::parse(&decode(recovery.public_key.trim())?)?;
+            let armored = secret.export()?;
+            let sealed = kernoid_e2e::message::encrypt(armored.as_bytes(), &[&tenant], None, false)?;
+            copies["tenant"] = json!({ "protected": STANDARD.encode(sealed), "salt": null });
+        }
+        let public = STANDARD.encode(secret.public().to_bytes()?);
+        let create = json!({ "create": { "key": { "publicKey": public, "copies": copies } } });
+        client.set(&[OPENPGP], "OpenPgpKey", &account, create, json!({})).await?;
+        self.refresh(client).await?;
+        self.unlocked = vec![secret.clone()];
+        self.current = Some(secret);
+        Ok(code)
     }
 
     /// The key in use (not retired).
@@ -163,7 +264,7 @@ impl E2e {
     }
 
     /// The public keys of `addresses` (asked once per run).
-    pub fn lookup(&mut self, client: &Client, addresses: &[String]) -> Result<BTreeMap<String, Vec<PublicKey>>> {
+    pub async fn lookup(&mut self, client: &Client, addresses: &[String]) -> Result<BTreeMap<String, Vec<PublicKey>>> {
         let mut wanted: Vec<String> = addresses.iter().map(|a| a.to_lowercase()).collect();
         wanted.sort();
         wanted.dedup();
@@ -182,9 +283,9 @@ impl E2e {
             }
             let account = client.primary(OPENPGP)?;
             let result =
-                client.call(&[OPENPGP], "OpenPgpKey/lookup", json!({ "accountId": account, "emails": wanted }))?;
+                client.call(&[OPENPGP], "OpenPgpKey/lookup", json!({ "accountId": account, "emails": wanted })).await?;
             for entry in list::<Entry>(&result)? {
-                // Keys this app cannot use are left out.
+                // Keys this library cannot use are left out.
                 let keys =
                     entry.keys.iter().filter_map(|key| PublicKey::parse(&decode(&key.public_key).ok()?).ok()).collect();
                 self.known.insert(entry.email.to_lowercase(), keys);
@@ -220,7 +321,7 @@ impl E2e {
 
     /// An email to read: an encrypted one downloaded, decrypted and read into its parts here, its signature checked
     /// against its sender's keys – locked if the key is not unlocked or does not open it. Other emails as they are.
-    pub fn open(&mut self, client: &Client, account: &str, mut email: Email) -> Result<Email> {
+    pub async fn open(&mut self, client: &Client, account: &str, mut email: Email) -> Result<Email> {
         if !email.summary.encrypted {
             return Ok(email);
         }
@@ -233,12 +334,12 @@ impl E2e {
         locked.sealed = Some(Sealed { locked: true, ..Sealed::default() });
         let Some(blob) = email.blob_id.clone().filter(|_| self.is_unlocked()) else { return Ok(locked) };
         let mut raw = Vec::new();
-        client.download(account, &blob, "message.eml", "message/rfc822", &mut raw, &mut |_, _| {})?;
+        client.download(account, &blob, "message.eml", "message/rfc822", &mut raw, &mut |_, _| {}).await?;
         let senders: Vec<String> = email.summary.from.iter().flatten().map(|a| a.email.clone()).collect();
         let senders: Vec<PublicKey> = if senders.is_empty() {
             Vec::new()
         } else {
-            self.lookup(client, &senders).map(|found| found.into_values().flatten().collect()).unwrap_or_default()
+            self.lookup(client, &senders).await.map(|found| found.into_values().flatten().collect()).unwrap_or_default()
         };
         let senders: Vec<&PublicKey> = senders.iter().collect();
         let Ok(opened) = mime::decrypt_message(&raw, &self.secrets(), &senders) else { return Ok(locked) };
@@ -323,7 +424,7 @@ impl E2e {
 
     /// How a message goes out: end-to-end encrypted if the key is unlocked, it is sent from the user's own account
     /// as an address of the key, and every recipient has a key (RFC 0006, 5.3) – else as before.
-    pub fn plan(&mut self, client: &Client, account: &str, identity: &Identity, draft: &Draft) -> Plan {
+    pub async fn plan(&mut self, client: &Client, account: &str, identity: &Identity, draft: &Draft) -> Plan {
         let own = match self.own_key(client, account, identity) {
             Ok(key) => key.public(),
             Err(reason) => return Plan::Plain(reason),
@@ -336,7 +437,7 @@ impl E2e {
         if addresses.is_empty() {
             return Plan::Plain("it has no recipients".into());
         }
-        let found = match self.lookup(client, &addresses) {
+        let found = match self.lookup(client, &addresses).await {
             Ok(found) => found,
             Err(error) => return Plan::Plain(format!("the keys could not be looked up: {error}")),
         };
@@ -364,16 +465,22 @@ impl E2e {
     /// Sends end-to-end encrypted to `recipients` (from `plan`): the message built, encrypted and signed here,
     /// uploaded as it is, imported into Drafts with its summary encrypted to the sender, submitted with an envelope
     /// (To and Cc), and moved to Sent once sent.
-    pub fn send(&self, client: &Client, outgoing: Outgoing<'_>, recipients: &[PublicKey]) -> Result<()> {
-        self.store(client, outgoing, recipients, true)
+    pub async fn send(&self, client: &Client, outgoing: Outgoing<'_>, recipients: &[PublicKey]) -> Result<()> {
+        self.store(client, outgoing, recipients, true).await
     }
 
     /// Keeps a draft encrypted to `keys` (from `draft_plan`).
-    pub fn keep(&self, client: &Client, outgoing: Outgoing<'_>, keys: &[PublicKey]) -> Result<()> {
-        self.store(client, outgoing, keys, false)
+    pub async fn keep(&self, client: &Client, outgoing: Outgoing<'_>, keys: &[PublicKey]) -> Result<()> {
+        self.store(client, outgoing, keys, false).await
     }
 
-    fn store(&self, client: &Client, outgoing: Outgoing<'_>, recipients: &[PublicKey], submit: bool) -> Result<()> {
+    async fn store(
+        &self,
+        client: &Client,
+        outgoing: Outgoing<'_>,
+        recipients: &[PublicKey],
+        submit: bool,
+    ) -> Result<()> {
         let Outgoing { account, identity, draft, files, boxes } = outgoing;
         let own = self.own_key(client, account, identity).map_err(Error::E2e)?;
         let drafts = role(boxes, "drafts").ok_or_else(|| Error::Protocol("there is no Drafts mailbox".into()))?;
@@ -381,7 +488,7 @@ impl E2e {
         // Forwarded files lie in the account already; they go inside the encrypted message.
         for file in &draft.attachments {
             let mut data = Vec::new();
-            client.download(account, &file.blob_id, &file.name, &file.kind, &mut data, &mut |_, _| {})?;
+            client.download(account, &file.blob_id, &file.name, &file.kind, &mut data, &mut |_, _| {}).await?;
             attachments.push(compose::Attachment {
                 name: file.name.clone(),
                 media_type: file.kind.clone(),
@@ -391,7 +498,7 @@ impl E2e {
         for path in files {
             let data = std::fs::read(path).map_err(|error| Error::Protocol(format!("{}: {error}", path.display())))?;
             let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("attachment").to_owned();
-            let media_type = super::files::media_type(&name).to_owned();
+            let media_type = crate::files::media_type(&name).to_owned();
             attachments.push(compose::Attachment { name, media_type, data: STANDARD.encode(data) });
         }
         let address = |a: &EmailAddress| Address { name: a.name.clone(), email: a.email.clone() };
@@ -421,7 +528,7 @@ impl E2e {
         let encrypted = mime::encrypt_message(&raw, &recipients, Some(own))?;
         let summary = mime::encrypted_summary(&raw, &[&own.public()])?;
         let size = encrypted.len() as u64;
-        let upload = client.upload(account, "message/rfc822", Cursor::new(encrypted), size, &mut |_, _| {})?;
+        let upload = client.upload(account, "message/rfc822", Cursor::new(encrypted), size, |_, _| {}).await?;
         let mut calls = vec![(
             "Email/import",
             json!({ "accountId": account, "emails": { "draft": {
@@ -450,7 +557,7 @@ impl E2e {
                 "s",
             ));
         }
-        let responses = client.request(&[MAIL, SUBMISSION, OPENPGP], calls)?;
+        let responses = client.request(&[MAIL, SUBMISSION, OPENPGP], calls).await?;
         for (_, result, _) in &responses.0 {
             set_error(result)?;
         }

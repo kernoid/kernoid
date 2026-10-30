@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
-//! JMAP (RFC 8620) over HTTP: the session, method calls with result references, uploads, downloads and the push
-//! stream – the only way this app talks to kernoid. Typed calls for mail, files, calendars, contacts and principals
-//! are in the submodules; end-to-end encrypted mail in `e2e`.
+//! kernoid's Rust SDK for clients. JMAP (RFC 8620) over HTTPS: the session, method calls with result references,
+//! uploads, downloads and the push stream. Typed calls for mail, files, calendars, contacts and principals are in the
+//! submodules; end-to-end encrypted mail in `e2e` (RFC 0006), finding a server in `srv`, iCalendar and vCard files in
+//! `transfer`. Everything is async on tokio; the terminal app and the apps share it.
 
 pub mod calendars;
 pub mod contacts;
@@ -12,16 +13,18 @@ pub mod push;
 pub mod srv;
 pub mod transfer;
 
-use std::{collections::BTreeMap, fmt, io::Read, time::Duration};
+use std::{
+    collections::BTreeMap,
+    fmt,
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+    time::Duration,
+};
 
 use base64::Engine;
+use futures_util::{Stream, StreamExt, TryStreamExt};
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
-use ureq::{
-    Agent,
-    config::RedirectAuthHeaders,
-    tls::{RootCerts, TlsConfig},
-};
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
 pub const CORE: &str = "urn:ietf:params:jmap:core";
 pub const MAIL: &str = "urn:ietf:params:jmap:mail";
@@ -78,8 +81,8 @@ impl fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-impl From<ureq::Error> for Error {
-    fn from(error: ureq::Error) -> Self {
+impl From<reqwest::Error> for Error {
+    fn from(error: reqwest::Error) -> Self {
         Self::Transport(error.to_string())
     }
 }
@@ -236,18 +239,26 @@ pub fn session_url(server: Option<&str>, address: &str) -> Result<String> {
 }
 
 /// How a connection is made.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct Options {
     /// Allow plain HTTP to hosts other than this machine (the password would travel readable).
     pub allow_http: bool,
+    /// Who is asking, in `User-Agent` (`kernoid-tui/0.2.0`).
+    pub user_agent: String,
+}
+
+impl Default for Options {
+    fn default() -> Self {
+        Self { allow_http: false, user_agent: concat!("kernoid-client/", env!("CARGO_PKG_VERSION")).into() }
+    }
 }
 
 /// A logged-in JMAP client: the session and the credentials, sent only to the origin the session came from.
 #[derive(Clone)]
 pub struct Client {
-    agent: Agent,
-    /// An agent without overall timeout, for transfers and the push stream.
-    streaming: Agent,
+    http: reqwest::Client,
+    /// A client without overall timeout, for transfers and the push stream.
+    streaming: reqwest::Client,
     authorization: String,
     origin: String,
     session_url: String,
@@ -266,27 +277,28 @@ fn problem_detail(body: &str) -> Option<String> {
     value.get("detail").or_else(|| value.get("description")).and_then(Value::as_str).map(str::to_owned)
 }
 
-fn agent(timeout: Option<Duration>) -> Agent {
-    Agent::config_builder()
-        .http_status_as_error(false)
-        .redirect_auth_headers(RedirectAuthHeaders::SameHost)
-        .max_redirects(5)
-        .timeout_connect(Some(Duration::from_secs(15)))
-        .timeout_global(timeout)
-        .user_agent(concat!("kernoid-tui/", env!("CARGO_PKG_VERSION")))
-        .tls_config(
-            TlsConfig::builder()
-                .root_certs(RootCerts::PlatformVerifier)
-                .unversioned_rustls_crypto_provider(std::sync::Arc::new(rustls::crypto::aws_lc_rs::default_provider()))
-                .build(),
-        )
-        .build()
-        .new_agent()
+/// An HTTP client: TLS through reqwest's rustls on AWS-LC with the system's trust store (rustls-platform-verifier),
+/// post-quantum key exchange preferred (the feature `prefer-post-quantum` of `rustls`); redirects followed up to five
+/// times – reqwest drops the credentials on a redirect to another host.
+fn http(origin: &str, user_agent: &str, timeout: Option<Duration>) -> Result<reqwest::Client> {
+    let mut builder = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::limited(5))
+        .connect_timeout(Duration::from_secs(15))
+        .user_agent(user_agent);
+    if let Some(timeout) = timeout {
+        builder = builder.timeout(timeout);
+    }
+    // `*.localhost` is this machine (RFC 6761), but not every system's resolver knows it.
+    let name = host(origin);
+    if name.ends_with(".localhost") {
+        builder = builder.resolve(name, SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 0));
+    }
+    Ok(builder.build()?)
 }
 
 impl Client {
     /// Fetches the session at `session_url` with HTTP Basic – the address and an app password.
-    pub fn connect(session_url: &str, username: &str, password: &str, options: &Options) -> Result<Self> {
+    pub async fn connect(session_url: &str, username: &str, password: &str, options: &Options) -> Result<Self> {
         let (origin, _) =
             split_origin(session_url).ok_or_else(|| Error::Protocol(format!("not a URL: {session_url}")))?;
         let origin = origin.to_owned();
@@ -298,8 +310,8 @@ impl Client {
         }
         let credentials = base64::engine::general_purpose::STANDARD.encode(format!("{username}:{password}"));
         let mut client = Self {
-            agent: agent(Some(Duration::from_secs(120))),
-            streaming: agent(None),
+            http: http(&origin, &options.user_agent, Some(Duration::from_secs(120)))?,
+            streaming: http(&origin, &options.user_agent, None)?,
             authorization: format!("Basic {credentials}"),
             origin,
             session_url: session_url.to_owned(),
@@ -315,24 +327,25 @@ impl Client {
                 state: String::new(),
             },
         };
-        client.session = client.fetch_session(session_url)?;
+        client.session = client.fetch_session(session_url).await?;
         Ok(client)
     }
 
     /// Fetches the session again (after a `StateChange` of the session, or to see new accounts).
-    pub fn refresh_session(&mut self) -> Result<()> {
-        self.session = self.fetch_session(&self.session_url.clone())?;
+    pub async fn refresh_session(&mut self) -> Result<()> {
+        self.session = self.fetch_session(&self.session_url.clone()).await?;
         Ok(())
     }
 
-    fn fetch_session(&self, url: &str) -> Result<Session> {
-        let mut response = self
-            .agent
+    async fn fetch_session(&self, url: &str) -> Result<Session> {
+        let response = self
+            .http
             .get(url)
             .header("authorization", &self.authorization)
             .header("accept", "application/json")
-            .call()?;
-        let body = check(&mut response, 200)?;
+            .send()
+            .await?;
+        let body = check(response, 200).await?;
         serde_json::from_str(&body).map_err(|error| Error::Protocol(format!("the session: {error}")))
     }
 
@@ -360,20 +373,22 @@ impl Client {
     }
 
     /// Runs method calls; the first method error fails them all.
-    pub fn request(&self, using: &[&str], calls: Vec<(&str, Value, &str)>) -> Result<Responses> {
+    pub async fn request(&self, using: &[&str], calls: Vec<(&str, Value, &str)>) -> Result<Responses> {
         let mut capabilities = vec![CORE];
         capabilities.extend(using.iter().filter(|capability| **capability != CORE));
         let calls: Vec<Value> = calls.into_iter().map(|(name, arguments, id)| json!([name, arguments, id])).collect();
         let body = json!({ "using": capabilities, "methodCalls": calls }).to_string();
-        let mut response = self
-            .agent
+        let response = self
+            .http
             .post(self.here(&self.session.api_url))
             .header("authorization", &self.authorization)
             .header("content-type", "application/json")
             .header("accept", "application/json")
-            .send(body)?;
+            .body(body)
+            .send()
+            .await?;
         let status = response.status().as_u16();
-        let text = response.body_mut().with_config().limit(64 << 20).read_to_string()?;
+        let text = limited_text(response, 64 << 20).await?;
         if status == 401 {
             return Err(Error::Unauthorized);
         }
@@ -407,21 +422,21 @@ impl Client {
     }
 
     /// One method call; its response.
-    pub fn call(&self, using: &[&str], name: &str, arguments: Value) -> Result<Value> {
-        let responses = self.request(using, vec![(name, arguments, "0")])?;
+    pub async fn call(&self, using: &[&str], name: &str, arguments: Value) -> Result<Value> {
+        let responses = self.request(using, vec![(name, arguments, "0")]).await?;
         responses.get("0").cloned().ok_or_else(|| Error::Protocol(format!("no response to {name}")))
     }
 
     /// `<type>/set` (RFC 8620, 5.3); the first refused change fails it. `extra` adds arguments
     /// (`onDestroyRemoveChildren`, `onExists`).
-    pub fn set(&self, using: &[&str], kind: &str, account: &str, change: Value, extra: Value) -> Result<Value> {
+    pub async fn set(&self, using: &[&str], kind: &str, account: &str, change: Value, extra: Value) -> Result<Value> {
         let mut arguments = json!({ "accountId": account });
         for source in [change, extra] {
             if let (Some(target), Value::Object(source)) = (arguments.as_object_mut(), source) {
                 target.extend(source);
             }
         }
-        let result = self.call(using, &format!("{kind}/set"), arguments)?;
+        let result = self.call(using, &format!("{kind}/set"), arguments).await?;
         set_error(&result)?;
         Ok(result)
     }
@@ -439,38 +454,35 @@ impl Client {
     }
 
     /// Downloads a blob into `out`; `progress` hears the bytes so far and the whole, if the server said it.
-    pub fn download(
+    pub async fn download(
         &self,
         account: &str,
         blob: &str,
         name: &str,
         kind: &str,
-        out: &mut dyn std::io::Write,
-        progress: &mut dyn FnMut(u64, Option<u64>),
+        out: &mut (dyn AsyncWrite + Unpin + Send),
+        progress: &mut (dyn FnMut(u64, Option<u64>) + Send),
     ) -> Result<u64> {
         let url = self.download_url(account, blob, name, kind);
-        let mut response = self.streaming.get(url).header("authorization", &self.authorization).call()?;
+        let response = self.streaming.get(url).header("authorization", &self.authorization).send().await?;
         let status = response.status().as_u16();
         if status == 401 {
             return Err(Error::Unauthorized);
         }
         if status != 200 {
-            let body = response.body_mut().read_to_string().unwrap_or_default();
+            let body = limited_text(response, 16 << 20).await.unwrap_or_default();
             return Err(Error::Status(status, problem_detail(&body)));
         }
-        let total = response.body().content_length();
-        let mut reader = response.body_mut().with_config().limit(u64::MAX).reader();
-        let mut buffer = vec![0; 256 << 10];
+        let total = response.content_length();
+        let mut body = response.bytes_stream();
         let mut done = 0;
-        loop {
-            let read = reader.read(&mut buffer)?;
-            if read == 0 {
-                break;
-            }
-            out.write_all(&buffer[..read])?;
-            done += read as u64;
+        while let Some(chunk) = body.next().await {
+            let chunk = chunk?;
+            out.write_all(&chunk).await?;
+            done += chunk.len() as u64;
             progress(done, total);
         }
+        out.flush().await?;
         if total.is_some_and(|total| total != done) {
             return Err(Error::Transport("the download broke off".into()));
         }
@@ -478,29 +490,38 @@ impl Client {
     }
 
     /// Uploads content of `size` bytes (RFC 8620, 6.1); `progress` hears the bytes sent so far.
-    pub fn upload(
+    pub async fn upload(
         &self,
         account: &str,
         kind: &str,
-        content: impl Read,
+        content: impl AsyncRead + Send + 'static,
         size: u64,
-        progress: &mut dyn FnMut(u64, u64),
+        mut progress: impl FnMut(u64, u64) + Send + 'static,
     ) -> Result<Upload> {
         let url = self.here(&self.session.upload_url.replace("{accountId}", &encode(account)));
-        let mut reader = Progress { inner: content, done: 0, total: size, progress };
-        let mut response = self
+        let mut done = 0;
+        let stream = tokio_util::io::ReaderStream::with_capacity(content, 256 << 10).inspect_ok(move |chunk| {
+            done += chunk.len() as u64;
+            progress(done, size);
+        });
+        let response = self
             .streaming
             .post(url)
             .header("authorization", &self.authorization)
             .header("content-type", kind)
             .header("content-length", size.to_string())
-            .send(ureq::SendBody::from_reader(&mut reader))?;
-        let body = check(&mut response, 201)?;
+            .body(reqwest::Body::wrap_stream(stream))
+            .send()
+            .await?;
+        let body = check(response, 201).await?;
         serde_json::from_str(&body).map_err(|error| Error::Protocol(format!("the upload: {error}")))
     }
 
-    /// Opens the push stream (RFC 8620, 7.3) for all types, with a ping each `ping` seconds.
-    pub fn event_source(&self, ping: u64) -> Result<impl Read + use<>> {
+    /// Opens the push stream (RFC 8620, 7.3) for all types, with a ping each `ping` seconds: its bytes as they come.
+    pub async fn event_source(
+        &self,
+        ping: u64,
+    ) -> Result<impl Stream<Item = std::io::Result<bytes::Bytes>> + Send + Unpin + use<>> {
         let url = self
             .session
             .event_source_url
@@ -512,36 +533,34 @@ impl Client {
             .get(self.here(&url))
             .header("authorization", &self.authorization)
             .header("accept", "text/event-stream")
-            .call()?;
+            .send()
+            .await?;
         match response.status().as_u16() {
-            200 => Ok(response.into_body().into_with_config().limit(u64::MAX).reader()),
+            200 => Ok(response.bytes_stream().map_err(std::io::Error::other)),
             401 => Err(Error::Unauthorized),
             status => Err(Error::Status(status, None)),
         }
     }
 }
 
-/// A reader that tells how far it got.
-struct Progress<'a, R> {
-    inner: R,
-    done: u64,
-    total: u64,
-    progress: &'a mut dyn FnMut(u64, u64),
-}
-
-impl<R: Read> Read for Progress<'_, R> {
-    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
-        let read = self.inner.read(buffer)?;
-        self.done += read as u64;
-        (self.progress)(self.done, self.total);
-        Ok(read)
+/// The body of an answer, refused beyond `limit` bytes.
+async fn limited_text(response: reqwest::Response, limit: usize) -> Result<String> {
+    let mut body = response.bytes_stream();
+    let mut out = Vec::new();
+    while let Some(chunk) = body.next().await {
+        let chunk = chunk?;
+        if out.len() + chunk.len() > limit {
+            return Err(Error::Protocol(format!("an answer of more than {limit} bytes")));
+        }
+        out.extend_from_slice(&chunk);
     }
+    String::from_utf8(out).map_err(|_| Error::Protocol("an answer that is not UTF-8".into()))
 }
 
 /// The body of an answer with the status expected; else the error it amounts to.
-fn check(response: &mut ureq::http::Response<ureq::Body>, expected: u16) -> Result<String> {
+async fn check(response: reqwest::Response, expected: u16) -> Result<String> {
     let status = response.status().as_u16();
-    let body = response.body_mut().with_config().limit(16 << 20).read_to_string().unwrap_or_default();
+    let body = limited_text(response, 16 << 20).await.unwrap_or_default();
     match status {
         401 => Err(Error::Unauthorized),
         status if status == expected || (expected == 201 && status == 200) => Ok(body),

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Events, contacts and the vacation response written in the user's editor, like messages (`compose`): header
 //! lines, a blank line, then the text – the description of an event, the note of a contact, the reply. Lines starting
 //! with `#` are hints and are ignored.

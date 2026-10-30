@@ -9,7 +9,7 @@ use chrono::{DateTime, NaiveDateTime, SecondsFormat, Utc};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use super::{CALENDARS, Client, Error, Result, ids_of};
+use crate::{CALENDARS, Client, Error, Result, ids_of};
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -169,10 +169,10 @@ fn list<T: serde::de::DeserializeOwned>(value: Option<&Value>) -> Result<Vec<T>>
 }
 
 /// The user's calendars and those shared with them.
-pub fn calendars(client: &Client) -> Result<Vec<Calendar>> {
+pub async fn calendars(client: &Client) -> Result<Vec<Calendar>> {
     let mut out = Vec::new();
     for (id, account) in client.session.accounts_with(CALENDARS) {
-        let result = client.call(&[CALENDARS], "Calendar/get", json!({ "accountId": id }))?;
+        let result = client.call(&[CALENDARS], "Calendar/get", json!({ "accountId": id })).await?;
         for mut calendar in list::<Calendar>(Some(&result))? {
             calendar.account = id.to_owned();
             calendar.shared = (!account.is_personal).then(|| account.name.clone());
@@ -187,8 +187,8 @@ fn utc(time: DateTime<Utc>) -> String {
 }
 
 /// One event as stored – for an instance, the recurring event it is of.
-pub fn event(client: &Client, account: &str, id: &str) -> Result<Option<Event>> {
-    let result = client.call(&[CALENDARS], "CalendarEvent/get", json!({ "accountId": account, "ids": [id] }))?;
+pub async fn event(client: &Client, account: &str, id: &str) -> Result<Option<Event>> {
+    let result = client.call(&[CALENDARS], "CalendarEvent/get", json!({ "accountId": account, "ids": [id] })).await?;
     Ok(list::<Event>(Some(&result))?.into_iter().next().map(|mut event| {
         event.account = account.to_owned();
         event
@@ -196,7 +196,7 @@ pub fn event(client: &Client, account: &str, id: &str) -> Result<Option<Event>> 
 }
 
 /// The instances of the events of `calendars` between `after` and `before`, by start.
-pub fn instances(
+pub async fn instances(
     client: &Client,
     calendars: &[Calendar],
     after: DateTime<Utc>,
@@ -211,20 +211,26 @@ pub fn instances(
             .filter(|calendar| calendar.account == account && calendar.is_visible.unwrap_or(true))
             .map(|calendar| calendar.id.as_str())
             .collect();
-        let responses = client.request(
-            &[CALENDARS],
-            vec![
-                (
-                    "CalendarEvent/query",
-                    json!({
-                        "accountId": account, "expandRecurrences": true,
-                        "filter": { "after": utc(after), "before": utc(before) },
-                    }),
-                    "q",
-                ),
-                ("CalendarEvent/get", json!({ "accountId": account, "#ids": ids_of("q", "CalendarEvent/query") }), "g"),
-            ],
-        )?;
+        let responses = client
+            .request(
+                &[CALENDARS],
+                vec![
+                    (
+                        "CalendarEvent/query",
+                        json!({
+                            "accountId": account, "expandRecurrences": true,
+                            "filter": { "after": utc(after), "before": utc(before) },
+                        }),
+                        "q",
+                    ),
+                    (
+                        "CalendarEvent/get",
+                        json!({ "accountId": account, "#ids": ids_of("q", "CalendarEvent/query") }),
+                        "g",
+                    ),
+                ],
+            )
+            .await?;
         for mut event in list::<Event>(responses.get("g"))? {
             if event.calendar_ids.keys().any(|id| visible.contains(&id.as_str())) {
                 event.account = account.to_owned();
@@ -280,7 +286,7 @@ pub fn format_duration(seconds: i64) -> String {
     out
 }
 
-/// How often an event repeats, as the app offers it.
+/// How often an event repeats, as kernoid's apps offer it.
 pub const FREQUENCIES: [&str; 4] = ["daily", "weekly", "monthly", "yearly"];
 
 /// An event as the user writes it.
@@ -418,16 +424,18 @@ impl EventForm {
 const SCHEDULE: &str = "sendSchedulingMessages";
 
 /// Makes an event in a calendar; its id.
-pub fn create(client: &Client, calendar: &Calendar, form: &EventForm, own: &str) -> Result<String> {
+pub async fn create(client: &Client, calendar: &Calendar, form: &EventForm, own: &str) -> Result<String> {
     let mut object = form.object(own);
     object["calendarIds"] = json!({ calendar.id.as_str(): true });
-    let result = client.set(
-        &[CALENDARS],
-        "CalendarEvent",
-        &calendar.account,
-        json!({ "create": { "e": object } }),
-        json!({ SCHEDULE: true }),
-    )?;
+    let result = client
+        .set(
+            &[CALENDARS],
+            "CalendarEvent",
+            &calendar.account,
+            json!({ "create": { "e": object } }),
+            json!({ SCHEDULE: true }),
+        )
+        .await?;
     result
         .pointer("/created/e/id")
         .and_then(Value::as_str)
@@ -436,17 +444,17 @@ pub fn create(client: &Client, calendar: &Calendar, form: &EventForm, own: &str)
 }
 
 /// Changes an event (all instances of a recurring one), and moves it to `calendar`.
-pub fn update(client: &Client, calendar: &Calendar, id: &str, form: &EventForm, own: &str) -> Result<()> {
+pub async fn update(client: &Client, calendar: &Calendar, id: &str, form: &EventForm, own: &str) -> Result<()> {
     let mut object = form.object(own);
     object["calendarIds"] = json!({ calendar.id.as_str(): true });
     let change = json!({ "update": { id: object } });
-    client.set(&[CALENDARS], "CalendarEvent", &calendar.account, change, json!({ SCHEDULE: true }))?;
+    client.set(&[CALENDARS], "CalendarEvent", &calendar.account, change, json!({ SCHEDULE: true })).await?;
     Ok(())
 }
 
 /// An event as stored – every property –, for writing it to a file.
-pub fn raw_event(client: &Client, account: &str, id: &str) -> Result<serde_json::Map<String, Value>> {
-    let result = client.call(&[CALENDARS], "CalendarEvent/get", json!({ "accountId": account, "ids": [id] }))?;
+pub async fn raw_event(client: &Client, account: &str, id: &str) -> Result<serde_json::Map<String, Value>> {
+    let result = client.call(&[CALENDARS], "CalendarEvent/get", json!({ "accountId": account, "ids": [id] })).await?;
     match result.pointer("/list/0") {
         Some(Value::Object(event)) => Ok(event.clone()),
         _ => Err(Error::Protocol("the event is gone".into())),
@@ -455,7 +463,7 @@ pub fn raw_event(client: &Client, account: &str, id: &str) -> Result<serde_json:
 
 /// Makes the events read from a file in `calendar`, sending no invitations – importing is not inviting; how many
 /// were made, and why the others were not.
-pub fn import(
+pub async fn import(
     client: &Client,
     calendar: &Calendar,
     events: Vec<serde_json::Map<String, Value>>,
@@ -468,11 +476,13 @@ pub fn import(
             (format!("i{n}"), Value::Object(event))
         })
         .collect();
-    let result = client.call(
-        &[CALENDARS],
-        "CalendarEvent/set",
-        json!({ "accountId": calendar.account, "create": create, SCHEDULE: false }),
-    )?;
+    let result = client
+        .call(
+            &[CALENDARS],
+            "CalendarEvent/set",
+            json!({ "accountId": calendar.account, "create": create, SCHEDULE: false }),
+        )
+        .await?;
     Ok(made_and_refused(&result))
 }
 
@@ -499,7 +509,7 @@ pub(crate) fn made_and_refused(result: &Value) -> (usize, Vec<String>) {
 const OVERRIDDEN: [&str; 6] = ["title", "start", "duration", "showWithoutTime", "description", "locations"];
 
 /// Changes one instance of `series`: its override in the event's `recurrenceOverrides`.
-pub fn update_instance(
+pub async fn update_instance(
     client: &Client,
     series: &Event,
     recurrence_id: &str,
@@ -512,33 +522,33 @@ pub fn update_instance(
     if whole["timeZone"] != json!(series.time_zone) {
         patch.insert("timeZone".into(), whole["timeZone"].clone());
     }
-    override_instance(client, series, recurrence_id, Value::Object(patch))
+    override_instance(client, series, recurrence_id, Value::Object(patch)).await
 }
 
 /// Leaves one instance of `series` out.
-pub fn destroy_instance(client: &Client, series: &Event, recurrence_id: &str) -> Result<()> {
-    override_instance(client, series, recurrence_id, json!({ "excluded": true }))
+pub async fn destroy_instance(client: &Client, series: &Event, recurrence_id: &str) -> Result<()> {
+    override_instance(client, series, recurrence_id, json!({ "excluded": true })).await
 }
 
-fn override_instance(client: &Client, series: &Event, recurrence_id: &str, patch: Value) -> Result<()> {
+async fn override_instance(client: &Client, series: &Event, recurrence_id: &str, patch: Value) -> Result<()> {
     let mut overrides = series.recurrence_overrides.clone().unwrap_or_default();
     overrides.insert(recurrence_id.to_owned(), patch);
     let change = json!({ "update": { series.id.as_str(): { "recurrenceOverrides": overrides } } });
-    client.set(&[CALENDARS], "CalendarEvent", &series.account, change, json!({ SCHEDULE: true }))?;
+    client.set(&[CALENDARS], "CalendarEvent", &series.account, change, json!({ SCHEDULE: true })).await?;
     Ok(())
 }
 
 /// Removes an event (all instances of a recurring one).
-pub fn destroy(client: &Client, account: &str, id: &str) -> Result<()> {
-    client.set(&[CALENDARS], "CalendarEvent", account, json!({ "destroy": [id] }), json!({ SCHEDULE: true }))?;
+pub async fn destroy(client: &Client, account: &str, id: &str) -> Result<()> {
+    client.set(&[CALENDARS], "CalendarEvent", account, json!({ "destroy": [id] }), json!({ SCHEDULE: true })).await?;
     Ok(())
 }
 
 /// Answers an invitation: the participant `key` (the user) gets `status` – `accepted`, `tentative` or `declined`.
-pub fn answer(client: &Client, account: &str, id: &str, key: &str, status: &str) -> Result<()> {
+pub async fn answer(client: &Client, account: &str, id: &str, key: &str, status: &str) -> Result<()> {
     let path = format!("participants/{key}/participationStatus");
     let change = json!({ "update": { id: { path: status } } });
-    client.set(&[CALENDARS], "CalendarEvent", account, change, json!({ SCHEDULE: true }))?;
+    client.set(&[CALENDARS], "CalendarEvent", account, change, json!({ SCHEDULE: true })).await?;
     Ok(())
 }
 

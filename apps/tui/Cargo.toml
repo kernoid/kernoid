@@ -1,7 +1,8 @@
-# SPDX-License-Identifier: MIT
-# kernoid's terminal app: mail, files, calendars and contacts over JMAP. A first-party app under MIT – a workspace of
-# its own, apart from the server's (AGPL), so it shares neither code nor the lock file with it: only the protocols
-# connect them. Dependencies are exact (`=`) and at least two weeks old when taken (`scripts/check-age.py`).
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# kernoid's terminal app: mail, files, calendars and contacts over JMAP, on kernoid's Rust SDK (`../client`, MIT). AGPL
+# like the server, but a workspace of its own, apart from the server's, so it shares neither code nor the lock file with
+# it: only the protocols connect them. Dependencies are exact (`=`) and at least two weeks old when taken
+# (`scripts/check-age.py`).
 [workspace]
 
 [package]
@@ -9,7 +10,7 @@ name = "kernoid-tui"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.94"
-license = "MIT"
+license = "AGPL-3.0-or-later"
 repository = "https://github.com/kernoid/kernoid"
 description = "kernoid in the terminal: mail, files, calendars and contacts over JMAP"
 publish = false
@@ -19,26 +20,18 @@ name = "kernoid-tui"
 path = "src/main.rs"
 
 [dependencies]
-base64 = "=0.22.1"
-# iCalendar and vCard files – parsed and written as kernoid does (Apache-2.0 OR MIT).
-calcard = "=0.3.14"
 chrono = { version = "=0.4.45", default-features = false, features = ["clock", "std"] }
 clap = { version = "=4.6.7", features = ["derive", "env"] }
 directories = "=6.0.0"
-hickory-proto = { version = "=0.26.3", default-features = false, features = ["std"] }
-html2text = "=0.17.1"
-iana-time-zone = "=0.1.65"
-# End-to-end encryption (RFC 0006): keys, PGP/MIME, building and reading mail in the client – kernoid's own library
-# (MIT), shared with the web app and the server.
-kernoid-e2e = { path = "../e2e" }
+# kernoid's Rust SDK (MIT): JMAP, push, end-to-end encryption, DNS, iCalendar and vCard files – async; the app waits for
+# it on a runtime of its own (`block`).
+kernoid-client = { path = "../client" }
 ratatui = "=0.30.2"
-# TLS with AWS-LC for its post-quantum key exchange (X25519MLKEM768), preferred over X25519 (RFC 0006, 2).
-rustls = { version = "=0.23.46", default-features = false, features = ["aws-lc-rs", "prefer-post-quantum", "std", "tls12"] }
 rpassword = "=7.5.4"
 serde = { version = "=1.0.228", features = ["derive"] }
 serde_json = "=1.0.151"
+tokio = { version = "=1.53.3", features = ["fs", "rt-multi-thread"] }
 toml = { version = "=1.1.6", default-features = false, features = ["parse", "serde"] }
-ureq = { version = "=3.4.2", default-features = false, features = ["rustls-no-provider", "platform-verifier"] }
 
 # Argon2 (unlocking the key) and the post-quantum algorithms are slow without optimisation; tests build dependencies
 # optimised, as the end-to-end library does.

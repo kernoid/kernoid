@@ -1,0 +1,56 @@
+# SPDX-License-Identifier: MIT
+# kernoid's Rust SDK: the protocols of kernoid for clients – JMAP for mail, files, calendars, contacts and principals,
+# push, the end-to-end encryption of RFC 0006 on kernoid-e2e, finding a server through DNS, iCalendar and vCard files.
+# Async on tokio. MIT and a workspace of its own like the terminal app and kernoid-e2e: apps under any licence may use
+# it, and it reaches no server code. Its requirements are minimum versions (it is a library for others); its
+# Cargo.lock pins them, each at least two weeks old when taken (`../tui/scripts/check-age.py --dir=apps/client`).
+[workspace]
+
+[package]
+name = "kernoid-client"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.94"
+license = "MIT"
+repository = "https://github.com/kernoid/kernoid"
+description = "kernoid's protocols for clients: JMAP mail, files, calendars, contacts, push and end-to-end encryption"
+keywords = ["kernoid", "jmap", "mail", "webdav", "openpgp"]
+categories = ["api-bindings", "email"]
+publish = false
+
+[dependencies]
+base64 = "0.22.1"
+bytes = "1.12.1"
+# iCalendar and vCard files – parsed and written as kernoid does (Apache-2.0 OR MIT).
+calcard = "0.3.14"
+chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
+futures-util = { version = "0.3.34", default-features = false, features = ["std"] }
+html2text = "0.17.1"
+hickory-proto = { version = "0.26.3", default-features = false, features = ["std"] }
+iana-time-zone = "0.1.65"
+# End-to-end encryption (RFC 0006): keys, PGP/MIME, building and reading mail in the client – kernoid's own library
+# (MIT), shared with the web app and the server.
+kernoid-e2e = { path = "../e2e" }
+# HTTPS with rustls on AWS-LC and the system's trust store (rustls-platform-verifier).
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls", "http2", "json", "stream"] }
+# Named only for its feature: prefer the post-quantum key exchange X25519MLKEM768 (RFC 0006, 2).
+rustls = { version = "0.23.46", default-features = false, features = ["aws-lc-rs", "prefer-post-quantum", "std", "tls12"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.151"
+tokio = { version = "1.53.3", features = ["fs", "io-util", "net", "rt", "time"] }
+tokio-util = { version = "0.7.20", default-features = false, features = ["io"] }
+
+[dev-dependencies]
+tokio = { version = "1.53.3", features = ["fs", "io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
+
+# Argon2 (unlocking the key) and the post-quantum algorithms are slow without optimisation; tests build dependencies
+# optimised, as the end-to-end library does.
+[profile.dev.package."*"]
+opt-level = 2
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }

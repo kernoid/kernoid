@@ -9,7 +9,7 @@ use chrono::{DateTime, Local, NaiveDateTime, TimeZone, Utc};
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
-use super::{Client, Error, MAIL, Result, SUBMISSION, VACATION, e2e::OPENPGP, ids_of, set_error};
+use crate::{Client, Error, MAIL, Result, SUBMISSION, VACATION, e2e::OPENPGP, ids_of, set_error};
 
 /// The vacation response of the user's account (RFC 8621, 8), its times here.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -34,10 +34,10 @@ fn utc(local: Option<NaiveDateTime>) -> Option<String> {
 }
 
 /// The vacation response; none if the server has none for the user.
-pub fn vacation(client: &Client) -> Result<Option<Vacation>> {
+pub async fn vacation(client: &Client) -> Result<Option<Vacation>> {
     let Ok(account) = client.primary(VACATION) else { return Ok(None) };
     let result =
-        client.call(&[VACATION], "VacationResponse/get", json!({ "accountId": account, "ids": ["singleton"] }))?;
+        client.call(&[VACATION], "VacationResponse/get", json!({ "accountId": account, "ids": ["singleton"] })).await?;
     let Some(found) = result.get("list").and_then(Value::as_array).and_then(|list| list.first()) else {
         return Ok(Some(Vacation::default()));
     };
@@ -51,7 +51,7 @@ pub fn vacation(client: &Client) -> Result<Option<Vacation>> {
     }))
 }
 
-pub fn set_vacation(client: &Client, vacation: &Vacation) -> Result<()> {
+pub async fn set_vacation(client: &Client, vacation: &Vacation) -> Result<()> {
     let account = client.primary(VACATION)?;
     let update = json!({ "update": { "singleton": {
         "isEnabled": vacation.on,
@@ -60,7 +60,7 @@ pub fn set_vacation(client: &Client, vacation: &Vacation) -> Result<()> {
         "subject": (!vacation.subject.is_empty()).then_some(&vacation.subject),
         "textBody": (!vacation.text.is_empty()).then_some(&vacation.text),
     } } });
-    client.set(&[VACATION], "VacationResponse", &account, update, json!({}))?;
+    client.set(&[VACATION], "VacationResponse", &account, update, json!({})).await?;
     Ok(())
 }
 
@@ -312,8 +312,8 @@ struct List<T> {
 const ROLES: [&str; 6] = ["inbox", "drafts", "sent", "archive", "junk", "trash"];
 
 /// The mailboxes of an account: by role (Inbox first), then by sort order and name.
-pub fn mailboxes(client: &Client, account: &str) -> Result<Vec<Mailbox>> {
-    let result = client.call(&[MAIL], "Mailbox/get", json!({ "accountId": account }))?;
+pub async fn mailboxes(client: &Client, account: &str) -> Result<Vec<Mailbox>> {
+    let result = client.call(&[MAIL], "Mailbox/get", json!({ "accountId": account })).await?;
     let mut list: Vec<Mailbox> = parse(result)?;
     let rank = |m: &Mailbox| m.role.as_deref().and_then(|r| ROLES.iter().position(|x| *x == r)).unwrap_or(99);
     list.sort_by(|a, b| rank(a).cmp(&rank(b)).then(a.sort_order.cmp(&b.sort_order)).then_with(|| a.name.cmp(&b.name)));
@@ -342,7 +342,7 @@ fn using(client: &Client) -> Vec<&'static str> {
 }
 
 /// A page of emails in a mailbox – or, without one, in all – newest first; `text` searches them (full text).
-pub fn emails(
+pub async fn emails(
     client: &Client,
     account: &str,
     mailbox: Option<&str>,
@@ -358,36 +358,38 @@ pub fn emails(
         filter.insert("text".into(), text.trim().into());
     }
     let properties = summary(client);
-    let responses = client.request(
-        &using(client),
-        vec![
-            (
-                "Email/query",
-                json!({
-                    "accountId": account, "filter": filter, "position": position, "limit": limit,
-                    "sort": [{ "property": "receivedAt", "isAscending": false }], "calculateTotal": true,
-                }),
-                "q",
-            ),
-            (
-                "Email/get",
-                json!({ "accountId": account, "#ids": ids_of("q", "Email/query"), "properties": properties }),
-                "g",
-            ),
-        ],
-    )?;
+    let responses = client
+        .request(
+            &using(client),
+            vec![
+                (
+                    "Email/query",
+                    json!({
+                        "accountId": account, "filter": filter, "position": position, "limit": limit,
+                        "sort": [{ "property": "receivedAt", "isAscending": false }], "calculateTotal": true,
+                    }),
+                    "q",
+                ),
+                (
+                    "Email/get",
+                    json!({ "accountId": account, "#ids": ids_of("q", "Email/query"), "properties": properties }),
+                    "g",
+                ),
+            ],
+        )
+        .await?;
     let total = responses.get("q").and_then(|q| q.get("total")).and_then(Value::as_u64).unwrap_or(0);
     let list = parse(responses.get("g").cloned().unwrap_or(Value::Null))?;
     Ok((list, total))
 }
 
 /// One email with its bodies and attachments.
-pub fn email(client: &Client, account: &str, id: &str) -> Result<Option<Email>> {
-    Ok(full(client, account, &[id])?.into_iter().next())
+pub async fn email(client: &Client, account: &str, id: &str) -> Result<Option<Email>> {
+    Ok(full(client, account, &[id]).await?.into_iter().next())
 }
 
 /// Emails with their bodies and attachments, oldest first – the messages of a thread.
-pub fn full(client: &Client, account: &str, ids: &[&str]) -> Result<Vec<Email>> {
+pub async fn full(client: &Client, account: &str, ids: &[&str]) -> Result<Vec<Email>> {
     let mut properties = summary(client);
     properties.extend([
         "blobId",
@@ -401,14 +403,16 @@ pub fn full(client: &Client, account: &str, ids: &[&str]) -> Result<Vec<Email>> 
         "attachments",
         "bodyValues",
     ]);
-    let result = client.call(
-        &using(client),
-        "Email/get",
-        json!({
-            "accountId": account, "ids": ids, "properties": properties,
-            "fetchTextBodyValues": true, "fetchHTMLBodyValues": true, "maxBodyValueBytes": 4_000_000,
-        }),
-    )?;
+    let result = client
+        .call(
+            &using(client),
+            "Email/get",
+            json!({
+                "accountId": account, "ids": ids, "properties": properties,
+                "fetchTextBodyValues": true, "fetchHTMLBodyValues": true, "maxBodyValueBytes": 4_000_000,
+            }),
+        )
+        .await?;
     let mut list: Vec<Email> = parse(result)?;
     list.sort_by(|a, b| a.summary.received_at.cmp(&b.summary.received_at));
     Ok(list)
@@ -444,7 +448,7 @@ impl Conversation {
 
 /// A page of conversations in a mailbox, newest first (RFC 8621, 4.4.3 `collapseThreads`, then `Thread/get`); the
 /// total counts conversations.
-pub fn conversations(
+pub async fn conversations(
     client: &Client,
     account: &str,
     mailbox: Option<&str>,
@@ -491,7 +495,7 @@ pub fn conversations(
                 "m",
             ),
         ],
-    )?;
+    ).await?;
     let total = responses.get("q").and_then(|q| q.get("total")).and_then(Value::as_u64).unwrap_or(0);
     let latest: Vec<EmailSummary> = parse(responses.get("g").cloned().unwrap_or(Value::Null))?;
     #[derive(Deserialize)]
@@ -520,57 +524,53 @@ pub fn conversations(
 }
 
 /// Sets or clears a keyword on several emails at once.
-pub fn set_keywords(client: &Client, account: &str, ids: &[String], keyword: &str, on: bool) -> Result<()> {
+pub async fn set_keywords(client: &Client, account: &str, ids: &[String], keyword: &str, on: bool) -> Result<()> {
     let value = if on { Value::Bool(true) } else { Value::Null };
     let path = format!("keywords/{keyword}");
     let update: Map<String, Value> = ids.iter().map(|id| (id.clone(), json!({ path.as_str(): value }))).collect();
-    client.set(&[MAIL], "Email", account, json!({ "update": update }), json!({}))?;
+    client.set(&[MAIL], "Email", account, json!({ "update": update }), json!({})).await?;
     Ok(())
 }
 
 /// Moves several emails into one mailbox.
-pub fn move_all(client: &Client, account: &str, ids: &[String], mailbox: &str) -> Result<()> {
+pub async fn move_all(client: &Client, account: &str, ids: &[String], mailbox: &str) -> Result<()> {
     let update: Map<String, Value> =
         ids.iter().map(|id| (id.clone(), json!({ "mailboxIds": { mailbox: true } }))).collect();
-    client.set(&[MAIL], "Email", account, json!({ "update": update }), json!({}))?;
+    client.set(&[MAIL], "Email", account, json!({ "update": update }), json!({})).await?;
     Ok(())
 }
 
 /// Removes several emails for good.
-pub fn destroy_all(client: &Client, account: &str, ids: &[String]) -> Result<()> {
-    client.set(&[MAIL], "Email", account, json!({ "destroy": ids }), json!({}))?;
+pub async fn destroy_all(client: &Client, account: &str, ids: &[String]) -> Result<()> {
+    client.set(&[MAIL], "Email", account, json!({ "destroy": ids }), json!({})).await?;
     Ok(())
 }
 
 /// Sets or clears a keyword (`$seen`, `$flagged`).
-pub fn set_keyword(client: &Client, account: &str, id: &str, keyword: &str, on: bool) -> Result<()> {
+pub async fn set_keyword(client: &Client, account: &str, id: &str, keyword: &str, on: bool) -> Result<()> {
     let value = if on { Value::Bool(true) } else { Value::Null };
     let path = format!("keywords/{keyword}");
-    client.set(&[MAIL], "Email", account, json!({ "update": { id: { path: value } } }), json!({}))?;
+    client.set(&[MAIL], "Email", account, json!({ "update": { id: { path: value } } }), json!({})).await?;
     Ok(())
 }
 
 /// Moves an email into one mailbox (out of all others).
-pub fn move_to(client: &Client, account: &str, id: &str, mailbox: &str) -> Result<()> {
-    client.set(
-        &[MAIL],
-        "Email",
-        account,
-        json!({ "update": { id: { "mailboxIds": { mailbox: true } } } }),
-        json!({}),
-    )?;
+pub async fn move_to(client: &Client, account: &str, id: &str, mailbox: &str) -> Result<()> {
+    client
+        .set(&[MAIL], "Email", account, json!({ "update": { id: { "mailboxIds": { mailbox: true } } } }), json!({}))
+        .await?;
     Ok(())
 }
 
 /// Removes an email for good.
-pub fn destroy(client: &Client, account: &str, id: &str) -> Result<()> {
-    client.set(&[MAIL], "Email", account, json!({ "destroy": [id] }), json!({}))?;
+pub async fn destroy(client: &Client, account: &str, id: &str) -> Result<()> {
+    client.set(&[MAIL], "Email", account, json!({ "destroy": [id] }), json!({})).await?;
     Ok(())
 }
 
 /// The addresses the account may send as.
-pub fn identities(client: &Client, account: &str) -> Result<Vec<Identity>> {
-    parse(client.call(&[MAIL, SUBMISSION], "Identity/get", json!({ "accountId": account }))?)
+pub async fn identities(client: &Client, account: &str) -> Result<Vec<Identity>> {
+    parse(client.call(&[MAIL, SUBMISSION], "Identity/get", json!({ "accountId": account })).await?)
 }
 
 /// A file attached to a message being written: uploaded, or a part of another message (forwarding).
@@ -643,15 +643,11 @@ pub(crate) fn role<'a>(boxes: &'a [Mailbox], role: &str) -> Option<&'a Mailbox> 
 }
 
 /// Keeps a message in Drafts; its id.
-pub fn save_draft(client: &Client, account: &str, draft: &Draft, boxes: &[Mailbox]) -> Result<String> {
+pub async fn save_draft(client: &Client, account: &str, draft: &Draft, boxes: &[Mailbox]) -> Result<String> {
     let drafts = role(boxes, "drafts").ok_or_else(|| Error::Protocol("there is no Drafts mailbox".into()))?;
-    let result = client.set(
-        &[MAIL],
-        "Email",
-        account,
-        json!({ "create": { "draft": draft.email(&drafts.id, true) } }),
-        json!({}),
-    )?;
+    let result = client
+        .set(&[MAIL], "Email", account, json!({ "create": { "draft": draft.email(&drafts.id, true) } }), json!({}))
+        .await?;
     result
         .pointer("/created/draft/id")
         .and_then(Value::as_str)
@@ -661,7 +657,7 @@ pub fn save_draft(client: &Client, account: &str, draft: &Draft, boxes: &[Mailbo
 
 /// Stores the message in Drafts and submits it as `identity`; once sent it moves to Sent and is no draft any more
 /// (RFC 8621, 7.5).
-pub fn send(client: &Client, account: &str, identity: &Identity, draft: &Draft, boxes: &[Mailbox]) -> Result<()> {
+pub async fn send(client: &Client, account: &str, identity: &Identity, draft: &Draft, boxes: &[Mailbox]) -> Result<()> {
     let drafts = role(boxes, "drafts").ok_or_else(|| Error::Protocol("there is no Drafts mailbox".into()))?;
     let mut update = json!({ "keywords/$draft": null });
     if let Some(sent) = role(boxes, "sent") {
@@ -672,21 +668,27 @@ pub fn send(client: &Client, account: &str, identity: &Identity, draft: &Draft, 
         name: (!identity.name.is_empty()).then(|| identity.name.clone()),
         email: identity.email.clone(),
     });
-    let responses = client.request(
-        &[MAIL, SUBMISSION],
-        vec![
-            ("Email/set", json!({ "accountId": account, "create": { "draft": draft.email(&drafts.id, true) } }), "e"),
-            (
-                "EmailSubmission/set",
-                json!({
-                    "accountId": account,
-                    "create": { "send": { "identityId": identity.id, "emailId": "#draft" } },
-                    "onSuccessUpdateEmail": { "#send": update },
-                }),
-                "s",
-            ),
-        ],
-    )?;
+    let responses = client
+        .request(
+            &[MAIL, SUBMISSION],
+            vec![
+                (
+                    "Email/set",
+                    json!({ "accountId": account, "create": { "draft": draft.email(&drafts.id, true) } }),
+                    "e",
+                ),
+                (
+                    "EmailSubmission/set",
+                    json!({
+                        "accountId": account,
+                        "create": { "send": { "identityId": identity.id, "emailId": "#draft" } },
+                        "onSuccessUpdateEmail": { "#send": update },
+                    }),
+                    "s",
+                ),
+            ],
+        )
+        .await?;
     for (_, result, _) in &responses.0 {
         set_error(result)?;
     }
@@ -694,12 +696,12 @@ pub fn send(client: &Client, account: &str, identity: &Identity, draft: &Draft, 
 }
 
 /// Uploads a file to attach.
-pub fn attach(client: &Client, account: &str, path: &std::path::Path) -> Result<Attachment> {
-    let file = std::fs::File::open(path)?;
-    let size = file.metadata()?.len();
+pub async fn attach(client: &Client, account: &str, path: &std::path::Path) -> Result<Attachment> {
+    let file = tokio::fs::File::open(path).await?;
+    let size = file.metadata().await?.len();
     let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("attachment").to_owned();
-    let kind = super::files::media_type(&name);
-    let upload = client.upload(account, kind, file, size, &mut |_, _| {})?;
+    let kind = crate::files::media_type(&name);
+    let upload = client.upload(account, kind, file, size, |_, _| {}).await?;
     Ok(Attachment { blob_id: upload.blob_id, kind: kind.to_owned(), name, size: upload.size })
 }
 
