@@ -608,6 +608,11 @@ const de: Record<string, string> = {
   "primary, the login name": "Hauptadresse, der Anmeldename",
   "Add alias": "Alias hinzufügen",
   "Members may send as the group": "Mitglieder dürfen als die Gruppe senden",
+  "Account menu": "Kontomenü",
+  Density: "Dichte",
+  Comfortable: "Luftig",
+  Compact: "Kompakt",
+  Sections: "Bereiche",
 };
 
 const lang = (navigator.languages?.[0] ?? navigator.language ?? "en").toLowerCase().startsWith("de") ? "de" : "en";

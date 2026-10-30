@@ -5,6 +5,25 @@
      permissions allow; kernoid checks them again on every request. Instance administrators pick the tenant they
      work on. -->
 <script lang="ts">
+  import {
+    AppWindow,
+    Building,
+    Building2,
+    FileKey,
+    Fingerprint,
+    FolderKanban,
+    Globe,
+    KeyRound,
+    Mails,
+    RefreshCw,
+    ScrollText,
+    Server,
+    Settings as SettingsIcon,
+    ShieldCheck,
+    Users,
+    UsersRound,
+  } from "@lucide/svelte";
+
   import { resource } from "../app.svelte.js";
   import { t } from "../i18n.js";
   import { adminAccess } from "./access.js";
@@ -65,6 +84,24 @@
     ["signing-keys", "Signing keys"],
     ["mail-queue", "Mail queue"],
   ];
+  const ICONS: Record<Page, typeof Globe> = {
+    settings: SettingsIcon,
+    domains: Globe,
+    accounts: Users,
+    groups: UsersRound,
+    drives: Building2,
+    roles: KeyRound,
+    projects: FolderKanban,
+    applications: AppWindow,
+    providers: Fingerprint,
+    scim: RefreshCw,
+    audit: ScrollText,
+    instance: Server,
+    tenants: Building,
+    "instance-roles": ShieldCheck,
+    "signing-keys": FileKey,
+    "mail-queue": Mails,
+  };
 
   function route(): { page: string; id: string | undefined } {
     const [, page = "", id] = window.location.hash.replace(/^#\/?/, "").split("/");
@@ -141,8 +178,11 @@
       <h3 class="muted small">{t("Tenant")}</h3>
       <ul class="boxes">
         {#each tenantPages as [name, label] (name)}
+          {@const Icon = ICONS[name]}
           <li>
-            <button type="button" class:active={page === name} onclick={() => go(name)}>{t(label)}</button>
+            <button type="button" class:active={page === name} onclick={() => go(name)}>
+              <Icon size={17} /><span class="label">{t(label)}</span>
+            </button>
           </li>
         {/each}
       </ul>
@@ -151,8 +191,11 @@
       <h3 class="muted small">{t("Instance")}</h3>
       <ul class="boxes">
         {#each instancePages as [name, label] (name)}
+          {@const Icon = ICONS[name]}
           <li>
-            <button type="button" class:active={page === name} onclick={() => go(name)}>{t(label)}</button>
+            <button type="button" class:active={page === name} onclick={() => go(name)}>
+              <Icon size={17} /><span class="label">{t(label)}</span>
+            </button>
           </li>
         {/each}
       </ul>

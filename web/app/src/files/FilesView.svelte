@@ -5,6 +5,24 @@
      files shown in place, how to connect a file manager (WebDAV). What the user may do follows the rights kernoid
      reports. -->
 <script lang="ts">
+  import {
+    Building2,
+    Cable,
+    Copy,
+    Folder,
+    FolderPlus,
+    HardDrive,
+    History,
+    Link,
+    Pencil,
+    Search,
+    Share2,
+    Trash2,
+    Upload,
+    UsersRound,
+  } from "@lucide/svelte";
+
+  import FileIcon from "../ui/FileIcon.svelte";
   import WebDavHelp from "../account/WebDavHelp.svelte";
   import { changed, resource, touch, useJmap } from "../app.svelte.js";
   import Failure from "../Failure.svelte";
@@ -182,12 +200,16 @@
   <nav class="side" aria-label={t("Files")}>
     <ul class="boxes">
       {#each all as entry (entry.id)}
+        {@const Icon = entry.kind === "own" ? HardDrive : entry.kind === "drive" ? Building2 : UsersRound}
         <li>
           <button type="button" class:active={entry.id === account} onclick={() => open(entry.id, null)}>
-            <span>{storeName(entry)}</span>
-            {#if entry.kind !== "own"}
-              <span class="muted small">{entry.kind === "drive" ? t("Drive") : t("Shared")}</span>
-            {/if}
+            <Icon size={18} />
+            <span class="label">
+              {storeName(entry)}
+              {#if entry.kind !== "own"}
+                <small class="muted">{entry.kind === "drive" ? t("Drive") : t("Shared")}</small>
+              {/if}
+            </span>
           </button>
         </li>
       {/each}
@@ -227,6 +249,7 @@
           query = typed;
         }}
       >
+        <Search size={16} />
         <input
           type="search"
           placeholder={t("Search names and contents")}
@@ -235,11 +258,19 @@
           oninput={() => typed === "" && (query = "")}
         />
       </form>
-      <button type="button" class="quiet" onclick={() => (connecting = true)}>{t("Connect a file manager")}</button>
+      <button
+        type="button"
+        class="icon quiet"
+        aria-label={t("Connect a file manager")}
+        data-tip={t("Connect a file manager")}
+        onclick={() => (connecting = true)}
+      >
+        <Cable size={18} />
+      </button>
       {#if !inTrash && here.mayAddChildren}
-        <button type="button" disabled={busy} onclick={newDirectory}>{t("New folder")}</button>
+        <button type="button" disabled={busy} onclick={newDirectory}><FolderPlus size={17} />{t("New folder")}</button>
         <label class="button primary" class:disabled={busy}>
-          {t("Upload")}
+          <Upload size={17} />{t("Upload")}
           <input type="file" multiple hidden disabled={busy} onchange={(event) => upload(event.currentTarget.files)} />
         </label>
       {/if}
@@ -273,15 +304,18 @@
                     open(account, node.id);
                   }}
                 >
+                  {#if node.role === "trash"}<Trash2 size={18} />{:else}<Folder size={18} />{/if}
                   {label(node)}
                 </button>
                 {#if Object.keys(node.shareWith ?? {}).length > 0}
                   <span class="muted small"> · {t("Shared")}</span>
                 {/if}
               {:else if node.blobId}
-                <button type="button" class="quiet file" onclick={() => (viewing = node)}>{node.name}</button>
+                <button type="button" class="quiet file" onclick={() => (viewing = node)}>
+                  <FileIcon name={node.name} type={node.mediaType} />{node.name}
+                </button>
               {:else}
-                <span>{node.name}</span>
+                <span class="file"><FileIcon name={node.name} type={node.mediaType} />{node.name}</span>
               {/if}
             </td>
             <td class="muted small">{node.size == null ? "" : formatSize(node.size, locale)}</td>
@@ -289,25 +323,32 @@
             <td class="end">
               {#if !node.role}
                 {#if isDirectory(node) && rights.mayShare}
-                  <button type="button" class="quiet" disabled={busy} onclick={() => (sharing = node)}>{t("Share")}</button>
+                  <button type="button" class="quiet icon small" disabled={busy} aria-label={t("Share")} data-tip={t("Share")} onclick={() => (sharing = node)}><Share2 size={17} /></button>
                 {/if}
                 {#if rights.mayShare && linksAvailable(jmap)}
-                  <button type="button" class="quiet" disabled={busy} onclick={() => (linking = node)}>{t("Link")}</button>
+                  <button type="button" class="quiet icon small" disabled={busy} aria-label={t("Link")} data-tip={t("Link")} onclick={() => (linking = node)}><Link size={17} /></button>
                 {/if}
                 {#if !isDirectory(node) && rights.mayRead}
-                  <button type="button" class="quiet" disabled={busy} onclick={() => (history = node)}>{t("Versions")}</button>
+                  <button type="button" class="quiet icon small" disabled={busy} aria-label={t("Versions")} data-tip={t("Versions")} onclick={() => (history = node)}><History size={17} /></button>
                 {/if}
                 {#if rights.mayRead}
-                  <button type="button" class="quiet" disabled={busy} onclick={() => (copying = node)}>
-                    {t("Copy or move")}
+                  <button type="button" class="quiet icon small" disabled={busy} aria-label={t("Copy or move")} data-tip={t("Copy or move")} onclick={() => (copying = node)}>
+                    <Copy size={17} />
                   </button>
                 {/if}
                 {#if rights.mayRename}
-                  <button type="button" class="quiet" disabled={busy} onclick={() => renameNode(node)}>{t("Rename")}</button>
+                  <button type="button" class="quiet icon small" disabled={busy} aria-label={t("Rename")} data-tip={t("Rename")} onclick={() => renameNode(node)}><Pencil size={17} /></button>
                 {/if}
                 {#if rights.mayDelete}
-                  <button type="button" class="quiet danger" disabled={busy} onclick={() => remove(node)}>
-                    {inTrash || !bin.value ? t("Delete for good") : t("Delete")}
+                  <button
+                    type="button"
+                    class="quiet icon small danger"
+                    disabled={busy}
+                    aria-label={inTrash || !bin.value ? t("Delete for good") : t("Delete")}
+                    data-tip={inTrash || !bin.value ? t("Delete for good") : t("Delete")}
+                    onclick={() => remove(node)}
+                  >
+                    <Trash2 size={17} />
                   </button>
                 {/if}
               {/if}

@@ -3,6 +3,7 @@
 // page; /login/register registers; /login/idp is where kernoid sends the browser back from an identity provider;
 // /login alone logs in and goes to the account page.
 
+import "@fontsource-variable/ibm-plex-sans/wght.css";
 import "./style.css";
 
 import { mount } from "svelte";

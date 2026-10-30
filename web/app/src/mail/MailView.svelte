@@ -1,11 +1,31 @@
 <!-- SPDX-License-Identifier: MIT -->
 <!-- Mail: the mailboxes, the emails of the one chosen, the one read, and writing. -->
 <script lang="ts">
+  import {
+    Archive,
+    FileText,
+    Flag,
+    Folder,
+    FolderInput,
+    Forward,
+    Inbox,
+    MailOpen,
+    Paperclip,
+    Reply,
+    ReplyAll,
+    Search,
+    Send,
+    ShieldAlert,
+    SquarePen,
+    Trash2,
+  } from "@lucide/svelte";
+
   import { changed, resource, touch, useJmap } from "../app.svelte.js";
   import Failure from "../Failure.svelte";
   import { locale, t } from "../i18n.js";
   import { MAIL } from "../jmap.js";
   import Compose, { type ComposeStart } from "./Compose.svelte";
+  import Avatar from "../ui/Avatar.svelte";
   import { showHtml } from "./html.js";
   import {
     type Email,
@@ -30,6 +50,15 @@
     archive: "Archive",
     junk: "Junk",
     trash: "Trash",
+  };
+
+  const ROLE_ICONS: Record<string, typeof Inbox> = {
+    inbox: Inbox,
+    drafts: FileText,
+    sent: Send,
+    archive: Archive,
+    junk: ShieldAlert,
+    trash: Trash2,
   };
 
   function boxName(box: Mailbox): string {
@@ -160,9 +189,12 @@
 
 <div class="three">
   <aside class="side">
-    <button type="button" class="primary wide" onclick={() => (composing = { ...blank })}>{t("Write")}</button>
+    <button type="button" class="primary wide" onclick={() => (composing = { ...blank })}>
+      <SquarePen size={18} />{t("Write")}
+    </button>
     <ul class="boxes">
       {#each boxes.value ?? [] as box (box.id)}
+        {@const Icon = (box.role && ROLE_ICONS[box.role]) || Folder}
         <li>
           <button
             type="button"
@@ -170,7 +202,8 @@
             class:active={selected === box.id}
             onclick={() => choose(box.id)}
           >
-            <span>{boxName(box)}</span>
+            <Icon size={18} />
+            <span class="label">{boxName(box)}</span>
             {#if box.unreadEmails > 0}
               <span class="count">{box.unreadEmails}</span>
             {/if}
@@ -187,7 +220,9 @@
           <option value={box.id}>{boxName(box)}{box.unreadEmails > 0 ? ` (${box.unreadEmails})` : ""}</option>
         {/each}
       </select>
-      <button type="button" class="primary" onclick={() => (composing = { ...blank })}>{t("Write")}</button>
+      <button type="button" class="primary icon" aria-label={t("Write")} onclick={() => (composing = { ...blank })}>
+        <SquarePen size={18} />
+      </button>
     </div>
     <form
       class="search"
@@ -196,6 +231,7 @@
         query = search;
       }}
     >
+      <Search size={16} />
       <input type="search" placeholder={t("Search")} aria-label={t("Search")} bind:value={search} />
     </form>
     <Failure error={list.error} />
@@ -212,17 +248,19 @@
             class:unread={!summary.keywords.$seen}
             onclick={() => (open = summary.id)}
           >
-            <span class="line">
-              <span class="who">{sender(summary)}</span>
-              <span class="time">{when(summary.receivedAt)}</span>
+            <Avatar name={summary.from?.[0]?.name ?? ""} address={summary.from?.[0]?.email ?? ""} size={36} />
+            <span class="text">
+              <span class="line">
+                <span class="who">{sender(summary)}</span>
+                <span class="time">
+                  {#if summary.hasAttachment}<Paperclip size={13} aria-label={t("Attachments")} />{/if}
+                  {#if summary.keywords.$flagged}<Flag size={13} class="flag" aria-label={t("Flag")} />{/if}
+                  {when(summary.receivedAt)}
+                </span>
+              </span>
+              <span class="subject">{summary.subject || t("(no subject)")}</span>
+              <span class="preview">{summary.preview}</span>
             </span>
-            <span class="subject">
-              {#if summary.keywords.$flagged}
-                <span class="flag" aria-label={t("Flag")}>● </span>
-              {/if}
-              {summary.subject || t("(no subject)")}
-            </span>
-            <span class="preview">{summary.preview}</span>
           </button>
         </li>
       {/each}
@@ -235,26 +273,40 @@
       {@const html = bodyHtml(current)}
       {@const path = originalPath(jmap, current)}
       <article>
-        <div class="actions">
-          <button type="button" onclick={() => reply(current, false)}>{t("Reply")}</button>
-          <button type="button" onclick={() => reply(current, true)}>{t("Reply all")}</button>
-          <button type="button" onclick={() => forward(current)}>{t("Forward")}</button>
+        <div class="actions reading">
+          <button type="button" onclick={() => reply(current, false)}><Reply size={17} />{t("Reply")}</button>
+          <button type="button" class="icon" aria-label={t("Reply all")} data-tip={t("Reply all")} onclick={() => reply(current, true)}>
+            <ReplyAll size={17} />
+          </button>
+          <button type="button" class="icon" aria-label={t("Forward")} data-tip={t("Forward")} onclick={() => forward(current)}>
+            <Forward size={17} />
+          </button>
+          <span class="divider"></span>
           <button
             type="button"
+            class="icon"
+            class:on={current.keywords.$flagged}
+            aria-label={current.keywords.$flagged ? t("Unflag") : t("Flag")}
+            aria-pressed={Boolean(current.keywords.$flagged)}
+            data-tip={current.keywords.$flagged ? t("Unflag") : t("Flag")}
             onclick={() => act(() => setKeyword(jmap, current.id, "$flagged", !current.keywords.$flagged))}
           >
-            {current.keywords.$flagged ? t("Unflag") : t("Flag")}
+            <Flag size={17} />
           </button>
           <button
             type="button"
+            class="icon"
+            aria-label={t("Mark unread")}
+            data-tip={t("Mark unread")}
             onclick={() =>
               act(async () => {
                 await setKeyword(jmap, current.id, "$seen", false);
                 open = undefined;
               })}
           >
-            {t("Mark unread")}
+            <MailOpen size={17} />
           </button>
+          <FolderInput size={17} class="muted" aria-hidden="true" />
           <select
             aria-label={t("Move to")}
             onchange={(event) => {
@@ -267,20 +319,26 @@
               <option value={box.id}>{boxName(box)}</option>
             {/each}
           </select>
-          <button type="button" class="danger" onclick={() => remove(current)}>{t("Delete")}</button>
+          <button type="button" class="icon danger" aria-label={t("Delete")} data-tip={t("Delete")} onclick={() => remove(current)}>
+            <Trash2 size={17} />
+          </button>
         </div>
-        <h2>{current.subject || t("(no subject)")}</h2>
+        <h2 class="subject-line">{current.subject || t("(no subject)")}</h2>
+        <div class="sender">
+          <Avatar name={current.from?.[0]?.name ?? ""} address={current.from?.[0]?.email ?? ""} size={42} />
+          <div>
+            <strong>{current.from?.[0]?.name || current.from?.[0]?.email}</strong>
+            {#if current.from?.[0]?.name}<span class="muted small">&lt;{current.from[0].email}&gt;</span>{/if}
+            <div class="muted small">{new Date(current.sentAt ?? current.receivedAt).toLocaleString(locale)}</div>
+          </div>
+        </div>
         <dl class="headers">
-          <dt>{t("From")}</dt>
-          <dd>{formatAddresses(current.from)}</dd>
           <dt>{t("To")}</dt>
           <dd>{formatAddresses(current.to)}</dd>
           {#if current.cc?.length}
             <dt>{t("Cc")}</dt>
             <dd>{formatAddresses(current.cc)}</dd>
           {/if}
-          <dt></dt>
-          <dd class="muted">{new Date(current.sentAt ?? current.receivedAt).toLocaleString(locale)}</dd>
         </dl>
         {#if html}
           {#if path}

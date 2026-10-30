@@ -1,6 +1,9 @@
 <!-- SPDX-License-Identifier: MIT -->
 <!-- Contacts: the address books' cards, one shown, made and changed here. -->
 <script lang="ts">
+  import { Pencil, Search, Trash2, UserPlus } from "@lucide/svelte";
+
+  import Avatar from "../ui/Avatar.svelte";
   import { changed, resource, touch, useJmap } from "../app.svelte.js";
   import Failure from "../Failure.svelte";
   import { t } from "../i18n.js";
@@ -40,9 +43,12 @@
           query = search;
         }}
       >
+        <Search size={16} />
         <input type="search" placeholder={t("Search")} aria-label={t("Search")} bind:value={search} />
       </form>
-      <button type="button" class="primary" onclick={() => (editing = "new")}>{t("New")}</button>
+      <button type="button" class="primary icon" aria-label={t("New contact")} data-tip={t("New contact")} onclick={() => (editing = "new")}>
+        <UserPlus size={18} />
+      </button>
     </div>
     <Failure error={books.error ?? list.error} />
     {#if list.value?.length === 0}
@@ -52,8 +58,11 @@
       {#each list.value ?? [] as card (`${card.accountId}/${card.id}`)}
         <li>
           <button type="button" class:active={open?.id === card.id} onclick={() => (open = card)}>
-            <span class="who">{fullName(card)}</span>
-            <span class="preview">{Object.values(card.emails ?? {})[0]?.address ?? ""}</span>
+            <Avatar name={fullName(card)} address={Object.values(card.emails ?? {})[0]?.address ?? ""} size={36} />
+            <span class="text">
+              <span class="who">{fullName(card)}</span>
+              <span class="preview">{Object.values(card.emails ?? {})[0]?.address ?? ""}</span>
+            </span>
           </button>
         </li>
       {/each}
@@ -66,11 +75,16 @@
       <article>
         <div class="actions">
           {#if book?.myRights.mayWrite}
-            <button type="button" onclick={() => (editing = card)}>{t("Edit")}</button>
-            <button type="button" class="danger" onclick={() => removeCard(card)}>{t("Delete")}</button>
+            <button type="button" onclick={() => (editing = card)}><Pencil size={17} />{t("Edit")}</button>
+            <button type="button" class="icon danger" aria-label={t("Delete")} data-tip={t("Delete")} onclick={() => removeCard(card)}>
+              <Trash2 size={17} />
+            </button>
           {/if}
         </div>
-        <h2>{fullName(card)}</h2>
+        <div class="sender contact-head">
+          <Avatar name={fullName(card)} address={Object.values(card.emails ?? {})[0]?.address ?? ""} size={56} />
+          <h2>{fullName(card)}</h2>
+        </div>
         <dl class="headers">
           {#each Object.values(card.emails ?? {}) as email, index (index)}
             <dt>{t("Email")}</dt>

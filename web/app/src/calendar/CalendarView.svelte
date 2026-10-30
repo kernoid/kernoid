@@ -3,6 +3,8 @@
      changed and answered here send their invitations and answers. Colours and positions are set as style properties
      (style:), which the Content-Security-Policy allows – not as style attributes. -->
 <script lang="ts">
+  import { CalendarPlus, ChevronLeft, ChevronRight } from "@lucide/svelte";
+
   import { changed, loaded, resource, touch, useJmap } from "../app.svelte.js";
   import Failure from "../Failure.svelte";
   import { locale, t } from "../i18n.js";
@@ -196,9 +198,9 @@
 
 <div class="calendar">
   <div class="toolbar">
-    <button type="button" onclick={() => step(-1)} aria-label={t("Earlier")}>‹</button>
+    <button type="button" class="icon" onclick={() => step(-1)} aria-label={t("Earlier")} data-tip={t("Earlier")}><ChevronLeft size={18} /></button>
     <button type="button" onclick={() => (anchor = new Date())}>{t("Today")}</button>
-    <button type="button" onclick={() => step(1)} aria-label={t("Later")}>›</button>
+    <button type="button" class="icon" onclick={() => step(1)} aria-label={t("Later")} data-tip={t("Later")}><ChevronRight size={18} /></button>
     <h2>{title}</h2>
     <span class="grow"></span>
     <div class="segmented" role="group" aria-label={t("View")}>
@@ -209,7 +211,7 @@
       {/each}
     </div>
     {#if writable.length > 0}
-      <button type="button" class="primary" onclick={() => (dialog = { day: new Date() })}>{t("New event")}</button>
+      <button type="button" class="primary" onclick={() => (dialog = { day: new Date() })}><CalendarPlus size={17} />{t("New event")}</button>
     {/if}
   </div>
   <Failure error={list.error ?? events.error} />

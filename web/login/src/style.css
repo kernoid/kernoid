@@ -12,7 +12,8 @@
   --error: #ff7a7a;
   --radius: 10px;
   color-scheme: dark;
-  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  font: 450 16px/1.5 "IBM Plex Sans Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
 @media (prefers-color-scheme: light) {

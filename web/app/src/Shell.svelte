@@ -3,8 +3,9 @@
      the account (#/account), the administration (#/admin), and the views. -->
 <script lang="ts">
   import { LoginClient } from "@kernoid/sdk";
+  import { CalendarDays, Contact, FolderOpen, Mail, Monitor, Moon, Shield, Sun } from "@lucide/svelte";
 
-  import { message, provideJmap } from "./app.svelte.js";
+  import { loaded, message, provideJmap } from "./app.svelte.js";
   import { t } from "./i18n.js";
   import { FILENODE, type Jmap, MAIL } from "./jmap.js";
   import MailNotifications from "./mail/MailNotifications.svelte";
@@ -14,7 +15,9 @@
   import FilesView from "./files/FilesView.svelte";
   import AccountView from "./account/AccountView.svelte";
   import AdminView from "./admin/AdminView.svelte";
-  import { THEMES, setTheme, theme } from "./theme.svelte.js";
+  import { type Theme, setTheme, theme } from "./theme.svelte.js";
+  import Tooltip from "./ui/Tooltip.svelte";
+  import UserMenu from "./ui/UserMenu.svelte";
 
   type Section = "mail" | "calendar" | "contacts" | "files" | "account" | "admin";
 
@@ -60,37 +63,61 @@
     window.location.assign(next ?? "/login/account");
   }
 
-  function nextTheme(): void {
-    setTheme(THEMES[(THEMES.indexOf(theme()) + 1) % THEMES.length] ?? "system");
-  }
+  const me = loaded(() => login.session());
 
-  const links: [Section, string][] = [
-    ["mail", "Mail"],
-    ["calendar", "Calendar"],
-    ["contacts", "Contacts"],
-    ["files", "Files"],
+  const links: [Section, string, typeof Mail][] = [
+    ["mail", "Mail", Mail],
+    ["calendar", "Calendar", CalendarDays],
+    ["contacts", "Contacts", Contact],
+    ["files", "Files", FolderOpen],
+  ];
+  const themes: [Theme, string, typeof Sun][] = [
+    ["light", "Light", Sun],
+    ["dark", "Dark", Moon],
+    ["system", "System", Monitor],
   ];
 </script>
 <div class="shell">
   <header class="bar">
-    <span class="brand" aria-label="kernoid">kern<b>0</b><i>id</i></span>
-    <nav bind:this={sectionBar}>
-      {#each links as [name, label] (name)}
+    <a class="brand" href="#/" aria-label="kernoid">kern<b>0</b><i>id</i></a>
+    <nav class="sections" bind:this={sectionBar} aria-label={t("Sections")}>
+      {#each links as [name, label, Icon] (name)}
         {#if available.includes(name)}
-          <a href={`#/${name}`} class:active={current === name}>{t(label)}</a>
+          <a href={`#/${name}`} class:active={current === name} aria-current={current === name ? "page" : undefined}>
+            <Icon size={18} />
+            <span>{t(label)}</span>
+          </a>
         {/if}
       {/each}
       {#if admin}
-        <a href="#/admin" class:active={current === "admin"}>{t("Administration")}</a>
+        <a href="#/admin" class:active={current === "admin"} aria-current={current === "admin" ? "page" : undefined}>
+          <Shield size={18} />
+          <span>{t("Administration")}</span>
+        </a>
       {/if}
     </nav>
-    <span class="who">
-      <button type="button" class="quiet" title={t("Theme")} onclick={nextTheme}>
-        {t(theme() === "system" ? "System" : theme() === "light" ? "Light" : "Dark")}
-      </button>
-      <a href="#/account" class:active={current === "account"}>{jmap.session.username}</a>
-      <button type="button" class="quiet" onclick={() => void logout()}>{t("Log out")}</button>
-    </span>
+    <div class="bar-end">
+      <div class="segmented icons theme-switch" role="group" aria-label={t("Theme")}>
+        {#each themes as [value, label, Icon] (value)}
+          <button
+            type="button"
+            class:active={theme() === value}
+            aria-pressed={theme() === value}
+            aria-label={t(label)}
+            data-tip={t(label)}
+            onclick={() => setTheme(value)}
+          >
+            <Icon size={16} />
+          </button>
+        {/each}
+      </div>
+      <UserMenu
+        name={me.value?.account.display_name ?? jmap.session.username}
+        address={me.value?.account.address ?? jmap.session.username}
+        {admin}
+        onlogout={() => void logout()}
+      />
+    </div>
   </header>
   {#if available.includes("mail")}
     <MailNotifications />
@@ -119,4 +146,5 @@
       </main>
     {/snippet}
   </svelte:boundary>
+  <Tooltip />
 </div>
