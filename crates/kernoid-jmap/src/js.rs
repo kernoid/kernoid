@@ -76,6 +76,12 @@ pub(crate) fn event_to_json(text: &str) -> Option<Map<String, Value>> {
 /// A JSCalendar object as an iCalendar object. calcard converts times and time zones only inside a `Group`, so a
 /// single event is wrapped in one.
 pub(crate) fn json_to_event(object: &Map<String, Value>) -> Result<String, String> {
+    // calcard drops a start it cannot read and keeps the event without one; refuse it instead.
+    if let Some(start) = object.get("start")
+        && !start.as_str().is_some_and(is_local_date_time)
+    {
+        return Err("start: a LocalDateTime, e.g. 2026-11-02T00:00:00".into());
+    }
     let object = &with_override_durations(object);
     let wrapped;
     let object = if object.get("@type").and_then(Value::as_str) == Some("Group") {
@@ -132,9 +138,32 @@ pub(crate) fn patch(object: &mut Map<String, Value>, patch: &Map<String, Value>)
     Ok(())
 }
 
+/// `YYYY-MM-DDTHH:MM:SS` with an optional fraction – JSCalendar's LocalDateTime (RFC 8984, 1.4.4).
+fn is_local_date_time(text: &str) -> bool {
+    let (main, fraction) = text.split_once('.').unwrap_or((text, ""));
+    chrono::NaiveDateTime::parse_from_str(main, "%Y-%m-%dT%H:%M:%S").is_ok()
+        && fraction.bytes().all(|b| b.is_ascii_digit())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_start_must_be_a_local_date_time() {
+        let event = |start: Value| {
+            let mut object = Map::new();
+            object.insert("@type".into(), "Event".into());
+            object.insert("uid".into(), "u".into());
+            object.insert("title".into(), "Holiday".into());
+            object.insert("start".into(), start);
+            object
+        };
+        assert!(json_to_event(&event("2026-11-02".into())).is_err());
+        assert!(json_to_event(&event("2026-11-02T10:00:00Z".into())).is_err());
+        assert!(json_to_event(&event(Value::Null)).is_err());
+        assert!(json_to_event(&event("2026-11-02T00:00:00".into())).is_ok());
+    }
 
     #[test]
     fn cards_and_events_go_both_ways() {

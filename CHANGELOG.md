@@ -195,6 +195,9 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 ### Fixed
 
+- `CalendarEvent/query` with `expandRecurrences` returns a single event as itself – its own id, no `baseEventId` –
+  and only recurring events as instances; clients showed every event as repeating. `CalendarEvent/set` refuses a
+  `start` that is not a LocalDateTime (`invalidProperties`) instead of storing the event without one.
 - A new screen of the login page puts the focus on its first field; it went to the heading.
 - WebDAV answers began with two XML declarations – not well-formed, and file managers (macOS Finder, Windows) refused
   to connect.

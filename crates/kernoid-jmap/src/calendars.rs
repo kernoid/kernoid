@@ -107,6 +107,15 @@ fn local(timestamp: i64, time_zone: Option<&str>) -> String {
     }
 }
 
+/// Whether an iCalendar object repeats: an `RRULE` or `RDATE` in one of its components.
+fn recurs(text: &str) -> bool {
+    let Entry::ICalendar(parsed) = Parser::new(text).entry() else { return false };
+    parsed.components.iter().any(|component| {
+        component.property(&calcard::icalendar::ICalendarProperty::Rrule).is_some()
+            || component.property(&calcard::icalendar::ICalendarProperty::Rdate).is_some()
+    })
+}
+
 /// The instances of an iCalendar object as (start, end) in seconds since 1970, in a time window.
 fn instances(text: &str, default_tz: Tz, after: Option<i64>, before: Option<i64>) -> Vec<(i64, i64)> {
     let Entry::ICalendar(parsed) = Parser::new(text).entry() else { return Vec::new() };
@@ -477,7 +486,8 @@ impl Context<'_> {
             }
             let zone = ical::time_zone(zones.get(&event.calendar).cloned().flatten().as_deref());
             let found = instances(&text_data, zone, after, before);
-            if expand {
+            // Only a recurring event becomes instances; any other is itself, with its own id.
+            if expand && recurs(&text_data) {
                 hits.extend(found.into_iter().map(|(start, _)| (start, instance_id(event.id, start))));
             } else if after.is_none() && before.is_none() || !found.is_empty() {
                 hits.push((found.first().map_or(i64::MIN, |(start, _)| *start), event.id.to_string()));

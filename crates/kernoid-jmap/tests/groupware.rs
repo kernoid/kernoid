@@ -173,6 +173,32 @@ async fn calendars_through_jmap(pool: PgPool) {
     let identities = setup.one(&alice, "ParticipantIdentity/get", json!({ "accountId": account })).await;
     assert_eq!(identities["list"][0]["calendarAddress"], "mailto:alice@firma.example");
 
+    // A single event stays itself when expanded; a start that is not a LocalDateTime is refused, not dropped.
+    let calendar = setup.one(&alice, "Calendar/get", json!({ "accountId": account })).await["list"][0]["id"].clone();
+    let made = setup
+        .one(
+            &alice,
+            "CalendarEvent/set",
+            json!({ "accountId": account, "create": {
+                "once": { "@type": "Event", "title": "Once", "calendarIds": { calendar.as_str().unwrap(): true },
+                          "start": "2026-11-05T15:00:00", "timeZone": "Europe/Berlin", "duration": "PT1H" },
+                "bad": { "@type": "Event", "title": "Holiday", "calendarIds": { calendar.as_str().unwrap(): true },
+                         "start": "2026-11-05", "showWithoutTime": true, "duration": "P1D" },
+            } }),
+        )
+        .await;
+    let once = made["created"]["once"]["id"].as_str().unwrap_or_else(|| panic!("{made}")).to_owned();
+    assert_eq!(made["notCreated"]["bad"]["type"], "invalidProperties", "{made}");
+    let found = setup
+        .one(
+            &alice,
+            "CalendarEvent/query",
+            json!({ "accountId": account, "expandRecurrences": true,
+                    "filter": { "after": "2026-11-05T00:00:00Z", "before": "2026-11-06T00:00:00Z" } }),
+        )
+        .await;
+    assert!(found["ids"].as_array().unwrap().contains(&json!(once)), "{found}");
+
     let gone = setup.one(&alice, "CalendarEvent/set", json!({ "accountId": account, "destroy": [id] })).await;
     assert_eq!(gone["destroyed"], json!([id]));
 }
