@@ -14,6 +14,7 @@
   import { THEMES, setTheme, theme } from "../theme.svelte.js";
   import { type AppPassword, client, deviceName, languageName, relogin, when } from "./account.js";
   import Connect from "./Connect.svelte";
+  import MailSettings from "./MailSettings.svelte";
   import Vacation from "./Vacation.svelte";
 
   const session = loaded(() => client.session());
@@ -160,6 +161,8 @@
         </form>
       </section>
     {/if}
+
+    <MailSettings />
 
     <Vacation />
 

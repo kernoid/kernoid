@@ -590,3 +590,80 @@ label.button { display: inline-flex; align-items: center; gap: 7px; min-height: 
 .profile-head h1 { margin: 0; }
 .profile-head p { margin: 2px 0 0; }
 .answer code.secret + button { margin-left: 4px; vertical-align: middle; }
+
+/* Mail: the folder tree (mail/Folders.svelte). */
+.folders-head { display: flex; align-items: center; justify-content: space-between; margin: 14px 4px 4px 10px; border-radius: var(--radius-small); }
+.folders-head .muted { text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.72rem; font-weight: 600; }
+.folders-head.over { outline: 2px dashed var(--accent); }
+.boxes.tree li { position: relative; display: flex; align-items: center; border-radius: var(--radius-small); }
+.boxes.tree li > button:first-child { flex: 1; min-width: 0; }
+.boxes.tree li.over > button:first-child { background: var(--accent-soft); outline: 2px dashed var(--accent); outline-offset: -2px; }
+.boxes.tree li.junk { margin-top: 10px; }
+.boxes.tree li.junk::before { content: ""; position: absolute; left: 10px; right: 10px; top: -6px; border-top: 1px solid var(--line); }
+.boxes.tree li.trash > button:first-child svg { color: var(--error); }
+.boxes.tree .folder-more { position: absolute; right: 2px; opacity: 0; }
+.boxes.tree li:hover .folder-more, .boxes.tree .folder-more:focus-visible, .boxes.tree .folder-more[aria-expanded="true"] { opacity: 1; background: var(--surface); }
+.boxes.tree li:hover > button:first-child .count, .boxes.tree li:hover > button:first-child .muted { visibility: hidden; }
+.folder-menu { top: calc(100% + 2px); right: 0; width: 230px; }
+.menu .menu-item.danger { color: var(--error); }
+.menu .menu-item.danger svg { color: var(--error); }
+
+/* Mail: the list and reading. */
+.trash-note { display: flex; align-items: center; gap: 10px; padding: 8px calc(var(--space) + 4px); background: var(--error-soft); border-bottom: 1px solid var(--line); color: var(--text); }
+.trash-note > svg { color: var(--error); }
+.trash-note a { color: var(--muted); vertical-align: middle; }
+button.small-button { min-height: calc(var(--control) - 8px); padding: 0 10px; font-size: 0.85rem; }
+.items button.picked { background: var(--accent-soft); }
+.items button.picked::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--violet); }
+.items button[draggable="true"] { cursor: default; }
+.nothing { height: 100%; display: grid; place-content: center; justify-items: center; gap: 4px; color: var(--faint); }
+.many h2 { margin-top: 0; }
+.attachments { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 16px; padding: 0; list-style: none; }
+.attachment { display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--raised); padding-right: 4px; max-width: 320px; }
+.attachment > button, .attachment > span.quiet { display: inline-flex; align-items: center; gap: 10px; min-height: 46px; padding: 0 10px; background: none; border: 0; min-width: 0; text-align: left; }
+.attachment .text { display: grid; min-width: 0; }
+.attachment .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 520; }
+a.button.icon { display: inline-grid; place-items: center; padding: 0; width: calc(var(--control) - 6px); min-height: calc(var(--control) - 6px); background: none; border: 0; color: var(--muted); }
+a.button.icon:hover { background: var(--hover); color: var(--text); }
+
+/* Writing (mail/Compose.svelte, mail/Editor.svelte). */
+.dialog.compose { width: min(900px, 100%); height: min(860px, 100%); display: flex; flex-direction: column; gap: 10px; padding: 18px 22px; }
+.dialog.compose.dropping { outline: 2px dashed var(--accent); outline-offset: -6px; }
+.compose-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.compose-head h2 { margin: 0; font-size: 1.1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.compose .fields { display: grid; border-top: 1px solid var(--line); }
+.compose .field-row { display: flex; align-items: center; gap: 10px; margin: 0; border-bottom: 1px solid var(--line); }
+.compose .field-row > span, .compose .field-row > label { width: 56px; flex: none; font-size: 0.85rem; color: var(--muted); margin: 0; }
+.compose .field-row input, .compose .field-row select { flex: 1; width: auto; border: 0; background: transparent; box-shadow: none; padding-left: 0; }
+.compose .field-row input:focus, .compose .field-row select:focus { box-shadow: none; }
+.compose .field-row:focus-within { border-bottom-color: var(--accent); }
+.compose-foot { display: flex; align-items: center; gap: 8px; }
+.editor { flex: 1; min-height: 220px; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.editor:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.editor-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; padding: 4px 6px; border-bottom: 1px solid var(--line); background: var(--panel); border-radius: var(--radius) var(--radius) 0 0; }
+.editor-tools .divider { width: 1px; height: 20px; background: var(--line); margin: 0 4px; }
+.editor-tools button.on { background: var(--accent-soft); color: var(--accent); }
+.editor-area { flex: 1; min-height: 0; overflow: auto; }
+.editor-body { min-height: 100%; padding: 12px 16px; outline: none; white-space: pre-wrap; word-wrap: break-word; font-variant-ligatures: none; }
+.editor-body p { margin: 0 0 0.6em; }
+.editor-body h2 { font-size: 1.25rem; margin: 0.8em 0 0.4em; }
+.editor-body h3 { font-size: 1.08rem; margin: 0.8em 0 0.4em; }
+.editor-body blockquote { margin: 0.4em 0; padding-left: 12px; border-left: 3px solid var(--line-strong); color: var(--muted); }
+.editor-body ul, .editor-body ol { padding-left: 1.4em; margin: 0 0 0.6em; }
+.editor-body a { color: var(--accent); }
+.editor-body code { font-size: 0.9em; }
+.editor-body p.is-editor-empty:first-child::before { content: attr(data-placeholder); color: var(--faint); float: left; height: 0; pointer-events: none; }
+.ProseMirror-hideselection *::selection { background: transparent; }
+.ProseMirror-separator { display: inline !important; border: none !important; margin: 0 !important; }
+
+/* Mail on a phone: the list, or what is read – with a way back. */
+@media (max-width: 760px) {
+  .mail.reading .list { display: none; }
+  .mail:not(.reading) .read { display: none; }
+  .mail .read { padding-top: 0; }
+  .dialog.compose { height: 100%; padding: 12px; }
+  .compose-foot .muted { display: none; }
+}
+input.days { width: 90px; min-width: 0; flex: none !important; }
+.page fieldset.choice { border: 0; padding: 0; margin: 0; display: grid; gap: 8px; }
+.page fieldset.choice legend { margin-bottom: 6px; }

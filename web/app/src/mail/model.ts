@@ -184,7 +184,10 @@ export interface Draft {
   to: Address[];
   cc: Address[];
   subject: string;
+  /** The plain text – alone, or alongside `html`. */
   body: string;
+  /** The same as HTML, if written with formatting. */
+  html?: string;
   inReplyTo?: string[] | null;
   references?: string[] | null;
 }
@@ -201,9 +204,10 @@ export async function send(jmap: Jmap, draft: Draft, boxes: Mailbox[]): Promise<
     from: [{ name: draft.identity.name || null, email: draft.identity.email }],
     to: draft.to,
     subject: draft.subject,
-    bodyValues: { body: { value: draft.body } },
+    bodyValues: draft.html ? { body: { value: draft.body }, html: { value: draft.html } } : { body: { value: draft.body } },
     textBody: [{ partId: "body", type: "text/plain" }],
   };
+  if (draft.html) email.htmlBody = [{ partId: "html", type: "text/html" }];
   if (draft.cc.length > 0) email.cc = draft.cc;
   if (draft.attachments?.length) {
     email.attachments = draft.attachments.map((file) => ({ blobId: file.blobId, type: file.type, name: file.name, disposition: "attachment" }));
@@ -230,4 +234,91 @@ export async function send(jmap: Jmap, draft: Draft, boxes: Mailbox[]): Promise<
       if (first) throw new Error(first.description ?? first.type);
     }
   }
+}
+
+// Mailboxes of one's own (RFC 8621, 2.5): made, renamed, moved under another and destroyed.
+
+export async function createMailbox(jmap: Jmap, name: string, parentId: string | null): Promise<void> {
+  await jmap.set([MAIL], "Mailbox", jmap.account(MAIL), { create: { box: { name, parentId } } });
+}
+
+export async function updateMailbox(jmap: Jmap, id: string, change: { name?: string; parentId?: string | null }): Promise<void> {
+  await jmap.set([MAIL], "Mailbox", jmap.account(MAIL), { update: { [id]: change } });
+}
+
+/** Destroys a mailbox; its emails go to the Trash first (they would be lost otherwise). */
+export async function destroyMailbox(jmap: Jmap, box: Mailbox, trash: Mailbox | undefined): Promise<void> {
+  if (trash && box.totalEmails > 0) await moveAll(jmap, box.id, trash.id);
+  await jmap.set([MAIL], "Mailbox", jmap.account(MAIL), { destroy: [box.id] }, { onDestroyRemoveEmails: !trash });
+}
+
+/** The ids of every email in a mailbox, page by page. */
+async function idsIn(jmap: Jmap, mailbox: string): Promise<string[]> {
+  const accountId = jmap.account(MAIL);
+  const ids: string[] = [];
+  for (;;) {
+    const page = await jmap.call<{ ids: string[] }>([MAIL], "Email/query", { accountId, filter: { inMailbox: mailbox }, position: ids.length, limit: 500 });
+    ids.push(...page.ids);
+    if (page.ids.length < 500) return ids;
+  }
+}
+
+/** Moves emails to another mailbox – out of every other. */
+export async function moveMany(jmap: Jmap, ids: string[], to: string): Promise<void> {
+  for (let start = 0; start < ids.length; start += 200) {
+    const update = Object.fromEntries(ids.slice(start, start + 200).map((id) => [id, { mailboxIds: { [to]: true } }]));
+    await jmap.set([MAIL], "Email", jmap.account(MAIL), { update });
+  }
+}
+
+async function moveAll(jmap: Jmap, from: string, to: string): Promise<void> {
+  await moveMany(jmap, await idsIn(jmap, from), to);
+}
+
+/** Destroys every email in a mailbox (emptying the Trash). */
+export async function emptyMailbox(jmap: Jmap, mailbox: string): Promise<void> {
+  for (;;) {
+    const ids = (await idsIn(jmap, mailbox)).slice(0, 500);
+    if (ids.length === 0) return;
+    await jmap.set([MAIL], "Email", jmap.account(MAIL), { destroy: ids });
+  }
+}
+
+export interface TreeEntry {
+  box: Mailbox;
+  depth: number;
+}
+
+/** The mailboxes as a tree in reading order: the roles first, then the account's own folders by name – each with its
+ * subfolders beneath it –, Junk and Trash last. */
+export function mailboxTree(boxes: Mailbox[]): TreeEntry[] {
+  const children = new Map<string | null, Mailbox[]>();
+  for (const box of boxes) {
+    const parent = box.parentId && boxes.some((other) => other.id === box.parentId) ? box.parentId : null;
+    children.set(parent, [...(children.get(parent) ?? []), box]);
+  }
+  const rank = (box: Mailbox) => {
+    if (box.role === "junk") return 90;
+    if (box.role === "trash") return 91;
+    const index = box.role ? ROLE_ORDER.indexOf(box.role) : -1;
+    return index >= 0 ? index : 50;
+  };
+  const sorted = (list: Mailbox[]) => [...list].sort((a, b) => rank(a) - rank(b) || a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+  const out: TreeEntry[] = [];
+  const walk = (parent: string | null, depth: number) => {
+    for (const box of sorted(children.get(parent) ?? [])) {
+      out.push({ box, depth });
+      walk(box.id, depth + 1);
+    }
+  };
+  walk(null, 0);
+  return out;
+}
+
+/** Whether `inside` is `box` or lies beneath it – a folder cannot move into itself. */
+export function within(boxes: Mailbox[], inside: string | null, box: string): boolean {
+  for (let current = inside; current; current = boxes.find((other) => other.id === current)?.parentId ?? null) {
+    if (current === box) return true;
+  }
+  return false;
 }

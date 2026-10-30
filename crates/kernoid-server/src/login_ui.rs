@@ -20,10 +20,10 @@ use tower_http::services::{ServeDir, ServeFile};
 use crate::Problem;
 
 const CONTENT_SECURITY_POLICY: &str = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; \
-     connect-src 'self'; manifest-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'";
+     font-src 'self'; connect-src 'self'; manifest-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'";
 /// The web app also shows files: images, audio and video from this origin's downloads, PDFs in a frame of it.
 const APP_CONTENT_SECURITY_POLICY: &str = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; \
-     media-src 'self'; frame-src 'self'; connect-src 'self'; manifest-src 'self'; form-action 'self'; base-uri 'none'; \
+     font-src 'self'; media-src 'self'; frame-src 'self'; connect-src 'self'; manifest-src 'self'; form-action 'self'; base-uri 'none'; \
      frame-ancestors 'none'";
 
 /// The login UI, built by `pnpm build` in `web/`; a build of kernoid without it answers 404 at `/login`.
