@@ -96,11 +96,23 @@ On Jitsi's side ([docker-jitsi-meet](https://jitsi.github.io/handbook/docs/devop
 `ENABLE_AUTH=1`, `AUTH_TYPE=jwt`, `JWT_APP_ID` and `JWT_APP_SECRET` as above; `ENABLE_GUESTS=1` with `guests = true`,
 where guests wait until someone with a token has joined. The token is signed with HS256 and carries `iss` (the app
 id), `aud`, `sub`, `room` (only this room), `iat`, `nbf`, `exp` and `context.user` with `id`, `name`, `email` and
-`moderator` (`"true"` or `"false"`). How Jitsi grants moderation from the token depends on its setup: Jitsi as a
-Service reads `context.user.moderator`; a self-hosted Jitsi makes everyone with a valid token a moderator unless a
-Prosody module for token affiliations is set up (`OPEN`: which module kernoid documents for that). Jitsi checks the
-token when someone joins and when the connection is made again – a meeting longer than `token_minutes` may need the
-link opened again.
+`moderator` (`"true"` or `"false"`). Jitsi checks the token when someone joins and when the connection is made again –
+a meeting longer than `token_minutes` may need the link opened again.
+
+**Moderation.** Out of the box, a self-hosted Jitsi makes everyone with a valid token a moderator: Jicofo gives every
+authenticated participant the owner role. For the meeting's owner alone to moderate, let Prosody take the role from the
+token – its image brings the module – and Jicofo leave roles alone:
+
+```sh
+XMPP_MUC_MODULES=token_affiliation   # context.user.moderator "true": moderator; otherwise participant
+JICOFO_ENABLE_AUTH=0                 # Jicofo does not make authenticated users owners; Prosody still checks tokens
+ENABLE_AUTO_OWNER=false              # nor the first to join
+```
+
+Tried with docker-jitsi-meet `stable-11031` (2026-10-30): the owner joins as moderator, an invited account as
+participant – also when it joins first –, a token with a changed claim is refused ("authentication failed"), and
+`sub` may be the host of `url` (the default) or Jitsi's XMPP domain. Jitsi as a Service reads `context.user.moderator`
+itself.
 
 The routes, below the instance:
 
