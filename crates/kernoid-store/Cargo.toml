@@ -21,7 +21,7 @@ getrandom = "0.4.3"
 kernoid-config = { version = "0.1.0", path = "../kernoid-config" }
 object_store = { version = "0.14.2", features = ["aws"] }
 sha2 = "0.11.1"
-sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "tls-rustls-ring-webpki", "postgres", "migrate", "macros", "uuid", "chrono", "json"] }
+sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "tls-rustls-aws-lc-rs", "postgres", "migrate", "macros", "uuid", "chrono", "json"] }
 thiserror = "2.0.21"
 tokio = { version = "1.54.1", features = ["rt", "sync"] }
 tracing = "0.1.44"

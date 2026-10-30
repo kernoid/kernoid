@@ -29,6 +29,8 @@ clap = { version = "=4.6.7", features = ["derive", "env"] }
 futures-util = { version = "=0.3.34", default-features = false }
 k8s-openapi = { version = "=0.28.0", default-features = false, features = ["v1_32", "schemars", "std"] }
 kube = { version = "=4.2.0", default-features = false, features = ["client", "rustls-tls", "aws-lc-rs", "derive", "runtime"] }
+# Only for its feature: kube's TLS prefers the post-quantum X25519MLKEM768 over X25519 (RFC 0006, 2).
+rustls = { version = "=0.23.46", default-features = false, features = ["aws-lc-rs", "prefer-post-quantum", "std", "tls12"] }
 schemars = "=1.2.2"
 serde = { version = "=1.0.228", features = ["derive"] }
 serde_json = "=1.0.151"

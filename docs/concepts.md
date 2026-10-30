@@ -70,3 +70,8 @@ kept in tables, the raw messages in object storage. kernoid receives mail for it
 
 kernoid needs nothing but PostgreSQL and S3-compatible object storage. Content (mail bodies, attachments, files) goes
 to object storage encrypted with a key per tenant; the tenant keys are wrapped with the installation's main key.
+
+Every TLS connection kernoid makes or takes – HTTPS, SMTP, IMAP, POP3, LDAP, PostgreSQL – prefers the post-quantum
+key exchange X25519MLKEM768 over X25519, so that recorded traffic stays unreadable once quantum computers can break
+X25519; clients without it connect as before. The design, together with end-to-end encryption, is
+[RFC 0006](https://github.com/kernoid/kernoid/blob/main/rfcs/0006-end-to-end-encryption.md).

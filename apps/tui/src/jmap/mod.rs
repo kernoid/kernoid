@@ -264,7 +264,12 @@ fn agent(timeout: Option<Duration>) -> Agent {
         .timeout_connect(Some(Duration::from_secs(15)))
         .timeout_global(timeout)
         .user_agent(concat!("kernoid-tui/", env!("CARGO_PKG_VERSION")))
-        .tls_config(TlsConfig::builder().root_certs(RootCerts::PlatformVerifier).build())
+        .tls_config(
+            TlsConfig::builder()
+                .root_certs(RootCerts::PlatformVerifier)
+                .unversioned_rustls_crypto_provider(std::sync::Arc::new(rustls::crypto::aws_lc_rs::default_provider()))
+                .build(),
+        )
         .build()
         .new_agent()
 }

@@ -71,7 +71,8 @@ regenerate them when the API changes, and update the pages with the code.
 Design decisions are written down as RFCs in `rfcs/` (CC BY 4.0); [0001](rfcs/0001-data-and-event-model.md) covers
 instances, tenants, aggregates, events, consistency, keys, login and APIs, [0002](rfcs/0002-mail-data-model.md) the
 mail store, [0003](rfcs/0003-accounts-logins-services.md) accounts, logins and services, [0004](rfcs/0004-calendars-and-contacts.md)
-calendars and contacts, [0005](rfcs/0005-files.md) files. Change the RFC with the code.
+calendars and contacts, [0005](rfcs/0005-files.md) files, [0006](rfcs/0006-end-to-end-encryption.md) post-quantum
+and end-to-end encryption. Change the RFC with the code.
 
 ## Rules
 
@@ -130,6 +131,9 @@ calendars and contacts, [0005](rfcs/0005-files.md) files. Change the RFC with th
 - **Commits** are signed off (`git commit -s`, DCO).
 - **XML signatures only through bergshamra** (SAML): no own XML-DSig, canonicalisation or certificate parsing; DTDs
   are refused before parsing, and what kernoid reads comes from the tree bergshamra verified.
+- **TLS prefers post-quantum key exchange** (RFC 0006, 2): every `rustls` dependency – here, in the terminal app and
+  in the operator – takes the feature `prefer-post-quantum` with AWS-LC, and no TLS uses ring;
+  `crates/kernoid-server/tests/tls.rs` checks it.
 - **Outbound requests** to addresses tenants configure go through `kernoid_oidc::outbound` (HTTPS, public addresses
   only, checked for DNS and redirects) – never through a client of one's own. MTA-STS policies use its client
   without redirects; SMTP connections of the queue go only to public addresses (`outbound::is_public`).

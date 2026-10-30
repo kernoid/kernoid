@@ -17,7 +17,7 @@ kernoid-config = { version = "0.1.0", path = "../kernoid-config" }
 kernoid-identity = { version = "0.1.0", path = "../kernoid-identity" }
 # `strict` reads the attributes a search asks for; without it, ldap3_proto drops them.
 ldap3_proto = { version = "0.8.1", default-features = false, features = ["strict"] }
-rustls = { version = "0.23.46", default-features = false, features = ["aws-lc-rs", "std", "tls12"] }
+rustls = { version = "0.23.46", default-features = false, features = ["aws-lc-rs", "prefer-post-quantum", "std", "tls12"] }
 tokio = { version = "1.54.1", features = ["net", "io-util", "time", "sync", "rt", "macros"] }
 tokio-rustls = { version = "0.26.6", default-features = false }
 tokio-util = { version = "0.7.20", features = ["codec"] }
