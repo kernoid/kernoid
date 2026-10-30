@@ -907,6 +907,69 @@
         }
       }
     },
+    "/v1/account/mail-settings/mailbox-names/{account}": {
+      "put": {
+        "tags": [
+          "account"
+        ],
+        "summary": "Names one's own mailbox or a shared one, for oneself.",
+        "operationId": "put_v1_account_mail_settings_mailbox_names_account",
+        "parameters": [
+          {
+            "name": "account",
+            "in": "path",
+            "description": "the mailbox's JMAP account id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MailboxName"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "description": "too long",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "no valid session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "not a mailbox the account reaches",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/account/mail/access": {
       "get": {
         "tags": [
@@ -11360,7 +11423,8 @@
       "MailSettingsView": {
         "type": "object",
         "required": [
-          "undo_send_seconds"
+          "undo_send_seconds",
+          "mailbox_names"
         ],
         "properties": {
           "default_from": {
@@ -11369,6 +11433,16 @@
               "null"
             ],
             "description": "The address new emails come from; null is the account's primary address."
+          },
+          "mailbox_names": {
+            "type": "object",
+            "description": "The names the account gives its own and shared mailboxes, by their JMAP account id; others show their address.",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
           },
           "tenant_trash_retention_days": {
             "type": [
@@ -11390,6 +11464,18 @@
             "type": "integer",
             "format": "int32",
             "description": "Seconds an email waits before it goes out, to be taken back (0 to 30); 0 sends at once."
+          }
+        }
+      },
+      "MailboxName": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Up to 64 characters; empty shows the mailbox's address again."
           }
         }
       },

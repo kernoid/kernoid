@@ -123,7 +123,9 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   `canceled` until then, and is sent by the worker (every two seconds). The web app says when an email is sent and,
   if the account chose to wait 5 or 10 seconds (`undo_send_seconds` of the mail settings; off by default), offers to
   take it back – the writing window opens again. Migration 0046.
-- Shared mailboxes in the web app: each one the account may use appears with its folders beside its own; writing
+- Shared mailboxes in the web app: each one the account may use appears with its folders beside its own, marked
+  private or shared, under its address or a name the account gives it (`PUT
+  /v1/account/mail-settings/mailbox-names/{account}`; migration 0047) – the address shows on hover; writing
   offers the addresses it may send as, and such an email is kept in and sent from the shared mailbox.
 - Pictures of accounts (`PUT/DELETE /v1/account/avatar`, `GET /v1/avatars`, `GET /v1/avatars/{account}`; PNG, JPEG or
   WebP up to 1 MiB, sealed like files, seen by the tenant); everyone else shows their initials. Migration 0045.
@@ -141,11 +143,14 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   `MailGrantView`, `IdpLinkView` and `TenantPolicy` – they had the names of other schemas, so the document described
   them wrong.
 
+- The worker logs every delivery attempt – delivered, deferred or bounced – with the recipient's domain (never the
+  address); before, successful deliveries left no trace above debug.
+
 ### Upgrading from 0.1
 
 - Take the new `deploy/compose` with the new image: the 0.1 image refuses the module settings the new compose file
   passes (`[modules.clamav]` did not exist).
-- `kernoid migrate` adds migrations 0034 to 0045 (CI's upgrade check runs them from 0.1.0 with mail and files in it).
+- `kernoid migrate` adds migrations 0034 to 0047 (CI's upgrade check runs them from 0.1.0 with mail and files in it).
 - DKIM: each domain gets an Ed25519 key beside its RSA key – publish the new TXT record `kernoid-ed1._domainkey`
   that the domain's DNS check shows; mail is signed with it once DNS has it.
 - A configuration that set `http.login_ui` or `http.web_app` to the image's old paths must drop them: those

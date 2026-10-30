@@ -677,6 +677,9 @@ const de: Record<string, string> = {
   "Off": "Aus",
   "{seconds} seconds": "{seconds} Sekunden",
   "A sent email waits this long and can be taken back until then.": "Eine gesendete Nachricht wartet so lange und lässt sich bis dahin zurückholen.",
+  "Private": "Privat",
+  "Name the mailbox": "Postfach benennen",
+  "Only you see it. Empty shows the address {address}.": "Nur Sie sehen ihn. Leer zeigt wieder die Adresse {address}.",
 };
 
 const lang = (navigator.languages?.[0] ?? navigator.language ?? "en").toLowerCase().startsWith("de") ? "de" : "en";

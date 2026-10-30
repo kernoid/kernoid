@@ -639,4 +639,12 @@ async fn an_account_keeps_its_trash_as_long_as_it_chooses_and_sends_from_its_add
         mail.settings(alice).await.unwrap(),
         kernoid_mail::MailSettings { tenant_trash_retention_days: Some(30), ..Default::default() }
     );
+
+    // Names for the mailboxes one reaches – only those, for oneself.
+    mail.set_mailbox_name(alice, alice, "  Privat  ").await.unwrap();
+    assert_eq!(mail.settings(alice).await.unwrap().mailbox_names.get(&alice).map(String::as_str), Some("Privat"));
+    assert!(matches!(mail.set_mailbox_name(alice, uuid::Uuid::now_v7(), "Fremd").await, Err(MailError::NotFound(_))));
+    assert!(matches!(mail.set_mailbox_name(alice, alice, &"x".repeat(65)).await, Err(MailError::Invalid(_))));
+    mail.set_mailbox_name(alice, alice, "").await.unwrap();
+    assert!(mail.settings(alice).await.unwrap().mailbox_names.is_empty());
 }

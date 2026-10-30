@@ -284,6 +284,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/account/mail-settings/mailbox-names/{account}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Names one's own mailbox or a shared one, for oneself. */
+        put: operations["put_v1_account_mail_settings_mailbox_names_account"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/account/mail/access": {
         parameters: {
             query?: never;
@@ -3391,6 +3408,10 @@ export interface components {
         MailSettingsView: {
             /** @description The address new emails come from; null is the account's primary address. */
             default_from?: string | null;
+            /** @description The names the account gives its own and shared mailboxes, by their JMAP account id; others show their address. */
+            mailbox_names: {
+                [key: string]: string;
+            };
             /**
              * Format: int32
              * @description The tenant's days; null keeps emails in the Trash until they are deleted.
@@ -3406,6 +3427,10 @@ export interface components {
              * @description Seconds an email waits before it goes out, to be taken back (0 to 30); 0 sends at once.
              */
             undo_send_seconds: number;
+        };
+        MailboxName: {
+            /** @description Up to 64 characters; empty shows the mailbox's address again. */
+            name: string;
         };
         MailboxView: {
             id: string;
@@ -4725,6 +4750,57 @@ export interface operations {
                 };
             };
             /** @description the account has no mail */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    put_v1_account_mail_settings_mailbox_names_account: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description the mailbox's JMAP account id */
+                account: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MailboxName"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description too long */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description no valid session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description not a mailbox the account reaches */
             404: {
                 headers: {
                     [name: string]: unknown;

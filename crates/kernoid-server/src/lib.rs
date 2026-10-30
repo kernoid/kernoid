@@ -208,6 +208,7 @@ fn rest() -> OpenApiRouter<AppState> {
         .routes(routes!(avatars::list))
         .routes(routes!(avatars::get))
         .routes(routes!(mail_settings::get, mail_settings::set))
+        .routes(routes!(mail_settings::name_mailbox))
         .routes(routes!(consents::own))
         .routes(routes!(consents::revoke_own))
         .routes(routes!(admin::tenant::get, admin::tenant::rename))

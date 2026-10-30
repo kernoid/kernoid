@@ -509,6 +509,17 @@ impl Outbound {
         let mut failures: BTreeMap<uuid::Uuid, (Leased, Vec<Failure>)> = BTreeMap::new();
         let mut messages = std::collections::BTreeSet::new();
         for (recipient, outcome) in outcomes {
+            // What happened, for whoever runs kernoid: the recipient's domain only, never the address.
+            let domain = recipient.address.rsplit_once('@').map_or("", |(_, domain)| domain).to_owned();
+            match &outcome {
+                Outcome::Delivered => tracing::info!(%domain, message = %recipient.message, "delivered"),
+                Outcome::Retry(reason) => {
+                    tracing::info!(%domain, message = %recipient.message, attempt = recipient.attempts + 1, %reason, "delivery deferred")
+                }
+                Outcome::Failed(failure) => {
+                    tracing::warn!(%domain, message = %recipient.message, reason = %failure.reason, "delivery failed; bouncing")
+                }
+            }
             let result = match outcome {
                 Outcome::Delivered => mail.outbound_delivered(recipient.message, &recipient.address).await,
                 Outcome::Retry(reason) => {

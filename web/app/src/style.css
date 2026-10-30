@@ -707,3 +707,14 @@ input.days { width: 90px; min-width: 0; flex: none !important; }
 .toast-action:hover:not(:disabled) { background: rgb(127 127 127 / 0.2); }
 .toast-action .muted { color: inherit; opacity: 0.7; font-variant-numeric: tabular-nums; }
 @media (max-width: 760px) { .toasts { bottom: 76px; } }
+
+/* A mail store's head in the side (mail/Folders.svelte): whose it is, its name – the address on hover. */
+.folders-head { position: relative; margin: 18px 4px 4px 10px; min-height: 36px; }
+.store-name { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; color: var(--muted); }
+.store-name > svg { flex: none; }
+.store-name .lines { display: grid; min-width: 0; line-height: 1.2; }
+.store-name .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-size: 0.85rem; font-weight: 650; }
+.store-name .tag { justify-self: start; margin-top: 2px; font-size: 0.62rem; font-weight: 650; text-transform: uppercase; letter-spacing: 0.06em; padding: 0 6px; border-radius: 999px; background: var(--raised); color: var(--muted); }
+.store-name .tag.shared { background: color-mix(in srgb, var(--violet) 18%, transparent); color: var(--violet); }
+.store-tools { position: absolute; right: 0; top: 50%; transform: translateY(-50%); display: inline-flex; background: var(--panel); border-radius: var(--radius-small); opacity: 0; transition: opacity 120ms; }
+.folders-head:hover .store-tools, .store-tools:focus-within { opacity: 1; }

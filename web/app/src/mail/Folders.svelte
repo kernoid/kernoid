@@ -11,7 +11,9 @@
 </script>
 
 <script lang="ts">
-  import { Ellipsis, FolderInput, FolderPlus, Pencil, Plus, Trash2, UsersRound } from "@lucide/svelte";
+  import { Ellipsis, FolderInput, FolderPlus, Pencil, Plus, Trash2, UserRound, UsersRound } from "@lucide/svelte";
+
+  import Dialog from "../admin/ui/Dialog.svelte";
 
   import { useJmap } from "../app.svelte.js";
   import { t } from "../i18n.js";
@@ -31,7 +33,9 @@
   let {
     account,
     title,
+    address,
     shared = false,
+    onrename,
     boxes,
     selected,
     onchoose,
@@ -39,8 +43,12 @@
     onerror,
   }: {
     account: string;
+    /** The name the user gave the mailbox, or its address. */
     title: string;
+    address: string;
     shared?: boolean;
+    /** Gives the mailbox a name of the user's own; empty shows the address again. */
+    onrename: (name: string) => Promise<void>;
     boxes: Mailbox[];
     selected: string | undefined;
     onchoose: (id: string) => void;
@@ -55,6 +63,8 @@
   let menu = $state<string>();
   let over = $state<string | null>();
   let dialog = $state<{ kind: "new"; parent: string | null } | { kind: "rename" | "move"; box: Mailbox }>();
+  let naming = $state<string>();
+  let namingError = $state<unknown>();
 
   function act(run: () => Promise<void>): void {
     menu = undefined;
@@ -112,10 +122,21 @@
   ondragleave={() => over === null && (over = undefined)}
   ondrop={(event) => drop(event, null)}
 >
-  <span class="muted small">{#if shared}<UsersRound size={13} />{/if}{title}</span>
-  <button type="button" class="icon quiet small" aria-label={t("New folder")} data-tip={t("New folder")} onclick={() => (dialog = { kind: "new", parent: null })}>
-    <Plus size={16} />
-  </button>
+  <span class="store-name" data-tip={address}>
+    {#if shared}<UsersRound size={14} />{:else}<UserRound size={14} />{/if}
+    <span class="lines">
+      <span class="name">{title}</span>
+      <span class="tag" class:shared>{shared ? t("Shared") : t("Private")}</span>
+    </span>
+  </span>
+  <span class="store-tools">
+    <button type="button" class="icon quiet small" aria-label={t("Name the mailbox")} data-tip={t("Name the mailbox")} onclick={() => (naming = title === address ? "" : title)}>
+      <Pencil size={14} />
+    </button>
+    <button type="button" class="icon quiet small" aria-label={t("New folder")} data-tip={t("New folder")} onclick={() => (dialog = { kind: "new", parent: null })}>
+      <Plus size={16} />
+    </button>
+  </span>
 </div>
 <ul class="boxes tree">
   {#each tree as { box, depth } (box.id)}
@@ -211,4 +232,33 @@
     save={(name, parent) => updateMailbox(jmap, account, box.id, { name, parentId: parent }).then(onchanged)}
     onclose={() => (dialog = undefined)}
   />
+{/if}
+
+{#if naming !== undefined}
+  <Dialog title={t("Name the mailbox")} onClose={() => (naming = undefined)}>
+    <form
+      onsubmit={async (event) => {
+        event.preventDefault();
+        namingError = undefined;
+        try {
+          await onrename(naming ?? "");
+          naming = undefined;
+        } catch (failure) {
+          namingError = failure;
+        }
+      }}
+    >
+      <label>
+        <span>{t("Name")}</span>
+        <!-- svelte-ignore a11y_autofocus -->
+        <input bind:value={naming} maxlength="64" placeholder={address} autofocus />
+        <small class="muted">{t("Only you see it. Empty shows the address {address}.", { address })}</small>
+      </label>
+      {#if namingError}<p class="error">{namingError instanceof Error ? namingError.message : String(namingError)}</p>{/if}
+      <div class="actions end">
+        <button type="button" onclick={() => (naming = undefined)}>{t("Cancel")}</button>
+        <button type="submit" class="primary">{t("Save")}</button>
+      </div>
+    </form>
+  </Dialog>
 {/if}

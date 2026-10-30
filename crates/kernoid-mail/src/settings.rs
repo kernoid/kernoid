@@ -17,7 +17,15 @@ pub struct MailSettings {
     pub default_from: Option<String>,
     /// Seconds an email waits before it goes out, to be taken back; 0 sends at once.
     pub undo_send_seconds: i32,
+    /// The names the account gives the mail stores it reaches, by their account id.
+    pub mailbox_names: std::collections::BTreeMap<Uuid, String>,
 }
+
+/// The names as stored: a JSON object by account id.
+type Names = sqlx::types::Json<std::collections::BTreeMap<Uuid, String>>;
+
+/// The longest name of a mail store.
+const MAX_MAILBOX_NAME: usize = 64;
 
 /// The longest wait before sending that may be chosen.
 pub const MAX_UNDO_SEND_SECONDS: i32 = 30;
@@ -25,9 +33,10 @@ pub const MAX_UNDO_SEND_SECONDS: i32 = 30;
 impl Mail {
     pub async fn settings(&self, account: Uuid) -> Result<MailSettings> {
         let row = sqlx::query!(
-            "SELECT ma.trash_retention_days, ma.default_from, ma.undo_send_seconds, t.trash_retention_days AS tenant_days
+            r#"SELECT ma.trash_retention_days, ma.default_from, ma.undo_send_seconds, ma.mailbox_names AS "mailbox_names: Names",
+                    t.trash_retention_days AS tenant_days
              FROM mail_accounts ma JOIN tenants t ON t.id = ma.tenant_id
-             WHERE ma.account_id = $1",
+             WHERE ma.account_id = $1"#,
             account,
         )
         .fetch_optional(&self.pool)
@@ -38,6 +47,7 @@ impl Mail {
             tenant_trash_retention_days: row.tenant_days,
             default_from: row.default_from,
             undo_send_seconds: row.undo_send_seconds,
+            mailbox_names: row.mailbox_names.0,
         })
     }
 
@@ -85,6 +95,43 @@ impl Mail {
         )
         .execute(&self.pool)
         .await?;
+        if updated.rows_affected() == 0 {
+            return Err(MailError::NotFound("the mail store"));
+        }
+        Ok(())
+    }
+
+    /// Names a mail store the account reaches – its own, or a shared mailbox – for the account itself; an empty name
+    /// shows its address again.
+    pub async fn set_mailbox_name(&self, account: Uuid, store: Uuid, name: &str) -> Result<()> {
+        let name = name.trim();
+        if name.chars().count() > MAX_MAILBOX_NAME {
+            return Err(MailError::Invalid(format!("a mailbox's name has up to {MAX_MAILBOX_NAME} characters")));
+        }
+        let reached = store == account || self.shared_with(account).await?.iter().any(|shared| shared.owner == store);
+        if !reached {
+            return Err(MailError::NotFound("the mailbox"));
+        }
+        let key = store.to_string();
+        let updated = if name.is_empty() {
+            sqlx::query!(
+                "UPDATE mail_accounts SET mailbox_names = mailbox_names - $2 WHERE account_id = $1",
+                account,
+                key
+            )
+            .execute(&self.pool)
+            .await?
+        } else {
+            sqlx::query!(
+                "UPDATE mail_accounts SET mailbox_names = jsonb_set(mailbox_names, ARRAY[$2], to_jsonb($3::text))
+                 WHERE account_id = $1",
+                account,
+                key,
+                name,
+            )
+            .execute(&self.pool)
+            .await?
+        };
         if updated.rows_affected() == 0 {
             return Err(MailError::NotFound("the mail store"));
         }

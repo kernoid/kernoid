@@ -275,8 +275,13 @@
     {#each stores as entry (entry.id)}
       <Folders
         account={entry.id}
-        title={entry.own ? t("Folders") : entry.name}
+        title={settings.value?.mailbox_names?.[entry.id] || entry.name}
+        address={entry.name}
         shared={!entry.own}
+        onrename={async (name) => {
+          await need(admin.PUT("/v1/account/mail-settings/mailbox-names/{account}", { params: { path: { account: entry.id } }, body: { name } }));
+          await settings.refetch();
+        }}
         boxes={allBoxes.value?.[entry.id] ?? []}
         selected={store === entry.id ? selected : undefined}
         onchoose={(box) => choose(entry.id, box)}
@@ -297,7 +302,7 @@
         }}
       >
         {#each stores as entry (entry.id)}
-          <optgroup label={entry.own ? t("My mailbox") : entry.name}>
+          <optgroup label={settings.value?.mailbox_names?.[entry.id] || entry.name}>
             {#each mailboxTree(allBoxes.value?.[entry.id] ?? []) as { box, depth } (box.id)}
               <option value={`${entry.id}/${box.id}`}>{" ".repeat(depth)}{boxName(box)}{box.unreadEmails > 0 ? ` (${box.unreadEmails})` : ""}</option>
             {/each}

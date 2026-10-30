@@ -4,7 +4,7 @@
 
 use axum::{
     Json,
-    extract::State,
+    extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
@@ -26,6 +26,8 @@ pub(crate) struct MailSettingsView {
     default_from: Option<String>,
     /// Seconds an email waits before it goes out, to be taken back (0 to 30); 0 sends at once.
     undo_send_seconds: i32,
+    /// The names the account gives its own and shared mailboxes, by their JMAP account id; others show their address.
+    mailbox_names: std::collections::BTreeMap<String, String>,
 }
 
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
@@ -57,6 +59,7 @@ pub(crate) async fn get(
             tenant_trash_retention_days: settings.tenant_trash_retention_days,
             default_from: settings.default_from,
             undo_send_seconds: settings.undo_send_seconds,
+            mailbox_names: settings.mailbox_names.into_iter().map(|(store, name)| (store.to_string(), name)).collect(),
         })
     }
     .await;
@@ -88,6 +91,40 @@ pub(crate) async fn set(
                 body.undo_send_seconds,
             )
             .await?;
+        Ok::<_, MailAdminError>(())
+    }
+    .await;
+    match result {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(error) => problem(error),
+    }
+}
+
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
+pub(crate) struct MailboxName {
+    /// Up to 64 characters; empty shows the mailbox's address again.
+    name: String,
+}
+
+/// Names one's own mailbox or a shared one, for oneself.
+#[utoipa::path(put, path = "/v1/account/mail-settings/mailbox-names/{account}", tag = "account",
+    params(("account" = String, Path, description = "the mailbox's JMAP account id")),
+    request_body = MailboxName, responses(
+    (status = 204),
+    (status = 400, description = "too long", body = Problem),
+    (status = 401, description = "no valid session", body = Problem),
+    (status = 404, description = "not a mailbox the account reaches", body = Problem),
+))]
+pub(crate) async fn name_mailbox(
+    State(state): State<AppState>,
+    CurrentInstance(instance): CurrentInstance,
+    SessionToken(token): SessionToken,
+    Path(store): Path<uuid::Uuid>,
+    Json(body): Json<MailboxName>,
+) -> Response {
+    let result = async {
+        let session = state.identity.session(instance.id, &token).await?;
+        mail(&state)?.set_mailbox_name(session.account.id, store, &body.name).await?;
         Ok::<_, MailAdminError>(())
     }
     .await;
