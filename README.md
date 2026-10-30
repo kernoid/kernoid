@@ -115,7 +115,8 @@ agreement. Security problems: [SECURITY.md](SECURITY.md).
   descriptions (`docs/_data/openapi.json`, `docs/api/`) [MIT](LICENSES/MIT.txt), so that clients may be generated from
   them.
 - Code taken over from Stalwart and Zitadel keeps its licence, the GNU AGPL-3.0-only, and is marked in every file –
-  see the whitepaper, chapter "Building on Stalwart and Zitadel".
+  see the whitepaper, chapter "Building on Stalwart and Zitadel", and [CREDITS.md](CREDITS.md) for what came from
+  where.
 - Copies of the logo and icons from [kernoid/brand](https://github.com/kernoid/brand) (`docs/assets/`, the web apps'
   `public/`): [CC BY-ND 4.0](LICENSES/CC-BY-ND-4.0.txt) – passed on unchanged.
 - The name and logo "kernoid" are not covered by these licences; they belong to falkOSS – Falcon Lake Open Source
