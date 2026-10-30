@@ -83,9 +83,9 @@ pub fn parse_event(text: &str, default_tz: Tz) -> Result<ParsedEvent> {
     Ok(ParsedEvent { ical, uid, component, span, organizer })
 }
 
-/// The time zone to expand an object's recurrences in. calcard 0.3.14 places the instances of a recurrence whose
-/// start is in UTC (`…Z`, no `TZID`) in the default time zone, so that they move by an hour across a change of
-/// daylight saving time; for such objects UTC is the default. OPEN: report to calcard.
+/// The time zone to expand an object's recurrences in. calcard 0.3.14 reads a start in UTC (`…Z`, no `TZID`) as
+/// local time in the default time zone, so that every instance moves by that zone's offset – and by another hour
+/// across a change of daylight saving time; for such objects UTC is the default. OPEN: reported to calcard?
 pub fn expansion_tz(ical: &ICalendar, default_tz: Tz) -> Tz {
     use calcard::icalendar::{ICalendarParameterName, ICalendarValue};
     let utc_start = ical.components.iter().filter(|comp| comp.component_type.has_time_ranges()).any(|comp| {

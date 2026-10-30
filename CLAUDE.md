@@ -150,7 +150,7 @@ and end-to-end encryption, [0007](rfcs/0007-push-notifications.md) push notifica
   only, checked for DNS and redirects) – never through a client of one's own. MTA-STS policies use its client
   without redirects; SMTP connections of the queue go only to public addresses (`outbound::is_public`).
 - **iCalendar and vCard only through calcard** – parsing, writing, recurrences, JSCalendar and JSContact; no own
-  parsers of these formats. calcard 0.3.14 expands recurrences with a UTC start in the default time zone:
+  parsers of these formats. calcard 0.3.14 reads a UTC start as local time in the default time zone when it expands recurrences:
   `ical::expansion_tz` works around it.
 - **Mail authentication only through mail-auth** (SPF, DKIM, DMARC, ARC, iprev) and SMTP parsing only through
   smtp-proto, Sieve only through sieve-rs – no own parsers of these records, signatures or protocols.
