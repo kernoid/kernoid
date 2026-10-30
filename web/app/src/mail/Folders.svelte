@@ -1,16 +1,17 @@
 <!-- SPDX-License-Identifier: MIT -->
-<!-- The mailboxes as a tree: choose one; make, rename, move and delete folders of one's own; empty Junk and Trash.
+<!-- The mailboxes of one mail account – one's own, or a shared mailbox – as a tree: choose one; make, rename, move and
+     delete folders; empty Junk and Trash.
      Emails dragged from the list – and folders dragged within the tree – are dropped onto a folder to move them there,
      a folder also onto "Folders" to move it to the top. -->
 <script lang="ts" module>
-  /** What the list puts into a drag: the ids of the emails dragged. */
+  /** What the list puts into a drag: the account and the ids of the emails dragged (`{ account, ids }`). */
   export const EMAILS = "application/x-kernoid-emails";
-  /** What the tree puts into a drag: the id of the folder dragged. */
+  /** What the tree puts into a drag: the account and the id of the folder dragged (`account/id`). */
   export const FOLDER = "application/x-kernoid-mailbox";
 </script>
 
 <script lang="ts">
-  import { Ellipsis, FolderInput, FolderPlus, Pencil, Plus, Trash2 } from "@lucide/svelte";
+  import { Ellipsis, FolderInput, FolderPlus, Pencil, Plus, Trash2, UsersRound } from "@lucide/svelte";
 
   import { useJmap } from "../app.svelte.js";
   import { t } from "../i18n.js";
@@ -28,12 +29,18 @@
   import { boxIcon, boxName } from "./names.js";
 
   let {
+    account,
+    title,
+    shared = false,
     boxes,
     selected,
     onchoose,
     onchanged,
     onerror,
   }: {
+    account: string;
+    title: string;
+    shared?: boolean;
     boxes: Mailbox[];
     selected: string | undefined;
     onchoose: (id: string) => void;
@@ -59,15 +66,16 @@
       box.totalEmails > 0
         ? t("Delete the folder {name}? Its {count} emails go to the Trash.", { name: box.name, count: box.totalEmails })
         : t("Delete the folder {name}?", { name: box.name });
-    if (window.confirm(text)) act(() => destroyMailbox(jmap, box, trash));
+    if (window.confirm(text)) act(() => destroyMailbox(jmap, account, box, trash));
   }
 
   function empty(box: Mailbox): void {
     const text = t("Delete the {count} emails in {name} for good?", { count: box.totalEmails, name: boxName(box) });
-    if (window.confirm(text)) act(() => emptyMailbox(jmap, box.id));
+    if (window.confirm(text)) act(() => emptyMailbox(jmap, account, box.id));
   }
 
-  /** What may be dropped where: emails onto any folder but the one shown; a folder onto one not beneath itself. */
+  /** What may be dropped where: emails onto any folder but the one shown; a folder onto one not beneath itself.
+   * Only within this account – the drag's account is known on the drop alone, which then checks it. */
   function accepts(event: DragEvent, target: string | null): boolean {
     const types = event.dataTransfer?.types ?? [];
     if (types.includes(EMAILS)) return target !== null && target !== selected;
@@ -81,11 +89,13 @@
     const data = event.dataTransfer;
     if (!data) return;
     const emails = data.getData(EMAILS);
-    const folder = data.getData(FOLDER);
+    const [from, folder] = data.getData(FOLDER).split("/");
     if (emails && target) {
-      act(() => moveMany(jmap, JSON.parse(emails) as string[], target));
-    } else if (folder && folder !== target && !within(boxes, target, folder)) {
-      act(() => updateMailbox(jmap, folder, { parentId: target }));
+      const dragged = JSON.parse(emails) as { account: string; ids: string[] };
+      if (dragged.account !== account) return onerror(new Error(t("Emails move only within one mailbox.")));
+      act(() => moveMany(jmap, account, dragged.ids, target));
+    } else if (folder && from === account && folder !== target && !within(boxes, target, folder)) {
+      act(() => updateMailbox(jmap, account, folder, { parentId: target }));
     }
   }
 </script>
@@ -102,7 +112,7 @@
   ondragleave={() => over === null && (over = undefined)}
   ondrop={(event) => drop(event, null)}
 >
-  <span class="muted small">{t("Folders")}</span>
+  <span class="muted small">{#if shared}<UsersRound size={13} />{/if}{title}</span>
   <button type="button" class="icon quiet small" aria-label={t("New folder")} data-tip={t("New folder")} onclick={() => (dialog = { kind: "new", parent: null })}>
     <Plus size={16} />
   </button>
@@ -131,7 +141,7 @@
         aria-label={box.unreadEmails > 0 ? `${boxName(box)} (${box.unreadEmails})` : boxName(box)}
         draggable={own}
         ondragstart={(event) => {
-          event.dataTransfer?.setData(FOLDER, box.id);
+          event.dataTransfer?.setData(FOLDER, `${account}/${box.id}`);
           if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
         }}
         onclick={() => onchoose(box.id)}
@@ -188,7 +198,7 @@
     {boxes}
     parent={dialog.parent}
     label={t("Create")}
-    save={(name, parent) => createMailbox(jmap, name, parent).then(onchanged)}
+    save={(name, parent) => createMailbox(jmap, account, name, parent).then(onchanged)}
     onclose={() => (dialog = undefined)}
   />
 {:else if dialog}
@@ -198,7 +208,7 @@
     {boxes}
     {box}
     label={t("Save")}
-    save={(name, parent) => updateMailbox(jmap, box.id, { name, parentId: parent }).then(onchanged)}
+    save={(name, parent) => updateMailbox(jmap, account, box.id, { name, parentId: parent }).then(onchanged)}
     onclose={() => (dialog = undefined)}
   />
 {/if}

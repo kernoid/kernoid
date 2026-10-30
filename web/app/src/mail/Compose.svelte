@@ -1,5 +1,6 @@
 <!-- SPDX-License-Identifier: MIT -->
-<!-- Writing an email: from one of the account's identities – the one chosen as default unless another is picked –,
+<!-- Writing an email: from one of the account's identities or of a shared mailbox it may send as – the one chosen as
+     default unless another is picked, or the shared mailbox's own when answering an email in it –,
      with formatting (Editor.svelte), the email answered or forwarded quoted beneath, and attachments. It goes out as
      HTML with the plain text alongside. -->
 <script lang="ts" module>
@@ -24,16 +25,23 @@
   import Failure from "../Failure.svelte";
   import { formatSize } from "../files/model.js";
   import { locale, t } from "../i18n.js";
+  import { MAIL } from "../jmap.js";
   import FileIcon from "../ui/FileIcon.svelte";
   import Editor from "./Editor.svelte";
-  import { type Attachment, type Mailbox, identities, parseAddresses, send, upload } from "./model.js";
+  import { type Attachment, identities, parseAddresses, send, upload } from "./model.js";
 
   let {
     start,
-    mailboxes,
     defaultFrom = null,
+    replyFrom,
     onclose,
-  }: { start: ComposeStart; mailboxes: Mailbox[]; defaultFrom?: string | null; onclose: (sent: boolean) => void } = $props();
+  }: {
+    start: ComposeStart;
+    defaultFrom?: string | null;
+    /** The mail account of the email answered or forwarded: its identity comes first. */
+    replyFrom?: string | undefined;
+    onclose: (sent: boolean) => void;
+  } = $props();
 
   const escape = (text: string) => text.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] ?? c);
   const paragraphs = (text: string) =>
@@ -68,24 +76,31 @@
   let identity = $state("");
   let busy = $state(false);
   let error = $state<unknown>();
-  let files = $state<Attachment[]>([]);
+  /** The files attached, uploaded to the account they go out from (again if the sender changes account). */
+  let files = $state<{ file: File; attachment: Attachment; account: string }[]>([]);
   let uploading = $state(0);
   let dropping = $state(false);
   // svelte-ignore state_referenced_locally
   const content = initial();
 
-  // The default sender, once the identities are known.
+  // The sender, once the identities are known: a shared mailbox's own when answering in it, else the default.
   $effect(() => {
     const list = from.value;
     if (!list || identity) return;
-    identity = (list.find((entry) => defaultFrom && entry.email.toLowerCase() === defaultFrom.toLowerCase()) ?? list[0])?.id ?? "";
+    const own = list[0]?.accountId;
+    const fromShared = start.quote && replyFrom && replyFrom !== own ? list.find((entry) => entry.accountId === replyFrom) : undefined;
+    const fromDefault = list.find((entry) => defaultFrom && entry.email.toLowerCase() === defaultFrom.toLowerCase());
+    identity = (fromShared ?? fromDefault ?? list[0])?.id ?? "";
   });
 
+  const sender = $derived((from.value ?? []).find((entry) => entry.id === identity) ?? from.value?.[0]);
+
   async function add(list: FileList | null | undefined): Promise<void> {
+    const account = sender?.accountId ?? jmap.account(MAIL);
     for (const file of Array.from(list ?? [])) {
       uploading += 1;
       try {
-        files = [...files, await upload(jmap, file)];
+        files = [...files, { file, attachment: await upload(jmap, account, file), account }];
       } catch (failure) {
         error = failure;
       } finally {
@@ -97,7 +112,7 @@
   async function submit(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     const list = from.value ?? [];
-    const chosen = list.find((entry) => entry.id === identity) ?? list[0];
+    const chosen = sender;
     if (!chosen) return;
     const own = new Set(list.map((entry) => entry.email.toLowerCase()));
     const keep = (value: string) =>
@@ -105,11 +120,15 @@
     busy = true;
     error = undefined;
     try {
+      // Attachments go out from the sender's account: upload again what went to another.
+      const attachments = await Promise.all(
+        files.map((entry) => (entry.account === chosen.accountId ? entry.attachment : upload(jmap, chosen.accountId, entry.file))),
+      );
       await send(
         jmap,
         {
           identity: chosen,
-          attachments: files,
+          attachments,
           to: keep(to),
           cc: keep(cc),
           subject,
@@ -118,7 +137,6 @@
           inReplyTo: start.inReplyTo ?? null,
           references: start.references ?? null,
         },
-        mailboxes,
       );
       onclose(true);
     } catch (failure) {
@@ -192,7 +210,8 @@
     />
     {#if files.length > 0 || uploading > 0}
       <ul class="attachments">
-        {#each files as file (file.blobId)}
+        {#each files as entry, index (index)}
+          {@const file = entry.attachment}
           <li class="attachment">
             <span class="quiet">
               <FileIcon name={file.name} type={file.type} size={22} />
@@ -206,7 +225,7 @@
               class="icon quiet small"
               aria-label={t("Remove")}
               data-tip={t("Remove")}
-              onclick={() => (files = files.filter((entry) => entry !== file))}
+              onclick={() => (files = files.filter((other) => other !== entry))}
             >
               <X size={15} />
             </button>

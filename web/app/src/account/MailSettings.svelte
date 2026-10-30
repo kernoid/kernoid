@@ -12,7 +12,8 @@
   const jmap = useJmap();
   const available = Boolean(jmap.session.primaryAccounts[MAIL]);
   const settings = loaded(() => (available ? need(admin.GET("/v1/account/mail-settings")) : Promise.resolve(undefined)));
-  const from = loaded(() => (available ? identities(jmap) : Promise.resolve([])));
+  // Only the account's own addresses (and its groups'): a shared mailbox is chosen when writing.
+  const from = loaded(() => (available ? identities(jmap, jmap.account(MAIL)) : Promise.resolve([])));
   let error = $state<unknown>();
   let saved = $state(false);
 

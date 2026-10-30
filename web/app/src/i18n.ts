@@ -669,6 +669,8 @@ const de: Record<string, string> = {
   "For": "Für",
   "days": "Tage",
   "Days": "Tage",
+  "My mailbox": "Mein Postfach",
+  "Emails move only within one mailbox.": "Nachrichten lassen sich nur innerhalb eines Postfachs verschieben.",
 };
 
 const lang = (navigator.languages?.[0] ?? navigator.language ?? "en").toLowerCase().startsWith("de") ? "de" : "en";

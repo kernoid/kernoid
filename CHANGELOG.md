@@ -118,6 +118,8 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   several at once – onto a folder; the Trash marked, emptied with one button and kept as long as the account chooses
   (`GET/PUT /v1/account/mail-settings`; retention takes the account's days over the tenant's); writing with formatting,
   sent as HTML with the plain text alongside, from a default sender the account chooses; attachments shown in place.
+- Shared mailboxes in the web app: each one the account may use appears with its folders beside its own; writing
+  offers the addresses it may send as, and such an email is kept in and sent from the shared mailbox.
 - Pictures of accounts (`PUT/DELETE /v1/account/avatar`, `GET /v1/avatars`, `GET /v1/avatars/{account}`; PNG, JPEG or
   WebP up to 1 MiB, sealed like files, seen by the tenant); everyone else shows their initials. Migration 0045.
 - A new look for the web app: icons throughout, IBM Plex Sans, a comfortable or compact density, the theme as icons,

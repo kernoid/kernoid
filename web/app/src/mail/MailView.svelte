@@ -26,7 +26,6 @@
   import { kindOf } from "../files/kind.js";
   import { formatSize } from "../files/model.js";
   import { locale, t } from "../i18n.js";
-  import { MAIL } from "../jmap.js";
   import Avatar from "../ui/Avatar.svelte";
   import FileIcon from "../ui/FileIcon.svelte";
   import type { ComposeStart } from "./Compose.svelte";
@@ -43,6 +42,7 @@
     emails,
     emptyMailbox,
     formatAddresses,
+    mailStores,
     mailboxTree,
     mailboxes,
     moveMany,
@@ -77,7 +77,15 @@
   }
 
   const jmap = useJmap();
-  const boxes = resource(() => [changed("Mailbox"), changed("Email")], () => mailboxes(jmap));
+  /** The own mail account and the shared mailboxes reached; each with its folders. */
+  const stores = mailStores(jmap);
+  const allBoxes = resource(
+    () => [changed("Mailbox"), changed("Email")],
+    async () => Object.fromEntries(await Promise.all(stores.map(async (entry) => [entry.id, await mailboxes(jmap, entry.id)] as const))),
+  );
+  /** The mail account shown. */
+  let store = $state(stores[0]?.id ?? "");
+  const boxes = $derived(allBoxes.value?.[store] ?? []);
   const settings = loaded(() => need(admin.GET("/v1/account/mail-settings")).catch(() => undefined));
   let selected = $state<string>();
   let search = $state("");
@@ -102,26 +110,26 @@
   }
 
   $effect(() => {
-    const list = boxes.value;
-    if (list && (!selected || !list.some((box) => box.id === selected))) {
+    const list = boxes;
+    if (list.length > 0 && (!selected || !list.some((box) => box.id === selected))) {
       selected = list.find((box) => box.role === "inbox")?.id ?? list[0]?.id;
     }
   });
 
   const list = resource(
-    () => (selected ? { box: selected, text: query, version: changed("Email") } : undefined),
-    ({ box, text }) => emails(jmap, box, text, 100),
+    () => (selected ? { account: store, box: selected, text: query, version: changed("Email") } : undefined),
+    ({ account, box, text }) => emails(jmap, account, box, text, 100),
   );
   const message = resource(
-    () => (open ? { id: open, version: changed("Email") } : undefined),
-    ({ id }) => email(jmap, id),
+    () => (open ? { account: store, id: open, version: changed("Email") } : undefined),
+    ({ account, id }) => email(jmap, account, id),
   );
 
   // Reading marks as read.
   $effect(() => {
     const current = message.value;
     if (current && !current.keywords.$seen) {
-      void setKeyword(jmap, current.id, "$seen", true).then(
+      void setKeyword(jmap, store, current.id, "$seen", true).then(
         () => touch("Email"),
         (failure: unknown) => (error = failure),
       );
@@ -136,8 +144,8 @@
     );
   }
 
-  const here = $derived(boxes.value?.find((box) => box.id === selected));
-  const trash = $derived(boxes.value?.find((box) => box.role === "trash"));
+  const here = $derived(boxes.find((box) => box.id === selected));
+  const trash = $derived(boxes.find((box) => box.role === "trash"));
   const inTrash = $derived(here?.role === "trash");
   const trashDays = $derived(settings.value?.trash_retention_days ?? settings.value?.tenant_trash_retention_days ?? null);
 
@@ -148,9 +156,9 @@
     act(async () => {
       if (!trash || inTrash) {
         if (inTrash && !window.confirm(t("Delete {count} emails for good?", { count: ids.length }))) return;
-        for (const id of ids) await destroy(jmap, id);
+        for (const id of ids) await destroy(jmap, store, id);
       } else {
-        await moveMany(jmap, ids, trash.id);
+        await moveMany(jmap, store, ids, trash.id);
       }
       open = undefined;
       chosen = [];
@@ -159,7 +167,7 @@
 
   function moveTo(ids: string[], to: string): void {
     act(async () => {
-      await moveMany(jmap, ids, to);
+      await moveMany(jmap, store, ids, to);
       open = undefined;
       chosen = [];
     });
@@ -216,18 +224,19 @@
     };
   }
 
-  function choose(box: string): void {
+  function choose(account: string, box: string): void {
+    store = account;
     selected = box;
     open = undefined;
     chosen = [];
   }
 
   function attachmentUrl(part: BodyPart): string {
-    return jmap.downloadPath(jmap.account(MAIL), part.blobId ?? "", part.name ?? "attachment", part.type);
+    return jmap.downloadPath(store, part.blobId ?? "", part.name ?? "attachment", part.type);
   }
 
   const blank: ComposeStart = { to: "", cc: "", subject: "", body: "" };
-  const places = $derived(mailboxTree(boxes.value ?? []));
+  const places = $derived(mailboxTree(boxes));
 </script>
 
 <div class="three mail" class:reading={Boolean(open) || chosen.length > 0}>
@@ -235,20 +244,36 @@
     <button type="button" class="primary wide" onclick={() => (composing = { ...blank })}>
       <SquarePen size={18} />{t("Write")}
     </button>
-    <Folders
-      boxes={boxes.value ?? []}
-      {selected}
-      onchoose={choose}
-      onchanged={() => touch("Email", "Mailbox")}
-      onerror={(failure) => (error = failure)}
-    />
+    {#each stores as entry (entry.id)}
+      <Folders
+        account={entry.id}
+        title={entry.own ? t("Folders") : entry.name}
+        shared={!entry.own}
+        boxes={allBoxes.value?.[entry.id] ?? []}
+        selected={store === entry.id ? selected : undefined}
+        onchoose={(box) => choose(entry.id, box)}
+        onchanged={() => touch("Email", "Mailbox")}
+        onerror={(failure) => (error = failure)}
+      />
+    {/each}
   </aside>
   <section class="list">
     <!-- On a phone the side is hidden: the mailbox and writing are here. -->
     <div class="narrow-only phone-bar">
-      <select aria-label={t("Mailboxes")} value={selected ?? ""} onchange={(event) => choose(event.currentTarget.value)}>
-        {#each places as { box, depth } (box.id)}
-          <option value={box.id}>{" ".repeat(depth)}{boxName(box)}{box.unreadEmails > 0 ? ` (${box.unreadEmails})` : ""}</option>
+      <select
+        aria-label={t("Mailboxes")}
+        value={`${store}/${selected ?? ""}`}
+        onchange={(event) => {
+          const [account = "", box = ""] = event.currentTarget.value.split("/");
+          choose(account, box);
+        }}
+      >
+        {#each stores as entry (entry.id)}
+          <optgroup label={entry.own ? t("My mailbox") : entry.name}>
+            {#each mailboxTree(allBoxes.value?.[entry.id] ?? []) as { box, depth } (box.id)}
+              <option value={`${entry.id}/${box.id}`}>{" ".repeat(depth)}{boxName(box)}{box.unreadEmails > 0 ? ` (${box.unreadEmails})` : ""}</option>
+            {/each}
+          </optgroup>
         {/each}
       </select>
       <button type="button" class="primary icon" aria-label={t("Write")} onclick={() => (composing = { ...blank })}>
@@ -281,7 +306,7 @@
             onclick={() =>
               window.confirm(t("Delete the {count} emails in {name} for good?", { count: here.totalEmails, name: boxName(here) })) &&
               act(async () => {
-                await emptyMailbox(jmap, here.id);
+                await emptyMailbox(jmap, store, here.id);
                 open = undefined;
               })}
           >
@@ -307,7 +332,7 @@
             draggable="true"
             ondragstart={(event) => {
               const ids = picked ? chosen : [summary.id];
-              event.dataTransfer?.setData(EMAILS, JSON.stringify(ids));
+              event.dataTransfer?.setData(EMAILS, JSON.stringify({ account: store, ids }));
               event.dataTransfer?.setData("text/plain", ids.length === 1 ? summary.subject || "" : t("{count} emails", { count: ids.length }));
               if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
             }}
@@ -358,7 +383,7 @@
     {:else if message.value}
       {@const current = message.value}
       {@const html = bodyHtml(current)}
-      {@const path = originalPath(jmap, current)}
+      {@const path = originalPath(store, current)}
       <article>
         <div class="actions reading">
           <button type="button" class="icon quiet narrow-only" aria-label={t("Back")} onclick={() => (open = undefined)}><ArrowLeft size={18} /></button>
@@ -377,7 +402,7 @@
             aria-label={current.keywords.$flagged ? t("Unflag") : t("Flag")}
             aria-pressed={Boolean(current.keywords.$flagged)}
             data-tip={current.keywords.$flagged ? t("Unflag") : t("Flag")}
-            onclick={() => act(() => setKeyword(jmap, current.id, "$flagged", !current.keywords.$flagged))}
+            onclick={() => act(() => setKeyword(jmap, store, current.id, "$flagged", !current.keywords.$flagged))}
           >
             <Flag size={17} />
           </button>
@@ -388,7 +413,7 @@
             data-tip={t("Mark unread")}
             onclick={() =>
               act(async () => {
-                await setKeyword(jmap, current.id, "$seen", false);
+                await setKeyword(jmap, store, current.id, "$seen", false);
                 open = undefined;
               })}
           >
@@ -503,8 +528,8 @@
     {#await import("./Compose.svelte") then { default: Compose }}
       <Compose
         start={composing}
-        mailboxes={boxes.value ?? []}
         defaultFrom={settings.value?.default_from ?? null}
+        replyFrom={store}
         onclose={(sent) => {
           composing = undefined;
           if (sent) touch("Email", "Mailbox");
