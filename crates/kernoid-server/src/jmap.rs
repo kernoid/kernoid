@@ -30,10 +30,21 @@ fn jmap(state: &AppState) -> Result<&Jmap, Response> {
     state.jmap.as_ref().ok_or_else(|| Problem::new(StatusCode::NOT_FOUND).detail("no mail here").into_response())
 }
 
-pub(crate) fn unauthorized() -> Response {
+/// "Log in": programs – mail, calendar and file clients – are asked for HTTP Basic, so that they prompt for an address
+/// and an app password. A script of a web page (the web app finding no session) is asked for a session instead:
+/// a Basic challenge would make the browser open its own login box before the page can send to the login.
+pub(crate) fn unauthorized(headers: &HeaderMap) -> Response {
     let mut response = Problem::new(StatusCode::UNAUTHORIZED).detail("log in").into_response();
-    response.headers_mut().insert(header::WWW_AUTHENTICATE, HeaderValue::from_static("Basic realm=\"kernoid\""));
+    let challenge = if from_a_page(headers) { "Bearer realm=\"kernoid\"" } else { "Basic realm=\"kernoid\"" };
+    response.headers_mut().insert(header::WWW_AUTHENTICATE, HeaderValue::from_static(challenge));
     response
+}
+
+/// Whether a request comes from a script of a web page: browsers mark those (`Sec-Fetch-Mode` other than
+/// `navigate`), and kernoid's own pages also send `kernoid-csrf`. Programs send neither.
+fn from_a_page(headers: &HeaderMap) -> bool {
+    headers.contains_key("kernoid-csrf")
+        || headers.get("sec-fetch-mode").and_then(|value| value.to_str().ok()).is_some_and(|mode| mode != "navigate")
 }
 
 /// The account of a request by a mail program – CalDAV, CardDAV – logged in, with the service `mail`.
@@ -64,21 +75,21 @@ async fn log_in(
         .and_then(|(_, token)| base64::engine::general_purpose::STANDARD.decode(token.trim()).ok())
         .and_then(|decoded| String::from_utf8(decoded).ok());
     let account = if let Some(basic) = basic {
-        let (user, password) = basic.split_once(':').ok_or_else(unauthorized)?;
+        let (user, password) = basic.split_once(':').ok_or_else(|| unauthorized(&parts.headers))?;
         let address = client.as_ref().map(|client| client.address);
         match state.identity.program_login(user, password, address, services, Some(instance.id)).await {
             Ok(account) => account,
-            Err(IdentityError::InvalidCredentials) => return Err(unauthorized()),
+            Err(IdentityError::InvalidCredentials) => return Err(unauthorized(&parts.headers)),
             Err(error) => return Err(crate::sessions::problem(error)),
         }
     } else {
         let token = crate::cookie::session_token(state, &parts.method, &parts.headers, Some(&instance))
-            .map_err(|_| unauthorized())?;
-        state.identity.session(instance.id, &token).await.map_err(|_| unauthorized())?.account
+            .map_err(|_| unauthorized(&parts.headers))?;
+        state.identity.session(instance.id, &token).await.map_err(|_| unauthorized(&parts.headers))?.account
     };
     // An account of another instance does not use this one.
     if account.instance != instance.id {
-        return Err(unauthorized());
+        return Err(unauthorized(&parts.headers));
     }
     Ok((account, base))
 }
@@ -450,4 +461,31 @@ pub(crate) async fn event_source(
         None => KeepAlive::new().interval(Duration::from_secs(60)),
     };
     Sse::new(events).keep_alive(keep_alive).into_response()
+}
+
+#[cfg(test)]
+mod challenge_tests {
+    use axum::http::{HeaderMap, HeaderValue, header};
+
+    use super::unauthorized;
+
+    fn challenge(pairs: &[(&'static str, &'static str)]) -> String {
+        let mut headers = HeaderMap::new();
+        for (name, value) in pairs {
+            headers.insert(*name, HeaderValue::from_static(value));
+        }
+        unauthorized(&headers).headers()[header::WWW_AUTHENTICATE].to_str().unwrap().to_owned()
+    }
+
+    #[test]
+    fn programs_are_asked_for_basic_and_pages_for_a_session() {
+        // A mail or file program sends no Fetch metadata: it should prompt for an app password.
+        assert_eq!(challenge(&[]), "Basic realm=\"kernoid\"");
+        // A browser opening the address itself may prompt too.
+        assert_eq!(challenge(&[("sec-fetch-mode", "navigate")]), "Basic realm=\"kernoid\"");
+        // A page's script must not make the browser open its login box.
+        assert_eq!(challenge(&[("sec-fetch-mode", "cors")]), "Bearer realm=\"kernoid\"");
+        assert_eq!(challenge(&[("sec-fetch-mode", "same-origin")]), "Bearer realm=\"kernoid\"");
+        assert_eq!(challenge(&[("kernoid-csrf", "1")]), "Bearer realm=\"kernoid\"");
+    }
 }
