@@ -114,6 +114,15 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 - `http.public_port`: instances reached on a port other than 443 or 80 name it in their issuer and links (JMAP);
   `deploy/compose` sets 8080.
 
+- The web app's mail: folders of one's own, nested, renamed, moved and deleted; emails moved by dragging them – also
+  several at once – onto a folder; the Trash marked, emptied with one button and kept as long as the account chooses
+  (`GET/PUT /v1/account/mail-settings`; retention takes the account's days over the tenant's); writing with formatting,
+  sent as HTML with the plain text alongside, from a default sender the account chooses; attachments shown in place.
+- Pictures of accounts (`PUT/DELETE /v1/account/avatar`, `GET /v1/avatars`, `GET /v1/avatars/{account}`; PNG, JPEG or
+  WebP up to 1 MiB, sealed like files, seen by the tenant); everyone else shows their initials. Migration 0045.
+- A new look for the web app: icons throughout, IBM Plex Sans, a comfortable or compact density, the theme as icons,
+  the account's menu behind its picture, a bar at the bottom on phones.
+
 ### Changed
 
 - The web app and the login UI are written in Svelte 5 (they were Solid and plain TypeScript); they look and behave
@@ -129,7 +138,7 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 - Take the new `deploy/compose` with the new image: the 0.1 image refuses the module settings the new compose file
   passes (`[modules.clamav]` did not exist).
-- `kernoid migrate` adds migrations 0034 to 0044 (CI's upgrade check runs them from 0.1.0 with mail and files in it).
+- `kernoid migrate` adds migrations 0034 to 0045 (CI's upgrade check runs them from 0.1.0 with mail and files in it).
 - DKIM: each domain gets an Ed25519 key beside its RSA key – publish the new TXT record `kernoid-ed1._domainkey`
   that the domain's DNS check shows; mail is signed with it once DNS has it.
 - A configuration that set `http.login_ui` or `http.web_app` to the image's old paths must drop them: those
@@ -139,6 +148,11 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 ### Fixed
 
 - A new screen of the login page puts the focus on its first field; it went to the heading.
+- WebDAV answers began with two XML declarations – not well-formed, and file managers (macOS Finder, Windows) refused
+  to connect.
+- An account with only a password in a tenant that requires a second factor got a page that reloaded without end: the
+  login now asks for the second factor (or has one set up), and the web app no longer sends such a session back to the
+  login.
 - The web app's lists said they were empty ("No links yet.") while still loading; they say "Loading" now. On a phone,
   file rows show their actions below the name, the search box of Files has a row of its own, the administration's
   pages are one row that scrolls, and the open section stays in sight.
