@@ -1,0 +1,41 @@
+# SPDX-FileCopyrightText: 2020 Stalwart Labs Ltd <hello@stalw.art>
+# SPDX-License-Identifier: AGPL-3.0-only
+# Taken over from sieve-rs 1.0.2 as published on crates.io (withdrawn there); dependencies as it declared them.
+[package]
+name = "sieve-rs"
+description = "Sieve filter interpreter"
+version = "1.0.2"
+edition.workspace = true
+rust-version.workspace = true
+license = "AGPL-3.0-only"
+repository.workspace = true
+publish.workspace = true
+
+# Not kernoid's workspace lints: the interpreter uses unsafe code (as it did as a dependency from crates.io).
+[lints]
+
+[lib]
+name = "sieve"
+doctest = false
+
+[dependencies]
+mail-parser = { version = "0.11.9", features = ["full_encoding"] }
+fancy-regex = "0.19.2"
+bumpalo = { version = "3.20.3", features = ["collections"] }
+memchr = "2.8.3"
+smallvec = "1.16.3"
+hashbrown = "0.17.1"
+hashify = "0.2.9"
+mail-builder = "1.0.0"
+ahash = "0.8.12"
+serde = { version = "1.0.229", features = ["derive", "rc"], optional = true }
+
+[dev-dependencies]
+mail-parser = { version = "0.11.9", features = ["full_encoding", "serde"] }
+serde = { version = "1.0.229", features = ["derive", "rc"] }
+serde_json = "1.0.154"
+evalexpr = "13.1.0"
+
+[features]
+default = []
+serde = ["dep:serde", "mail-parser/serde"]

@@ -1,0 +1,198 @@
+/*
+ * SPDX-FileCopyrightText: 2020 Stalwart Labs Ltd <hello@stalw.art>
+ *
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+use crate::Context;
+use mail_parser::{Message, MessagePart, MimeHeaders, PartType};
+use std::slice::Iter;
+
+const FIRST_PART: [u32; 1] = [0];
+
+#[derive(Debug)]
+pub(crate) enum ContentTypeFilter<'x> {
+    Type(&'x str),
+    TypeSubtype((&'x str, &'x str)),
+}
+
+pub(crate) struct SubpartIterator<'x, 'y, 'p> {
+    ctx: &'y Context<'x>,
+    iter: Iter<'p, u32>,
+    iter_stack: Vec<Iter<'p, u32>>,
+    anychild: bool,
+}
+
+impl<'x, 'y: 'p, 'p> SubpartIterator<'x, 'y, 'p> {
+    pub(crate) fn new(ctx: &'y Context<'x>, parts: &'p [u32], anychild: bool) -> Self {
+        SubpartIterator {
+            ctx,
+            iter: parts.iter(),
+            iter_stack: Vec::new(),
+            anychild,
+        }
+    }
+
+    #[allow(clippy::should_implement_trait)]
+    pub fn next(&mut self) -> Option<(u32, &'y MessagePart<'x>)> {
+        loop {
+            if let Some(&part_id) = self.iter.next() {
+                let subpart = self.ctx.message.parts.get(part_id as usize)?;
+                match &subpart.body {
+                    PartType::Multipart(subparts) if self.anychild => {
+                        self.iter_stack
+                            .push(std::mem::replace(&mut self.iter, subparts.iter()));
+                    }
+                    _ => (),
+                }
+                return Some((part_id, subpart));
+            }
+            {
+                let prev_iter = self.iter_stack.pop()?;
+                self.iter = prev_iter;
+            }
+        }
+    }
+}
+
+impl<'x> Context<'x> {
+    pub(crate) fn find_nested_parts<'y>(
+        &'y self,
+        mut message: &'y Message<'x>,
+        ct_filter: &[ContentTypeFilter<'_>],
+        visitor_fnc: &mut impl FnMut(&'y MessagePart<'x>, &'y [u8]) -> bool,
+    ) -> bool {
+        let mut iter_stack = Vec::new();
+        let root = [self.part];
+        let mut iter = root.iter();
+
+        loop {
+            while let Some(&part_id) = iter.next() {
+                if let Some(subpart) = message.parts.get(part_id as usize) {
+                    let process_part = if !ct_filter.is_empty() {
+                        let mut process_part = false;
+                        let (ct, cst) = if let Some(ct) = subpart.content_type() {
+                            (ct.c_type.as_ref(), ct.c_subtype.as_deref().unwrap_or(""))
+                        } else {
+                            match &subpart.body {
+                                PartType::Text(_) => ("text", "plain"),
+                                PartType::Html(_) => ("text", "html"),
+                                PartType::Message(_) => ("message", "rfc822"),
+                                PartType::Multipart(_) => ("multipart", "mixed"),
+                                _ => ("application", "octet-stream"),
+                            }
+                        };
+
+                        for ctf in ct_filter {
+                            match ctf {
+                                ContentTypeFilter::Type(name) => {
+                                    if name.eq_ignore_ascii_case(ct) {
+                                        process_part = true;
+                                        break;
+                                    }
+                                }
+                                ContentTypeFilter::TypeSubtype((name, subname)) => {
+                                    if name.eq_ignore_ascii_case(ct)
+                                        && subname.eq_ignore_ascii_case(cst)
+                                    {
+                                        process_part = true;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+
+                        process_part
+                    } else {
+                        true
+                    };
+                    if process_part && visitor_fnc(subpart, message.raw_message.as_ref()) {
+                        return true;
+                    }
+                    match &subpart.body {
+                        PartType::Multipart(subparts) => {
+                            iter_stack.push((std::mem::replace(&mut iter, subparts.iter()), None));
+                        }
+                        PartType::Message(next_message) => {
+                            iter_stack.push((
+                                std::mem::replace(&mut iter, FIRST_PART.iter()),
+                                Some(message),
+                            ));
+                            message = next_message;
+                        }
+                        _ => (),
+                    }
+                }
+            }
+            if let Some((prev_iter, prev_message)) = iter_stack.pop() {
+                iter = prev_iter;
+                if let Some(prev_message) = prev_message {
+                    message = prev_message;
+                }
+            } else {
+                break;
+            }
+        }
+        false
+    }
+
+    pub(crate) fn find_nested_parts_ids(&self, include_current: bool) -> Vec<u32> {
+        if self.part == 0 {
+            if include_current {
+                (0u32..self.message.parts.len() as u32).collect()
+            } else if self.message.parts.len() > 1 {
+                (1u32..self.message.parts.len() as u32).collect()
+            } else {
+                Vec::new()
+            }
+        } else {
+            let mut part_ids = Vec::new();
+            let mut iter_stack = Vec::new();
+
+            if include_current {
+                part_ids.push(self.part);
+            }
+
+            if let Some(PartType::Multipart(subparts)) =
+                self.message.parts.get(self.part as usize).map(|p| &p.body)
+            {
+                let mut iter = subparts.iter();
+                loop {
+                    while let Some(&part_id) = iter.next() {
+                        part_ids.push(part_id);
+                        if let Some(PartType::Multipart(subparts)) =
+                            self.message.parts.get(part_id as usize).map(|p| &p.body)
+                        {
+                            iter_stack.push(std::mem::replace(&mut iter, subparts.iter()));
+                        }
+                    }
+                    if let Some(prev_iter) = iter_stack.pop() {
+                        iter = prev_iter;
+                    } else {
+                        break;
+                    }
+                }
+            }
+
+            part_ids
+        }
+    }
+}
+
+impl<'x> ContentTypeFilter<'x> {
+    pub(crate) fn parse(ct: &'x str) -> Option<ContentTypeFilter<'x>> {
+        let mut iter = ct.split('/');
+        let name = iter.next()?;
+        if let Some(sub_name) = iter.next() {
+            if !name.is_empty() && !sub_name.is_empty() && iter.next().is_none() {
+                Some(ContentTypeFilter::TypeSubtype((name, sub_name)))
+            } else {
+                None
+            }
+        } else if !name.is_empty() {
+            Some(ContentTypeFilter::Type(name))
+        } else {
+            None
+        }
+    }
+}

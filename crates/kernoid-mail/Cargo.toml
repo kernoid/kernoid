@@ -21,7 +21,7 @@ hmac = "0.13.0"
 kernoid-e2e = { version = "0.2.0", path = "../../apps/e2e" }
 kernoid-store = { version = "0.2.0", path = "../kernoid-store" }
 mail-parser = { version = "0.11.9", features = ["full_encoding"] }
-sieve-rs = "1.0.2"
+sieve-rs = { version = "1.0.2", path = "../sieve" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 sha2 = "0.11.1"

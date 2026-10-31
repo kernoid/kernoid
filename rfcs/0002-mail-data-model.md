@@ -222,8 +222,8 @@ With [mail-auth](https://crates.io/crates/mail-auth) (Apache-2.0 OR MIT, by Stal
 
 - After the data, kernoid adds `Received`, `Authentication-Results` and `Received-SPF` and delivers to every
   recipient before it answers – there is no queue for incoming mail: `250` means stored.
-- **Sieve** ([RFC 5228](https://www.rfc-editor.org/rfc/rfc5228)) with [sieve-rs](https://crates.io/crates/sieve-rs)
-  (AGPL-3.0-only, by Stalwart Labs): an account's active script decides – `keep`, `fileinto` (with `:create`),
+- **Sieve** ([RFC 5228](https://www.rfc-editor.org/rfc/rfc5228)) with sieve-rs
+  (by Stalwart Labs; 1.0.2 taken over into `crates/sieve` under AGPL-3.0-only after it left crates.io): an account's active script decides – `keep`, `fileinto` (with `:create`),
   `discard`, flags (`imap4flags`), and `redirect` and `vacation` through the queue (10.6). Scripts are stored per
   account (`sieve_scripts`), checked when saved, at most one active. Managing scripts (ManageSieve, JMAP Sieve) comes
   with the protocols.
