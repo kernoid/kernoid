@@ -10,6 +10,11 @@ minimumReleaseAge: 20160
 # - GHSA-gcqx-w48m-w2h4 (low, no fixed version): deepmerge's mergeObject() lets a merged object carry a prototype.
 #   Only @sveltejs/vite-plugin-svelte uses it, merging the build's own configuration – nothing from users reaches it,
 #   and none of it is in what kernoid serves.
+# - GHSA-g3hv-75wg-m249 (moderate, fixed only in minimatch 11.0.1): a glob pattern with many parts takes long to match.
+#   Only @redocly/openapi-core uses it (minimatch 5, called as a function, which 10 and later no longer allow), when
+#   openapi-typescript turns docs/_data/openapi.json into the administration's types: it matches patterns of its own
+#   configuration – none from users – at build time, and none of it is in what kernoid serves.
 auditConfig:
   ignoreGhsas:
     - GHSA-gcqx-w48m-w2h4
+    - GHSA-g3hv-75wg-m249
