@@ -26,7 +26,10 @@ use serde_json::{Value, json};
 
 use crate::{
     Client, Error, MAIL, Result, SUBMISSION,
-    mail::{BodyPart, BodyValue, Draft, Email, EmailAddress, EmailSummary, Identity, Inner, Mailbox, Sealed, role},
+    mail::{
+        BodyPart, BodyValue, Draft, Email, EmailAddress, EmailSummary, Identity, InlineFile, Inner, Mailbox, Sealed,
+        role,
+    },
     set_error,
 };
 
@@ -466,18 +469,42 @@ impl E2e {
     /// uploaded as it is, imported into Drafts with its summary encrypted to the sender, submitted with an envelope
     /// (To and Cc), and moved to Sent once sent.
     pub async fn send(&self, client: &Client, outgoing: Outgoing<'_>, recipients: &[PublicKey]) -> Result<()> {
-        self.store(client, outgoing, recipients, true).await
+        self.store(client, outgoing, &[], recipients, true).await
     }
 
     /// Keeps a draft encrypted to `keys` (from `draft_plan`).
     pub async fn keep(&self, client: &Client, outgoing: Outgoing<'_>, keys: &[PublicKey]) -> Result<()> {
-        self.store(client, outgoing, keys, false).await
+        self.store(client, outgoing, &[], keys, false).await
+    }
+
+    /// [`send`](Self::send), with files held in memory attached as well – the attachments of an encrypted message
+    /// forwarded ([`Email::decrypted_attachments`](crate::mail::Email::decrypted_attachments)).
+    pub async fn send_with(
+        &self,
+        client: &Client,
+        outgoing: Outgoing<'_>,
+        inline: &[InlineFile],
+        recipients: &[PublicKey],
+    ) -> Result<()> {
+        self.store(client, outgoing, inline, recipients, true).await
+    }
+
+    /// [`keep`](Self::keep), with files held in memory attached as well.
+    pub async fn keep_with(
+        &self,
+        client: &Client,
+        outgoing: Outgoing<'_>,
+        inline: &[InlineFile],
+        keys: &[PublicKey],
+    ) -> Result<()> {
+        self.store(client, outgoing, inline, keys, false).await
     }
 
     async fn store(
         &self,
         client: &Client,
         outgoing: Outgoing<'_>,
+        inline: &[InlineFile],
         recipients: &[PublicKey],
         submit: bool,
     ) -> Result<()> {
@@ -500,6 +527,13 @@ impl E2e {
             let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("attachment").to_owned();
             let media_type = crate::files::media_type(&name).to_owned();
             attachments.push(compose::Attachment { name, media_type, data: STANDARD.encode(data) });
+        }
+        for file in inline {
+            attachments.push(compose::Attachment {
+                name: file.name.clone(),
+                media_type: file.media_type.clone(),
+                data: STANDARD.encode(&file.data),
+            });
         }
         let address = |a: &EmailAddress| Address { name: a.name.clone(), email: a.email.clone() };
         let strip = |ids: &[String]| -> Vec<String> {

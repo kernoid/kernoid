@@ -289,6 +289,41 @@ impl Email {
         let (inner, index) = (self.inner.as_ref()?, part.inner?);
         Some(kernoid_e2e::compose::part(&inner.0, index).map_err(Error::from))
     }
+
+    /// The attachments decrypted here, in memory – to forward them: they are on the server only inside the encrypted
+    /// message, so a forward cannot name them by blob as it does with others.
+    pub fn decrypted_attachments(&self) -> Result<Vec<InlineFile>> {
+        self.attachments
+            .iter()
+            .filter_map(|part| {
+                let data = self.part(part)?;
+                Some(data.map(|data| InlineFile {
+                    name: part.name.clone().unwrap_or_else(|| "attachment".into()),
+                    media_type: part.kind.clone(),
+                    data,
+                }))
+            })
+            .collect()
+    }
+}
+
+/// A file held in memory – an attachment of a message decrypted here, forwarded –, attached like a file of the device:
+/// inside an encrypted message, or uploaded with [`attach_bytes`]. Its content is not in `Debug`.
+#[derive(Clone, PartialEq, Eq)]
+pub struct InlineFile {
+    pub name: String,
+    pub media_type: String,
+    pub data: Vec<u8>,
+}
+
+impl std::fmt::Debug for InlineFile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("InlineFile")
+            .field("name", &self.name)
+            .field("media_type", &self.media_type)
+            .field("size", &self.data.len())
+            .finish()
+    }
 }
 
 /// HTML as plain text, `width` columns wide.
@@ -703,6 +738,19 @@ pub async fn attach(client: &Client, account: &str, path: &std::path::Path) -> R
     let kind = crate::files::media_type(&name);
     let upload = client.upload(account, kind, file, size, |_, _| {}).await?;
     Ok(Attachment { blob_id: upload.blob_id, kind: kind.to_owned(), name, size: upload.size })
+}
+
+/// Uploads a file held in memory, to attach it to a message that does not go end-to-end encrypted.
+pub async fn attach_bytes(client: &Client, account: &str, file: &InlineFile) -> Result<Attachment> {
+    let size = file.data.len() as u64;
+    let upload =
+        client.upload(account, &file.media_type, std::io::Cursor::new(file.data.clone()), size, |_, _| {}).await?;
+    Ok(Attachment {
+        blob_id: upload.blob_id,
+        kind: file.media_type.clone(),
+        name: file.name.clone(),
+        size: upload.size,
+    })
 }
 
 #[cfg(test)]

@@ -7,6 +7,12 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 ## [Unreleased]
 
+### Added
+
+- The Rust SDK forwards the attachments of an end-to-end encrypted email: `Email::decrypted_attachments` holds them in
+  memory, `E2e::send_with`/`keep_with` put them inside the encrypted message, and `mail::attach_bytes` uploads one for
+  a message that does not go encrypted – never written to disk decrypted.
+
 ### Changed
 
 - calcard, the library for iCalendar, vCard, JSCalendar and JSContact, moved into Stalwart's repository after 0.3.14;

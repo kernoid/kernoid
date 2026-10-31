@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 //! End-to-end encrypted mail against a server that records what it is sent (RFC 0006, 4–5): unlocking the key with
-//! the recovery code, the summaries of the list, reading an encrypted email, and sending one encrypted. The keys are
-//! made here with kernoid-e2e, as the web app makes them.
+//! the recovery code, the summaries of the list, reading an encrypted email, sending one encrypted, and forwarding the
+//! attachments of one, decrypted in memory. The keys are made here with kernoid-e2e, as the web app makes them.
 
 mod support;
 
@@ -388,4 +388,51 @@ async fn drafts_kept_encrypted_to_the_own_key() {
     assert!(mime::decrypt_message(&upload.body, &[&keys().alice], &[]).is_ok());
     // Not from the own account: plain.
     assert!(matches!(e2e.draft_plan(&client, "S", &identity(), &draft), Plan::Plain(_)));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn forwarding_the_attachments_of_an_encrypted_email() {
+    let server = server();
+    let client = connect(&server).await;
+    let boxes = mail::mailboxes(&client, "A").await.unwrap();
+    let mut e2e = E2e::load(&client).await.unwrap();
+    e2e.unlock(&keys().code).unwrap();
+    let email = mail::email(&client, "A", "e1").await.unwrap().unwrap();
+    let read = e2e.open(&client, "A", email).await.unwrap();
+    // The attachment is on the server only inside the encrypted message: decrypted here, held in memory.
+    let inline = read.decrypted_attachments().unwrap();
+    assert_eq!(inline.len(), 1);
+    assert_eq!((inline[0].name.as_str(), inline[0].data.as_slice()), ("plan.txt", &b"step one"[..]));
+    assert!(!format!("{:?}", inline[0]).contains("step one"), "the content is not in Debug");
+
+    let draft = Draft {
+        to: parse_addresses("Bob <bob@x.example>"),
+        subject: "Fwd: The secret plan".into(),
+        body: "See the plan.".into(),
+        ..Draft::default()
+    };
+    let Plan::Sealed(recipients) = e2e.plan(&client, "A", &identity(), &draft).await else { panic!("not sealed") };
+    let outgoing = Outgoing { account: "A", identity: &identity(), draft: &draft, files: &[], boxes: &boxes };
+    e2e.send_with(&client, outgoing, &inline, &recipients).await.unwrap();
+
+    // Bob finds the file inside the forward; nothing of it reached the server in the clear.
+    let upload = server.requests().into_iter().find(|r| r.path == "/jmap/upload/A/").unwrap();
+    assert!(!String::from_utf8_lossy(&upload.body).contains("step one"));
+    let opened = mime::decrypt_message(&upload.body, &[&keys().bob], &[&keys().alice.public()]).unwrap();
+    let parsed = compose::parse(&opened.data).unwrap();
+    assert_eq!(parsed.attachments.len(), 1);
+    assert_eq!(parsed.attachments[0].name.as_deref(), Some("plan.txt"));
+    assert_eq!(compose::part(&opened.data, parsed.attachments[0].index).unwrap(), b"step one");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_file_in_memory_uploaded_for_a_plain_message() {
+    let server = server();
+    let client = connect(&server).await;
+    let file =
+        mail::InlineFile { name: "plan.txt".into(), media_type: "text/plain".into(), data: b"step one".to_vec() };
+    let attachment = mail::attach_bytes(&client, "A", &file).await.unwrap();
+    assert_eq!((attachment.blob_id.as_str(), attachment.name.as_str(), attachment.size), ("U1", "plan.txt", 8));
+    let upload = server.requests().into_iter().find(|r| r.path == "/jmap/upload/A/").unwrap();
+    assert_eq!((upload.header("content-type"), upload.body.as_slice()), (Some("text/plain"), &b"step one"[..]));
 }
