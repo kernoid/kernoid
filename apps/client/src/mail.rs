@@ -558,6 +558,52 @@ pub async fn conversations(
     Ok((out, total))
 }
 
+/// Makes a mailbox – in `parent`, or at the top – and returns its id.
+pub async fn create_mailbox(client: &Client, account: &str, name: &str, parent: Option<&str>) -> Result<String> {
+    let create = json!({ "create": { "m": { "name": name, "parentId": parent } } });
+    let result = client.set(&[MAIL], "Mailbox", account, create, json!({})).await?;
+    result["created"]["m"]["id"]
+        .as_str()
+        .map(str::to_owned)
+        .ok_or_else(|| Error::Protocol("the server named no new mailbox".into()))
+}
+
+/// Gives a mailbox another name.
+pub async fn rename_mailbox(client: &Client, account: &str, id: &str, name: &str) -> Result<()> {
+    client.set(&[MAIL], "Mailbox", account, json!({ "update": { id: { "name": name } } }), json!({})).await?;
+    Ok(())
+}
+
+/// Moves a mailbox into `parent`, or to the top.
+pub async fn move_mailbox(client: &Client, account: &str, id: &str, parent: Option<&str>) -> Result<()> {
+    client.set(&[MAIL], "Mailbox", account, json!({ "update": { id: { "parentId": parent } } }), json!({})).await?;
+    Ok(())
+}
+
+/// Removes a mailbox – with the emails only in it when `with_emails`; otherwise the server refuses a mailbox that
+/// holds any (`mailboxHasEmail`).
+pub async fn destroy_mailbox(client: &Client, account: &str, id: &str, with_emails: bool) -> Result<()> {
+    let extra = json!({ "onDestroyRemoveEmails": with_emails });
+    client.set(&[MAIL], "Mailbox", account, json!({ "destroy": [id] }), extra).await?;
+    Ok(())
+}
+
+/// Removes every email of a mailbox for good – emptying the Trash or Junk – and returns how many.
+pub async fn empty_mailbox(client: &Client, account: &str, id: &str) -> Result<u64> {
+    let mut removed = 0;
+    loop {
+        let result = client
+            .call(&[MAIL], "Email/query", json!({ "accountId": account, "filter": { "inMailbox": id }, "limit": 500 }))
+            .await?;
+        let ids: Vec<String> = serde_json::from_value(result["ids"].clone()).unwrap_or_default();
+        if ids.is_empty() {
+            return Ok(removed);
+        }
+        destroy_all(client, account, &ids).await?;
+        removed += ids.len() as u64;
+    }
+}
+
 /// Sets or clears a keyword on several emails at once.
 pub async fn set_keywords(client: &Client, account: &str, ids: &[String], keyword: &str, on: bool) -> Result<()> {
     let value = if on { Value::Bool(true) } else { Value::Null };

@@ -7,6 +7,11 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 ## [Unreleased]
 
+### Added
+
+- The Rust SDK manages mail folders: `mail::create_mailbox`, `rename_mailbox`, `move_mailbox`, `destroy_mailbox`
+  (with or without its emails) and `empty_mailbox`.
+
 ## [0.2.1] – 2026-10-31
 
 A patch release, chiefly for the Rust SDK: kernoid's apps forward the attachments of end-to-end encrypted mail with

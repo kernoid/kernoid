@@ -161,3 +161,47 @@ async fn an_app_logs_in_with_openid_connect() {
     let other = kernoid_client::oidc::begin(&server, "http://127.0.0.1:47613/oauth", None, &options).await.unwrap();
     assert!(kernoid_client::oidc::finish(&other, &callback, &options).await.is_err());
 }
+
+#[tokio::test]
+async fn folders_made_renamed_moved_emptied_and_removed() {
+    let Some(client) = client().await else { return };
+    let account = client.primary(MAIL).unwrap();
+    let stamp = std::process::id();
+    let parent = mail::create_mailbox(&client, &account, &format!("SDK {stamp}"), None).await.unwrap();
+    let child = mail::create_mailbox(&client, &account, "Kind", Some(&parent)).await.unwrap();
+    let find = async |id: &str| mail::mailboxes(&client, &account).await.unwrap().into_iter().find(|b| b.id == id);
+    assert_eq!(find(&child).await.unwrap().parent_id.as_deref(), Some(parent.as_str()));
+
+    mail::rename_mailbox(&client, &account, &child, "Umbenannt").await.unwrap();
+    mail::move_mailbox(&client, &account, &child, None).await.unwrap();
+    let moved = find(&child).await.unwrap();
+    assert_eq!((moved.name.as_str(), moved.parent_id), ("Umbenannt", None));
+
+    // A message in it: emptied, then the folder goes; one with a message is refused unless its emails go too.
+    let message =
+        format!("From: a@x.example\r\nSubject: Ordner {stamp}\r\nMessage-ID: <o{stamp}@x.example>\r\n\r\nHallo\r\n");
+    let upload = client
+        .upload(
+            &account,
+            "message/rfc822",
+            std::io::Cursor::new(message.clone().into_bytes()),
+            message.len() as u64,
+            |_, _| {},
+        )
+        .await
+        .unwrap();
+    client
+        .call(
+            &[MAIL],
+            "Email/import",
+            serde_json::json!({ "accountId": account, "emails": { "e": {
+            "blobId": upload.blob_id, "mailboxIds": { child.as_str(): true } } } }),
+        )
+        .await
+        .unwrap();
+    assert!(mail::destroy_mailbox(&client, &account, &child, false).await.is_err(), "it holds an email");
+    assert_eq!(mail::empty_mailbox(&client, &account, &child).await.unwrap(), 1);
+    mail::destroy_mailbox(&client, &account, &child, false).await.unwrap();
+    mail::destroy_mailbox(&client, &account, &parent, true).await.unwrap();
+    assert!(find(&child).await.is_none() && find(&parent).await.is_none());
+}
