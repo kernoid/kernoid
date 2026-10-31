@@ -1491,7 +1491,7 @@ dependencies = [
 
 [[package]]
 name = "kernoid-client"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -1515,7 +1515,7 @@ dependencies = [
 
 [[package]]
 name = "kernoid-e2e"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "base64 0.22.1",
  "mail-parser",

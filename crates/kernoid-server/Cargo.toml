@@ -22,18 +22,18 @@ futures-util = { version = "0.3.34", default-features = false }
 chrono = { version = "0.4.45", features = ["serde"] }
 instant-acme = { version = "0.8.5", default-features = false, features = ["aws-lc-rs", "hyper-rustls", "rcgen"] }
 ipnet = "2.12.2"
-kernoid-e2e = { version = "0.2.0", path = "../../apps/e2e" }
-kernoid-config = { version = "0.2.0", path = "../kernoid-config" }
-kernoid-identity = { version = "0.2.0", path = "../kernoid-identity" }
-kernoid-dav = { version = "0.2.0", path = "../kernoid-dav" }
-kernoid-files = { version = "0.2.0", path = "../kernoid-files" }
-kernoid-groupware = { version = "0.2.0", path = "../kernoid-groupware" }
-kernoid-jmap = { version = "0.2.0", path = "../kernoid-jmap" }
-kernoid-mail = { version = "0.2.0", path = "../kernoid-mail" }
-kernoid-module = { version = "0.2.0", path = "../kernoid-module" }
-kernoid-oidc = { version = "0.2.0", path = "../kernoid-oidc" }
-kernoid-smtp = { version = "0.2.0", path = "../kernoid-smtp" }
-kernoid-store = { version = "0.2.0", path = "../kernoid-store" }
+kernoid-e2e = { version = "0.2.1", path = "../../apps/e2e" }
+kernoid-config = { version = "0.2.1", path = "../kernoid-config" }
+kernoid-identity = { version = "0.2.1", path = "../kernoid-identity" }
+kernoid-dav = { version = "0.2.1", path = "../kernoid-dav" }
+kernoid-files = { version = "0.2.1", path = "../kernoid-files" }
+kernoid-groupware = { version = "0.2.1", path = "../kernoid-groupware" }
+kernoid-jmap = { version = "0.2.1", path = "../kernoid-jmap" }
+kernoid-mail = { version = "0.2.1", path = "../kernoid-mail" }
+kernoid-module = { version = "0.2.1", path = "../kernoid-module" }
+kernoid-oidc = { version = "0.2.1", path = "../kernoid-oidc" }
+kernoid-smtp = { version = "0.2.1", path = "../kernoid-smtp" }
+kernoid-store = { version = "0.2.1", path = "../kernoid-store" }
 mail-builder = "1.0.0"
 metrics = "0.24.6"
 percent-encoding = "2.3.2"

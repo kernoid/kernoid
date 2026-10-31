@@ -80,7 +80,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: operator
-          image: ghcr.io/kernoid/kernoid:0.2.0
+          image: ghcr.io/kernoid/kernoid:0.2.1
           command: ["/usr/local/bin/kernoid-operator"]
           args: ["run", "--log-format", "json"]
           resources:

@@ -13,8 +13,8 @@ workspace = true
 
 [dependencies]
 futures-util = { version = "0.3.34", default-features = false, features = ["sink"] }
-kernoid-config = { version = "0.2.0", path = "../kernoid-config" }
-kernoid-identity = { version = "0.2.0", path = "../kernoid-identity" }
+kernoid-config = { version = "0.2.1", path = "../kernoid-config" }
+kernoid-identity = { version = "0.2.1", path = "../kernoid-identity" }
 # `strict` reads the attributes a search asks for; without it, ldap3_proto drops them.
 ldap3_proto = { version = "0.8.1", default-features = false, features = ["strict"] }
 rustls = { version = "0.23.46", default-features = false, features = ["aws-lc-rs", "prefer-post-quantum", "std", "tls12"] }

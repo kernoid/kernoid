@@ -154,7 +154,7 @@
                     "type": "array"
                   },
                   "image": {
-                    "description": "The kernoid image, e.g. `ghcr.io/kernoid/kernoid:0.2.0`. Changing it upgrades: the schema is migrated with\nthe new image first, then the processes are replaced.",
+                    "description": "The kernoid image, e.g. `ghcr.io/kernoid/kernoid:0.2.1`. Changing it upgrades: the schema is migrated with\nthe new image first, then the processes are replaced.",
                     "type": "string"
                   },
                   "imagePullSecrets": {

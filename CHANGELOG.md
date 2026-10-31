@@ -7,6 +7,13 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 ## [Unreleased]
 
+## [0.2.1] – DATE
+
+A patch release, chiefly for the Rust SDK: kernoid's apps forward the attachments of end-to-end encrypted mail with
+it. Two libraries of Stalwart Labs left crates.io for Stalwart's repository; kernoid now carries them itself. No
+migration, no change to the API or the configuration – upgrade by pulling the image `ghcr.io/kernoid/kernoid:0.2.1`
+(the Helm chart and the crates follow the version).
+
 ### Added
 
 - The Rust SDK forwards the attachments of an end-to-end encrypted email: `Email::decrypted_attachments` holds them in
@@ -316,6 +323,7 @@ Marked `OPEN` in the documentation, among them: public links to files, resumable
 OAUTHBEARER and LDAP, IMAP `SORT` and `THREAD`, a week and a day view, an audit log in the web app, a Kubernetes
 operator – planned for 0.2.
 
-[Unreleased]: https://github.com/kernoid/kernoid/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/kernoid/kernoid/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/kernoid/kernoid/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/kernoid/kernoid/releases/tag/v0.2.0
 [0.1.0]: https://github.com/kernoid/kernoid/releases/tag/v0.1.0

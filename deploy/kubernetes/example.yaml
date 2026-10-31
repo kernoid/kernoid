@@ -14,7 +14,7 @@ metadata:
   namespace: kernoid
 spec:
   # Changing the tag upgrades: the schema is migrated with the new image first, then the processes are replaced.
-  image: ghcr.io/kernoid/kernoid:0.2.0
+  image: ghcr.io/kernoid/kernoid:0.2.1
   env:
     - name: KERNOID__DATABASE__URL
       valueFrom: { secretKeyRef: { name: kernoid, key: database-url } }

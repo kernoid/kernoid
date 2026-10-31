@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 )]
 #[serde(rename_all = "camelCase")]
 pub struct KernoidSpec {
-    /// The kernoid image, e.g. `ghcr.io/kernoid/kernoid:0.2.0`. Changing it upgrades: the schema is migrated with
+    /// The kernoid image, e.g. `ghcr.io/kernoid/kernoid:0.2.1`. Changing it upgrades: the schema is migrated with
     /// the new image first, then the processes are replaced.
     pub image: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
