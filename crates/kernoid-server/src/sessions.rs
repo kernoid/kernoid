@@ -343,7 +343,7 @@ pub(crate) struct LanguageChoice {
 /// The language of the emails kernoid writes to one's own account – invitations sent for it, notices.
 #[utoipa::path(get, path = "/v1/account/language", tag = "account", responses(
     (status = 200, body = LanguageView),
-    (status = 401, description = "no valid session", body = Problem),
+    (status = 401, description = "no valid session or app token", body = Problem),
 ))]
 pub(crate) async fn language(
     State(state): State<AppState>,
@@ -365,7 +365,7 @@ pub(crate) async fn language(
 #[utoipa::path(put, path = "/v1/account/language", tag = "account", request_body = LanguageChoice, responses(
     (status = 204),
     (status = 400, description = "a language kernoid does not write", body = Problem),
-    (status = 401, description = "no valid session", body = Problem),
+    (status = 401, description = "no valid session or app token", body = Problem),
 ))]
 pub(crate) async fn set_language(
     State(state): State<AppState>,
@@ -387,7 +387,7 @@ pub(crate) struct Profile {
 /// Changes the display name of one's own account.
 #[utoipa::path(patch, path = "/v1/account", tag = "account", request_body = Profile, responses(
     (status = 204),
-    (status = 401, description = "no valid session", body = Problem),
+    (status = 401, description = "no valid session or app token", body = Problem),
 ))]
 pub(crate) async fn change_profile(
     State(state): State<AppState>,

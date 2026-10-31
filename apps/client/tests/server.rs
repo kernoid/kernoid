@@ -5,7 +5,7 @@
 
 use std::time::Duration;
 
-use kernoid_client::{Client, FILENODE, MAIL, Options, files, mail, push};
+use kernoid_client::{Client, FILENODE, MAIL, Options, account, files, mail, push};
 
 async fn client() -> Option<Client> {
     let server = std::env::var("KERNOID_TEST_SERVER").ok()?;
@@ -13,6 +13,13 @@ async fn client() -> Option<Client> {
     let password = std::env::var("KERNOID_TEST_PASSWORD").expect("KERNOID_TEST_PASSWORD");
     let url = kernoid_client::session_url(Some(&server), &address).unwrap();
     Some(Client::connect(&url, &address, &password, &Options::default()).await.unwrap())
+}
+
+#[tokio::test]
+async fn an_app_password_changes_no_settings() {
+    let Some(client) = client().await else { return };
+    assert!(matches!(account::language(&client).await, Err(kernoid_client::Error::Unauthorized)));
+    assert!(matches!(account::set_name(&client, "Mallory").await, Err(kernoid_client::Error::Unauthorized)));
 }
 
 #[tokio::test]
@@ -133,6 +140,27 @@ async fn an_app_logs_in_with_openid_connect() {
     assert_eq!(client.session.username, address);
     let account = client.primary(MAIL).unwrap();
     mail::mailboxes(&client, &account).await.unwrap();
+    // The everyday settings take the app's token: name, language, mail settings, picture.
+    account::set_name(&client, "Alice A.").await.unwrap();
+    account::set_language(&client, Some("de")).await.unwrap();
+    let language = account::language(&client).await.unwrap();
+    assert_eq!((language.language.as_deref(), language.used.as_str()), (Some("de"), "de"));
+    account::set_language(&client, None).await.unwrap();
+    let mut settings = account::mail_settings(&client).await.unwrap();
+    settings.undo_send_seconds = 10;
+    settings.trash_retention_days = Some(14);
+    account::set_mail_settings(&client, &settings).await.unwrap();
+    assert_eq!(account::mail_settings(&client).await.unwrap(), settings);
+    account::set_mail_settings(&client, &account::MailSettings::default()).await.unwrap();
+    const PNG: &[u8] = &[
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d, 0x49, 0x48, 0x44, 0x52, 0, 0, 0, 1, 0, 0, 0, 1,
+        8, 6, 0, 0, 0, 0x1f, 0x15, 0xc4, 0x89, 0, 0, 0, 0x0d, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0, 1, 0, 0, 5,
+        0, 1, 0x0d, 0x0a, 0x2d, 0xb4, 0, 0, 0, 0, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+    ];
+    account::set_avatar(&client, PNG.to_vec(), "image/png").await.unwrap();
+    assert_eq!(account::avatar(&client, &account).await.unwrap().as_deref(), Some(PNG));
+    account::remove_avatar(&client).await.unwrap();
+    assert_eq!(account::avatar(&client, &account).await.unwrap(), None);
     let renewed = kernoid_client::oidc::refresh(&tokens, &options).await.unwrap();
     assert_ne!(renewed.access_token, tokens.access_token);
     client.set_access_token(&renewed.access_token);

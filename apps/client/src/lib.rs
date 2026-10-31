@@ -4,6 +4,7 @@
 //! submodules; end-to-end encrypted mail in `e2e` (RFC 0006), finding a server in `srv`, iCalendar and vCard files in
 //! `transfer`. Everything is async on tokio; the terminal app and the apps share it.
 
+pub mod account;
 pub mod calendars;
 pub mod contacts;
 pub mod e2e;
@@ -255,6 +256,12 @@ impl Default for Options {
     }
 }
 
+/// What a request to kernoid's own API carries.
+pub(crate) enum Body {
+    Json(Value),
+    Bytes(Vec<u8>, String),
+}
+
 /// A logged-in JMAP client: the session and the credentials, sent only to the origin the session came from.
 #[derive(Clone)]
 pub struct Client {
@@ -447,6 +454,44 @@ impl Client {
     pub async fn call(&self, using: &[&str], name: &str, arguments: Value) -> Result<Value> {
         let responses = self.request(using, vec![(name, arguments, "0")]).await?;
         responses.get("0").cloned().ok_or_else(|| Error::Protocol(format!("no response to {name}")))
+    }
+
+    /// A request to kernoid's own API (`/v1/…`, Problem Details on errors) on the origin of the session, with the
+    /// login's credentials; the answer's body, empty for `204`. `body` is JSON, or bytes with their media type.
+    pub(crate) async fn rest(&self, method: reqwest::Method, path: &str, body: Option<Body>) -> Result<String> {
+        let mut request = self
+            .http
+            .request(method, format!("{}{path}", self.origin))
+            .header("authorization", self.authorization())
+            .header("accept", "application/json");
+        request = match body {
+            Some(Body::Json(value)) => request.header("content-type", "application/json").body(value.to_string()),
+            Some(Body::Bytes(bytes, kind)) => request.header("content-type", kind).body(bytes),
+            None => request,
+        };
+        let response = request.send().await?;
+        let status = response.status().as_u16();
+        let text = limited_text(response, 4 << 20).await?;
+        match status {
+            401 => Err(Error::Unauthorized),
+            200..=299 => Ok(text),
+            status => Err(Error::Status(status, problem_detail(&text))),
+        }
+    }
+
+    /// Bytes from kernoid's own API – a picture.
+    pub(crate) async fn rest_bytes(&self, path: &str) -> Result<Vec<u8>> {
+        let response = self
+            .http
+            .get(format!("{}{path}", self.origin))
+            .header("authorization", self.authorization())
+            .send()
+            .await?;
+        match response.status().as_u16() {
+            401 => Err(Error::Unauthorized),
+            200 => Ok(response.bytes().await?.to_vec()),
+            status => Err(Error::Status(status, None)),
+        }
     }
 
     /// `<type>/set` (RFC 8620, 5.3); the first refused change fails it. `extra` adds arguments

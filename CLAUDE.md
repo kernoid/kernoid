@@ -47,7 +47,7 @@ dependencies (pnpm's default).
 `apps/client` (MIT) is kernoid's Rust SDK `kernoid-client`, async on tokio with reqwest (rustls on AWS-LC, post-quantum
 key exchange preferred): the session, method calls, uploads, downloads and push (`lib.rs`, `push.rs`); mail with
 threads, files with versions, sharing and links, calendars with scheduling, contacts (`mail`, `files`, `calendars`,
-`contacts`); end-to-end encrypted mail on `kernoid-e2e` (`e2e`); finding the server through `_jmap._tcp` (`srv`, DNS
+`contacts`); the account's everyday settings over kernoid's own API (`account`); end-to-end encrypted mail on `kernoid-e2e` (`e2e`); finding the server through `_jmap._tcp` (`srv`, DNS
 messages by hickory-proto, over tokio's sockets); iCalendar and vCard files through calcard (`transfer`); logging in with OpenID Connect as kernoid's apps do –
 PKCE, the built-in client of the apps, the scope `urn:kernoid:data`, refresh (`oidc`; `Client::connect_with_token`,
 `set_access_token`). Tests run

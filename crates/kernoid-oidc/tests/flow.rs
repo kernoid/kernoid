@@ -1228,6 +1228,21 @@ async fn kernoids_own_apps_have_a_client_on_every_instance(pool: PgPool) {
         .await
         .unwrap();
     assert!(setup.identity.data_token_login(&narrow.access_token).await.is_err());
+    // The everyday settings take the app's token – name and language here –, the password and the rest do not.
+    let instance = setup.instance.id;
+    assert_eq!(setup.identity.settings_account(instance, &tokens.access_token, true).await.unwrap().id, bob);
+    setup.identity.rename_own_account(instance, &tokens.access_token, "Bob B.").await.unwrap();
+    setup.identity.set_own_language(instance, &tokens.access_token, Some("de")).await.unwrap();
+    assert_eq!(setup.identity.own_language(instance, &tokens.access_token).await.unwrap().0.as_deref(), Some("de"));
+    assert!(setup.identity.settings_account(instance, &narrow.access_token, false).await.is_err());
+    assert!(setup.identity.settings_account(Uuid::now_v7(), &tokens.access_token, false).await.is_err());
+    assert!(
+        setup
+            .identity
+            .change_own_password(instance, &tokens.access_token, PASSWORD, "another long password")
+            .await
+            .is_err()
+    );
 
     // Other redirects than the registered ones are refused, also on loopback with another path or host.
     for wrong in ["http://127.0.0.1:53817/other", "http://localhost:53817/oauth", "dev.kernoid.other:/oauth"] {

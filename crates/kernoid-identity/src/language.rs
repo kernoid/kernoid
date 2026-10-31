@@ -55,8 +55,8 @@ impl Identity {
 
     /// The same for the token's own account.
     pub async fn set_own_language(&self, instance: Uuid, token: &str, language: Option<&str>) -> Result<()> {
-        let session = self.session(instance, token).await?;
-        self.set_account_language(session.account.id, language, &format!("account:{}", session.account.id)).await
+        let account = self.settings_account(instance, token, false).await?;
+        self.set_account_language(account.id, language, &format!("account:{}", account.id)).await
     }
 
     /// The account's own choice, and the language its emails are written in.
@@ -76,8 +76,8 @@ impl Identity {
 
     /// The language of the token's own account: its choice, and what is used.
     pub async fn own_language(&self, instance: Uuid, token: &str) -> Result<(Option<String>, String)> {
-        let session = self.session(instance, token).await?;
-        self.account_language(session.account.id).await
+        let account = self.settings_account(instance, token, false).await?;
+        self.account_language(account.id).await
     }
 
     /// Sets the language of the emails kernoid writes to the tenant's accounts that chose none; `None` for English.

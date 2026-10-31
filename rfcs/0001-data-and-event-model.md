@@ -236,8 +236,12 @@ running (`pg_snapshot_xmin`), which needs no locks between writers and readers.
   `dev.kernoid.kernoid:/oauth` and `http://127.0.0.1/oauth`, `http://[::1]/oauth` on any port. Staying logged in
   (`offline_access`) needs no consent screen for it. Other apps register applications of their own, as before.
 - The scope **`urn:kernoid:data`** lets the access token reach the account's data – JMAP, CalDAV, CardDAV, WebDAV –
-  in place of a session or an app password; what the account may do there is the same. The scope `mail` stays the
-  one for IMAP and SMTP.
+  in place of a session or an app password; what the account may do there is the same. It also changes the account's
+  everyday settings – its name, picture, language and mail settings (`PATCH /v1/account`, `/v1/account/avatar`,
+  `/v1/account/language`, `/v1/account/mail-settings`) –, so that the apps need no browser for them; never the
+  password, second factors, passkeys, app passwords, linked services, applications or sessions, which take a session
+  logged in with the password. App passwords reach none of the settings: they are given to other programs. The scope
+  `mail` stays the one for IMAP and SMTP.
 - **PKCE with S256 is required for every client** (as in OAuth 2.1); there is no implicit flow, no `plain`.
 - `authorize` checks client and redirect URI first – errors about them are shown, never redirected to – then
   parks an **auth request** (10 minutes) and sends the browser to the login UI (`<issuer>/login?authRequest=…`). The

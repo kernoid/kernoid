@@ -4157,7 +4157,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description no valid session */
+            /** @description no valid session or app token */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4276,7 +4276,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description no valid session */
+            /** @description no valid session or app token */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4311,7 +4311,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description no valid session */
+            /** @description no valid session or app token */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4722,7 +4722,7 @@ export interface operations {
                     "application/json": components["schemas"]["LanguageView"];
                 };
             };
-            /** @description no valid session */
+            /** @description no valid session or app token */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4761,7 +4761,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description no valid session */
+            /** @description no valid session or app token */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4789,7 +4789,7 @@ export interface operations {
                     "application/json": components["schemas"]["MailSettingsView"];
                 };
             };
-            /** @description no valid session */
+            /** @description no valid session or app token */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4837,7 +4837,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description no valid session */
+            /** @description no valid session or app token */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4888,7 +4888,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description no valid session */
+            /** @description no valid session or app token */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7177,7 +7177,7 @@ export interface operations {
                     "application/json": components["schemas"]["AvatarView"][];
                 };
             };
-            /** @description no valid session */
+            /** @description no valid session or app token */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7206,7 +7206,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description no valid session */
+            /** @description no valid session or app token */
             401: {
                 headers: {
                     [name: string]: unknown;

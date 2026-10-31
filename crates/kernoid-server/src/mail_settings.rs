@@ -43,7 +43,7 @@ pub(crate) struct MailSettingsChange {
 
 #[utoipa::path(get, path = "/v1/account/mail-settings", tag = "account", responses(
     (status = 200, body = MailSettingsView),
-    (status = 401, description = "no valid session", body = Problem),
+    (status = 401, description = "no valid session or app token", body = Problem),
     (status = 404, description = "the account has no mail", body = Problem),
 ))]
 pub(crate) async fn get(
@@ -52,8 +52,8 @@ pub(crate) async fn get(
     SessionToken(token): SessionToken,
 ) -> Response {
     let result = async {
-        let session = state.identity.data_session(instance.id, &token).await?;
-        let settings = mail(&state)?.settings(session.account.id).await?;
+        let account = state.identity.settings_account(instance.id, &token, true).await?;
+        let settings = mail(&state)?.settings(account.id).await?;
         Ok::<_, MailAdminError>(MailSettingsView {
             trash_retention_days: settings.trash_retention_days,
             tenant_trash_retention_days: settings.tenant_trash_retention_days,
@@ -72,7 +72,7 @@ pub(crate) async fn get(
 #[utoipa::path(put, path = "/v1/account/mail-settings", tag = "account", request_body = MailSettingsChange, responses(
     (status = 204),
     (status = 400, description = "days out of range, or an address the account may not send from", body = Problem),
-    (status = 401, description = "no valid session", body = Problem),
+    (status = 401, description = "no valid session or app token", body = Problem),
     (status = 404, description = "the account has no mail", body = Problem),
 ))]
 pub(crate) async fn set(
@@ -82,14 +82,9 @@ pub(crate) async fn set(
     Json(body): Json<MailSettingsChange>,
 ) -> Response {
     let result = async {
-        let session = state.identity.data_session(instance.id, &token).await?;
+        let account = state.identity.settings_account(instance.id, &token, true).await?;
         mail(&state)?
-            .set_settings(
-                session.account.id,
-                body.trash_retention_days,
-                body.default_from.as_deref(),
-                body.undo_send_seconds,
-            )
+            .set_settings(account.id, body.trash_retention_days, body.default_from.as_deref(), body.undo_send_seconds)
             .await?;
         Ok::<_, MailAdminError>(())
     }
@@ -112,7 +107,7 @@ pub(crate) struct MailboxName {
     request_body = MailboxName, responses(
     (status = 204),
     (status = 400, description = "too long", body = Problem),
-    (status = 401, description = "no valid session", body = Problem),
+    (status = 401, description = "no valid session or app token", body = Problem),
     (status = 404, description = "not a mailbox the account reaches", body = Problem),
 ))]
 pub(crate) async fn name_mailbox(
@@ -123,8 +118,8 @@ pub(crate) async fn name_mailbox(
     Json(body): Json<MailboxName>,
 ) -> Response {
     let result = async {
-        let session = state.identity.data_session(instance.id, &token).await?;
-        mail(&state)?.set_mailbox_name(session.account.id, store, &body.name).await?;
+        let account = state.identity.settings_account(instance.id, &token, true).await?;
+        mail(&state)?.set_mailbox_name(account.id, store, &body.name).await?;
         Ok::<_, MailAdminError>(())
     }
     .await;

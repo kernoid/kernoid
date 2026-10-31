@@ -434,6 +434,23 @@ impl Identity {
         Ok(session)
     }
 
+    /// The account of a token that may change the account's own everyday settings – its name, picture, language and
+    /// mail settings, never its password, factors, passkeys, app passwords or sessions: a session (with `data`, as
+    /// [`Identity::data_session`] checks it), or an access token of kernoid's apps with the scope
+    /// [`DATA_SCOPE`](crate::app_password::DATA_SCOPE) for an account of this instance (RFC 0003, 7).
+    pub async fn settings_account(&self, instance: Uuid, token: &str, data: bool) -> Result<AccountInfo> {
+        if token.starts_with("ks1.") {
+            let session =
+                if data { self.data_session(instance, token).await? } else { self.session(instance, token).await? };
+            return Ok(session.account);
+        }
+        let account = self.data_token_login(token).await?;
+        if account.instance != instance {
+            return Err(IdentityError::InvalidCredentials);
+        }
+        Ok(account)
+    }
+
     /// Ends the session of a valid token (logout).
     pub async fn terminate_session(&self, instance: Uuid, token: &str) -> Result<()> {
         let session = self.session(instance, token).await?;
@@ -551,8 +568,8 @@ impl Identity {
 
     /// Changes the display name of the token's own account.
     pub async fn rename_own_account(&self, instance: Uuid, token: &str, display_name: &str) -> Result<()> {
-        let session = self.session(instance, token).await?;
-        self.rename_account(session.account.id, display_name, &format!("account:{}", session.account.id)).await
+        let account = self.settings_account(instance, token, false).await?;
+        self.rename_account(account.id, display_name, &format!("account:{}", account.id)).await
     }
 
     /// Changes the password of the token's own account: needs a recent session and the current password, which is

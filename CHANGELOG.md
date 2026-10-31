@@ -11,6 +11,10 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 - The Rust SDK manages mail folders: `mail::create_mailbox`, `rename_mailbox`, `move_mailbox`, `destroy_mailbox`
   (with or without its emails) and `empty_mailbox`.
+- kernoid's apps change the account's everyday settings themselves: an access token with the scope `urn:kernoid:data`
+  now also reaches its name, picture, language and mail settings (`PATCH /v1/account`, `/v1/account/avatar`,
+  `/v1/account/language`, `/v1/account/mail-settings`, `/v1/avatars`) – never the password, second factors, passkeys,
+  app passwords or sessions, and app passwords none of them (RFC 0001). The Rust SDK has them in `account`.
 
 ## [0.2.1] – 2026-10-31
 

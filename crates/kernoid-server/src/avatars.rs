@@ -49,15 +49,15 @@ pub(crate) struct AvatarView {
 /// The pictures of the caller's tenant – which accounts have one, and their addresses.
 #[utoipa::path(get, path = "/v1/avatars", tag = "account", responses(
     (status = 200, body = Vec<AvatarView>),
-    (status = 401, description = "no valid session", body = Problem),
+    (status = 401, description = "no valid session or app token", body = Problem),
 ))]
 pub(crate) async fn list(
     State(state): State<AppState>,
     CurrentInstance(instance): CurrentInstance,
     SessionToken(token): SessionToken,
 ) -> Response {
-    let session = match state.identity.data_session(instance.id, &token).await {
-        Ok(session) => session,
+    let account = match state.identity.settings_account(instance.id, &token, true).await {
+        Ok(account) => account,
         Err(error) => return problem(error),
     };
     let rows = sqlx::query!(
@@ -68,7 +68,7 @@ pub(crate) async fn list(
            LEFT JOIN addresses a ON a.account_id = v.account_id
            WHERE v.tenant_id = $1
            GROUP BY v.account_id, v.version"#,
-        session.account.tenant,
+        account.tenant,
     )
     .fetch_all(&state.db)
     .await;
@@ -93,7 +93,7 @@ pub(crate) async fn list(
 /// The picture of an account of the caller's tenant.
 #[utoipa::path(get, path = "/v1/avatars/{account}", tag = "account", params(("account" = String, Path)), responses(
     (status = 200, description = "the picture (PNG, JPEG or WebP)"),
-    (status = 401, description = "no valid session", body = Problem),
+    (status = 401, description = "no valid session or app token", body = Problem),
     (status = 404, description = "no picture", body = Problem),
 ))]
 pub(crate) async fn get(
@@ -102,14 +102,14 @@ pub(crate) async fn get(
     SessionToken(token): SessionToken,
     Path(account): Path<Uuid>,
 ) -> Response {
-    let session = match state.identity.data_session(instance.id, &token).await {
-        Ok(session) => session,
+    let caller = match state.identity.settings_account(instance.id, &token, true).await {
+        Ok(caller) => caller,
         Err(error) => return problem(error),
     };
     let row = sqlx::query!(
         "SELECT version, media_type FROM account_avatars WHERE account_id = $1 AND tenant_id = $2",
         account,
-        session.account.tenant,
+        caller.tenant,
     )
     .fetch_optional(&state.db)
     .await;
@@ -121,7 +121,7 @@ pub(crate) async fn get(
             return Problem::new(StatusCode::SERVICE_UNAVAILABLE).into_response();
         }
     };
-    let content = match state.blobs.get(session.account.tenant, &blob_key(account, row.version)).await {
+    let content = match state.blobs.get(caller.tenant, &blob_key(account, row.version)).await {
         Ok(content) => content,
         Err(error) => {
             tracing::warn!(%error, %account, "an avatar's content cannot be read");
@@ -149,7 +149,7 @@ pub(crate) async fn get(
 #[utoipa::path(put, path = "/v1/account/avatar", tag = "account", request_body(content = Vec<u8>, content_type = "image/*"), responses(
     (status = 204),
     (status = 400, description = "not a PNG, JPEG or WebP image", body = Problem),
-    (status = 401, description = "no valid session", body = Problem),
+    (status = 401, description = "no valid session or app token", body = Problem),
     (status = 413, description = "larger than 1 MiB", body = Problem),
 ))]
 pub(crate) async fn set(
@@ -158,8 +158,8 @@ pub(crate) async fn set(
     SessionToken(token): SessionToken,
     body: Bytes,
 ) -> Response {
-    let session = match state.identity.data_session(instance.id, &token).await {
-        Ok(session) => session,
+    let account = match state.identity.settings_account(instance.id, &token, true).await {
+        Ok(account) => account,
         Err(error) => return problem(error),
     };
     if body.len() > MAX_SIZE {
@@ -168,7 +168,7 @@ pub(crate) async fn set(
     let Some(media_type) = media_type(&body) else {
         return Problem::new(StatusCode::BAD_REQUEST).detail("a picture is a PNG, JPEG or WebP image").into_response();
     };
-    let (account, tenant) = (session.account.id, session.account.tenant);
+    let (account, tenant) = (account.id, account.tenant);
     let version = Uuid::now_v7();
     let size = body.len() as i32;
     if let Err(error) = state.blobs.put(tenant, &blob_key(account, version), body).await {
@@ -204,18 +204,18 @@ pub(crate) async fn set(
 /// Removes one's own picture; the initials show again.
 #[utoipa::path(delete, path = "/v1/account/avatar", tag = "account", responses(
     (status = 204),
-    (status = 401, description = "no valid session", body = Problem),
+    (status = 401, description = "no valid session or app token", body = Problem),
 ))]
 pub(crate) async fn remove(
     State(state): State<AppState>,
     CurrentInstance(instance): CurrentInstance,
     SessionToken(token): SessionToken,
 ) -> Response {
-    let session = match state.identity.data_session(instance.id, &token).await {
-        Ok(session) => session,
+    let account = match state.identity.settings_account(instance.id, &token, true).await {
+        Ok(account) => account,
         Err(error) => return problem(error),
     };
-    let (account, tenant) = (session.account.id, session.account.tenant);
+    let (account, tenant) = (account.id, account.tenant);
     let removed = sqlx::query_scalar!("DELETE FROM account_avatars WHERE account_id = $1 RETURNING version", account)
         .fetch_optional(&state.db)
         .await;

@@ -204,7 +204,7 @@ offline grants – withdraw those on the account page, too.
 | `offline_access` | none; refresh tokens that outlive the session, for applications allowed to ask, with consent |
 | `urn:kernoid:project:roles` | `urn:kernoid:project:roles` – also without the scope if the project asserts roles |
 | `mail` | none; the access token logs a mail program in over IMAP and SMTP (`OAUTHBEARER`, `XOAUTH2`) – for an account with mail |
-| `urn:kernoid:data` | none; the access token reaches the account's data over JMAP, CalDAV, CardDAV and WebDAV (`Authorization: Bearer`) – what kernoid's apps ask for |
+| `urn:kernoid:data` | none; the access token reaches the account's data over JMAP, CalDAV, CardDAV and WebDAV (`Authorization: Bearer`) and changes its name, picture, language and mail settings – never its password, factors, passkeys, app passwords or sessions – what kernoid's apps ask for |
 | `urn:kernoid:tenant:id:<tenant id>` | none; restricts the login to accounts of that tenant |
 
 `amr` follows RFC 8176: `pwd`, `otp` (TOTP or a recovery code), `pop` (passkey), and `mfa` for more than one factor.
