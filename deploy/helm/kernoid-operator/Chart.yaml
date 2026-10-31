@@ -4,8 +4,8 @@ name: kernoid-operator
 description: The Kubernetes operator of kernoid – runs kernoid installations described as Kernoid resources.
 type: application
 # The chart follows kernoid's releases: the operator runs from kernoid's image of the same version.
-version: 0.2.1
-appVersion: "0.2.1"
+version: 0.2.2
+appVersion: "0.2.2"
 home: https://kernoid.dev/operations/#kubernetes
 sources:
   - https://github.com/kernoid/kernoid

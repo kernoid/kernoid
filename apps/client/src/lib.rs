@@ -246,7 +246,7 @@ pub fn session_url(server: Option<&str>, address: &str) -> Result<String> {
 pub struct Options {
     /// Allow plain HTTP to hosts other than this machine (the password would travel readable).
     pub allow_http: bool,
-    /// Who is asking, in `User-Agent` (`kernoid-tui/0.2.1`).
+    /// Who is asking, in `User-Agent` (`kernoid-tui/0.2.2`).
     pub user_agent: String,
 }
 

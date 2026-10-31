@@ -17,12 +17,12 @@ base64 = "0.22.1"
 bytes = "1.12.1"
 chrono = "0.4.45"
 idna = "1.1.0"
-kernoid-config = { version = "0.2.1", path = "../kernoid-config" }
-kernoid-groupware = { version = "0.2.1", path = "../kernoid-groupware" }
-kernoid-identity = { version = "0.2.1", path = "../kernoid-identity" }
-kernoid-mail = { version = "0.2.1", path = "../kernoid-mail" }
-kernoid-oidc = { version = "0.2.1", path = "../kernoid-oidc" }
-kernoid-store = { version = "0.2.1", path = "../kernoid-store" }
+kernoid-config = { version = "0.2.2", path = "../kernoid-config" }
+kernoid-groupware = { version = "0.2.2", path = "../kernoid-groupware" }
+kernoid-identity = { version = "0.2.2", path = "../kernoid-identity" }
+kernoid-mail = { version = "0.2.2", path = "../kernoid-mail" }
+kernoid-oidc = { version = "0.2.2", path = "../kernoid-oidc" }
+kernoid-store = { version = "0.2.2", path = "../kernoid-store" }
 mail-builder = "1.0.0"
 mail-auth = { version = "0.13.3", default-features = false, features = ["aws-lc-rs", "arc"] }
 mail-parser = { version = "0.11.9", features = ["full_encoding"] }

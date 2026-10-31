@@ -8,7 +8,7 @@
 
 [package]
 name = "kernoid-client"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2024"
 rust-version = "1.94"
 license = "MIT"
@@ -34,7 +34,7 @@ hickory-proto = { version = "0.26.3", default-features = false, features = ["std
 iana-time-zone = "0.1.65"
 # End-to-end encryption (RFC 0006): keys, PGP/MIME, building and reading mail in the client – kernoid's own library
 # (MIT), shared with the web app and the server.
-kernoid-e2e = { version = "0.2.1", path = "../e2e" }
+kernoid-e2e = { version = "0.2.2", path = "../e2e" }
 # HTTPS with rustls on AWS-LC and the system's trust store (rustls-platform-verifier).
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls", "http2", "json", "stream"] }
 # Named only for its feature: prefer the post-quantum key exchange X25519MLKEM768 (RFC 0006, 2).

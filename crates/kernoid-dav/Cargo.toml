@@ -17,7 +17,7 @@ chrono = "0.4.45"
 chrono-tz = "0.10.4"
 hashify = "0.2.9"
 http = "1.5.0"
-kernoid-groupware = { version = "0.2.1", path = "../kernoid-groupware" }
+kernoid-groupware = { version = "0.2.2", path = "../kernoid-groupware" }
 mail-parser = { version = "0.11.9", features = ["full_encoding"] }
 quick-xml = "0.41.0"
 serde = { version = "1.0.229", features = ["derive"] }

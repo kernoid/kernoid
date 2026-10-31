@@ -7,6 +7,13 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 ## [Unreleased]
 
+## [0.2.2] – DATE
+
+A patch release for kernoid's apps: the Rust SDK manages mail folders, and the apps' login now changes the account's
+name, picture, language and mail settings without a browser. No migration and no change to the configuration; the API
+only accepts more (the apps' access token on four settings) – upgrade by pulling the image
+`ghcr.io/kernoid/kernoid:0.2.2` (the Helm chart and the crates follow the version).
+
 ### Added
 
 - The Rust SDK manages mail folders: `mail::create_mailbox`, `rename_mailbox`, `move_mailbox`, `destroy_mailbox`
@@ -332,7 +339,8 @@ Marked `OPEN` in the documentation, among them: public links to files, resumable
 OAUTHBEARER and LDAP, IMAP `SORT` and `THREAD`, a week and a day view, an audit log in the web app, a Kubernetes
 operator – planned for 0.2.
 
-[Unreleased]: https://github.com/kernoid/kernoid/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/kernoid/kernoid/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/kernoid/kernoid/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/kernoid/kernoid/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/kernoid/kernoid/releases/tag/v0.2.0
 [0.1.0]: https://github.com/kernoid/kernoid/releases/tag/v0.1.0

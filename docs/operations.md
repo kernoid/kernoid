@@ -54,7 +54,7 @@ needs PostgreSQL and S3-compatible object storage from elsewhere, like every ins
 ```sh
 kubectl apply -f deploy/kubernetes/crd.json -f deploy/kubernetes/operator.yaml
 # or, with Helm (from a release on, the chart is published next to the image):
-#   helm install kernoid-operator oci://ghcr.io/kernoid/charts/kernoid-operator --version 0.2.1 \
+#   helm install kernoid-operator oci://ghcr.io/kernoid/charts/kernoid-operator --version 0.2.2 \
 #     -n kernoid-system --create-namespace
 kubectl create namespace kernoid
 kubectl -n kernoid create secret generic kernoid --from-literal=database-url=… --from-literal=migrate-url=… \

@@ -6,7 +6,7 @@ members = ["crates/*"]
 exclude = ["apps/e2e"]
 
 [workspace.package]
-version = "0.2.1"
+version = "0.2.2"
 edition = "2024"
 rust-version = "1.94"
 license = "AGPL-3.0-or-later"

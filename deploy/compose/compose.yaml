@@ -8,7 +8,7 @@ name: kernoid
 services:
   kernoid:
     # The released image; KERNOID_IMAGE picks another, e.g. one built from this checkout (docs: Getting started).
-    image: ${KERNOID_IMAGE:-ghcr.io/kernoid/kernoid:0.2.1}
+    image: ${KERNOID_IMAGE:-ghcr.io/kernoid/kernoid:0.2.2}
     pull_policy: missing
     depends_on:
       migrate: { condition: service_completed_successfully }
@@ -51,7 +51,7 @@ services:
   # Brings the schema up to date before kernoid starts; with several kernoid processes it runs once. Only this
   # step knows the owner's password.
   migrate:
-    image: ${KERNOID_IMAGE:-ghcr.io/kernoid/kernoid:0.2.1}
+    image: ${KERNOID_IMAGE:-ghcr.io/kernoid/kernoid:0.2.2}
     pull_policy: missing
     command: ["migrate"]
     depends_on:

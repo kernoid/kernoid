@@ -11,7 +11,7 @@
 **kernoid** is one self-hostable system for an organisation's core: an account is created once and is at the same
 time the mailbox, the login for single sign-on and the owner of files. Free software in Rust – everything included.
 
-> **Status:** 0.2.1, a pre-release – identity and single sign-on (OpenID Connect, SAML and OIDC federation, SCIM),
+> **Status:** 0.2.2, a pre-release – identity and single sign-on (OpenID Connect, SAML and OIDC federation, SCIM),
 > mail (SMTP, JMAP, IMAP) with end-to-end encryption, calendars and contacts (CalDAV, CardDAV, JMAP), files (JMAP,
 > WebDAV, drives, public links), LDAP for older software, a Kubernetes operator, virus scanning and Jitsi as the first
 > modules, a web app with administration and a terminal app; the Rust SDK on crates.io (`kernoid-client`). For trying
