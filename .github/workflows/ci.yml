@@ -431,7 +431,8 @@ jobs:
           done
 
   # An installation of the last release, with mail and a file in it, upgraded to the image just pushed: the schema
-  # migrated to the newest migration, the data still there (scripts/upgrade-check.sh).
+  # migrated to the newest migration, the data still there (scripts/upgrade-check.sh). The image is the one this run
+  # pushed – `sha-<commit>` from main, the version from a tag (a tag's run pushes no `sha-` tag).
   upgrade:
     needs: manifest
     runs-on: ubuntu-latest
@@ -441,4 +442,8 @@ jobs:
           fetch-depth: 0
       - run: |
           from=$(git describe --tags --abbrev=0 --match 'v*' HEAD^)
-          scripts/upgrade-check.sh "$from" "ghcr.io/kernoid/kernoid:sha-${{ github.sha }}"
+          case "$GITHUB_REF" in
+            refs/tags/v*) image="ghcr.io/kernoid/kernoid:${GITHUB_REF_NAME#v}" ;;
+            *) image="ghcr.io/kernoid/kernoid:sha-${{ github.sha }}" ;;
+          esac
+          scripts/upgrade-check.sh "$from" "$image"
