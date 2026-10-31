@@ -12,8 +12,9 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+smallvec = "1.16.3"
 ahash = "0.8.12"
-calcard = "0.3.14"
+calcard = { version = "1.0.1", path = "../calcard" }
 chrono = { version = "0.4.45", features = ["serde"] }
 chrono-tz = "0.10.4"
 kernoid-mail = { version = "0.2.0", path = "../kernoid-mail" }

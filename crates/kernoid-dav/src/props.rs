@@ -540,7 +540,7 @@ fn vtimezone(name: &str) -> Option<String> {
     let text = |property, value: &str| ICalendarEntry {
         name: property,
         params: vec![],
-        values: vec![ICalendarValue::Text(value.into())],
+        values: smallvec::smallvec![ICalendarValue::Text(value.into())],
     };
     let mut ical = ICalendar {
         components: vec![ICalendarComponent {

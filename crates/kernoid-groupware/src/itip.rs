@@ -146,7 +146,7 @@ impl Groupware {
                     component.entries.push(ICalendarEntry {
                         name: ICalendarProperty::Organizer,
                         params: vec![],
-                        values: vec![ICalendarValue::Text(format!("mailto:{own}"))],
+                        values: [ICalendarValue::Text(format!("mailto:{own}"))].into(),
                     });
                 }
             }
@@ -168,7 +168,7 @@ impl Groupware {
                     .map_err(scheduling)?
                 {
                     MergeResult::Actions(changes) => {
-                        itip_merge_changes(&mut ical, &itip, changes);
+                        itip_merge_changes(&mut ical, &itip, changes).map_err(scheduling)?;
                         self.replace_event(account, event.id, &ical.to_string(), true).await?;
                         self.notify(account, Some(event.id), "updated", &sender, &itip).await?;
                         Ok(0)

@@ -8,7 +8,8 @@ from each; every file says the same in its SPDX header and its first lines. The 
 ## Stalwart
 
 [Stalwart](https://github.com/stalwartlabs/stalwart) by Stalwart Labs LLC – mail and collaboration server. Code was
-taken from **v0.16.27**, once, and changed for kernoid; it is not merged again. Only files under `AGPL-3.0-only OR
+taken from **v0.16.27**, once, and changed for kernoid; it is not merged again – except calcard and jmap-tools,
+taken from the repository at commit `23b6975` (2026-10-28, their v1.0.1) after they moved there from crates.io. Only files under `AGPL-3.0-only OR
 LicenseRef-SEL` were taken, under `AGPL-3.0-only`, with Stalwart's copyright (`2020 Stalwart Labs LLC`); nothing under
 the Stalwart Enterprise License, which `scripts/check-sel.sh` enforces.
 
@@ -19,6 +20,8 @@ the Stalwart Enterprise License, which `scripts/check-sel.sh` enforces.
 | `crates/kernoid-imap/src/proto/` | `crates/imap-proto` – IMAP requests and responses |
 | `crates/kernoid-dav/src/proto/` | `crates/dav-proto` – WebDAV, CalDAV and CardDAV requests and responses |
 | `crates/kernoid-groupware/src/scheduling/` | `crates/groupware/src/scheduling` – iTIP (RFC 5546) |
+| `crates/calcard/` | `crates/calcard` – iCalendar, vCard, JSCalendar, JSContact (its files from rust-rrule and bttf keep their licences) |
+| `crates/jmap-tools/` | `crates/jmap-tools` – JMAP objects with JSON Pointer (its JSON files from serde_json_borrow keep their licence) |
 
 **Derived** – written for kernoid's storage, following Stalwart's logic:
 
@@ -32,7 +35,8 @@ the Stalwart Enterprise License, which `scripts/check-sel.sh` enforces.
 | `crates/kernoid-dav/src/query.rs` | calendar and contact queries in `crates/dav/src/calendar/query.rs`, `card/query.rs` |
 
 **Libraries** of Stalwart Labs that kernoid uses as they are: `mail-parser`, `mail-auth`, `mail-builder`,
-`smtp-proto` and `calcard` (Apache-2.0 OR MIT), `sieve-rs` (AGPL-3.0-only).
+`smtp-proto` (Apache-2.0 OR MIT), `sieve-rs` (AGPL-3.0-only). The SDK `kernoid-client` (MIT) uses `calcard` 0.3.14, its last
+release on crates.io (Apache-2.0 OR MIT).
 
 ## ZITADEL
 

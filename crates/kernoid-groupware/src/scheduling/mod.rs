@@ -8,7 +8,8 @@
 //! message (RFC 5546) changes an event. Taken over from Stalwart's `crates/groupware/src/scheduling` (v0.16.27):
 //! pure functions over calcard's objects. Changed for kernoid: the queueing of messages through Stalwart's task
 //! registry and the localised email texts (`format.rs`) left out – kernoid sends through its own queue (`send.rs`);
-//! `decode_mailto_address`, `extract_addr_spec` and a simpler `sanitize_email` included here.
+//! `decode_mailto_address`, `extract_addr_spec` and a simpler `sanitize_email` included here; adapted to calcard 1.0.1
+//! (values in a `SmallVec`, dates unboxed, a removal of components that fails is an error, as in Stalwart now).
 
 use ahash::{AHashMap, AHashSet};
 use calcard::{
@@ -333,7 +334,7 @@ impl ItipDateTime<'_> {
         ICalendarEntry {
             name,
             params: self.tz_id.map(|tz_id| vec![ICalendarParameter::tzid(tz_id.to_string())]).unwrap_or_default(),
-            values: vec![ICalendarValue::PartialDateTime(Box::new(self.date.clone()))],
+            values: [ICalendarValue::PartialDateTime(self.date.clone())].into(),
         }
     }
 }

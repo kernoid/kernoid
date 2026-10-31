@@ -12,7 +12,7 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-calcard = "0.3.14"
+calcard = { version = "1.0.1", path = "../calcard" }
 chrono-tz = "0.10.4"
 bytes = "1.12.1"
 chrono = { version = "0.4.45", features = ["serde"] }

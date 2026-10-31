@@ -61,3 +61,12 @@ path = "crates/kernoid-dav/resources/**"
 precedence = "override"
 SPDX-FileCopyrightText = "2020 Stalwart Labs LLC <hello@stalw.art>"
 SPDX-License-Identifier = "AGPL-3.0-only"
+
+# jmap-tools' JSON value has no header in Stalwart's repository either (commit 23b6975). Its siblings in that folder
+# come from Pascal Seitz's serde_json_borrow under Apache-2.0 OR MIT, Stalwart changed them: both licences named, as
+# kernoid takes Stalwart's part under AGPL-3.0-only. OPEN: which licence Stalwart means for the file.
+[[annotations]]
+path = "crates/jmap-tools/src/json/value.rs"
+precedence = "override"
+SPDX-FileCopyrightText = ["2021 Pascal Seitz <pascal.seitz@gmail.com>", "2020 Stalwart Labs LLC <hello@stalw.art>"]
+SPDX-License-Identifier = "(Apache-2.0 OR MIT) AND AGPL-3.0-only"

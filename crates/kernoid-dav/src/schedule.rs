@@ -99,7 +99,7 @@ pub(crate) async fn outbox_post(dav: &Dav, user: &PrincipalInfo, body: &[u8]) ->
                         ICalendarEntry {
                             name: ICalendarProperty::Uid,
                             params: vec![],
-                            values: vec![ICalendarValue::Text(uid.clone())],
+                            values: smallvec::smallvec![ICalendarValue::Text(uid.clone())],
                         },
                         attendee.clone(),
                         request.property(&ICalendarProperty::Organizer).cloned().expect("checked"),
@@ -109,7 +109,7 @@ pub(crate) async fn outbox_post(dav: &Dav, user: &PrincipalInfo, body: &[u8]) ->
                         root.entries.push(ICalendarEntry {
                             name: ICalendarProperty::Method,
                             params: vec![],
-                            values: vec![ICalendarValue::Text("REPLY".into())],
+                            values: smallvec::smallvec![ICalendarValue::Text("REPLY".into())],
                         });
                     }
                     item.request_status = Cow::Borrowed("2.0;Success");

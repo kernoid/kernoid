@@ -20,8 +20,10 @@ scheduling ([RFC 6638](https://www.rfc-editor.org/rfc/rfc6638)), CardDAV
 
 - **iCalendar and vCard** are parsed, written, expanded (recurrences) and converted to JSCalendar
   ([RFC 8984](https://www.rfc-editor.org/rfc/rfc8984)) and JSContact ([RFC 9553](https://www.rfc-editor.org/rfc/rfc9553))
-  by [calcard](https://crates.io/crates/calcard) (Apache-2.0 OR MIT, by Stalwart Labs) – kernoid has no parser of
-  its own for these formats.
+  by calcard (by Stalwart Labs) – kernoid has no parser of its own for these formats. calcard moved into Stalwart's
+  repository (`crates/calcard`, `AGPL-3.0-only OR LicenseRef-SEL`) after 0.3.14, its last release on crates.io under
+  Apache-2.0 OR MIT; kernoid takes it over from there (v1.0.1, `crates/calcard`, with `crates/jmap-tools`) under
+  `AGPL-3.0-only`. The MIT SDK keeps 0.3.14.
 - **The WebDAV, CalDAV and CardDAV protocol** – parsing requests and writing responses in XML, and headers – is
   taken over from Stalwart (`crates/dav-proto`), as it is, like IMAP's (RFC 0002, 11.2). So is the logic of
   **scheduling** (`crates/groupware/src/scheduling`: what an organizer or attendee sends when an event changes, and
@@ -64,9 +66,8 @@ What PostgreSQL holds in the clear is what finding needs, protected like the res
   contact by address.
 
 Everything else – text matches, exact times of recurring instances – is decided in kernoid after opening the
-candidates the index finds. Recurrences are expanded by calcard; for objects whose start is in UTC kernoid expands
-in UTC, since calcard 0.3.14 would place their instances in the calendar's time zone (**OPEN:** report upstream). Limits: 1 MiB per object; at most 3 000 instances of a recurrence are expanded for one
-query (the rest is not matched).
+candidates the index finds. Recurrences are expanded by calcard, in the calendar's time zone for floating times.
+Limits: 1 MiB per object; at most 3 000 instances of a recurrence are expanded for one query (the rest is not matched).
 
 ## 4. Calendars and events
 
@@ -198,8 +199,7 @@ with the same states (one `modseq` per account) and push.
   - calcard writes an override as a component with only what it changes, so an override without a duration of its
     own takes the series' duration when it is stored – otherwise a moved instance would last to the end of its day;
   - a video meeting (the module `jitsi`, docs: Modules) is a `virtualLocations` entry, iCalendar `CONFERENCE`, which
-    the web app also adds as a line in the description for calendar programs that show no conference. calcard
-    writes `CONFERENCE` without `VALUE=URI` (**OPEN:** report upstream);
+    the web app also adds as a line in the description for calendar programs that show no conference;
   - `shareWith` is null: sharing is changed through the administration API (section 9). **OPEN:** JMAP Sharing.
 
 ### 8.3 The web app

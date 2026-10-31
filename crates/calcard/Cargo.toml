@@ -1,0 +1,45 @@
+# SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
+# SPDX-License-Identifier: AGPL-3.0-only
+# Taken over from Stalwart's crates/calcard (v1.0.1); versions of the dependencies as kernoid uses them (mail-parser
+# 0.11 instead of 1.0, which is younger than two weeks: see src/common/decode.rs).
+[package]
+name = "calcard"
+description = "iCalendar/JSCalendar and vCard/JSContact parsing, building and conversion library"
+version = "1.0.1"
+edition.workspace = true
+rust-version.workspace = true
+license = "AGPL-3.0-only"
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+jmap-tools = { version = "1.0.1", path = "../jmap-tools", optional = true }
+ahash = "0.8.12"
+jiff = "0.2.38"
+hashify = "0.3.1"
+memchr = "2.8.0"
+encodify = "1.0.2"
+mail-parser = { version = "0.11.9", features = ["full_encoding"] }
+simdutf8 = "0.1.5"
+smallvec = { version = "1.16.3", features = ["union"] }
+uuid = { version = "1.28.0", default-features = false, optional = true }
+sha1 = { version = "0.11.0", default-features = false, optional = true }
+rkyv = { version = "0.8.18", optional = true, features = ["smallvec-1"] }
+serde = { version = "1.0.229", features = ["derive"], optional = true }
+serde_json = { version = "1.0.154", optional = true }
+
+[target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
+jiff = { version = "0.2.38", features = ["js"] }
+
+[features]
+default = ["jmap", "tzdb-bundle"]
+rkyv = ["dep:rkyv"]
+serde = ["dep:serde", "smallvec/serde"]
+jmap = ["jmap-tools", "uuid", "sha1", "serde", "serde_json"]
+tzdb-bundle = ["jiff/tzdb-bundle-always"]
+
+[lib]
+doctest = false

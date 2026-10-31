@@ -16,7 +16,7 @@ use calcard::{
     icalendar::{
         ICalendar, ICalendarComponent, ICalendarComponentType, ICalendarEntry, ICalendarFreeBusyType,
         ICalendarParameter, ICalendarParameterName, ICalendarPeriod, ICalendarProperty, ICalendarStatus,
-        ICalendarTransparency, ICalendarValue, dates::TimeOrDelta,
+        ICalendarTransparency, ICalendarValue,
     },
     vcard::{VCard, VCardEntry, VCardParameterName, VCardProperty, VCardVersion},
 };
@@ -43,16 +43,13 @@ pub struct Instance {
 
 /// The instances of an object's components that meet `range` (or all, up to the limit).
 pub fn instances(ical: &ICalendar, default_tz: Tz, range: Option<TimeRange>) -> Vec<Instance> {
-    let expanded = ical.expand_dates(kernoid_groupware::ical::expansion_tz(ical, default_tz), MAX_INSTANCES);
+    let expanded = ical.expand_dates(default_tz, MAX_INSTANCES);
     expanded
         .events
         .into_iter()
         .map(|event| {
             let start = event.start.timestamp();
-            let end = match event.end {
-                TimeOrDelta::Time(end) => end.timestamp(),
-                TimeOrDelta::Delta(delta) => start + delta.num_seconds(),
-            };
+            let end = event.end.timestamp();
             Instance { comp_id: event.comp_id, start, end: end.max(start) }
         })
         .filter(|instance| range.is_none_or(|range| range.is_in_range(false, instance.start, instance.end)))
@@ -223,7 +220,8 @@ fn write_entry(out: &mut String, entry: &ICalendarEntry, with_value: bool) {
     if with_value {
         let _ = entry.write_to(out);
     } else {
-        let empty = ICalendarEntry { name: entry.name.clone(), params: entry.params.clone(), values: Vec::new() };
+        let empty =
+            ICalendarEntry { name: entry.name.clone(), params: entry.params.clone(), values: Default::default() };
         let _ = empty.write_to(out);
     }
 }
@@ -323,9 +321,9 @@ pub fn serialize_ical(
                         let mut entry = ICalendarEntry {
                             name: ICalendarProperty::Dtstart,
                             params: vec![],
-                            values: vec![ICalendarValue::PartialDateTime(Box::new(
-                                PartialDateTime::from_utc_timestamp(instance.start),
-                            ))],
+                            values: smallvec::smallvec![ICalendarValue::PartialDateTime(
+                                PartialDateTime::from_utc_timestamp(instance.start)
+                            )],
                         };
                         let _ = entry.write_to(&mut out);
                         if is_recurrent_or_override {
@@ -334,9 +332,9 @@ pub fn serialize_ical(
                         }
                         if !has_duration {
                             entry.name = ICalendarProperty::Dtend;
-                            entry.values = vec![ICalendarValue::PartialDateTime(Box::new(
-                                PartialDateTime::from_utc_timestamp(instance.end),
-                            ))];
+                            entry.values = smallvec::smallvec![ICalendarValue::PartialDateTime(
+                                PartialDateTime::from_utc_timestamp(instance.end)
+                            )];
                             let _ = entry.write_to(&mut out);
                         }
                         for (entry, with_value) in &entries {
@@ -442,17 +440,16 @@ pub fn serialize_vcard(card: &VCard, props: &[CardDavPropertyName], version: VCa
         let _ = card.write_to(&mut out, version);
         return out;
     }
-    let is_v4 = matches!(version, VCardVersion::V4_0);
     let _ = write!(&mut out, "BEGIN:VCARD\r\n");
     for entry in &card.entries {
         if let Some(item) = props.iter().find(|item| entry.name == item.name && entry.group == item.group) {
             if item.name == VCardProperty::Version {
                 let _ = write!(&mut out, "VERSION:{version}\r\n");
             } else if item.no_value {
-                let empty = VCardEntry { values: Vec::new(), ..entry.clone() };
-                let _ = empty.write_to(&mut out, is_v4);
+                let empty = VCardEntry { values: Default::default(), ..entry.clone() };
+                let _ = empty.write_with_version(&mut out, version);
             } else {
-                let _ = entry.write_to(&mut out, is_v4);
+                let _ = entry.write_with_version(&mut out, version);
             }
         }
     }
@@ -489,7 +486,7 @@ pub fn busy_times(
     }
 }
 
-fn merge_intervals(mut intervals: Vec<(i64, i64)>) -> Vec<ICalendarValue> {
+fn merge_intervals(mut intervals: Vec<(i64, i64)>) -> smallvec::SmallVec<[ICalendarValue; 1]> {
     intervals.sort_unstable_by_key(|interval| interval.0);
     let mut merged: Vec<(i64, i64)> = Vec::with_capacity(intervals.len());
     for (start, end) in intervals {
@@ -501,10 +498,10 @@ fn merge_intervals(mut intervals: Vec<(i64, i64)>) -> Vec<ICalendarValue> {
     merged
         .into_iter()
         .map(|(start, end)| {
-            ICalendarValue::Period(ICalendarPeriod::Range {
+            ICalendarValue::Period(Box::new(ICalendarPeriod::Range {
                 start: PartialDateTime::from_utc_timestamp(start),
                 end: PartialDateTime::from_utc_timestamp(end),
-            })
+            }))
         })
         .collect()
 }
@@ -515,16 +512,19 @@ pub fn freebusy_object(
     busy: HashMap<ICalendarFreeBusyType, Vec<(i64, i64)>>,
     extra: Vec<ICalendarEntry>,
 ) -> ICalendar {
-    let time =
-        |timestamp: i64| ICalendarValue::PartialDateTime(Box::new(PartialDateTime::from_utc_timestamp(timestamp)));
+    let time = |timestamp: i64| ICalendarValue::PartialDateTime(PartialDateTime::from_utc_timestamp(timestamp));
     let mut entries = vec![
         ICalendarEntry {
             name: ICalendarProperty::Dtstamp,
             params: vec![],
-            values: vec![time(chrono::Utc::now().timestamp())],
+            values: smallvec::smallvec![time(chrono::Utc::now().timestamp())],
         },
-        ICalendarEntry { name: ICalendarProperty::Dtstart, params: vec![], values: vec![time(range.start)] },
-        ICalendarEntry { name: ICalendarProperty::Dtend, params: vec![], values: vec![time(range.end)] },
+        ICalendarEntry {
+            name: ICalendarProperty::Dtstart,
+            params: vec![],
+            values: smallvec::smallvec![time(range.start)],
+        },
+        ICalendarEntry { name: ICalendarProperty::Dtend, params: vec![], values: smallvec::smallvec![time(range.end)] },
     ];
     entries.extend(extra);
     let mut busy: Vec<_> = busy.into_iter().collect();
@@ -544,12 +544,12 @@ pub fn freebusy_object(
                     ICalendarEntry {
                         name: ICalendarProperty::Version,
                         params: vec![],
-                        values: vec![ICalendarValue::Text("2.0".into())],
+                        values: smallvec::smallvec![ICalendarValue::Text("2.0".into())],
                     },
                     ICalendarEntry {
                         name: ICalendarProperty::Prodid,
                         params: vec![],
-                        values: vec![ICalendarValue::Text(crate::PROD_ID.into())],
+                        values: smallvec::smallvec![ICalendarValue::Text(crate::PROD_ID.into())],
                     },
                 ],
                 component_ids: vec![1],

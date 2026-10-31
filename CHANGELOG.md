@@ -7,6 +7,12 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 ## [Unreleased]
 
+### Changed
+
+- calcard, the library for iCalendar, vCard, JSCalendar and JSContact, moved into Stalwart's repository after 0.3.14;
+  kernoid takes over its v1.0.1 (`crates/calcard`, `crates/jmap-tools`, `AGPL-3.0-only`). Recurrences with a start in
+  UTC keep their time without a workaround, and `CONFERENCE` is written with `VALUE=URI` (RFC 7986).
+
 ## [0.2.0] – 2026-10-30
 
 The core completed, still a pre-release. Files gain public links and drop boxes, uploads in pieces, versions shared

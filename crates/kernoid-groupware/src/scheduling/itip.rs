@@ -24,17 +24,17 @@ pub(crate) fn itip_build_envelope(method: ICalendarMethod) -> ICalendarComponent
             ICalendarEntry {
                 name: ICalendarProperty::Version,
                 params: vec![],
-                values: vec![ICalendarValue::Text("2.0".to_string())],
+                values: [ICalendarValue::Text("2.0".to_string())].into(),
             },
             ICalendarEntry {
                 name: ICalendarProperty::Prodid,
                 params: vec![],
-                values: vec![ICalendarValue::Text(PROD_ID.to_string())],
+                values: [ICalendarValue::Text(PROD_ID.to_string())].into(),
             },
             ICalendarEntry {
                 name: ICalendarProperty::Method,
                 params: vec![],
-                values: vec![ICalendarValue::Method(method)],
+                values: [ICalendarValue::Method(method)].into(),
             },
         ],
         component_ids: Default::default(),
@@ -64,7 +64,7 @@ pub fn itip_assign_organizer(ical: &mut ICalendar, organizer_address: &str) -> b
             component.entries.push(ICalendarEntry {
                 name: ICalendarProperty::Organizer,
                 params: vec![],
-                values: vec![ICalendarValue::Text(format!("mailto:{organizer_address}"))],
+                values: [ICalendarValue::Text(format!("mailto:{organizer_address}"))].into(),
             });
             assigned = true;
         }
@@ -294,7 +294,10 @@ pub(crate) fn itip_export_component(
         comp.entries.push(ICalendarEntry {
             name: ICalendarProperty::RequestStatus,
             params: vec![],
-            values: vec![ICalendarValue::Text("2.0".to_string()), ICalendarValue::Text("Success".to_string())],
+            values: smallvec::smallvec![
+                ICalendarValue::Text("2.0".to_string()),
+                ICalendarValue::Text("Success".to_string())
+            ],
         });
     }
 
@@ -321,7 +324,7 @@ pub(crate) fn itip_finalize(ical: &mut ICalendar, scheduling_object_ids: &[u16])
                 if let Some(ICalendarValue::Integer(seq)) = entry.values.first_mut() {
                     *seq += 1;
                 } else {
-                    entry.values = vec![ICalendarValue::Integer(1)];
+                    entry.values = [ICalendarValue::Integer(1)].into();
                 }
                 found_sequence = true;
                 break;

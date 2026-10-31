@@ -48,7 +48,7 @@ pub(crate) fn card_text(text: &str) -> String {
 pub(crate) fn json_to_card(object: &Map<String, Value>) -> Result<String, String> {
     let json = serde_json::to_string(object).map_err(|error| error.to_string())?;
     let card: JSContact<'_, String, String> = JSContact::parse(&json)?;
-    let card = card.into_vcard().ok_or("not a contact card")?;
+    let card = card.into_vcard().map_err(|error| error.to_string())?;
     let mut out = String::new();
     card.write_to(&mut out, VCardVersion::V4_0).map_err(|error| error.to_string())?;
     Ok(out)
@@ -96,7 +96,7 @@ pub(crate) fn json_to_event(object: &Map<String, Value>) -> Result<String, Strin
     };
     let json = serde_json::to_string(object).map_err(|error| error.to_string())?;
     let event: JSCalendar<'_, String, String> = JSCalendar::parse(&json)?;
-    let ical = event.into_icalendar().ok_or("not a calendar object")?;
+    let ical = event.into_icalendar().map_err(|error| error.to_string())?;
     Ok(ical.to_string())
 }
 
@@ -191,5 +191,19 @@ mod tests {
         let text = card_text(card);
         assert!(text.contains("ada lovelace") && text.contains("ada@example.org"));
         assert!(!text.contains("vcard") && !text.contains("carrot"));
+    }
+
+    #[test]
+    fn a_virtual_location_is_written_as_a_conference_uri() {
+        let object: Map<String, Value> = serde_json::from_str(
+            r#"{"@type":"Event","uid":"c","start":"2026-11-02T10:00:00","timeZone":"Europe/Berlin","duration":"PT1H",
+                "title":"Call","virtualLocations":{"v1":{"@type":"VirtualLocation","uri":"https://meet.example.org/room",
+                "features":{"video":true}}}}"#,
+        )
+        .unwrap();
+        let ical = json_to_event(&object).unwrap();
+        // RFC 7986, 5.11: CONFERENCE has no default value type.
+        let line = ical.lines().find(|line| line.starts_with("CONFERENCE")).unwrap();
+        assert!(line.contains("VALUE=URI") && line.ends_with(":https://meet.example.org/room"), "{line}");
     }
 }

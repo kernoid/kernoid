@@ -119,17 +119,13 @@ fn recurs(text: &str) -> bool {
 /// The instances of an iCalendar object as (start, end) in seconds since 1970, in a time window.
 fn instances(text: &str, default_tz: Tz, after: Option<i64>, before: Option<i64>) -> Vec<(i64, i64)> {
     let Entry::ICalendar(parsed) = Parser::new(text).entry() else { return Vec::new() };
-    let expanded = parsed.expand_dates(ical::expansion_tz(&parsed, default_tz), ical::MAX_INSTANCES);
+    let expanded = parsed.expand_dates(default_tz, ical::MAX_INSTANCES);
     let mut out: Vec<(i64, i64)> = expanded
         .events
         .into_iter()
         .map(|event| {
             let start = event.start.timestamp();
-            let end = match event.end {
-                calcard::icalendar::dates::TimeOrDelta::Time(end) => end.timestamp(),
-                calcard::icalendar::dates::TimeOrDelta::Delta(delta) => start + delta.num_seconds(),
-            };
-            (start, end.max(start))
+            (start, event.end.timestamp().max(start))
         })
         .filter(|(start, end)| after.is_none_or(|after| *end > after) && before.is_none_or(|before| *start < before))
         .collect();

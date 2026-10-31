@@ -13,6 +13,7 @@ can run on its own.
 | Crate | Depends on | Holds |
 |---|---|---|
 | `kernoid-config` | – | `Config`, `Role`, `Secret` |
+| `calcard`, `jmap-tools` | – | iCalendar, vCard, JSCalendar, JSContact and JMAP objects – Stalwart's libraries, taken over at v1.0.1 (`AGPL-3.0-only`) |
 | `kernoid-store` | config | PostgreSQL pool, `MIGRATOR` (all migrations, one history), `migrate` (owner → runtime grants), `BlobStore`, `TenantKeys`, `crypto`, `lock` (advisory locks for work one process does at a time), `garbage` (objects to remove once nothing needs them), `parts` (content of any size streamed in sealed parts of 8 MiB), `scan` (the hook of a malware scanner: content of tenants that switched its module on is scanned as `parts` stores it, mail with `check_bytes` before it is accepted) |
 | `kernoid-events` | sqlx | `EventStore`: append with expected sequence, load an aggregate, read all by cursor; `projection::{Projection, Runner}` |
 | `kernoid-identity` | events, store | `Identity`: instance, tenant and account aggregates with inline read models (`instances`, `instance_domains`, `tenants`, `tenant_domains`, `tenant_modules`, `accounts`, `addresses`), `account_passwords`, `DomainName`, `Address`, DNS verification (`TxtLookup`), `authenticate`, sessions, TOTP (`mfa`), passkeys (`passkey`, webauthn-rs), groups (`group`), roles and permissions (`role`: built in, a tenant's own, instance roles), projects and authorizations (`project`), app passwords and mail logins (`app_password`), shared mailboxes, grants on mail and quotas (`mail_access`), files quotas, drives and grants on files (`files_quota`), logins by address, username or contact address (`login`), services and their rules (`services`), registration (`registration`), end-to-end encryption (`openpgp`, RFC 0006: accounts' OpenPGP keys and the protected copies of their secret keys – read through `kernoid-e2e` –, mail encrypted on arrival, the tenant's policy and recovery key, what WKD serves), administration with permission checks (`admin`, used by REST and GraphQL alike) |
@@ -171,8 +172,10 @@ and end-to-end encryption, [0007](rfcs/0007-push-notifications.md) push notifica
   only, checked for DNS and redirects) – never through a client of one's own. MTA-STS policies use its client
   without redirects; SMTP connections of the queue go only to public addresses (`outbound::is_public`).
 - **iCalendar and vCard only through calcard** – parsing, writing, recurrences, JSCalendar and JSContact; no own
-  parsers of these formats. calcard 0.3.14 reads a UTC start as local time in the default time zone when it expands recurrences:
-  `ical::expansion_tz` works around it.
+  parsers of these formats. calcard is Stalwart's, taken over as it is into `crates/calcard` (with `crates/jmap-tools`,
+  both `AGPL-3.0-only`, formatted with rustfmt's defaults as there); change it only where kernoid's dependencies need it
+  and say so in the file. The MIT SDK (`apps/client`) stays on calcard 0.3.14 from crates.io – nothing from
+  `crates/calcard` may go there.
 - **Mail authentication only through mail-auth** (SPF, DKIM, DMARC, ARC, iprev) and SMTP parsing only through
   smtp-proto, Sieve only through sieve-rs – no own parsers of these records, signatures or protocols.
 - **WebAuthn only through webauthn-rs** – no own parsing of WebAuthn, CBOR or COSE. It needs OpenSSL (`pkg-config`,

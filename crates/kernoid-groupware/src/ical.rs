@@ -4,8 +4,8 @@
 
 use calcard::{
     Entry, Parser,
-    common::timezone::Tz,
-    icalendar::{ICalendar, ICalendarComponentType, ICalendarProperty, dates::TimeOrDelta},
+    common::timezone::{Tz, ZonedDateTime},
+    icalendar::{ICalendar, ICalendarComponentType, ICalendarProperty},
     vcard::{VCard, VCardProperty},
 };
 use chrono::{DateTime, Utc};
@@ -83,32 +83,14 @@ pub fn parse_event(text: &str, default_tz: Tz) -> Result<ParsedEvent> {
     Ok(ParsedEvent { ical, uid, component, span, organizer })
 }
 
-/// The time zone to expand an object's recurrences in. calcard 0.3.14 reads a start in UTC (`…Z`, no `TZID`) as
-/// local time in the default time zone, so that every instance moves by that zone's offset – and by another hour
-/// across a change of daylight saving time; for such objects UTC is the default. OPEN: reported to calcard?
-pub fn expansion_tz(ical: &ICalendar, default_tz: Tz) -> Tz {
-    use calcard::icalendar::{ICalendarParameterName, ICalendarValue};
-    let utc_start = ical.components.iter().filter(|comp| comp.component_type.has_time_ranges()).any(|comp| {
-        comp.property(&ICalendarProperty::Dtstart).is_some_and(|entry| {
-            !entry.params.iter().any(|param| param.name == ICalendarParameterName::Tzid)
-                && matches!(entry.values.first(), Some(ICalendarValue::PartialDateTime(date)) if date.tz_hour.is_some())
-        })
-    });
-    if utc_start { Tz::UTC } else { default_tz }
-}
-
 /// The span of an object's instances (RFC 0004, 3).
 pub fn span(ical: &ICalendar, default_tz: Tz) -> Option<(DateTime<Utc>, Option<DateTime<Utc>>)> {
-    let expanded = ical.expand_dates(expansion_tz(ical, default_tz), MAX_INSTANCES);
+    let expanded = ical.expand_dates(default_tz, MAX_INSTANCES);
     let endless = expanded.events.len() >= MAX_INSTANCES;
     let mut first: Option<DateTime<Utc>> = None;
     let mut last: Option<DateTime<Utc>> = None;
     for event in &expanded.events {
-        let start = event.start.with_timezone(&Utc);
-        let end = match &event.end {
-            TimeOrDelta::Time(end) => end.with_timezone(&Utc),
-            TimeOrDelta::Delta(delta) => start + *delta,
-        };
+        let (Some(start), Some(end)) = (utc(event.start), utc(event.end)) else { continue };
         first = Some(first.map_or(start, |first| first.min(start)));
         last = Some(last.map_or(end, |last| last.max(end)));
     }
@@ -116,9 +98,15 @@ pub fn span(ical: &ICalendar, default_tz: Tz) -> Option<(DateTime<Utc>, Option<D
     Some((first, if endless { None } else { last.map(|last| last.max(first)) }))
 }
 
+/// An instant of calcard as a time in UTC.
+pub fn utc(time: ZonedDateTime) -> Option<DateTime<Utc>> {
+    let time = time.to_timestamp();
+    DateTime::from_timestamp(time.as_second(), time.subsec_nanosecond().unsigned_abs())
+}
+
 /// The time zone named by a calendar, or UTC.
 pub fn time_zone(name: Option<&str>) -> Tz {
-    name.and_then(|name| name.parse::<chrono_tz::Tz>().ok()).map_or(Tz::UTC, Tz::from)
+    name.and_then(Tz::iana).unwrap_or(Tz::UTC)
 }
 
 /// A contact as a client sent it, with its index.

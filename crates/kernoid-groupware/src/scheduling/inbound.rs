@@ -180,7 +180,7 @@ pub fn itip_process_message(
                                     .chain([ICalendarEntry {
                                         name: ICalendarProperty::Status,
                                         params: vec![],
-                                        values: vec![ICalendarValue::Status(ICalendarStatus::Cancelled)],
+                                        values: [ICalendarValue::Status(ICalendarStatus::Cancelled)].into(),
                                     }])
                                     .collect(),
                             });
@@ -203,7 +203,7 @@ pub fn itip_process_message(
                                     .chain([ICalendarEntry {
                                         name: ICalendarProperty::Status,
                                         params: vec![],
-                                        values: vec![ICalendarValue::Status(ICalendarStatus::Cancelled)],
+                                        values: [ICalendarValue::Status(ICalendarStatus::Cancelled)].into(),
                                     }])
                                     .collect(),
                                 component_ids: vec![],
@@ -240,7 +240,7 @@ pub fn itip_process_message(
                                     .chain([ICalendarEntry {
                                         name: ICalendarProperty::Status,
                                         params: vec![],
-                                        values: vec![ICalendarValue::Status(ICalendarStatus::Cancelled)],
+                                        values: [ICalendarValue::Status(ICalendarStatus::Cancelled)].into(),
                                     }])
                                     .collect(),
                             });
@@ -468,7 +468,7 @@ fn handle_reply(
     Ok(())
 }
 
-pub fn itip_merge_changes(ical: &mut ICalendar, itip: &ICalendar, changes: Vec<MergeAction>) {
+pub fn itip_merge_changes(ical: &mut ICalendar, itip: &ICalendar, changes: Vec<MergeAction>) -> Result<(), ItipError> {
     let mut remove_component_ids: Vec<u32> = Vec::new();
     for action in changes {
         match action {
@@ -503,11 +503,12 @@ pub fn itip_merge_changes(ical: &mut ICalendar, itip: &ICalendar, changes: Vec<M
         }
     }
 
-    if !remove_component_ids.is_empty() {
-        ical.remove_component_ids(&remove_component_ids);
+    if !remove_component_ids.is_empty() && !ical.remove_component_ids(&remove_component_ids) {
+        return Err(ItipError::CannotModifyInstance);
     }
 
     merge_timezones(ical, itip);
+    Ok(())
 }
 
 fn merge_timezones(ical: &mut ICalendar, itip: &ICalendar) {
