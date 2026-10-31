@@ -190,6 +190,21 @@ and end-to-end encryption, [0007](rfcs/0007-push-notifications.md) push notifica
   crates.io; an advisory that does not affect kernoid is ignored there with a reason.
 - Facts need a source; what is not settled is marked `OPEN`.
 
+## Releases
+
+A release is a commit of main that main's CI run passed, tagged afterwards – the tag's run checks nothing again:
+
+1. Versions everywhere (`Cargo.toml` of every workspace with its lock file, `web/*/package.json`, compose, the
+   Kubernetes examples, the Helm chart, `kernoid-operator crd`), `kernoid openapi`, and the changelog's section with
+   the day of the release – in one commit, pushed to main.
+2. Once main's run of that commit passed (its image `sha-<commit>` is on ghcr.io), tag it `vX.Y.Z` and push the tag.
+3. The tag's run: `release` gives that image the version's tags, `chart` pushes the chart, `crates` publishes
+   `kernoid-e2e`, `kernoid-client` and `kernoid-sync` after the approval of the environment `crates-io`, and
+   `upgrade` upgrades the release before to the new image.
+
+`release` waits up to 90 minutes for main's run when the commit and the tag were pushed together, and refuses a tag
+on a commit that is not on main.
+
 ## The falkOSS starter pack
 
 kernoid follows [falkoss/starterpack](https://github.com/falkoss/starterpack) (`docs/practices.md`): its own

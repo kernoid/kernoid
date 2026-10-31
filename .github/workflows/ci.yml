@@ -2,9 +2,11 @@
 # Format, lints, the sqlx query cache, tests against PostgreSQL and the API files of the documentation – on Linux and
 # on macOS; the web SDK, login UI and web app (types, tests, build); the terminal app (its own Cargo workspace:
 # format, lints, tests); the operator and its Helm chart; no Stalwart Enterprise License material; known
-# vulnerabilities and licences of the dependencies; the container image builds, and is pushed to ghcr.io from main
-# and version tags – with the operator's Helm chart on version tags. The licence check (REUSE) and the sign-off (DCO)
-# come from falkoss/starterpack, pinned by commit. Actions are pinned by commit, with the version as a comment.
+# vulnerabilities and licences of the dependencies; the container image builds, and is pushed to ghcr.io from main.
+# A version tag checks nothing again: it releases the commit main's run checked – its image under the version, the
+# operator's Helm chart, the Rust SDK on crates.io – and checks the upgrade from the release before. The licence check
+# (REUSE) and the sign-off (DCO) come from falkoss/starterpack, pinned by commit. Actions are pinned by commit, with the
+# version as a comment.
 name: CI
 
 on:
@@ -23,6 +25,7 @@ env:
 
 jobs:
   rust:
+    if: github.ref_type != 'tag'
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -63,6 +66,7 @@ jobs:
 
   # kernoid's Rust SDK (apps/client, MIT): a workspace of its own, tested against a server that records requests.
   client:
+    if: github.ref_type != 'tag'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -81,6 +85,7 @@ jobs:
   # kernoid-sync (apps/sync, MIT): a folder kept in step with a file store, on the SDK. Against a real kernoid in the
   # job `rust` (scripts/client-check.sh).
   sync:
+    if: github.ref_type != 'tag'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -98,6 +103,7 @@ jobs:
 
   # The terminal app: a Cargo workspace of its own (AGPL), apart from the server's, on the SDK.
   tui:
+    if: github.ref_type != 'tag'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -117,6 +123,7 @@ jobs:
   # The end-to-end library (apps/e2e, MIT): a workspace of its own, tested natively and built as WebAssembly for the
   # web app, which takes the build from here.
   e2e:
+    if: github.ref_type != 'tag'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -145,6 +152,7 @@ jobs:
   # The Kubernetes operator: a workspace of its own (operator/); its CustomResourceDefinition must be the one in
   # deploy/kubernetes and in the Helm chart, which must lint (with the runner's Helm).
   operator:
+    if: github.ref_type != 'tag'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -195,6 +203,7 @@ jobs:
   # Known vulnerabilities, licences and sources of the dependencies (deny.toml, apps/*/deny.toml; pnpm's audit for
   # web/). Separate from the image: an advisory published today fails this job, not the release of unrelated changes.
   deps:
+    if: github.ref_type != 'tag'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -229,6 +238,7 @@ jobs:
   # The server, the SDK and the terminal app on macOS too, where much of the development happens. macOS runners have no
   # containers: PostgreSQL comes from Homebrew, its major version pinned (the minor one is Homebrew's).
   macos:
+    if: github.ref_type != 'tag'
     runs-on: macos-latest
     env:
       DATABASE_URL: postgres://kernoid:kernoid@localhost:5432/kernoid
@@ -273,6 +283,7 @@ jobs:
 
   # No material under the Stalwart Enterprise License (scripts/check-sel.sh).
   stalwart:
+    if: github.ref_type != 'tag'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -281,16 +292,18 @@ jobs:
   # The licence check (REUSE) and a sign-off (DCO) on every commit of a pull request, from falkoss/starterpack, pinned
   # by commit.
   licences:
+    if: github.ref_type != 'tag'
     uses: falkoss/starterpack/.github/workflows/reuse.yml@1e2fad7b6afb0f45f7d62d6a9472c97484ff4585
   sign-off:
+    if: github.ref_type != 'tag'
     uses: falkoss/starterpack/.github/workflows/dco.yml@1e2fad7b6afb0f45f7d62d6a9472c97484ff4585
 
   # Builds the image for every change, for amd64 and arm64 – each on a runner of its own architecture, since
-  # building Rust under emulation takes hours. From main and version tags, once the other jobs passed, each pushes its
-  # image by digest, and `manifest` names both with the tags: `main` and `sha-<commit>` from main, the version
-  # (`0.2.0`, `0.2`) from a tag `v0.2.0`.
+  # building Rust under emulation takes hours. From main, once every other check passed, each pushes its image by
+  # digest, and `manifest` names both `main` and `sha-<commit>` – so an image `sha-<commit>` says that commit passed
+  # all of them, and `release` gives it a version.
   image:
-    needs: [rust, macos, tui, e2e, operator, web, stalwart, licences]
+    needs: [rust, client, sync, macos, tui, e2e, operator, web, deps, stalwart, licences]
     strategy:
       matrix:
         include:
@@ -303,7 +316,7 @@ jobs:
       contents: read
       packages: write
     env:
-      PUSH: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) }}
+      PUSH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -338,7 +351,7 @@ jobs:
 
   manifest:
     needs: image
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -357,8 +370,6 @@ jobs:
           tags: |
             type=raw,value=main,enable={{is_default_branch}}
             type=sha,format=long,enable={{is_default_branch}}
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
@@ -370,13 +381,50 @@ jobs:
           images=()
           for digest in *; do images+=("ghcr.io/kernoid/kernoid@sha256:$digest"); done
           docker buildx imagetools create "${tags[@]}" "${images[@]}"
-          docker buildx imagetools inspect "ghcr.io/kernoid/kernoid:${{ steps.meta.outputs.version }}"
+          docker buildx imagetools inspect "ghcr.io/kernoid/kernoid:sha-${{ github.sha }}"
+
+  # A release, from a tag `v0.2.1` on a commit of main: nothing is built or checked again. The image main's run pushed
+  # for the commit – there only once every check passed – gets the version's tags (`0.2.1`, `0.2`); the job waits for
+  # main's run when the commit and the tag were pushed together.
+  release:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: The tag is on main
+        run: |
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
+            || { echo "::error::$GITHUB_REF_NAME is not on main: release a commit of main"; exit 1; }
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: The image main's run checked, under the version
+        run: |
+          checked="ghcr.io/kernoid/kernoid:sha-$GITHUB_SHA"
+          for _ in $(seq 1 90); do
+            docker buildx imagetools inspect "$checked" >/dev/null 2>&1 && break
+            echo "waiting for main's run to push $checked"
+            sleep 60
+          done
+          docker buildx imagetools inspect "$checked" >/dev/null \
+            || { echo "::error::no $checked: push the commit to main and let its run pass first"; exit 1; }
+          version="${GITHUB_REF_NAME#v}"
+          docker buildx imagetools create -t "ghcr.io/kernoid/kernoid:$version" -t "ghcr.io/kernoid/kernoid:${version%.*}" "$checked"
+          docker buildx imagetools inspect "ghcr.io/kernoid/kernoid:$version"
 
   # The operator's Helm chart, on a release: its version must be the tag's; pushed next to the image as an OCI chart,
   # oci://ghcr.io/kernoid/charts/kernoid-operator (with the runner's Helm).
   chart:
-    needs: manifest
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: release
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -399,10 +447,10 @@ jobs:
 
   # The Rust SDK on crates.io, on a release: kernoid-e2e, kernoid-client and kernoid-sync in this order, each in the
   # tag's version, through crates.io's trusted publishing (a short-lived token for this workflow and the environment
-  # `crates-io`, no stored secret). A version already on crates.io is left alone, so the job can run again.
+  # `crates-io`, no stored secret). A version already on crates.io is left alone, so the job can run again. The crates
+  # were checked by main's run of the commit, which `release` waited for.
   crates:
-    needs: [rust, client, sync, e2e, deps, licences]
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: release
     runs-on: ubuntu-latest
     environment: crates-io
     permissions:
@@ -432,9 +480,10 @@ jobs:
 
   # An installation of the last release, with mail and a file in it, upgraded to the image just pushed: the schema
   # migrated to the newest migration, the data still there (scripts/upgrade-check.sh). The image is the one this run
-  # pushed – `sha-<commit>` from main, the version from a tag (a tag's run pushes no `sha-` tag).
+  # pushed – `sha-<commit>` from main, the version from a tag.
   upgrade:
-    needs: manifest
+    needs: [manifest, release]
+    if: always() && (needs.manifest.result == 'success' || needs.release.result == 'success')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
