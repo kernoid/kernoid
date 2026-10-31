@@ -7,7 +7,7 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 ## [Unreleased]
 
-## [0.2.2] – DATE
+## [0.2.2] – 2026-10-31
 
 A patch release for kernoid's apps: the Rust SDK manages mail folders, and the apps' login now changes the account's
 name, picture, language and mail settings without a browser. No migration and no change to the configuration; the API
