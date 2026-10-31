@@ -7,7 +7,7 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 ## [Unreleased]
 
-## [0.2.1] – DATE
+## [0.2.1] – 2026-10-31
 
 A patch release, chiefly for the Rust SDK: kernoid's apps forward the attachments of end-to-end encrypted mail with
 it. Two libraries of Stalwart Labs left crates.io for Stalwart's repository; kernoid now carries them itself. No
