@@ -7,7 +7,7 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 ## [Unreleased]
 
-## [0.3.0] – DATE
+## [0.3.0] – 2026-11-04
 
 The file sync of kernoid's apps grows up: `kernoid-sync` keeps moves as moves, goes on with transfers that broke off,
 keeps vaults in step and knows the file systems' rules for names – the apps keep folders of a computer in step with it
