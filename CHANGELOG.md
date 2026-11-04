@@ -7,6 +7,14 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 ## [Unreleased]
 
+## [0.2.4] – DATE
+
+A patch release for kernoid's apps: the file sync `kernoid-sync` keeps moves as moves, goes on with transfers that
+broke off, keeps vaults in step and knows the file systems' rules for names – the apps keep folders of a computer in
+step with it. The server is unchanged but for the web app, which no longer shows a vault's encrypted size – no
+migration, no change to the API or the configuration; the image `ghcr.io/kernoid/kernoid:0.2.4` follows the version, as
+do the Helm chart and the crates.
+
 ### Added
 
 - kernoid-sync keeps moves as moves – on the server (a node's id at another path) and in the folder (a file's inode
@@ -371,7 +379,8 @@ Marked `OPEN` in the documentation, among them: public links to files, resumable
 OAUTHBEARER and LDAP, IMAP `SORT` and `THREAD`, a week and a day view, an audit log in the web app, a Kubernetes
 operator – planned for 0.2.
 
-[Unreleased]: https://github.com/kernoid/kernoid/compare/v0.2.3...HEAD
+[Unreleased]: https://github.com/kernoid/kernoid/compare/v0.2.4...HEAD
+[0.2.4]: https://github.com/kernoid/kernoid/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/kernoid/kernoid/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/kernoid/kernoid/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/kernoid/kernoid/compare/v0.2.0...v0.2.1
