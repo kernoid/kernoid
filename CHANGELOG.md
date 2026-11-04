@@ -7,6 +7,12 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 ## [Unreleased]
 
+## [0.2.3] – DATE
+
+A patch release for kernoid's apps: the Rust SDK opens vaults, so the apps read and write end-to-end encrypted folders
+as the web app does. The server is unchanged – no migration, no change to the API or the configuration; the image
+`ghcr.io/kernoid/kernoid:0.2.3` follows the version, as do the Helm chart and the crates.
+
 ### Added
 
 - The Rust SDK opens vaults (RFC 0006, 6) as the web app does: `E2e::create_vault`, `create_directory_in`,
@@ -348,7 +354,8 @@ Marked `OPEN` in the documentation, among them: public links to files, resumable
 OAUTHBEARER and LDAP, IMAP `SORT` and `THREAD`, a week and a day view, an audit log in the web app, a Kubernetes
 operator – planned for 0.2.
 
-[Unreleased]: https://github.com/kernoid/kernoid/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/kernoid/kernoid/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/kernoid/kernoid/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/kernoid/kernoid/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/kernoid/kernoid/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/kernoid/kernoid/releases/tag/v0.2.0
