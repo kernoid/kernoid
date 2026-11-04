@@ -4,7 +4,7 @@
 - **Status:** draft, 2026-10-30; implemented: section 2 (post-quantum TLS), 4 (keys: `apps/e2e`, `kernoid-identity`'s
   `openpgp`, migration 0048; WKD and Autocrypt), 5.1–5.2 on the server (`kernoid-mail`'s `e2e`), 8 (policy, recovery
   key) and the JMAP extension; the web app's side of 5 and 8; section 6 (vaults: `kernoid-files`' `vault`, migration
-  0049, the web app); section 7 (encrypted calendars and address books: `kernoid-groupware`'s `sealed`, migration 0050,
+  0049, the web app, the Rust SDK's `e2e::vault`); section 7 (encrypted calendars and address books: `kernoid-groupware`'s `sealed`, migration 0050,
   the web app). Section 9 is open.
 - **Scope:** what kernoid encrypts so that quantum computers cannot read it later (sections 2–3), and how mail, files,
   calendars and contacts can be encrypted so that only their owners can read them – not the operator, not kernoid

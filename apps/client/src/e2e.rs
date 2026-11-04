@@ -24,6 +24,8 @@ use kernoid_e2e::{
 use serde::Deserialize;
 use serde_json::{Value, json};
 
+mod vault;
+
 use crate::{
     Client, Error, MAIL, Result, SUBMISSION,
     mail::{
@@ -79,6 +81,9 @@ pub struct Policy {
     /// `allowed`, `required` or `forbidden`.
     #[serde(default)]
     pub mail: String,
+    /// For vaults: `allowed`, `required` (nothing new outside one) or `forbidden` (6).
+    #[serde(default)]
+    pub vaults: String,
     /// The tenant can recover the account's keys (8.2).
     #[serde(default)]
     pub recovery: bool,
@@ -124,6 +129,8 @@ pub struct E2e {
     unlocked: Vec<SecretKey>,
     /// Public keys by address (lower case); an address without any has none.
     known: BTreeMap<String, Vec<PublicKey>>,
+    /// The keys of vaults opened so far, by the vault's id (RFC 0006, 6; `vault.rs`).
+    vaults: BTreeMap<String, SecretKey>,
 }
 
 impl std::fmt::Debug for E2e {
@@ -264,6 +271,7 @@ impl E2e {
     pub fn lock(&mut self) {
         self.current = None;
         self.unlocked.clear();
+        self.vaults.clear();
     }
 
     /// The public keys of `addresses` (asked once per run).

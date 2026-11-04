@@ -233,3 +233,59 @@ async fn folders_made_renamed_moved_emptied_and_removed() {
     mail::destroy_mailbox(&client, &account, &parent, true).await.unwrap();
     assert!(find(&child).await.is_none() && find(&parent).await.is_none());
 }
+
+#[tokio::test]
+async fn a_vault_keeps_names_and_contents_from_the_server() {
+    use kernoid_client::e2e::E2e;
+    let Some(client) = client().await else { return };
+    let mut e2e = E2e::load(&client).await.unwrap();
+    // The account's own key is made here once; with one from before, its recovery code is not known.
+    if !e2e.vaults_allowed() || e2e.has_key() {
+        return;
+    }
+    let code = e2e.setup(&client, kernoid_e2e::Kind::Pqc).await.unwrap();
+    let account = client.primary(FILENODE).unwrap();
+
+    let vault = e2e.create_vault(&client, &account, None, "Geheim").await.unwrap();
+    e2e.create_directory_in(&client, &account, &vault, &vault, "Verträge").await.unwrap();
+    let dir = std::env::temp_dir().join(format!("kernoid-client-vault-{}", std::process::id()));
+    tokio::fs::create_dir_all(&dir).await.unwrap();
+    let path = dir.join("Brief.txt");
+    tokio::fs::write(&path, "nur für Mitglieder").await.unwrap();
+    e2e.upload_into(&client, &account, &vault, &vault, &path, None, |_, _| {}).await.unwrap();
+
+    // The server sees ids and ciphertext only.
+    let mut top = files::children(&client, &account, None).await.unwrap();
+    let mut inside = files::children(&client, &account, Some(&vault)).await.unwrap();
+    assert!(top.iter().chain(&inside).all(|n| n.name != "Geheim" && n.name != "Verträge" && n.name != "Brief.txt"));
+    let file = inside.iter().find(|n| !n.is_directory()).unwrap().clone();
+    let mut raw = Vec::new();
+    let blob = file.blob_id.as_deref().unwrap();
+    client.download(&account, blob, "x", "application/octet-stream", &mut raw, &mut |_, _| {}).await.unwrap();
+    assert!(!String::from_utf8_lossy(&raw).contains("Mitglieder"));
+
+    // With the key: the real names and the content.
+    e2e.open_names(&client, &account, &mut top).await;
+    e2e.open_names(&client, &account, &mut inside).await;
+    assert!(top.iter().any(|n| n.name == "Geheim" && n.vault.as_deref() == Some(vault.as_str()) && !n.locked));
+    let mut names: Vec<_> = inside.iter().map(|n| n.name.as_str()).collect();
+    names.sort();
+    assert_eq!(names, ["Brief.txt", "Verträge"]);
+    let file = inside.iter().find(|n| n.name == "Brief.txt").unwrap();
+    assert_eq!(e2e.download_from(&client, &account, file).await.unwrap(), "nur für Mitglieder".as_bytes());
+
+    // Renamed; locked, the names are ids again – and come back with the recovery code.
+    e2e.rename_in(&client, &account, file, "Antwort.txt").await.unwrap();
+    e2e.lock();
+    let mut again = files::children(&client, &account, Some(&vault)).await.unwrap();
+    e2e.open_names(&client, &account, &mut again).await;
+    assert!(again.iter().all(|n| n.locked));
+    e2e.unlock(&code).unwrap();
+    e2e.open_names(&client, &account, &mut again).await;
+    assert!(again.iter().any(|n| n.name == "Antwort.txt" && !n.locked));
+
+    // Nothing moves out of a vault.
+    let moved = files::move_to(&client, &account, &file.id, None).await;
+    assert!(moved.is_err(), "{moved:?}");
+    tokio::fs::remove_dir_all(&dir).await.unwrap();
+}

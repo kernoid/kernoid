@@ -12,8 +12,20 @@ use serde_json::{Value, json};
 use crate::{Client, Error, FILE_LINKS, FILE_VERSIONS, FILENODE, PRINCIPALS, Result, ids_of};
 
 const USING: [&str; 3] = [FILENODE, FILE_VERSIONS, PRINCIPALS];
-const PROPERTIES: [&str; 9] =
-    ["parentId", "name", "role", "blobId", "size", "mediaType", "modified", "myRights", "shareWith"];
+const PROPERTIES: [&str; 12] = [
+    "parentId",
+    "name",
+    "role",
+    "blobId",
+    "size",
+    "mediaType",
+    "modified",
+    "myRights",
+    "shareWith",
+    "kernoid:vault",
+    "kernoid:vaultKey",
+    "kernoid:encryptedName",
+];
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -49,9 +61,26 @@ pub struct FileNode {
     pub my_rights: Option<Rights>,
     #[serde(default)]
     pub share_with: Option<BTreeMap<String, Rights>>,
+    /// The vault the node lies in – its own id on the vault itself (RFC 0006, 6); see [`crate::e2e::E2e::open_names`].
+    #[serde(rename = "kernoid:vault", default)]
+    pub vault: Option<String>,
+    /// The vault's public key (base64), on the vault itself.
+    #[serde(rename = "kernoid:vaultKey", default)]
+    pub vault_key: Option<String>,
+    /// The real name, encrypted to the vault's key (base64); `name` is then an id.
+    #[serde(rename = "kernoid:encryptedName", default)]
+    pub encrypted_name: Option<String>,
+    /// In a vault whose key is not at hand: `name` is still the id.
+    #[serde(skip)]
+    pub locked: bool,
 }
 
 impl FileNode {
+    /// Whether the node lies in a vault, or is one.
+    pub fn in_vault(&self) -> bool {
+        self.vault.is_some()
+    }
+
     pub fn is_directory(&self) -> bool {
         self.kind == "Directory" || (self.kind.is_empty() && self.blob_id.is_none())
     }
@@ -683,6 +712,10 @@ mod tests {
             modified: None,
             my_rights: None,
             share_with: None,
+            vault: None,
+            vault_key: None,
+            encrypted_name: None,
+            locked: false,
         };
         let mut nodes = vec![node("File", "b"), node("Directory", "z"), node("File", "A")];
         sort(&mut nodes);

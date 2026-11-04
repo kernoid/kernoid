@@ -7,6 +7,15 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 ## [Unreleased]
 
+### Added
+
+- The Rust SDK opens vaults (RFC 0006, 6) as the web app does: `E2e::create_vault`, `create_directory_in`,
+  `upload_into` (encrypted to the vault's key, signed with the account's), `download_from`/`save_from` (decrypted
+  here), `rename_in`, `open_names` (real names where the vault's key is at hand, `FileNode::locked` elsewhere) and
+  `give_vault_keys` after sharing; `FileNode` carries `vault`, `vault_key` and `encrypted_name`, and `Policy` the
+  tenant's rule for `vaults`. New public fields of `FileNode` and `Policy`: code that builds them field by field needs
+  the new ones.
+
 ## [0.2.2] – 2026-10-31
 
 A patch release for kernoid's apps: the Rust SDK manages mail folders, and the apps' login now changes the account's
