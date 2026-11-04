@@ -90,19 +90,83 @@ impl E2e {
         for node in nodes.iter_mut() {
             let (Some(vault), Some(sealed)) = (node.vault.clone(), node.encrypted_name.clone()) else { continue };
             node.locked = true;
-            if self.current.is_none() {
-                continue;
-            }
-            let Ok(Some(key)) = self.vault_key(client, account, &vault).await else { continue };
-            let name = decode(&sealed)
-                .ok()
-                .and_then(|bytes| message::decrypt(&bytes, &[&key], &[]).ok())
-                .and_then(|opened| String::from_utf8(opened.data).ok());
-            if let Some(name) = name {
+            if let Some(name) = self.open_name(client, account, &vault, &sealed).await {
                 node.name = name;
                 node.locked = false;
             }
         }
+    }
+
+    /// The real name of a node in a vault (`kernoid:encryptedName`) – `None` while the vault's key is not at hand.
+    pub async fn open_name(&mut self, client: &Client, account: &str, vault: &str, sealed: &str) -> Option<String> {
+        self.current.as_ref()?;
+        let key = self.vault_key(client, account, vault).await.ok().flatten()?;
+        decode(sealed)
+            .ok()
+            .and_then(|bytes| message::decrypt(&bytes, &[&key], &[]).ok())
+            .and_then(|opened| String::from_utf8(opened.data).ok())
+    }
+
+    /// A name for a node in a vault: the id it gets as `name` and the real name encrypted, for
+    /// `kernoid:encryptedName`.
+    pub async fn name_in(
+        &mut self,
+        client: &Client,
+        account: &str,
+        vault: &str,
+        name: &str,
+    ) -> Result<(String, String)> {
+        let key = self.need_vault_key(client, account, vault).await?;
+        Ok((opaque_name(), seal(&key.public(), name)?))
+    }
+
+    /// Content for a vault: encrypted to its key and signed with the account's, as a file's blob there is.
+    pub async fn seal_content(
+        &mut self,
+        client: &Client,
+        account: &str,
+        vault: &str,
+        data: Vec<u8>,
+    ) -> Result<Vec<u8>> {
+        let key = self.need_vault_key(client, account, vault).await?;
+        let signer = self.need_unlocked()?.clone();
+        let public = key.public();
+        tokio::task::spawn_blocking(move || message::encrypt(&data, &[&public], Some(&signer), false))
+            .await
+            .map_err(|error| Error::E2e(error.to_string()))?
+            .map_err(Into::into)
+    }
+
+    /// The content of a file of a vault, decrypted.
+    pub async fn open_content(
+        &mut self,
+        client: &Client,
+        account: &str,
+        vault: &str,
+        sealed: Vec<u8>,
+    ) -> Result<Vec<u8>> {
+        let key = self.need_vault_key(client, account, vault).await?;
+        let opened = tokio::task::spawn_blocking(move || message::decrypt(&sealed, &[&key], &[]))
+            .await
+            .map_err(|error| Error::E2e(error.to_string()))??;
+        Ok(opened.data)
+    }
+
+    /// Moves or renames a node within its vault: a new id for its name, the real name encrypted anew.
+    pub async fn move_in(
+        &mut self,
+        client: &Client,
+        account: &str,
+        vault: &str,
+        id: &str,
+        parent: &str,
+        name: &str,
+    ) -> Result<()> {
+        let (opaque, sealed) = self.name_in(client, account, vault, name).await?;
+        let update =
+            json!({ "update": { id: { "parentId": parent, "name": opaque, "kernoid:encryptedName": sealed } } });
+        client.set(&USING, "FileNode", account, update, json!({})).await?;
+        Ok(())
     }
 
     /// Makes a vault in `parent` (`None`: the top of the store): its key here, the secret wrapped for the account's own
@@ -144,13 +208,24 @@ impl E2e {
         parent: &str,
         name: &str,
     ) -> Result<()> {
-        let key = self.need_vault_key(client, account, vault).await?;
+        self.make_directory_in(client, account, vault, parent, name).await.map(drop)
+    }
+
+    /// A directory inside a vault; returns its id.
+    pub async fn make_directory_in(
+        &mut self,
+        client: &Client,
+        account: &str,
+        vault: &str,
+        parent: &str,
+        name: &str,
+    ) -> Result<String> {
+        let (opaque, sealed) = self.name_in(client, account, vault, name).await?;
         let create = json!({ "create": { "d": {
-            "@type": "Directory", "parentId": parent, "name": opaque_name(),
-            "kernoid:encryptedName": seal(&key.public(), name)?,
+            "@type": "Directory", "parentId": parent, "name": opaque, "kernoid:encryptedName": sealed,
         } } });
-        client.set(&USING, "FileNode", account, create, json!({})).await?;
-        Ok(())
+        let result = client.set(&USING, "FileNode", account, create, json!({})).await?;
+        created_id(&result, "d")
     }
 
     /// Renames a node in a vault: a new id for a name, the real one encrypted anew.
@@ -220,13 +295,10 @@ impl E2e {
     pub async fn download_from(&mut self, client: &Client, account: &str, node: &FileNode) -> Result<Vec<u8>> {
         let vault = node.vault.as_deref().ok_or_else(|| Error::E2e("not in a vault".into()))?;
         let blob = node.blob_id.as_deref().ok_or_else(|| Error::E2e("not a file".into()))?;
-        let key = self.need_vault_key(client, account, vault).await?;
+        self.need_vault_key(client, account, vault).await?;
         let mut sealed = Vec::new();
         client.download(account, blob, "encrypted", "application/octet-stream", &mut sealed, &mut |_, _| {}).await?;
-        let opened = tokio::task::spawn_blocking(move || message::decrypt(&sealed, &[&key], &[]))
-            .await
-            .map_err(|error| Error::E2e(error.to_string()))??;
-        Ok(opened.data)
+        self.open_content(client, account, vault, sealed).await
     }
 
     /// Downloads a file of a vault, decrypted, into `path`.

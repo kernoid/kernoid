@@ -7,6 +7,22 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 ## [Unreleased]
 
+### Added
+
+- kernoid-sync keeps moves as moves – on the server (a node's id at another path) and in the folder (a file's inode
+  at another path) –, goes on with downloads that broke off (HTTP ranges) and sends files over 8 MiB in pieces joined
+  on the server (`Blob/upload`), not sending again the pieces already there; keeps vaults in step with the account's
+  key (`Folder::sync_with`) and leaves a vault whose key is not at hand as it is; and leaves out names the folder's
+  file system cannot hold (`Names`: Windows' rules, names that differ only in case). Its state database is upgraded on
+  opening. New public fields of `Report` (`moved`, `locked`) and of `plan::Remote`/`Local` (`vault`, `file`).
+- The Rust SDK: `Client::download_from` (from a byte on, an HTTP range) and `Client::join` (uploads joined into one
+  blob, RFC 9404); for vaults `E2e::open_name`, `name_in`, `seal_content`, `open_content`, `move_in` and
+  `make_directory_in` (which returns the new directory's id).
+
+### Fixed
+
+- The web app showed the size of a vault's encrypted content as the file's size; it shows none there now.
+
 ## [0.2.3] – 2026-11-04
 
 A patch release for kernoid's apps: the Rust SDK opens vaults, so the apps read and write end-to-end encrypted folders

@@ -28,6 +28,7 @@ serde_json = "1.0.151"
 tokio = { version = "1.53.3", features = ["fs"] }
 
 [dev-dependencies]
+kernoid-e2e = { version = "0.2.3", path = "../e2e" }
 tokio = { version = "1.53.3", features = ["fs", "macros", "rt-multi-thread", "time"] }
 
 [profile.dev.package."*"]

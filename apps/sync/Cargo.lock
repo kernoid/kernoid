@@ -1571,6 +1571,7 @@ version = "0.2.3"
 dependencies = [
  "chrono",
  "kernoid-client",
+ "kernoid-e2e",
  "rusqlite",
  "serde_json",
  "tokio",

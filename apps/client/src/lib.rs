@@ -41,6 +41,8 @@ pub const FILE_VERSIONS: &str = "https://kernoid.dev/jmap/file-versions";
 pub const FILE_LINKS: &str = "https://kernoid.dev/jmap/file-links";
 pub const PRINCIPALS: &str = "urn:ietf:params:jmap:principals";
 pub const VACATION: &str = "urn:ietf:params:jmap:vacationresponse";
+/// Blobs: joining uploads into one (`Blob/upload`, RFC 9404).
+pub const BLOB: &str = "urn:ietf:params:jmap:blob";
 
 /// What went wrong talking to the server.
 #[derive(Debug)]
@@ -530,30 +532,74 @@ impl Client {
         out: &mut (dyn AsyncWrite + Unpin + Send),
         progress: &mut (dyn FnMut(u64, Option<u64>) + Send),
     ) -> Result<u64> {
+        self.download_from(account, blob, name, kind, 0, out, progress).await
+    }
+
+    /// Downloads a blob from byte `from` on (an HTTP range, RFC 9110, 14) into `out` – to go on with a download that
+    /// broke off. `progress` hears the bytes of the whole blob so far (`from` included) and its size, if the server
+    /// said it. Returns the bytes written to `out`. A server that sends the whole blob instead of the range is an
+    /// error: what is in `out` would be wrong.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn download_from(
+        &self,
+        account: &str,
+        blob: &str,
+        name: &str,
+        kind: &str,
+        from: u64,
+        out: &mut (dyn AsyncWrite + Unpin + Send),
+        progress: &mut (dyn FnMut(u64, Option<u64>) + Send),
+    ) -> Result<u64> {
         let url = self.download_url(account, blob, name, kind);
-        let response = self.streaming.get(url).header("authorization", self.authorization()).send().await?;
+        let mut request = self.streaming.get(url).header("authorization", self.authorization());
+        if from > 0 {
+            request = request.header("range", format!("bytes={from}-"));
+        }
+        let response = request.send().await?;
         let status = response.status().as_u16();
         if status == 401 {
             return Err(Error::Unauthorized);
         }
-        if status != 200 {
+        let expected = if from > 0 { 206 } else { 200 };
+        if status != expected {
             let body = limited_text(response, 16 << 20).await.unwrap_or_default();
             return Err(Error::Status(status, problem_detail(&body)));
         }
-        let total = response.content_length();
+        let length = response.content_length();
         let mut body = response.bytes_stream();
         let mut done = 0;
         while let Some(chunk) = body.next().await {
             let chunk = chunk?;
             out.write_all(&chunk).await?;
             done += chunk.len() as u64;
-            progress(done, total);
+            progress(from + done, length.map(|length| from + length));
         }
         out.flush().await?;
-        if total.is_some_and(|total| total != done) {
+        if length.is_some_and(|length| length != done) {
             return Err(Error::Transport("the download broke off".into()));
         }
         Ok(done)
+    }
+
+    /// Joins uploaded blobs, in order, into one (`Blob/upload`, RFC 9404) – the way to send a large file in pieces, each
+    /// of which can be sent again alone. The pieces are uploads, which the server keeps for a day.
+    pub async fn join(&self, account: &str, kind: &str, pieces: &[String]) -> Result<Upload> {
+        let data: Vec<Value> = pieces.iter().map(|blob| json!({ "blobId": blob })).collect();
+        let arguments = json!({ "accountId": account, "create": { "whole": { "type": kind, "data": data } } });
+        let result = self.call(&[BLOB], "Blob/upload", arguments).await?;
+        set_error(&result)?;
+        let whole =
+            result.pointer("/created/whole").ok_or_else(|| Error::Protocol("Blob/upload made nothing".into()))?;
+        Ok(Upload {
+            account_id: account.to_owned(),
+            blob_id: whole
+                .get("id")
+                .and_then(Value::as_str)
+                .ok_or_else(|| Error::Protocol("Blob/upload without an id".into()))?
+                .to_owned(),
+            kind: kind.to_owned(),
+            size: whole.get("size").and_then(Value::as_u64).unwrap_or_default(),
+        })
     }
 
     /// Uploads content of `size` bytes (RFC 8620, 6.1); `progress` hears the bytes sent so far.

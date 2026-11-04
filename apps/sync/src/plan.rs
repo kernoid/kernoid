@@ -5,8 +5,13 @@
 //! A change on one side is carried to the other. A change on both sides is a conflict: the server's version wins the
 //! name, the local one is kept beside it as a copy – never merged, never lost (the copy is uploaded in the next round).
 //! A deletion never takes a change of the other side with it: a file deleted here but changed on the server comes
-//! back, a file deleted on the server but changed here is uploaded again. A move is a deletion and a creation (OPEN:
-//! moves as moves).
+//! back, a file deleted on the server but changed here is uploaded again.
+//!
+//! A move is carried over as a move – what was moved keeps its node on the server (its versions, its shares) and is not
+//! sent again. On the server a move is told by the node's id at another path; here by the file's id on the file system
+//! (its inode) at another path, the size and modification time unchanged. A move that cannot be one – onto a path taken
+//! on the other side, into or out of a vault (RFC 0006, 6), a file system without file ids (**OPEN**: Windows) – is
+//! a deletion and a creation.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -21,6 +26,8 @@ pub struct Remote {
     /// The content's blob; `None` for a directory.
     pub blob: Option<String>,
     pub size: u64,
+    /// The vault the node lies in – its own id on a vault's root.
+    pub vault: Option<String>,
 }
 
 /// A file or directory of the folder at a path.
@@ -30,6 +37,8 @@ pub struct Local {
     pub size: u64,
     /// Modification time, nanoseconds since 1970 – with the size, what tells a change without reading the file.
     pub modified: i128,
+    /// The file's id on its file system (the inode); 0 where there is none to read.
+    pub file: u64,
 }
 
 /// A path as both sides were when they last agreed.
@@ -57,11 +66,134 @@ pub enum Action {
     KeepLocalCopy(RelPath),
     /// Both sides agree already (both made the same directory): remember it.
     Adopt(RelPath),
+    /// Moved on the server: move it here too (with what is in it).
+    MoveLocal { from: RelPath, to: RelPath },
+    /// Moved here: move the node on the server too.
+    MoveRemote { from: RelPath, to: RelPath, id: String },
 }
 
-/// The actions in the order they must run: local directories and copies first, then downloads; remote directories
-/// shallow before deep, then uploads; deletions deep before shallow.
+/// The actions in the order they must run: moves here first, local directories and copies, then downloads; remote
+/// directories shallow before deep, moves on the server, then uploads; deletions deep before shallow.
 pub fn plan(
+    base: &BTreeMap<RelPath, Base>,
+    remote: &BTreeMap<RelPath, Remote>,
+    local: &BTreeMap<RelPath, Local>,
+) -> Vec<Action> {
+    let (mut base, mut remote, mut local) = (base.clone(), remote.clone(), local.clone());
+    let mut actions = moved_on_server(&mut base, &remote, &mut local);
+    actions.extend(moved_here(&mut base, &mut remote, &local));
+    actions.extend(compare(&base, &remote, &local));
+    order(actions)
+}
+
+/// Paths whose node is at another path on the server now, unchanged here and with nothing in the way: moved here
+/// too. `base` and `local` are changed as if done, so that the rest is compared at the new paths.
+fn moved_on_server(
+    base: &mut BTreeMap<RelPath, Base>,
+    remote: &BTreeMap<RelPath, Remote>,
+    local: &mut BTreeMap<RelPath, Local>,
+) -> Vec<Action> {
+    let by_id: BTreeMap<&str, &RelPath> = remote.iter().map(|(path, node)| (node.id.as_str(), path)).collect();
+    let mut actions = Vec::new();
+    // Shallow first: a directory moved takes what is in it along, which then needs nothing of its own.
+    let known: Vec<RelPath> = base.keys().cloned().collect();
+    for from in known {
+        let Some(b) = base.get(&from) else { continue };
+        if remote.get(&from).is_some_and(|r| r.id == b.remote.id) {
+            continue;
+        }
+        let Some(to) = by_id.get(b.remote.id.as_str()).map(|to| (*to).clone()) else { continue };
+        let here = local.get(&from);
+        let unchanged =
+            here.is_some_and(|l| l.directory == b.local.directory && (l.directory || same_file(l, &b.local)));
+        if !unchanged || local.contains_key(&to) || base.contains_key(&to) || under(&to, &from) {
+            continue;
+        }
+        rename(base, &from, &to);
+        rename(local, &from, &to);
+        actions.push(Action::MoveLocal { from, to });
+    }
+    actions
+}
+
+/// Paths whose file is at another path here now (the same file id, size and time), unchanged on the server and with
+/// nothing in the way: moved on the server too. `base` and `remote` are changed as if done.
+fn moved_here(
+    base: &mut BTreeMap<RelPath, Base>,
+    remote: &mut BTreeMap<RelPath, Remote>,
+    local: &BTreeMap<RelPath, Local>,
+) -> Vec<Action> {
+    // Ids seen twice (hard links) tell nothing.
+    let mut by_file: BTreeMap<u64, Option<&RelPath>> = BTreeMap::new();
+    for (path, l) in local.iter().filter(|(_, l)| l.file != 0) {
+        by_file.entry(l.file).and_modify(|seen| *seen = None).or_insert(Some(path));
+    }
+    let mut actions = Vec::new();
+    let known: Vec<RelPath> = base.keys().cloned().collect();
+    for from in known {
+        let Some(b) = base.get(&from).cloned() else { continue };
+        if b.local.file == 0 || local.get(&from).is_some_and(|l| l.file == b.local.file) {
+            continue;
+        }
+        let Some(Some(to)) = by_file.get(&b.local.file).map(|to| to.cloned()) else { continue };
+        let l = &local[&to];
+        if l.directory != b.local.directory || (!l.directory && !same_file(l, &b.local)) {
+            continue;
+        }
+        let Some(r) = remote.get(&from).filter(|r| r.id == b.remote.id).cloned() else { continue };
+        if base.contains_key(&to) || remote.contains_key(&to) || under(&to, &from) {
+            continue;
+        }
+        // A vault's root may go where there is no vault; anything else stays in its vault.
+        let target = vault_at(remote, parent(&to));
+        let allowed = if r.vault.as_deref() == Some(r.id.as_str()) { target.is_none() } else { r.vault == target };
+        if !allowed {
+            continue;
+        }
+        rename(base, &from, &to);
+        rename(remote, &from, &to);
+        actions.push(Action::MoveRemote { from, to, id: r.id });
+    }
+    actions
+}
+
+/// The same file content as far as the folder tells: size and modification time.
+fn same_file(a: &Local, b: &Local) -> bool {
+    a.size == b.size && a.modified == b.modified
+}
+
+fn under(path: &str, root: &str) -> bool {
+    path.strip_prefix(root).is_some_and(|rest| rest.starts_with('/'))
+}
+
+/// The parent of a path; `""` at the top.
+pub fn parent(path: &str) -> &str {
+    path.rsplit_once('/').map_or("", |(parent, _)| parent)
+}
+
+/// The vault a path of the store lies in: that of its nearest ancestor known.
+pub fn vault_at(remote: &BTreeMap<RelPath, Remote>, mut path: &str) -> Option<String> {
+    while !path.is_empty() {
+        if let Some(node) = remote.get(path) {
+            return node.vault.clone();
+        }
+        path = parent(path);
+    }
+    None
+}
+
+/// Moves a path and what is below it to another path in a map.
+pub fn rename<T>(map: &mut BTreeMap<RelPath, T>, from: &str, to: &str) {
+    let moved: Vec<RelPath> = map.keys().filter(|path| *path == from || under(path, from)).cloned().collect();
+    for path in moved {
+        if let Some(value) = map.remove(&path) {
+            map.insert(format!("{to}{}", &path[from.len()..]), value);
+        }
+    }
+}
+
+/// What to do at each path, moves already applied.
+fn compare(
     base: &BTreeMap<RelPath, Base>,
     remote: &BTreeMap<RelPath, Remote>,
     local: &BTreeMap<RelPath, Local>,
@@ -157,7 +289,7 @@ pub fn plan(
             }
         }
     }
-    order(actions)
+    actions
 }
 
 fn fetch(path: &RelPath, remote: &Remote) -> Action {
@@ -205,11 +337,13 @@ fn depth(path: &str) -> usize {
 fn order(actions: Vec<Action>) -> Vec<Action> {
     let rank = |action: &Action| -> (u8, isize) {
         match action {
+            Action::MoveLocal { to, .. } => (0, depth(to) as isize),
             Action::KeepLocalCopy(path) => (0, depth(path) as isize),
             Action::DeleteLocal(path) => (1, -(depth(path) as isize)),
             Action::MakeLocalDirectory(path) => (2, depth(path) as isize),
             Action::Download { path, .. } => (3, depth(path) as isize),
             Action::MakeRemoteDirectory(path) => (4, depth(path) as isize),
+            Action::MoveRemote { to, .. } => (5, depth(to) as isize),
             Action::Upload { path, .. } => (5, depth(path) as isize),
             Action::DeleteRemote { path, .. } => (6, -(depth(path) as isize)),
             Action::Adopt(path) => (7, depth(path) as isize),
@@ -225,16 +359,24 @@ mod tests {
     use super::*;
 
     fn file(id: &str, blob: &str) -> Remote {
-        Remote { id: id.into(), directory: false, blob: Some(blob.into()), size: 1 }
+        Remote { id: id.into(), directory: false, blob: Some(blob.into()), size: 1, vault: None }
     }
     fn dir(id: &str) -> Remote {
-        Remote { id: id.into(), directory: true, blob: None, size: 0 }
+        Remote { id: id.into(), directory: true, blob: None, size: 0, vault: None }
     }
     fn here(size: u64, modified: i128) -> Local {
-        Local { directory: false, size, modified }
+        Local { directory: false, size, modified, file: 0 }
     }
     fn here_dir() -> Local {
-        Local { directory: true, size: 0, modified: 0 }
+        Local { directory: true, size: 0, modified: 0, file: 0 }
+    }
+    fn with_file(mut local: Local, file: u64) -> Local {
+        local.file = file;
+        local
+    }
+    fn in_vault(mut remote: Remote, vault: &str) -> Remote {
+        remote.vault = Some(vault.into());
+        remote
     }
     fn map<T: Clone>(entries: &[(&str, T)]) -> BTreeMap<RelPath, T> {
         entries.iter().map(|(path, value)| ((*path).to_owned(), value.clone())).collect()
@@ -363,6 +505,86 @@ mod tests {
                 Action::MakeLocalDirectory("A/B".into()),
                 Action::MakeLocalDirectory("A/B/C".into()),
             ]
+        );
+    }
+
+    #[test]
+    fn a_move_on_the_server_is_a_move_here() {
+        let base = agreed(&[
+            ("D", dir("d"), here_dir()),
+            ("D/a", file("n1", "b1"), here(1, 10)),
+            ("b", file("n2", "b2"), here(1, 10)),
+        ]);
+        // D renamed to E (with D/a), b moved into E and changed there.
+        let remote = map(&[("E", dir("d")), ("E/a", file("n1", "b1")), ("E/b", file("n2", "b3"))]);
+        let local = map(&[("D", here_dir()), ("D/a", here(1, 10)), ("b", here(1, 10))]);
+        assert_eq!(
+            plan(&base, &remote, &local),
+            [
+                Action::MoveLocal { from: "D".into(), to: "E".into() },
+                Action::MoveLocal { from: "b".into(), to: "E/b".into() },
+                Action::Download { path: "E/b".into(), id: "n2".into(), blob: "b3".into() },
+            ]
+        );
+        // Changed here too: no move – the server's version comes, the one here goes to the server as new.
+        let local = map(&[("D", here_dir()), ("D/a", here(1, 10)), ("b", here(2, 11))]);
+        let actions = plan(&base, &remote, &local);
+        assert!(!actions.contains(&Action::MoveLocal { from: "b".into(), to: "E/b".into() }), "{actions:?}");
+        assert!(actions.contains(&Action::Upload { path: "b".into(), id: None }), "{actions:?}");
+    }
+
+    #[test]
+    fn a_move_here_is_a_move_on_the_server() {
+        let base = agreed(&[
+            ("D", dir("d"), with_file(here_dir(), 7)),
+            ("D/a", file("n1", "b1"), with_file(here(1, 10), 8)),
+            ("b", file("n2", "b2"), with_file(here(1, 10), 9)),
+        ]);
+        let remote = map(&[("D", dir("d")), ("D/a", file("n1", "b1")), ("b", file("n2", "b2"))]);
+        let local = map(&[
+            ("E", with_file(here_dir(), 7)),
+            ("E/a", with_file(here(1, 10), 8)),
+            ("New", with_file(here_dir(), 10)),
+            ("New/b", with_file(here(1, 10), 9)),
+        ]);
+        assert_eq!(
+            plan(&base, &remote, &local),
+            [
+                Action::MakeRemoteDirectory("New".into()),
+                Action::MoveRemote { from: "D".into(), to: "E".into(), id: "d".into() },
+                Action::MoveRemote { from: "b".into(), to: "New/b".into(), id: "n2".into() },
+            ]
+        );
+    }
+
+    #[test]
+    fn nothing_moves_into_or_out_of_a_vault() {
+        let base = agreed(&[
+            ("V", in_vault(dir("v"), "v"), with_file(here_dir(), 1)),
+            ("V/a", in_vault(file("n1", "b1"), "v"), with_file(here(1, 10), 2)),
+            ("b", file("n2", "b2"), with_file(here(1, 10), 3)),
+        ]);
+        let remote =
+            map(&[("V", in_vault(dir("v"), "v")), ("V/a", in_vault(file("n1", "b1"), "v")), ("b", file("n2", "b2"))]);
+        // a out of the vault, b into it: each a deletion and a creation.
+        let local = map(&[
+            ("V", with_file(here_dir(), 1)),
+            ("a", with_file(here(1, 10), 2)),
+            ("V/b", with_file(here(1, 10), 3)),
+        ]);
+        let actions = plan(&base, &remote, &local);
+        assert!(!actions.iter().any(|a| matches!(a, Action::MoveRemote { .. })), "{actions:?}");
+        assert!(actions.contains(&Action::Upload { path: "V/b".into(), id: None }), "{actions:?}");
+        assert!(actions.contains(&Action::DeleteRemote { path: "V/a".into(), id: "n1".into() }), "{actions:?}");
+        // The vault itself may be renamed.
+        let local = map(&[
+            ("W", with_file(here_dir(), 1)),
+            ("W/a", with_file(here(1, 10), 2)),
+            ("b", with_file(here(1, 10), 3)),
+        ]);
+        assert_eq!(
+            plan(&base, &remote, &local),
+            [Action::MoveRemote { from: "V".into(), to: "W".into(), id: "v".into() }]
         );
     }
 }

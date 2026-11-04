@@ -356,7 +356,7 @@
                 <span class="file"><FileIcon name={node.name} type={node.mediaType} />{node.name}</span>
               {/if}
             </td>
-            <td class="muted small">{node.size == null ? "" : formatSize(node.size, locale)}</td>
+            <td class="muted small">{node.size == null || inVault(node) ? "" : formatSize(node.size, locale)}</td>
             <td class="muted small">{node.modified ? when(node.modified) : ""}</td>
             <td class="end">
               {#if !node.role}

@@ -64,8 +64,10 @@ publishing (environment `crates-io`); the apps of
 `apps/sync` (MIT) is `kernoid-sync`, the file sync of kernoid's apps on the SDK: one round (`Folder::sync`) reads the
 store's changes (`FileNode/changes`, the whole store when the state is too old), scans the folder (size and modification
 time) and decides in `plan` – a pure function with the tests of every case – what to carry over; a change on both sides
-keeps the local version as a copy beside the server's. Its state is SQLite through rusqlite (bundled) outside the folder
-(`state`). A workspace of its own like the SDK, minimum versions with a lock file. `scripts/client-check.sh` runs the
+keeps the local version as a copy beside the server's; moves stay moves (node ids on the server, inodes here), downloads
+go on from where they broke off and large uploads go in pieces (`Blob/upload`), vaults are kept in step with the
+account's key (`Folder::sync_with`), and names the file system cannot hold are left out (`Names`). Its state is SQLite
+through rusqlite (bundled) outside the folder (`state`, upgraded by `PRAGMA user_version`). A workspace of its own like the SDK, minimum versions with a lock file. `scripts/client-check.sh` runs the
 SDK's and its tests against a real kernoid (this checkout's binary, a fresh database, objects in memory) – CI does in
 the job `rust`.
 
