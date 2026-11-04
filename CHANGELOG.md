@@ -7,7 +7,7 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 ## [Unreleased]
 
-## [0.2.3] – DATE
+## [0.2.3] – 2026-11-04
 
 A patch release for kernoid's apps: the Rust SDK opens vaults, so the apps read and write end-to-end encrypted folders
 as the web app does. The server is unchanged – no migration, no change to the API or the configuration; the image
