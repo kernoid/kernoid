@@ -9,7 +9,7 @@
 
 [package]
 name = "kernoid-e2e"
-version = "0.2.4"
+version = "0.3.0"
 edition = "2024"
 rust-version = "1.94"
 license = "MIT"

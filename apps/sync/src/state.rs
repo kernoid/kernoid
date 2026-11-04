@@ -67,7 +67,7 @@ impl State {
                  path TEXT PRIMARY KEY, id TEXT NOT NULL, directory INTEGER NOT NULL, blob TEXT, size INTEGER NOT NULL,
                  local_directory INTEGER NOT NULL, local_size INTEGER NOT NULL, local_modified TEXT NOT NULL);",
         )?;
-        // 1 (0.2.4): vaults, file ids, transfers.
+        // 1 (0.3.0): vaults, file ids, transfers.
         let version: i64 = db.query_row("PRAGMA user_version", [], |row| row.get(0))?;
         if version < 1 {
             db.execute_batch(
