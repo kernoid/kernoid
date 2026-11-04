@@ -14,7 +14,8 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   on the server (`Blob/upload`), not sending again the pieces already there; keeps vaults in step with the account's
   key (`Folder::sync_with`) and leaves a vault whose key is not at hand as it is; and leaves out names the folder's
   file system cannot hold (`Names`: Windows' rules, names that differ only in case). Its state database is upgraded on
-  opening. New public fields of `Report` (`moved`, `locked`) and of `plan::Remote`/`Local` (`vault`, `file`).
+  opening, and is shared behind a lock, so that a round runs on any thread of a runtime (an app's). New public fields of
+  `Report` (`moved`, `locked`) and of `plan::Remote`/`Local` (`vault`, `file`).
 - The Rust SDK: `Client::download_from` (from a byte on, an HTTP range) and `Client::join` (uploads joined into one
   blob, RFC 9404); for vaults `E2e::open_name`, `name_in`, `seal_content`, `open_content`, `move_in` and
   `make_directory_in` (which returns the new directory's id).

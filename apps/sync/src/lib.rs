@@ -831,6 +831,18 @@ mod tests {
     }
 
     #[test]
+    fn a_round_runs_on_any_thread() {
+        fn send<T: Send>(_: T) {}
+        fn shared<T: Send + Sync>() {}
+        shared::<Folder>();
+        let client: Option<&Client> = None;
+        if let Some(client) = client {
+            let mut folder = Folder::open(std::env::temp_dir(), "x", Path::new("unused.db")).unwrap();
+            send(async move { folder.sync_with(client, None).await });
+        }
+    }
+
+    #[test]
     fn the_tree_by_path_without_the_trash_and_bad_names() {
         let mut nodes: BTreeMap<String, Node> = [
             node("1", None, "Projects", true),

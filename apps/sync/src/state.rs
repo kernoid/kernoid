@@ -6,6 +6,8 @@
 
 use std::{collections::BTreeMap, path::Path};
 
+use std::sync::{Mutex, MutexGuard};
+
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::{
@@ -42,7 +44,8 @@ pub struct Pieces {
 
 #[derive(Debug)]
 pub struct State {
-    db: Connection,
+    // Behind a lock, so that a round – which holds the state across awaits – can run on any thread.
+    db: Mutex<Connection>,
 }
 
 impl From<rusqlite::Error> for Error {
@@ -82,22 +85,27 @@ impl State {
                  COMMIT;",
             )?;
         }
-        Ok(State { db })
+        Ok(State { db: Mutex::new(db) })
+    }
+
+    fn db(&self) -> MutexGuard<'_, Connection> {
+        // A round that panicked left nothing half-written: SQLite's transactions saw to that.
+        self.db.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     pub fn meta(&self, key: &str) -> Result<Option<String>> {
-        Ok(self.db.query_row("SELECT value FROM meta WHERE key = ?1", [key], |row| row.get(0)).optional()?)
+        Ok(self.db().query_row("SELECT value FROM meta WHERE key = ?1", [key], |row| row.get(0)).optional()?)
     }
 
     pub fn set_meta(&self, key: &str, value: &str) -> Result<()> {
-        self.db.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?1, ?2)", [key, value])?;
+        self.db().execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?1, ?2)", [key, value])?;
         Ok(())
     }
 
     pub fn remote(&self) -> Result<BTreeMap<String, Node>> {
-        let mut query = self
-            .db
-            .prepare("SELECT id, parent, name, directory, blob, size, role, vault, sealed_name, locked FROM remote")?;
+        let db = self.db();
+        let mut query =
+            db.prepare("SELECT id, parent, name, directory, blob, size, role, vault, sealed_name, locked FROM remote")?;
         let rows = query.query_map([], |row| {
             Ok(Node {
                 id: row.get(0)?,
@@ -122,7 +130,8 @@ impl State {
 
     /// Replaces the stored tree and its state at once.
     pub fn set_remote(&mut self, nodes: &BTreeMap<String, Node>, state: &str) -> Result<()> {
-        let tx = self.db.transaction()?;
+        let mut db = self.db();
+        let tx = db.transaction()?;
         tx.execute("DELETE FROM remote", [])?;
         {
             let mut insert = tx.prepare(
@@ -150,7 +159,8 @@ impl State {
     }
 
     pub fn base(&self) -> Result<BTreeMap<RelPath, Base>> {
-        let mut query = self.db.prepare(
+        let db = self.db();
+        let mut query = db.prepare(
             "SELECT path, id, directory, blob, size, local_directory, local_size, local_modified, vault, local_file
                  FROM base",
         )?;
@@ -186,7 +196,8 @@ impl State {
 
     /// Replaces what both sides agreed on.
     pub fn set_base(&mut self, base: &BTreeMap<RelPath, Base>) -> Result<()> {
-        let tx = self.db.transaction()?;
+        let mut db = self.db();
+        let tx = db.transaction()?;
         tx.execute("DELETE FROM base", [])?;
         {
             let mut insert = tx.prepare(
@@ -215,23 +226,24 @@ impl State {
 
     /// The blob a download into a path's partial file was for, if one broke off.
     pub fn download(&self, path: &str) -> Result<Option<String>> {
-        Ok(self.db.query_row("SELECT blob FROM downloads WHERE path = ?1", [path], |row| row.get(0)).optional()?)
+        Ok(self.db().query_row("SELECT blob FROM downloads WHERE path = ?1", [path], |row| row.get(0)).optional()?)
     }
 
     /// Records a download begun (`Some`) or ended (`None`).
     pub fn set_download(&self, path: &str, blob: Option<&str>) -> Result<()> {
         match blob {
             Some(blob) => {
-                self.db.execute("INSERT OR REPLACE INTO downloads (path, blob) VALUES (?1, ?2)", [path, blob])?
+                self.db().execute("INSERT OR REPLACE INTO downloads (path, blob) VALUES (?1, ?2)", [path, blob])?
             }
-            None => self.db.execute("DELETE FROM downloads WHERE path = ?1", [path])?,
+            None => self.db().execute("DELETE FROM downloads WHERE path = ?1", [path])?,
         };
         Ok(())
     }
 
     /// The paths of downloads that broke off.
     pub fn downloads(&self) -> Result<Vec<RelPath>> {
-        let mut query = self.db.prepare("SELECT path FROM downloads")?;
+        let db = self.db();
+        let mut query = db.prepare("SELECT path FROM downloads")?;
         let rows = query.query_map([], |row| row.get(0))?;
         Ok(rows.collect::<std::result::Result<_, _>>()?)
     }
@@ -239,7 +251,7 @@ impl State {
     /// The pieces of an upload of a path sent so far.
     pub fn upload(&self, path: &str) -> Result<Option<Pieces>> {
         let row = self
-            .db
+            .db()
             .query_row("SELECT size, modified, blobs, started FROM uploads WHERE path = ?1", [path], |row| {
                 Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?, row.get::<_, i64>(3)?))
             })
@@ -255,7 +267,7 @@ impl State {
     /// Records the pieces of an upload (`Some`), or that it ended (`None`).
     pub fn set_upload(&self, path: &str, pieces: Option<&Pieces>) -> Result<()> {
         match pieces {
-            Some(p) => self.db.execute(
+            Some(p) => self.db().execute(
                 "INSERT OR REPLACE INTO uploads (path, size, modified, blobs, started) VALUES (?1, ?2, ?3, ?4, ?5)",
                 params![
                     path,
@@ -265,7 +277,7 @@ impl State {
                     p.started
                 ],
             )?,
-            None => self.db.execute("DELETE FROM uploads WHERE path = ?1", [path])?,
+            None => self.db().execute("DELETE FROM uploads WHERE path = ?1", [path])?,
         };
         Ok(())
     }
