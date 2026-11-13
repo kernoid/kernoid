@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2020 Stalwart Labs Ltd <hello@stalw.art>
+ * SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
  *
  * SPDX-License-Identifier: AGPL-3.0-only
  */
@@ -20,7 +20,7 @@ use crate::compiler::grammar::{MatchType, test::Test};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 pub(crate) struct TestMailboxExists {
@@ -30,7 +30,7 @@ pub(crate) struct TestMailboxExists {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 pub(crate) struct TestMetadataExists {
@@ -49,7 +49,7 @@ metadata [MATCH-TYPE] [COMPARATOR]
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 pub(crate) struct TestMetadata {

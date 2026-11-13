@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2020 Stalwart Labs Ltd <hello@stalw.art>
+ * SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
  *
  * SPDX-License-Identifier: AGPL-3.0-only
  */
@@ -169,26 +169,7 @@ header_ids! {
     139 => WrongRecipient,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    const HEADER_ID_COUNT: u8 = 140;
-
-    #[test]
-    fn header_ids_round_trip() {
-        for id in 0..HEADER_ID_COUNT {
-            let name = header_from_id(id).unwrap_or_else(|| panic!("missing header id {id}"));
-            assert_eq!(header_id(&name), Some(id), "{name:?}");
-            assert_eq!(
-                HeaderName::parse(name.as_str()),
-                Some(name.clone()),
-                "{name:?}"
-            );
-        }
-        for id in HEADER_ID_COUNT..=HEADER_OTHER {
-            assert_eq!(header_from_id(id), None);
-        }
-        assert_eq!(header_id(&HeaderName::Other("X-Test".into())), None);
-    }
-}
+#[cfg(all(test, stalwart_tests))]
+#[rustfmt::skip]
+#[path = "../../../../../stalwart-tests/unit/sieve/src/bytecode/header_id/tests.rs"]
+mod tests;

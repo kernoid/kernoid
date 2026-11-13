@@ -289,11 +289,13 @@ impl Session {
                     (Attribute::ModSeq, _, _) => DataItem::ModSeq { modseq: entry.modseq },
                     (Attribute::Rfc822, _, Some(raw)) => DataItem::Rfc822 { contents: SliceRange::Single(raw) },
                     (Attribute::Rfc822Header, Some(message), Some(raw)) => DataItem::Rfc822Header {
-                        contents: SliceRange::Single(&raw[..(message.parts[0].offset_body as usize).min(raw.len())]),
+                        contents: SliceRange::Single(
+                            &raw[..(message.root().root_part().offset_body() as usize).min(raw.len())],
+                        ),
                     },
                     (Attribute::Rfc822Text, Some(message), Some(raw)) => DataItem::Rfc822Text {
                         contents: SliceRange::Single(
-                            raw.get(message.parts[0].offset_body as usize..).unwrap_or_default(),
+                            raw.get(message.root().root_part().offset_body() as usize..).unwrap_or_default(),
                         ),
                     },
                     (Attribute::Envelope, Some(message), _) => {

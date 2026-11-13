@@ -5,13 +5,13 @@
 use std::collections::BTreeMap;
 
 use kernoid_mail::{AddressInfo, EmailInfo};
-use mail_parser::{Address, HeaderValue, Message, MessageParser, MessagePart, MimeHeaders, PartType};
+use mail_parser::{AddressList, HeaderValue, Message, MessageParser, MessagePart, PartKind, TextList};
 use serde_json::{Map, Value, json};
 use uuid::Uuid;
 
 use crate::{
     MAX_OBJECTS_IN_GET,
-    blob::BlobId,
+    blob::{BlobId, part_at, part_index},
     mailbox::{ids, mailbox_ids, properties},
     request::{Context, MethodError, MethodResult},
 };
@@ -77,22 +77,24 @@ fn address_list(list: &[AddressInfo]) -> Value {
     json!(list.iter().map(|address| json!({ "name": address.name, "email": address.email })).collect::<Vec<_>>())
 }
 
-fn parsed_addresses(address: Option<&Address<'_>>) -> Value {
-    match address {
-        None => Value::Null,
-        Some(address) => json!(
-            address
-                .iter()
-                .filter_map(|addr| Some(json!({ "name": addr.name(), "email": addr.address()? })))
-                .collect::<Vec<_>>()
-        ),
-    }
+fn mailboxes<'x>(mailboxes: impl Iterator<Item = mail_parser::Mailbox<'x>>) -> Value {
+    json!(
+        mailboxes.filter_map(|addr| Some(json!({ "name": addr.name(), "email": addr.address()? }))).collect::<Vec<_>>()
+    )
+}
+
+fn parsed_addresses(address: Option<AddressList<'_>>) -> Value {
+    address.map_or(Value::Null, |address| mailboxes(address.mailboxes()))
+}
+
+fn text_list(list: Option<TextList<'_>>) -> Value {
+    list.filter(|list| !list.is_empty()).map_or(Value::Null, |list| json!(list.iter().collect::<Vec<_>>()))
 }
 
 fn id_list(value: &HeaderValue<'_>) -> Value {
     match value {
         HeaderValue::Text(id) => json!([id]),
-        HeaderValue::TextList(ids) => json!(ids),
+        HeaderValue::TextList(ids) => json!(ids.iter().collect::<Vec<_>>()),
         _ => Value::Null,
     }
 }
@@ -106,7 +108,7 @@ fn keywords(list: &[String]) -> Value {
 }
 
 /// A header's value in one of the forms of RFC 8621, 4.1.2.
-fn header_form(raw: &[u8], message: &Message<'_>, part: &MessagePart<'_>, property: &str) -> Value {
+fn header_form(part: &MessagePart<'_>, property: &str) -> Value {
     let mut pieces = property.splitn(4, ':').skip(1);
     let name = pieces.next().unwrap_or_default();
     let mut form = "asRaw";
@@ -119,60 +121,60 @@ fn header_form(raw: &[u8], message: &Message<'_>, part: &MessagePart<'_>, proper
         }
     }
     let values: Vec<Value> = part
-        .headers
+        .headers()
         .iter()
-        .filter(|header| header.name.as_str().eq_ignore_ascii_case(name))
-        .map(|header| match form {
-            "asRaw" => json!(String::from_utf8_lossy(
-                raw.get(header.offset_start as usize..header.offset_end as usize).unwrap_or_default()
-            )),
-            "asText" => match &header.value {
-                HeaderValue::Text(text) => json!(text.trim()),
-                HeaderValue::TextList(list) => json!(list.join(", ")),
+        .filter(|header| header.raw_name().eq_ignore_ascii_case(name))
+        .map(|header| {
+            let value = header.value();
+            match form {
+                "asRaw" => json!(String::from_utf8_lossy(header.raw_value())),
+                "asText" => match &value {
+                    HeaderValue::Text(text) => json!(text.trim()),
+                    HeaderValue::TextList(list) => json!(list.iter().collect::<Vec<_>>().join(", ")),
+                    _ => Value::Null,
+                },
+                "asAddresses" => parsed_addresses(value.as_address()),
+                "asGroupedAddresses" => match value.as_address() {
+                    Some(address) => json!(
+                        address
+                            .groups()
+                            .map(|(name, members)| json!({ "name": name, "addresses": mailboxes(members) }))
+                            .collect::<Vec<_>>()
+                    ),
+                    None => Value::Null,
+                },
+                "asMessageIds" => id_list(&value),
+                "asDate" => value.as_datetime().map_or(Value::Null, |date| json!(date.to_rfc3339())),
+                "asURLs" => match &value {
+                    HeaderValue::Text(text) => json!(
+                        text.split(',')
+                            .filter_map(|url| url.trim().strip_prefix('<').and_then(|url| url.strip_suffix('>')))
+                            .collect::<Vec<_>>()
+                    ),
+                    HeaderValue::TextList(list) => json!(list.iter().collect::<Vec<_>>()),
+                    HeaderValue::Address(list) => {
+                        json!(list.mailboxes().filter_map(|mailbox| mailbox.address()).collect::<Vec<_>>())
+                    }
+                    _ => Value::Null,
+                },
                 _ => Value::Null,
-            },
-            "asAddresses" => parsed_addresses(header.value.as_address()),
-            "asGroupedAddresses" => match header.value.as_address() {
-                Some(address) => json!([{ "name": null, "addresses": parsed_addresses(Some(address)) }]),
-                None => Value::Null,
-            },
-            "asMessageIds" => id_list(&header.value),
-            "asDate" => header.value.as_datetime().map_or(Value::Null, |date| json!(date.to_rfc3339())),
-            "asURLs" => match &header.value {
-                HeaderValue::Text(text) => json!(
-                    text.split(',')
-                        .filter_map(|url| url.trim().strip_prefix('<').and_then(|url| url.strip_suffix('>')))
-                        .collect::<Vec<_>>()
-                ),
-                HeaderValue::TextList(list) => json!(list),
-                _ => Value::Null,
-            },
-            _ => Value::Null,
+            }
         })
         .collect();
-    let _ = message;
     if all { json!(values) } else { values.into_iter().last().unwrap_or(Value::Null) }
 }
 
 /// One body part (RFC 8621, 4.1.4) with the properties asked for.
-fn body_part(raw: &[u8], message: &Message<'_>, index: usize, email: Option<Uuid>, options: &BodyOptions) -> Value {
-    let Some(part) = message.parts.get(index) else { return Value::Null };
-    let multipart = matches!(part.body, PartType::Multipart(_));
+fn body_part(message: &Message<'_>, part: MessagePart<'_>, email: Option<Uuid>, options: &BodyOptions) -> Value {
+    let Some(index) = part_index(message, &part) else { return Value::Null };
+    let multipart = part.is_multipart();
     let mut out = Map::new();
     for property in &options.properties {
         let value = match property.as_str() {
             "partId" if !multipart => json!(index.to_string()),
             "blobId" if !multipart => email.map_or(Value::Null, |email| json!(BlobId::Part(email, index).to_string())),
-            "size" => json!(part.len()),
-            "headers" => json!(
-                part.headers
-                    .iter()
-                    .map(|header| json!({
-                        "name": header.name.as_str(),
-                        "value": String::from_utf8_lossy(raw.get(header.offset_start as usize..header.offset_end as usize).unwrap_or_default()),
-                    }))
-                    .collect::<Vec<_>>()
-            ),
+            "size" => json!(part.decoded_len()),
+            "headers" => headers(&part),
             "name" => json!(part.attachment_name()),
             "type" => json!(match part.content_type() {
                 Some(kind) => format!("{}/{}", kind.ctype(), kind.subtype().unwrap_or("plain")).to_lowercase(),
@@ -186,27 +188,18 @@ fn body_part(raw: &[u8], message: &Message<'_>, index: usize, email: Option<Uuid
             },
             "disposition" => json!(part.content_disposition().map(|disposition| disposition.ctype())),
             "cid" => json!(part.content_id()),
-            "language" => match part.content_language() {
-                HeaderValue::Text(language) => json!([language]),
-                HeaderValue::TextList(languages) => json!(languages),
-                _ => Value::Null,
-            },
+            "language" => text_list(part.content_language()),
             "location" => json!(part.content_location()),
             "subParts" if multipart => Value::Null,
-            property if property.starts_with("header:") => header_form(raw, message, part, property),
+            property if property.starts_with("header:") => header_form(&part, property),
             _ => continue,
         };
         out.insert(property.clone(), value);
     }
-    if let PartType::Multipart(children) = &part.body {
+    if multipart {
         out.insert(
             "subParts".into(),
-            json!(
-                children
-                    .iter()
-                    .map(|child| body_part(raw, message, *child as usize, email, options))
-                    .collect::<Vec<_>>()
-            ),
+            json!(part.children().map(|child| body_part(message, child, email, options)).collect::<Vec<_>>()),
         );
     }
     Value::Object(out)
@@ -214,10 +207,11 @@ fn body_part(raw: &[u8], message: &Message<'_>, index: usize, email: Option<Uuid
 
 /// The text of a part for `bodyValues`, cut at `max` bytes (on a character boundary) when `max` is set.
 fn body_value(part: &MessagePart<'_>, max: usize) -> Value {
-    let text = match &part.body {
-        PartType::Text(text) => text.to_string(),
-        PartType::Html(html) => html.to_string(),
-        _ => String::new(),
+    let (text, problems) = match part.kind() {
+        PartKind::Text | PartKind::Html => part
+            .text_checked()
+            .map_or_else(|| (String::new(), true), |(text, problems)| (text.into_owned(), !problems.is_empty())),
+        _ => (String::new(), false),
     };
     let truncated = max > 0 && text.len() > max;
     let value = if truncated {
@@ -229,7 +223,20 @@ fn body_value(part: &MessagePart<'_>, max: usize) -> Value {
     } else {
         text
     };
-    json!({ "value": value, "isEncodingProblem": part.is_encoding_problem, "isTruncated": truncated })
+    json!({ "value": value, "isEncodingProblem": problems, "isTruncated": truncated })
+}
+
+/// The header fields of a part as written (RFC 8621, 4.1.3).
+fn headers(part: &MessagePart<'_>) -> Value {
+    json!(
+        part.headers()
+            .iter()
+            .map(|header| json!({
+                "name": header.raw_name(),
+                "value": String::from_utf8_lossy(header.raw_value()),
+            }))
+            .collect::<Vec<_>>()
+    )
 }
 
 /// The properties of an email that come from its raw message.
@@ -240,45 +247,40 @@ pub(crate) fn from_message(
     property: &str,
     options: &BodyOptions,
 ) -> Option<Value> {
-    let list = |indices: &[u32]| {
-        json!(indices.iter().map(|index| body_part(raw, message, *index as usize, email, options)).collect::<Vec<_>>())
+    let list = |parts: &mut dyn Iterator<Item = MessagePart<'_>>| {
+        json!(parts.map(|part| body_part(message, part, email, options)).collect::<Vec<_>>())
     };
+    let root = message.root();
     Some(match property {
-        "bodyStructure" => body_part(raw, message, 0, email, options),
-        "textBody" => list(&message.text_body),
-        "htmlBody" => list(&message.html_body),
-        "attachments" => list(&message.attachments),
-        "headers" => json!(
-            message.parts[0]
-                .headers
-                .iter()
-                .map(|header| json!({
-                    "name": header.name.as_str(),
-                    "value": String::from_utf8_lossy(raw.get(header.offset_start as usize..header.offset_end as usize).unwrap_or_default()),
-                }))
-                .collect::<Vec<_>>()
-        ),
+        "bodyStructure" => body_part(message, root.root_part(), email, options),
+        "textBody" => list(&mut root.text_body()),
+        "htmlBody" => list(&mut root.html_body()),
+        "attachments" => list(&mut root.attachments()),
+        "headers" => headers(&root.root_part()),
         "bodyValues" => {
-            let mut wanted: BTreeMap<u32, ()> = BTreeMap::new();
+            let mut wanted: BTreeMap<usize, ()> = BTreeMap::new();
+            let mut want = |parts: &mut dyn Iterator<Item = MessagePart<'_>>| {
+                wanted.extend(parts.filter_map(|part| part_index(message, &part)).map(|index| (index, ())));
+            };
             if options.text || options.all {
-                wanted.extend(message.text_body.iter().map(|index| (*index, ())));
+                want(&mut root.text_body());
             }
             if options.html || options.all {
-                wanted.extend(message.html_body.iter().map(|index| (*index, ())));
+                want(&mut root.html_body());
             }
             Value::Object(
                 wanted
                     .keys()
                     .filter_map(|index| {
-                        let part = message.parts.get(*index as usize)?;
-                        part.is_text().then(|| (index.to_string(), body_value(part, options.max_bytes)))
+                        let part = part_at(message, *index)?;
+                        part.is_text().then(|| (index.to_string(), body_value(&part, options.max_bytes)))
                     })
                     .collect(),
             )
         }
         "messageId" => message.message_id().map_or(Value::Null, |id| json!([id])),
-        "inReplyTo" => id_list(message.in_reply_to()),
-        "references" => id_list(message.references()),
+        "inReplyTo" => text_list(message.in_reply_to()),
+        "references" => text_list(message.references()),
         "sender" => parsed_addresses(message.sender()),
         "from" => parsed_addresses(message.from()),
         "to" => parsed_addresses(message.to()),
@@ -287,10 +289,12 @@ pub(crate) fn from_message(
         "replyTo" => parsed_addresses(message.reply_to()),
         "subject" => json!(message.subject()),
         "sentAt" => message.date().map_or(Value::Null, |date| json!(date.to_rfc3339())),
-        "hasAttachment" => json!(message.attachment_count() > 0),
-        "preview" => json!(message.body_preview(256).map(|preview| preview.split_whitespace().collect::<Vec<_>>().join(" "))),
+        "hasAttachment" => json!(message.has_attachments()),
+        "preview" => {
+            json!(message.body_preview(256).map(|preview| preview.split_whitespace().collect::<Vec<_>>().join(" ")))
+        }
         "size" => json!(raw.len()),
-        property if property.starts_with("header:") => header_form(raw, message, &message.parts[0], property),
+        property if property.starts_with("header:") => header_form(&root.root_part(), property),
         _ => return None,
     })
 }

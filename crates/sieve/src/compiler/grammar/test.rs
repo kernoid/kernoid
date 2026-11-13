@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2020 Stalwart Labs Ltd <hello@stalw.art>
+ * SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
  *
  * SPDX-License-Identifier: AGPL-3.0-only
  */
@@ -37,7 +37,7 @@ use crate::compiler::{
 #[allow(clippy::enum_variant_names)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[repr(u8)]
@@ -100,14 +100,14 @@ pub(crate) enum Test {
     Vacation(Box<TestVacation>) = 27,
 
     // Only test
-    #[cfg(test)]
+    #[cfg(all(test, stalwart_tests))]
     TestCmd(Box<TestCommand>) = 0x7f,
 }
 
-#[cfg(test)]
+#[cfg(all(test, stalwart_tests))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 pub(crate) struct TestCommand {
@@ -502,7 +502,7 @@ impl CompilerState<'_> {
                         }))
                         .into()
                     }
-                    #[cfg(test)]
+                    #[cfg(all(test, stalwart_tests))]
                     Token::Unknown(name) if name.contains("test") => {
                         use crate::compiler::Value;
 
@@ -688,7 +688,7 @@ impl Instruction {
                 Test::SpecialUseExists(op) => {
                     op.is_not = true;
                 }
-                #[cfg(test)]
+                #[cfg(all(test, stalwart_tests))]
                 Test::TestCmd(op) => {
                     op.is_not = true;
                 }

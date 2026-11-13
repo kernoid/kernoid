@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2020 Stalwart Labs Ltd <hello@stalw.art>
+ * SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
  *
  * SPDX-License-Identifier: AGPL-3.0-only
  */
@@ -14,7 +14,7 @@ use super::action_set::{Modifier, Replacement};
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[repr(transparent)]
@@ -24,7 +24,7 @@ pub(crate) struct ForEveryPart {
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 pub(crate) struct Replace {
@@ -36,7 +36,7 @@ pub(crate) struct Replace {
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 pub(crate) struct Enclose {
@@ -47,7 +47,7 @@ pub(crate) struct Enclose {
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 pub(crate) struct ExtractText {
@@ -58,7 +58,7 @@ pub(crate) struct ExtractText {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[repr(u8)]

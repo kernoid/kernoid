@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2020 Stalwart Labs Ltd <hello@stalw.art>
+ * SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
  *
  * SPDX-License-Identifier: AGPL-3.0-only
  */
@@ -33,7 +33,7 @@ impl<'x, F> Tokenizer<'x, F>
 where
     F: Fn(&str, bool) -> Result<Token, String>,
 {
-    #[cfg(test)]
+    #[cfg(all(test, stalwart_tests))]
     pub fn new(expr: &'x str, token_map: F) -> Self {
         Self::from_iter(expr.as_bytes().iter().enumerate().peekable(), token_map)
     }
@@ -291,9 +291,10 @@ where
 }
 
 fn lookup_boolean(input: &str) -> Option<i64> {
-    hashify::tiny_map!(
-        input.as_bytes(),
+    hashify::map!(
+        input.as_bytes(), i64,
         "true" => 1,
         "false" => 0,
     )
+    .copied()
 }

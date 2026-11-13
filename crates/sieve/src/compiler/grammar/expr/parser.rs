@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2020 Stalwart Labs Ltd <hello@stalw.art>
+ * SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
  *
  * SPDX-License-Identifier: AGPL-3.0-only
  */
@@ -240,7 +240,7 @@ where
             if let Expression::JmpIf { pos, .. } = &mut self.output[jmp_pos] {
                 *pos = (cur_pos - jmp_pos) as u32;
             } else {
-                #[cfg(test)]
+                #[cfg(all(test, stalwart_tests))]
                 panic!("Invalid jump position");
             }
         }

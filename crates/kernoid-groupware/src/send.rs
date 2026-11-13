@@ -14,7 +14,6 @@ use mail_builder::{
     headers::{HeaderType, content_type::ContentType},
     mime::{BodyPart, MimePart},
 };
-use mail_parser::MimeHeaders;
 use uuid::Uuid;
 
 use crate::{
@@ -169,16 +168,16 @@ impl Groupware {
         let Some(message) = mail_parser::MessageParser::new().parse(raw) else { return };
         let Some(from) = message.from().and_then(|from| from.first()).and_then(|from| from.address()) else { return };
         let from = from.to_lowercase();
-        for part in message.parts.iter() {
+        for part in message.root().parts() {
             let Some(content_type) = part.content_type() else { continue };
-            let is_itip = content_type.c_type.eq_ignore_ascii_case("text")
+            let is_itip = content_type.ctype().eq_ignore_ascii_case("text")
                 && content_type.subtype().is_some_and(|subtype| subtype.eq_ignore_ascii_case("calendar"))
                 && content_type.attribute("method").is_some();
             if !is_itip {
                 continue;
             }
-            let Some(text) = part.text_contents() else { continue };
-            if let Err(error) = self.receive_itip(account, &from, text).await {
+            let Some(text) = part.text() else { continue };
+            if let Err(error) = self.receive_itip(account, &from, &text).await {
                 tracing::info!(%error, %account, "an invitation was not applied");
             }
             // One iTIP object per message (RFC 6047, 2.4).

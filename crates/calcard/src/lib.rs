@@ -5,7 +5,7 @@
  */
 
 //! iCalendar, vCard, JSCalendar and JSContact: parsing, writing, conversion and recurrences. Taken over from Stalwart's
-//! `crates/calcard` (v1.0.1, commit 23b6975, 2026-10-28), as it is – the library moved into Stalwart's repository and
+//! `crates/calcard` (v1.1.0, commit e7cde9b, 2026-11-09), as it is – the library moved into Stalwart's repository and
 //! is no longer published to crates.io; 0.3.14, the last release there, read a UTC start as local time when expanding
 //! recurrences and wrote `CONFERENCE` without `VALUE=URI`. Files under other licences (`datecalc`) keep their headers.
 

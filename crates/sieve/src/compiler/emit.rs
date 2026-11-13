@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2020 Stalwart Labs Ltd <hello@stalw.art>
+ * SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
  *
  * SPDX-License-Identifier: AGPL-3.0-only
  */
@@ -708,7 +708,7 @@ impl Codegen<'_> {
                 };
                 self.emit_op(&op);
             }
-            #[cfg(test)]
+            #[cfg(all(test, stalwart_tests))]
             Instruction::TestCmd(arguments) => {
                 let arguments = self.list(arguments);
                 self.emit_op(&ops::TestCmd { arguments });
@@ -1031,7 +1031,7 @@ impl Codegen<'_> {
                 };
                 self.emit_op(&op);
             }
-            #[cfg(test)]
+            #[cfg(all(test, stalwart_tests))]
             Test::TestCmd(cmd) => {
                 let op = ops::TestCmdTest {
                     arguments: self.list(&cmd.arguments),

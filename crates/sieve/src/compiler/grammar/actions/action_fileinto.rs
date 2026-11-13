@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2020 Stalwart Labs Ltd <hello@stalw.art>
+ * SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
  *
  * SPDX-License-Identifier: AGPL-3.0-only
  */
@@ -15,7 +15,7 @@ use crate::compiler::{
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 pub(crate) struct FileInto {
@@ -69,7 +69,7 @@ impl CompilerState<'_> {
                 Token::Tag(Word::MailboxId) => {
                     self.validate_argument(
                         4,
-                        Capability::Mailbox.into(),
+                        Capability::MailboxId.into(),
                         token_info.line_num,
                         token_info.line_pos,
                     )?;

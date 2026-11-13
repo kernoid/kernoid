@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2020 Stalwart Labs Ltd <hello@stalw.art>
+ * SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
  *
  * SPDX-License-Identifier: AGPL-3.0-only
  */
@@ -541,6 +541,7 @@ impl Iterator for Tokenizer<'_> {
                     b'\\' => {
                         if last_ch == b'\\' {
                             self.push_byte(ch);
+                            self.last_ch = 0;
                             self.skip_string_chunk();
                         }
                     }
@@ -644,3 +645,8 @@ impl From<&State> for ErrorType {
         }
     }
 }
+
+#[cfg(all(test, stalwart_tests))]
+#[rustfmt::skip]
+#[path = "../../../../../../stalwart-tests/unit/sieve/src/compiler/lexer/tokenizer/tests.rs"]
+mod tests;

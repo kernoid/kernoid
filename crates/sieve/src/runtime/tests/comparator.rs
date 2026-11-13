@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2020 Stalwart Labs Ltd <hello@stalw.art>
+ * SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
  *
  * SPDX-License-Identifier: AGPL-3.0-only
  */
@@ -241,48 +241,7 @@ impl RelationalMatch {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn unknown_comparators_fold_case() {
-        let other = Comparator::from_code(Comparator::Other("i;unicode-casemap".into()).code());
-        assert!(other.is(&"HELLO", &"hello"));
-        assert!(other.contains("This is a TEST header", "test"));
-        assert!(other.relational(&RelationalMatch::Eq, &"HELLO", &"hello"));
-        assert!(!other.is_casemap());
-        let octet = Comparator::from_code(Comparator::Octet.code());
-        assert!(!octet.is(&"HELLO", &"hello"));
-        assert!(!octet.contains("This is a TEST header", "test"));
-    }
-
-    #[test]
-    fn ascii_case_insensitive_search() {
-        for (haystack, needle, expected) in [
-            ("Hello World", "world", true),
-            ("Hello World", "WORLD", true),
-            ("Hello World", "o w", true),
-            ("Hello World", "xyz", false),
-            ("Hello World", "", true),
-            ("", "a", false),
-            ("aaa", "aaaa", false),
-            ("aAaAb", "aab", true),
-            ("...", ".", true),
-            ("Grüße", "grüsse", false),
-            ("Grüße", "ÜSSE", false),
-            ("Grüße", "grüß", true),
-        ] {
-            assert_eq!(
-                contains_ignore_ascii_case(haystack, needle),
-                expected,
-                "{haystack:?} contains {needle:?}"
-            );
-            assert_eq!(
-                haystack.to_lowercase().contains(&needle.to_lowercase()),
-                expected,
-                "reference {haystack:?} contains {needle:?}"
-            );
-        }
-    }
-}
+#[cfg(all(test, stalwart_tests))]
+#[rustfmt::skip]
+#[path = "../../../../../../stalwart-tests/unit/sieve/src/runtime/tests/comparator/tests.rs"]
+mod tests;

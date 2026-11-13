@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2020 Stalwart Labs Ltd <hello@stalw.art>
+ * SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
  *
  * SPDX-License-Identifier: AGPL-3.0-only
  */
@@ -15,7 +15,7 @@ use crate::compiler::{
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 pub(crate) struct Redirect {
@@ -29,7 +29,7 @@ pub(crate) struct Redirect {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[repr(u8)]
@@ -41,7 +41,7 @@ pub enum NotifyItem {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[repr(u8)]
@@ -53,7 +53,7 @@ pub enum Notify {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[repr(u8)]
@@ -74,7 +74,7 @@ pub enum Ret {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[repr(u8)]
@@ -94,7 +94,7 @@ pub enum ByTime<T> {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[repr(u8)]
@@ -261,26 +261,29 @@ impl MapLocalVars for ByTime<Value> {
 }
 
 fn lookup_by_mode(input: &str) -> Option<ByMode> {
-    hashify::tiny_map_ignore_case!(
-        input.as_bytes(),
+    hashify::map_ignore_case!(
+        input.as_bytes(), ByMode,
         "notify" => ByMode::Notify,
         "return" => ByMode::Return,
     )
+    .copied()
 }
 
 fn lookup_ret(input: &str) -> Option<Ret> {
-    hashify::tiny_map_ignore_case!(
-        input.as_bytes(),
+    hashify::map_ignore_case!(
+        input.as_bytes(), Ret,
         "full" => Ret::Full,
         "hdrs" => Ret::Hdrs,
     )
+    .copied()
 }
 
 fn lookup_notify_item(input: &str) -> Option<NotifyItem> {
-    hashify::tiny_map_ignore_case!(
-        input.as_bytes(),
+    hashify::map_ignore_case!(
+        input.as_bytes(), NotifyItem,
         "success" => NotifyItem::Success,
         "failure" => NotifyItem::Failure,
         "delay" => NotifyItem::Delay,
     )
+    .copied()
 }

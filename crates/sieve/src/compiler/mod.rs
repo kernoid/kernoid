@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2020 Stalwart Labs Ltd <hello@stalw.art>
+ * SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
  *
  * SPDX-License-Identifier: AGPL-3.0-only
  */
@@ -12,7 +12,7 @@ use crate::{
     Compiler, Envelope, FunctionMap,
     runtime::{RuntimeError, tests::glob::CompiledGlob},
 };
-use ahash::AHashMap;
+use ahash::{AHashMap, AHashSet};
 use mail_parser::HeaderName;
 use std::{borrow::Cow, fmt::Display};
 
@@ -68,6 +68,7 @@ pub enum ErrorType {
     UnsupportedComparator(String),
     DuplicatedParameter,
     UndeclaredCapability(Capability),
+    UnsupportedCapability(Capability),
     MissingTag(Cow<'static, str>),
 }
 
@@ -79,7 +80,7 @@ impl Default for Compiler {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[repr(u8)]
@@ -111,7 +112,7 @@ impl From<StringConstant> for RawValue {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[repr(transparent)]
@@ -133,7 +134,7 @@ impl ConstantId {
 
 #[derive(Debug, Clone)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 pub struct Regex {
@@ -142,18 +143,21 @@ pub struct Regex {
 
 #[derive(Debug, Clone)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 pub struct Glob {
-    #[cfg_attr(any(test, feature = "serde"), serde(skip, default))]
+    #[cfg_attr(
+        any(all(test, stalwart_tests), feature = "serde"),
+        serde(skip, default)
+    )]
     pub(crate) glob: CompiledGlob,
     pub expr: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[repr(u8)]
@@ -169,7 +173,7 @@ pub enum VariableType {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 pub struct Transform {
@@ -179,19 +183,31 @@ pub struct Transform {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 pub struct HeaderVariable<'x> {
+    #[cfg_attr(
+        any(all(test, stalwart_tests), feature = "serde"),
+        serde(deserialize_with = "deserialize_header_names")
+    )]
     pub name: Box<[HeaderName<'x>]>,
     pub part: HeaderPart,
     pub index_hdr: i32,
     pub index_part: i32,
 }
 
+#[cfg(any(all(test, stalwart_tests), feature = "serde"))]
+fn deserialize_header_names<'de, 'x, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Box<[HeaderName<'x>]>, D::Error> {
+    <Vec<HeaderName<'static>> as serde::Deserialize>::deserialize(deserializer)
+        .map(Vec::into_boxed_slice)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[repr(u8)]
@@ -204,7 +220,7 @@ pub enum MessagePart {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[repr(u8)]
@@ -222,7 +238,7 @@ pub enum HeaderPart {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[repr(u8)]
@@ -234,7 +250,7 @@ pub enum ContentTypePart {
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[repr(u8)]
@@ -256,7 +272,7 @@ pub enum ReceivedPart {
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[repr(u8)]
@@ -268,7 +284,7 @@ pub enum ReceivedHostname {
 
 #[derive(Debug, Clone, Copy)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[repr(u8)]
@@ -322,7 +338,7 @@ impl ReceivedPart {
 }
 
 impl Number {
-    #[cfg(test)]
+    #[cfg(all(test, stalwart_tests))]
     pub fn to_float(&self) -> f64 {
         match self {
             Number::Integer(i) => *i as f64,
@@ -366,6 +382,7 @@ impl Compiler {
             max_includes: 6,
             functions: AHashMap::new(),
             no_capability_check: false,
+            disabled_capabilities: AHashSet::new(),
         }
     }
 
@@ -471,6 +488,25 @@ impl Compiler {
 
     pub fn set_no_capability_check(&mut self, value: bool) {
         self.no_capability_check = value;
+    }
+
+    pub fn unset_capability(&mut self, capability: impl Into<Capability>) {
+        self.disabled_capabilities.insert(capability.into());
+    }
+
+    pub fn without_capability(mut self, capability: impl Into<Capability>) -> Self {
+        self.unset_capability(capability);
+        self
+    }
+
+    pub fn without_capabilities(
+        mut self,
+        capabilities: impl IntoIterator<Item = impl Into<Capability>>,
+    ) -> Self {
+        for capability in capabilities {
+            self.unset_capability(capability);
+        }
+        self
     }
 }
 
@@ -601,6 +637,9 @@ impl Display for CompileError {
             ErrorType::UndeclaredCapability(value) => {
                 write!(f, "Undeclared capability '{value}'")
             }
+            ErrorType::UnsupportedCapability(value) => {
+                write!(f, "Capability '{value}' is not supported")
+            }
             ErrorType::MissingTag(value) => write!(f, "Missing tag {value:?}"),
         }?;
 
@@ -648,74 +687,7 @@ impl Display for RuntimeError {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use std::{fs, path::PathBuf};
-
-    use crate::Compiler;
-
-    #[test]
-    #[ignore = "reads the test suite of Dovecot Pigeonhole, not taken over (LGPL)"]
-    fn parse_rfc() {
-        let mut test_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        test_dir.push("tests");
-        test_dir.push("rfcs");
-        let mut tests_run = 0;
-
-        let compiler = Compiler::new().with_max_nested_foreverypart(10);
-
-        for file_name in fs::read_dir(&test_dir).unwrap() {
-            let mut file_name = file_name.unwrap().path();
-            if file_name.extension().is_some_and(|e| e == "sieve") {
-                println!("Parsing {}", file_name.display());
-
-                /*if !file_name
-                    .file_name()
-                    .unwrap()
-                    .to_str()
-                    .unwrap()
-                    .contains("plugins")
-                {
-                    let test = "true";
-                    continue;
-                }*/
-
-                let script = fs::read(&file_name).unwrap();
-                file_name.set_extension("json");
-                let expected_result = fs::read(&file_name).unwrap();
-
-                tests_run += 1;
-
-                let program = compiler.compile_ast(&script).unwrap();
-                let sieve = program.emit().unwrap();
-                assert_eq!(
-                    crate::Sieve::from_bytes(&sieve.to_bytes()).unwrap(),
-                    sieve,
-                    "bytecode round trip altered {}",
-                    file_name.display()
-                );
-
-                let json_sieve = serde_json::to_string_pretty(
-                    &program
-                        .instructions
-                        .into_iter()
-                        .enumerate()
-                        .collect::<Vec<_>>(),
-                )
-                .unwrap();
-
-                if json_sieve.as_bytes() != expected_result {
-                    file_name.set_extension("failed");
-                    fs::write(&file_name, json_sieve.as_bytes()).unwrap();
-                    panic!("Test failed, parsed sieve saved to {}", file_name.display());
-                }
-            }
-        }
-
-        assert!(
-            tests_run > 0,
-            "Did not find any tests to run in folder {}.",
-            test_dir.display()
-        );
-    }
-}
+#[cfg(all(test, stalwart_tests))]
+#[rustfmt::skip]
+#[path = "../../../../../stalwart-tests/unit/sieve/src/compiler/tests.rs"]
+mod tests;

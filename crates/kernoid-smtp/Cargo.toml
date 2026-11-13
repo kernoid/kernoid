@@ -23,9 +23,9 @@ kernoid-identity = { version = "0.3.0", path = "../kernoid-identity" }
 kernoid-mail = { version = "0.3.0", path = "../kernoid-mail" }
 kernoid-oidc = { version = "0.3.0", path = "../kernoid-oidc" }
 kernoid-store = { version = "0.3.0", path = "../kernoid-store" }
-mail-builder = "1.0.0"
+mail-builder = "2.0.0"
 mail-auth = { version = "0.13.3", default-features = false, features = ["aws-lc-rs", "arc"] }
-mail-parser = { version = "0.11.9", features = ["full_encoding"] }
+mail-parser = { version = "1.0.0", features = ["full_encoding"] }
 rustls = { version = "0.23.46", default-features = false, features = ["aws-lc-rs", "prefer-post-quantum", "std", "tls12"] }
 rustls-webpki = { version = "0.103.16", default-features = false, features = ["aws-lc-rs", "std"] }
 sha2 = "0.11.1"

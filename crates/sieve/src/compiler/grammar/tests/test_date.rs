@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2020 Stalwart Labs Ltd <hello@stalw.art>
+ * SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
  *
  * SPDX-License-Identifier: AGPL-3.0-only
  */
@@ -14,7 +14,7 @@ use crate::compiler::grammar::{MatchType, test::Test};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 pub(crate) struct TestDate {
@@ -31,7 +31,7 @@ pub(crate) struct TestDate {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 pub(crate) struct TestCurrentDate {
@@ -45,7 +45,7 @@ pub(crate) struct TestCurrentDate {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[repr(u8)]
@@ -57,7 +57,7 @@ pub(crate) enum Zone {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[repr(u8)]
@@ -333,8 +333,8 @@ impl CompilerState<'_> {
 */
 
 fn lookup_date_part(input: &str) -> Option<DatePart> {
-    hashify::tiny_map!(
-        input.as_bytes(),
+    hashify::map!(
+        input.as_bytes(), DatePart,
         "year" => DatePart::Year,
         "month" => DatePart::Month,
         "day" => DatePart::Day,
@@ -349,6 +349,7 @@ fn lookup_date_part(input: &str) -> Option<DatePart> {
         "zone" => DatePart::Zone,
         "weekday" => DatePart::Weekday,
     )
+    .copied()
 }
 
 impl DatePart {

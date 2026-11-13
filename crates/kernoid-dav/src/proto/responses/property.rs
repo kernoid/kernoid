@@ -20,10 +20,7 @@ use crate::proto::{
     },
 };
 use calcard::icalendar::ICalendarComponentType;
-use mail_parser::{
-    DateTime,
-    parsers::fields::date::{DOW, MONTH},
-};
+use mail_parser::{DOW, DateTime, MONTH};
 use std::fmt::Display;
 
 impl Display for PropResponse {

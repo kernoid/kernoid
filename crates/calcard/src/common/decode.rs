@@ -9,10 +9,10 @@ use encodify::{
     base64,
     qp::{self, QuotedPrintable},
 };
-use mail_parser::decoders::charsets::map::charset_decoder;
+use mail_parser::Charset;
 use std::borrow::Cow;
 
-const QUOTED_PRINTABLE_CHARSET: &str = "iso-8859-1";
+const QUOTED_PRINTABLE_CHARSET: Charset = Charset::Windows1252;
 const QUOTED_PRINTABLE: QuotedPrintable = qp::BODY.strict();
 
 #[derive(Debug, PartialEq, Eq)]
@@ -45,20 +45,21 @@ impl ValueDecoder<'_> {
         if self.binary {
             return Decoded::Binary(bytes.into_owned());
         }
-        let default_charset = match self.encoding {
-            Encoding::QuotedPrintable => Some(QUOTED_PRINTABLE_CHARSET),
-            Encoding::Base64 => None,
+        let charset = match (self.charset, self.encoding) {
+            (Some(label), _) => Charset::from_label(label.as_bytes()),
+            (None, Encoding::QuotedPrintable) => {
+                return Decoded::Text(match String::from_utf8(bytes.into_owned()) {
+                    Ok(text) => text,
+                    Err(err) => QUOTED_PRINTABLE_CHARSET.decode_owned(err.into_bytes()),
+                });
+            }
+            (None, Encoding::Base64) => None,
         };
-        // Changed for kernoid: the charset decoders of mail-parser 0.11 (Stalwart uses `Charset` of mail-parser 1.0).
-        match self
-            .charset
-            .or(default_charset)
-            .filter(|charset| {
-                !charset.eq_ignore_ascii_case("utf-8") && !charset.eq_ignore_ascii_case("utf8")
-            })
-            .and_then(|charset| charset_decoder(charset.as_bytes()))
-        {
-            Some(decoder) => Decoded::Text(decoder(&bytes)),
+        match charset.filter(|charset| *charset != Charset::Utf8) {
+            Some(charset) => Decoded::Text(match bytes {
+                Cow::Borrowed(bytes) => charset.decode(bytes).into_owned(),
+                Cow::Owned(bytes) => charset.decode_owned(bytes),
+            }),
             None => match String::from_utf8(bytes.into_owned()) {
                 Ok(text) => Decoded::Text(text),
                 Err(err) => Decoded::Binary(err.into_bytes()),

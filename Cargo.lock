@@ -941,14 +941,14 @@ dependencies = [
 
 [[package]]
 name = "calcard"
-version = "1.0.1"
+version = "1.1.0"
 dependencies = [
  "ahash",
  "encodify",
  "hashify 0.3.1",
  "jiff",
  "jmap-tools",
- "mail-parser",
+ "mail-parser 1.0.0",
  "memchr",
  "rkyv",
  "serde",
@@ -1291,9 +1291,9 @@ checksum = "fd121741cf3eb82c08dd3023eb55bf2665e5f60ec20f89760cf836ae4562e6a0"
 
 [[package]]
 name = "crc32fast"
-version = "1.5.2"
+version = "1.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "01a7799fd6b852db0e61728dde9a204c423b44d689dbd432522543614b490e78"
+checksum = "2b929dd2a135771f40afabd1073f85eed59c800b7c61901e5c254270497dad64"
 dependencies = [
  "cfg-if",
 ]
@@ -1873,12 +1873,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "evalexpr"
-version = "13.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25929004897f2bbab309121a60400d36992f6d911d09baa6c172f6cc55706601"
-
-[[package]]
 name = "event-listener"
 version = "5.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1901,9 +1895,9 @@ dependencies = [
 
 [[package]]
 name = "fancy-regex"
-version = "0.19.2"
+version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d301f5bf187b3c295fce6468d3875037a0bccc5f6b151c63cac2f85babf21912"
+checksum = "20ed7f62ce0ae0da1a8b93c3c7104ab7e0760a74491e097c701fff966e945390"
 dependencies = [
  "bit-set",
  "regex-automata",
@@ -2944,7 +2938,7 @@ dependencies = [
 
 [[package]]
 name = "jmap-tools"
-version = "1.0.1"
+version = "1.1.0"
 dependencies = [
  "rkyv",
  "serde",
@@ -3130,7 +3124,7 @@ dependencies = [
  "kernoid-identity",
  "kernoid-mail",
  "kernoid-store",
- "mail-parser",
+ "mail-parser 1.0.0",
  "object_store",
  "quick-xml",
  "serde",
@@ -3147,7 +3141,7 @@ name = "kernoid-e2e"
 version = "0.3.0"
 dependencies = [
  "base64 0.22.1",
- "mail-parser",
+ "mail-parser 0.11.9",
  "pgp",
  "rand 0.8.8",
  "serde",
@@ -3201,8 +3195,8 @@ dependencies = [
  "kernoid-identity",
  "kernoid-mail",
  "kernoid-store",
- "mail-builder",
- "mail-parser",
+ "mail-builder 2.0.0",
+ "mail-parser 1.0.0",
  "object_store",
  "percent-encoding",
  "serde",
@@ -3258,7 +3252,7 @@ dependencies = [
  "kernoid-identity",
  "kernoid-mail",
  "kernoid-store",
- "mail-parser",
+ "mail-parser 1.0.0",
  "object_store",
  "rcgen",
  "rustls",
@@ -3313,8 +3307,8 @@ dependencies = [
  "kernoid-identity",
  "kernoid-mail",
  "kernoid-store",
- "mail-builder",
- "mail-parser",
+ "mail-builder 2.0.0",
+ "mail-parser 1.0.0",
  "object_store",
  "serde",
  "serde_json",
@@ -3360,7 +3354,7 @@ dependencies = [
  "kernoid-events",
  "kernoid-identity",
  "kernoid-store",
- "mail-parser",
+ "mail-parser 1.0.0",
  "object_store",
  "serde",
  "serde_json",
@@ -3450,7 +3444,7 @@ dependencies = [
  "kernoid-oidc",
  "kernoid-smtp",
  "kernoid-store",
- "mail-builder",
+ "mail-builder 2.0.0",
  "metrics",
  "metrics-exporter-prometheus",
  "percent-encoding",
@@ -3500,8 +3494,8 @@ dependencies = [
  "kernoid-oidc",
  "kernoid-store",
  "mail-auth",
- "mail-builder",
- "mail-parser",
+ "mail-builder 2.0.0",
+ "mail-parser 1.0.0",
  "object_store",
  "rcgen",
  "rustls",
@@ -3696,8 +3690,8 @@ dependencies = [
  "hashify 0.2.9",
  "hickory-resolver",
  "idna",
- "mail-builder",
- "mail-parser",
+ "mail-builder 1.0.0",
+ "mail-parser 0.11.9",
  "memchr",
  "rustls-pki-types",
  "serde",
@@ -3715,6 +3709,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "mail-builder"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a8bca634885db8e836b80700a73661de20ffd93cb5787729afc31575545e2aed"
+dependencies = [
+ "encodify",
+ "gethostname",
+]
+
+[[package]]
 name = "mail-parser"
 version = "0.11.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3723,7 +3727,20 @@ dependencies = [
  "encoding_rs",
  "hashify 0.2.9",
  "memchr",
+]
+
+[[package]]
+name = "mail-parser"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "908e05ffd2f281e4494cdb77552e6df2dc1476da22af811685b37773d415b2df"
+dependencies = [
+ "encodify",
+ "encoding_rs",
+ "hashify 0.3.1",
+ "memchr",
  "serde",
+ "simdutf8",
 ]
 
 [[package]]
@@ -5688,19 +5705,18 @@ checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
 
 [[package]]
 name = "sieve-rs"
-version = "1.0.2"
+version = "1.1.0"
 dependencies = [
  "ahash",
  "bumpalo",
- "evalexpr",
+ "encodify",
  "fancy-regex",
  "hashbrown 0.17.1",
- "hashify 0.2.9",
- "mail-builder",
- "mail-parser",
+ "hashify 0.3.1",
+ "mail-builder 2.0.0",
+ "mail-parser 1.0.0",
  "memchr",
  "serde",
- "serde_json",
  "smallvec",
 ]
 

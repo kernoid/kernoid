@@ -270,7 +270,7 @@ impl Context<'_> {
         let own: BTreeSet<&str> = identities.iter().map(|identity| identity.2.as_str()).collect();
         let senders: Vec<String> = message
             .from()
-            .map(|from| from.iter().filter_map(|addr| addr.address()).map(str::to_lowercase).collect())
+            .map(|from| from.mailboxes().filter_map(|addr| addr.address()).map(str::to_lowercase).collect())
             .unwrap_or_default();
         if senders.is_empty() || senders.iter().any(|sender| !own.contains(sender.as_str())) {
             return Err(json!({ "type": "forbiddenFrom", "description": "send as the account's own addresses" }));
@@ -295,7 +295,7 @@ impl Context<'_> {
                     .into_iter()
                     .flatten()
                     .flat_map(|list| {
-                        list.iter().filter_map(|addr| addr.address()).map(str::to_lowercase).collect::<Vec<_>>()
+                        list.mailboxes().filter_map(|addr| addr.address()).map(str::to_lowercase).collect::<Vec<_>>()
                     })
                     .collect(),
             };

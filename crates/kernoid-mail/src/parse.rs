@@ -2,7 +2,7 @@
 //! What kernoid keeps of a message in PostgreSQL (RFC 0002, 4), read with mail-parser.
 
 use chrono::{DateTime, Utc};
-use mail_parser::{Address, HeaderValue, MessageParser, MimeHeaders};
+use mail_parser::{AddressList, MessageParser, TextList};
 use serde::{Deserialize, Serialize};
 
 /// Length of the preview, in characters (JMAP `preview` has at most 256).
@@ -43,22 +43,15 @@ pub(crate) struct Summary {
     pub encrypted_summary: Option<Vec<u8>>,
 }
 
-fn ids(value: &HeaderValue<'_>) -> Vec<String> {
-    match value {
-        HeaderValue::Text(id) => vec![id.to_string()],
-        HeaderValue::TextList(list) => list.iter().map(ToString::to_string).collect(),
-        _ => Vec::new(),
-    }
-    .into_iter()
-    .filter(|id| !id.is_empty())
-    .collect()
+fn ids(list: Option<TextList<'_>>) -> Vec<String> {
+    list.map(|list| list.iter().filter(|id| !id.is_empty()).map(str::to_owned).collect()).unwrap_or_default()
 }
 
-fn mailboxes(address: Option<&Address<'_>>) -> Vec<Mailbox> {
+fn mailboxes(address: Option<AddressList<'_>>) -> Vec<Mailbox> {
     address
         .map(|address| {
             address
-                .iter()
+                .mailboxes()
                 .filter_map(|addr| {
                     Some(Mailbox {
                         name: addr.name().map(str::to_owned).filter(|name| !name.is_empty()),
@@ -93,7 +86,7 @@ pub(crate) fn summarize(raw: &[u8]) -> Option<Summary> {
         reply_to: mailboxes(message.reply_to()),
         sender: mailboxes(message.sender()),
         preview,
-        has_attachment: message.attachment_count() > 0,
+        has_attachment: message.has_attachments(),
         search_text: search_text(&message),
         encrypted: false,
         encrypted_summary: None,
@@ -104,7 +97,7 @@ pub(crate) fn summarize(raw: &[u8]) -> Option<Summary> {
 /// [`SEARCH_TEXT`] bytes.
 pub(crate) fn search_text(message: &mail_parser::Message<'_>) -> String {
     let mut text = String::new();
-    for index in 0..message.text_body.len() {
+    for index in 0..message.text_body().len() {
         if let Some(body) = message.body_text(index) {
             text.push_str(&body);
             text.push('\n');

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2020 Stalwart Labs Ltd <hello@stalw.art>
+ * SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
  *
  * SPDX-License-Identifier: AGPL-3.0-only
  */
@@ -22,7 +22,7 @@ pub mod tests;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[repr(u8)]
@@ -80,7 +80,7 @@ pub enum Capability {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[repr(u8)]
@@ -95,7 +95,7 @@ pub enum AddressPart {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[repr(u8)]
@@ -111,7 +111,7 @@ pub(crate) enum MatchType {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[repr(u8)]
@@ -126,7 +126,7 @@ pub(crate) enum RelationalMatch {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[repr(u8)]
@@ -140,7 +140,7 @@ pub enum Comparator {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 pub struct Clear {
@@ -151,7 +151,7 @@ pub struct Clear {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 pub struct Invalid {
@@ -162,7 +162,7 @@ pub struct Invalid {
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 pub(crate) struct While {
@@ -461,7 +461,7 @@ impl CompilerState<'_> {
                     });
                 }
             } else {
-                #[cfg(test)]
+                #[cfg(all(test, stalwart_tests))]
                 panic!("Argument out of range {arg_num}");
             }
         }
@@ -752,8 +752,8 @@ impl Capability {
 }
 
 fn lookup_relational(input: &str) -> Option<RelationalMatch> {
-    hashify::tiny_map!(
-        input.as_bytes(),
+    hashify::map!(
+        input.as_bytes(), RelationalMatch,
         "gt" => RelationalMatch::Gt,
         "ge" => RelationalMatch::Ge,
         "lt" => RelationalMatch::Lt,
@@ -761,14 +761,16 @@ fn lookup_relational(input: &str) -> Option<RelationalMatch> {
         "eq" => RelationalMatch::Eq,
         "ne" => RelationalMatch::Ne,
     )
+    .copied()
 }
 
 fn lookup_comparator(input: &str) -> Option<Comparator> {
-    hashify::tiny_map!(
+    hashify::fnc_map!(
         input.as_bytes(),
-        "i;octet" => Comparator::Octet,
-        "i;ascii-casemap" => Comparator::AsciiCaseMap,
-        "i;ascii-numeric" => Comparator::AsciiNumeric,
+        "i;octet" => Some(Comparator::Octet),
+        "i;ascii-casemap" => Some(Comparator::AsciiCaseMap),
+        "i;ascii-numeric" => Some(Comparator::AsciiNumeric),
+        _ => None,
     )
 }
 
@@ -861,58 +863,59 @@ impl Display for Capability {
 }
 
 fn lookup_capabilities(input: &str) -> Option<Capability> {
-    hashify::tiny_map!(
+    hashify::fnc_map!(
         input.as_bytes(),
-        "envelope" => Capability::Envelope,
-        "envelope-dsn" => Capability::EnvelopeDsn,
-        "envelope-deliverby" => Capability::EnvelopeDeliverBy,
-        "fileinto" => Capability::FileInto,
-        "encoded-character" => Capability::EncodedCharacter,
-        "comparator-elbonia" => Capability::Comparator(Comparator::Elbonia),
-        "comparator-i;octet" => Capability::Comparator(Comparator::Octet),
-        "comparator-i;ascii-casemap" => Capability::Comparator(Comparator::AsciiCaseMap),
-        "comparator-i;ascii-numeric" => Capability::Comparator(Comparator::AsciiNumeric),
-        "body" => Capability::Body,
-        "convert" => Capability::Convert,
-        "copy" => Capability::Copy,
-        "relational" => Capability::Relational,
-        "date" => Capability::Date,
-        "index" => Capability::Index,
-        "duplicate" => Capability::Duplicate,
-        "variables" => Capability::Variables,
-        "editheader" => Capability::EditHeader,
-        "foreverypart" => Capability::ForEveryPart,
-        "mime" => Capability::Mime,
-        "replace" => Capability::Replace,
-        "enclose" => Capability::Enclose,
-        "extracttext" => Capability::ExtractText,
-        "enotify" => Capability::Enotify,
-        "redirect-dsn" => Capability::RedirectDsn,
-        "redirect-deliverby" => Capability::RedirectDeliverBy,
-        "environment" => Capability::Environment,
-        "reject" => Capability::Reject,
-        "ereject" => Capability::Ereject,
-        "extlists" => Capability::ExtLists,
-        "subaddress" => Capability::SubAddress,
-        "vacation" => Capability::Vacation,
-        "vacation-seconds" => Capability::VacationSeconds,
-        "fcc" => Capability::Fcc,
-        "mailbox" => Capability::Mailbox,
-        "mailboxid" => Capability::MailboxId,
-        "mboxmetadata" => Capability::MboxMetadata,
-        "servermetadata" => Capability::ServerMetadata,
-        "special-use" => Capability::SpecialUse,
-        "imap4flags" => Capability::Imap4Flags,
-        "ihave" => Capability::Ihave,
-        "imapsieve" => Capability::ImapSieve,
-        "include" => Capability::Include,
-        "regex" => Capability::Regex,
-        "spamtest" => Capability::SpamTest,
-        "spamtestplus" => Capability::SpamTestPlus,
-        "virustest" => Capability::VirusTest,
+        "envelope" => Some(Capability::Envelope),
+        "envelope-dsn" => Some(Capability::EnvelopeDsn),
+        "envelope-deliverby" => Some(Capability::EnvelopeDeliverBy),
+        "fileinto" => Some(Capability::FileInto),
+        "encoded-character" => Some(Capability::EncodedCharacter),
+        "comparator-elbonia" => Some(Capability::Comparator(Comparator::Elbonia)),
+        "comparator-i;octet" => Some(Capability::Comparator(Comparator::Octet)),
+        "comparator-i;ascii-casemap" => Some(Capability::Comparator(Comparator::AsciiCaseMap)),
+        "comparator-i;ascii-numeric" => Some(Capability::Comparator(Comparator::AsciiNumeric)),
+        "body" => Some(Capability::Body),
+        "convert" => Some(Capability::Convert),
+        "copy" => Some(Capability::Copy),
+        "relational" => Some(Capability::Relational),
+        "date" => Some(Capability::Date),
+        "index" => Some(Capability::Index),
+        "duplicate" => Some(Capability::Duplicate),
+        "variables" => Some(Capability::Variables),
+        "editheader" => Some(Capability::EditHeader),
+        "foreverypart" => Some(Capability::ForEveryPart),
+        "mime" => Some(Capability::Mime),
+        "replace" => Some(Capability::Replace),
+        "enclose" => Some(Capability::Enclose),
+        "extracttext" => Some(Capability::ExtractText),
+        "enotify" => Some(Capability::Enotify),
+        "redirect-dsn" => Some(Capability::RedirectDsn),
+        "redirect-deliverby" => Some(Capability::RedirectDeliverBy),
+        "environment" => Some(Capability::Environment),
+        "reject" => Some(Capability::Reject),
+        "ereject" => Some(Capability::Ereject),
+        "extlists" => Some(Capability::ExtLists),
+        "subaddress" => Some(Capability::SubAddress),
+        "vacation" => Some(Capability::Vacation),
+        "vacation-seconds" => Some(Capability::VacationSeconds),
+        "fcc" => Some(Capability::Fcc),
+        "mailbox" => Some(Capability::Mailbox),
+        "mailboxid" => Some(Capability::MailboxId),
+        "mboxmetadata" => Some(Capability::MboxMetadata),
+        "servermetadata" => Some(Capability::ServerMetadata),
+        "special-use" => Some(Capability::SpecialUse),
+        "imap4flags" => Some(Capability::Imap4Flags),
+        "ihave" => Some(Capability::Ihave),
+        "imapsieve" => Some(Capability::ImapSieve),
+        "include" => Some(Capability::Include),
+        "regex" => Some(Capability::Regex),
+        "spamtest" => Some(Capability::SpamTest),
+        "spamtestplus" => Some(Capability::SpamTestPlus),
+        "virustest" => Some(Capability::VirusTest),
 
         // Extensions
-        "vnd.stalwart.while" => Capability::While,
-        "vnd.stalwart.expressions" => Capability::Expressions,
+        "vnd.stalwart.while" => Some(Capability::While),
+        "vnd.stalwart.expressions" => Some(Capability::Expressions),
+        _ => None,
     )
 }

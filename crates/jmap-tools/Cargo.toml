@@ -1,10 +1,10 @@
 # SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
 # SPDX-License-Identifier: AGPL-3.0-only
-# Taken over from Stalwart's crates/jmap-tools (v1.0.1).
+# Taken over from Stalwart's crates/jmap-tools (v1.1.0).
 [package]
 name = "jmap-tools"
 description = "JMAP object parser with JSON Pointer querying and patching support"
-version = "1.0.1"
+version = "1.1.0"
 edition.workspace = true
 rust-version.workspace = true
 license = "AGPL-3.0-only"

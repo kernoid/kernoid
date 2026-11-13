@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2020 Stalwart Labs Ltd <hello@stalw.art>
+ * SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
  *
  * SPDX-License-Identifier: AGPL-3.0-only
  */
@@ -10,6 +10,7 @@ pub mod context;
 pub mod eval;
 pub mod expression;
 pub mod handler;
+pub(crate) mod message;
 pub(crate) mod platform;
 pub mod tests;
 pub mod variable;
@@ -30,8 +31,7 @@ use crate::{
     },
 };
 use ahash::{AHashMap, AHashSet};
-use mail_parser::HeaderName;
-use mail_parser::{Encoding, Message, MessageParser, MessagePart, PartType};
+use mail_parser::{HeaderName, Message, MessageParser};
 use std::borrow::Cow;
 
 use crate::Context;
@@ -131,35 +131,23 @@ impl PartialOrd for Number {
 impl Runtime {
     pub fn filter<'z: 'x, 'x>(
         &'z self,
-        raw_message: &'x [u8],
+        raw_message: &[u8],
         script: &'x Sieve<'x>,
         arena: &'x mut Arena,
     ) -> Context<'x> {
-        Context::new(
-            self,
-            MessageParser::new()
-                .parse(raw_message)
-                .unwrap_or_else(|| Message {
-                    parts: vec![MessagePart {
-                        headers: vec![],
-                        is_encoding_problem: false,
-                        body: PartType::Text("".into()),
-                        encoding: Encoding::None,
-                        offset_header: 0,
-                        offset_body: 0,
-                        offset_end: 0,
-                    }],
-                    raw_message: b""[..].into(),
-                    ..Default::default()
-                }),
-            script,
-            arena,
-        )
+        arena.prepare(self.memory_limit);
+        let message = match MessageParser::new().parse_owned(raw_message.to_vec()) {
+            Some(message) => arena.keep_message(message),
+            None => arena.keep_message(Message::default()),
+        };
+        let mut context = Context::with_message(self, message, script, arena);
+        context.message_size = raw_message.len();
+        context
     }
 
     pub fn filter_parsed<'z: 'x, 'x>(
         &'z self,
-        message: Message<'x>,
+        message: &'x Message<'x>,
         script: &'x Sieve<'x>,
         arena: &'x mut Arena,
     ) -> Context<'x> {
@@ -178,7 +166,7 @@ impl Runtime {
         #[allow(unused_mut)]
         let mut allowed_capabilities = AHashSet::from_iter(Capability::all().iter().cloned());
 
-        #[cfg(test)]
+        #[cfg(all(test, stalwart_tests))]
         allowed_capabilities.insert(Capability::Other("vnd.stalwart.testsuite".to_string()));
 
         Runtime {
@@ -195,16 +183,15 @@ impl Runtime {
             max_variable_size: 4096,
             max_redirects: 1,
             max_received_headers: 10,
-            protected_headers: vec![
-                HeaderName::Other("Original-Subject".into()),
-                HeaderName::Other("Original-From".into()),
-            ],
+            protected_headers: vec![HeaderName::OriginalSubject, HeaderName::OriginalFrom],
             valid_notification_uris: AHashSet::new(),
             valid_ext_lists: AHashSet::new(),
             vacation_use_orig_rcpt: false,
             vacation_default_subject: "Automated reply".into(),
             vacation_subject_prefix: "Auto: ".into(),
             max_header_size: 1024,
+            max_header_count: usize::MAX,
+            max_header_block_size: usize::MAX,
             max_out_messages: 3,
             default_vacation_expiry: 30 * 86400,
             default_duplicate_expiry: 7 * 86400,
@@ -283,6 +270,29 @@ impl Runtime {
     pub fn with_max_header_size(mut self, size: usize) -> Self {
         self.max_header_size = size;
         self
+    }
+
+    pub fn set_max_header_count(&mut self, count: usize) {
+        self.max_header_count = count;
+    }
+
+    pub fn with_max_header_count(mut self, count: usize) -> Self {
+        self.max_header_count = count;
+        self
+    }
+
+    pub fn set_max_header_block_size(&mut self, size: usize) {
+        self.max_header_block_size = size;
+    }
+
+    pub fn with_max_header_block_size(mut self, size: usize) -> Self {
+        self.max_header_block_size = size;
+        self
+    }
+
+    #[inline(always)]
+    pub(crate) fn has_header_block_limits(&self) -> bool {
+        self.max_header_count != usize::MAX || self.max_header_block_size != usize::MAX
     }
 
     pub fn set_default_vacation_expiry(&mut self, expiry: u64) {

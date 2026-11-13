@@ -1,15 +1,24 @@
 /*
- * SPDX-FileCopyrightText: 2020 Stalwart Labs Ltd <hello@stalw.art>
+ * SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
  *
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
 use super::super::tests::TestResult;
-use crate::{Context, Sieve, bytecode::ops, runtime::RuntimeError};
-use mail_parser::{
-    Encoding, Header, HeaderName, HeaderValue, MimeHeaders, PartType,
-    decoders::html::{html_to_text, text_to_html},
+use crate::{
+    Context, Sieve,
+    bytecode::ops,
+    runtime::{
+        RuntimeError,
+        message::{
+            body::TextForm,
+            edits::{BodyEdit, BodyFormat, BodyKind, TransferEncoding},
+            headers::HeaderRef,
+            parts::{PartCursor, ROOT_PART, Scope},
+        },
+    },
 };
+use mail_parser::{HeaderName, PartKind};
 
 #[derive(Clone, Copy)]
 enum Conversion {
@@ -51,47 +60,78 @@ impl<'x> Context<'x> {
             return Ok(TestResult::Bool(false ^ convert.is_not));
         };
         let mut did_convert = false;
-        for part in self.message.parts.iter_mut() {
-            let (new_body, ct) = match (&part.body, conversion) {
-                (PartType::Html(html), Conversion::HtmlToText) => (
-                    PartType::Text(html_to_text(html.as_ref()).into()),
-                    "text/plain; charset=utf8",
+        let mut parts = match self.root_part() {
+            Some(root) => PartCursor::subtree(root, true, Scope::Message),
+            None => PartCursor::default(),
+        };
+        while let Some(part) = self.advance(&mut parts) {
+            let (text, kind, content_type) = match (self.part_kind(part), conversion) {
+                (PartKind::Html, Conversion::HtmlToText) => (
+                    self.part_text(part, TextForm::Plain),
+                    BodyKind::Text,
+                    "text/plain; charset=utf-8",
                 ),
-                (PartType::Text(text), Conversion::TextToHtml) => (
-                    PartType::Html(text_to_html(text.as_ref()).into()),
-                    "text/html; charset=utf8",
+                (PartKind::Text, Conversion::TextToHtml) => (
+                    self.part_text(part, TextForm::Html),
+                    BodyKind::Html,
+                    "text/html; charset=utf-8",
                 ),
-                (PartType::Text(text), Conversion::TextPlainToHtml)
-                    if part
-                        .content_type()
-                        .and_then(|ct| ct.c_subtype.as_ref())
-                        .is_some_and(|st| st.eq_ignore_ascii_case("plain")) =>
+                (PartKind::Text, Conversion::TextPlainToHtml)
+                    if self
+                        .part_content_type(part)
+                        .is_some_and(|(_, subtype)| subtype.eq_ignore_ascii_case("plain")) =>
                 {
                     (
-                        PartType::Html(text_to_html(text.as_ref()).into()),
-                        "text/html; charset=utf8",
+                        self.part_text(part, TextForm::Html),
+                        BodyKind::Html,
+                        "text/html; charset=utf-8",
                     )
                 }
-                _ => {
-                    continue;
-                }
+                _ => continue,
             };
-            part.headers = vec![Header {
-                name: HeaderName::Other("Content-Type".into()),
-                value: HeaderValue::Text(ct.into()),
-                offset_start: 0,
-                offset_end: 0,
-                offset_field: 0,
-            }];
-            self.message_size = self.message_size + ct.len() + new_body.len() + 16
-                - (if part.offset_body != 0 {
-                    (part.offset_end - part.offset_header) as usize
-                } else {
-                    part.body.len()
-                });
-            part.offset_body = 0;
-            part.body = new_body;
-            part.encoding = Encoding::QuotedPrintable;
+            let Some(text) = text else {
+                continue;
+            };
+            let part_id = part.id();
+            let (encoding, encoded_len) = TransferEncoding::select(text);
+            let previous_size = match self.edits.body(part_id) {
+                Some(edited) => edited.encoded_len,
+                None => part.raw().len(),
+            };
+
+            let mut headers = Vec::new();
+            if part_id == ROOT_PART {
+                let mut add_mime_version = true;
+                let previous = self.part_headers(part);
+                headers.reserve(previous.size_hint().0 + 3);
+                headers.extend(previous.filter(|header| {
+                    let name = header.name();
+                    add_mime_version &= name != HeaderName::MimeVersion;
+                    !name.is_content_header()
+                }));
+                if add_mime_version {
+                    headers.push(self.add_header(HeaderName::MimeVersion, "1.0"));
+                }
+            }
+            headers.push(self.add_header(HeaderName::ContentType, content_type));
+            if let Some(cte) = encoding.header_value() {
+                headers.push(self.add_header(HeaderName::ContentTransferEncoding, cte));
+            }
+
+            let headers_size = headers.iter().map(HeaderRef::len).sum::<usize>();
+            self.message_size =
+                (self.message_size + headers_size + encoded_len + 2).saturating_sub(previous_size);
+            self.edits.set_headers(part_id, headers);
+            self.set_part_body(
+                part_id,
+                BodyEdit {
+                    text,
+                    kind,
+                    format: BodyFormat::Content,
+                    encoding,
+                    encoded_len,
+                },
+            );
             did_convert = true;
         }
 

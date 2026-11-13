@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2020 Stalwart Labs Ltd <hello@stalw.art>
+ * SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
  *
  * SPDX-License-Identifier: AGPL-3.0-only
  */
@@ -615,8 +615,8 @@ impl TryFrom<&str> for AddressPart {
 }
 
 fn lookup_envelope(input: &str) -> Option<Envelope> {
-    hashify::tiny_map!(
-        input.as_bytes(),
+    hashify::map!(
+        input.as_bytes(), Envelope,
         "from" => Envelope::From,
         "to" => Envelope::To,
         "by_time_absolute" => Envelope::ByTimeAbsolute,
@@ -628,29 +628,32 @@ fn lookup_envelope(input: &str) -> Option<Envelope> {
         "ret" => Envelope::Ret,
         "envid" => Envelope::Envid,
     )
+    .copied()
 }
 
 fn lookup_body_part(input: &str) -> Option<MessagePart> {
-    hashify::tiny_map!(
-        input.as_bytes(),
+    hashify::map!(
+        input.as_bytes(), MessagePart,
         "text" => MessagePart::TextBody(false),
         "html" => MessagePart::HtmlBody(false),
         "to_text" => MessagePart::TextBody(true),
         "to_html" => MessagePart::HtmlBody(true),
     )
+    .copied()
 }
 
 fn lookup_message_part(input: &str) -> Option<MessagePart> {
-    hashify::tiny_map!(
-        input.as_bytes(),
+    hashify::map!(
+        input.as_bytes(), MessagePart,
         "text" => MessagePart::Contents,
         "raw" => MessagePart::Raw,
     )
+    .copied()
 }
 
 fn lookup_received_part(input: &str) -> Option<ReceivedPart> {
-    hashify::tiny_map!(
-        input.as_bytes(),
+    hashify::map!(
+        input.as_bytes(), ReceivedPart,
         "from" => ReceivedPart::From(ReceivedHostname::Any),
         "from.name" => ReceivedPart::From(ReceivedHostname::Name),
         "from.ip" => ReceivedPart::From(ReceivedHostname::Ip),
@@ -668,11 +671,12 @@ fn lookup_received_part(input: &str) -> Option<ReceivedPart> {
         "date" => ReceivedPart::Date,
         "date.raw" => ReceivedPart::DateRaw,
     )
+    .copied()
 }
 
 fn lookup_address_part(input: &str) -> Option<AddressPart> {
-    hashify::tiny_map!(
-        input.as_bytes(),
+    hashify::map!(
+        input.as_bytes(), AddressPart,
         "name" => AddressPart::Name,
         "addr" => AddressPart::All,
         "all" => AddressPart::All,
@@ -681,6 +685,7 @@ fn lookup_address_part(input: &str) -> Option<AddressPart> {
         "addr.user" => AddressPart::User,
         "addr.detail" => AddressPart::Detail,
     )
+    .copied()
 }
 
 impl Display for VariableType {
@@ -754,228 +759,7 @@ impl Display for VariableType {
     }
 }
 
-#[cfg(test)]
-mod tests {
-
-    use mail_parser::HeaderName;
-
-    use super::Value;
-    use crate::compiler::grammar::instruction::{Block, CompilerState, Instruction, MAX_PARAMS};
-    use crate::compiler::grammar::test::Test;
-    use crate::compiler::grammar::tests::test_string::TestString;
-    use crate::compiler::grammar::{Comparator, MatchType};
-    use crate::compiler::lexer::tokenizer::Tokenizer;
-    use crate::compiler::lexer::word::Word;
-    use crate::compiler::{AddressPart, HeaderPart, HeaderVariable, VariableType};
-    use crate::{AHashSet, Compiler};
-
-    fn text(state: &mut CompilerState, value: &str) -> Value {
-        Value::Text(state.intern(value))
-    }
-
-    #[test]
-    fn tokenize_string() {
-        let c = Compiler::new();
-        let mut block = Block::new(Word::Not);
-        block.match_test_pos.push(0);
-        let mut compiler = CompilerState {
-            compiler: &c,
-            instructions: vec![Instruction::Test(Box::new(Test::String(Box::new(
-                TestString {
-                    match_type: MatchType::Regex(u64::MAX),
-                    comparator: Comparator::AsciiCaseMap,
-                    source: vec![Value::Variable(VariableType::Local(0))].into(),
-                    key_list: vec![Value::Variable(VariableType::Local(0))].into(),
-                    is_not: false,
-                },
-            ))))],
-            block_stack: Vec::new(),
-            block,
-            last_block_type: Word::Not,
-            vars_global: AHashSet::new(),
-            vars_num: 0,
-            vars_num_max: 0,
-            vars_local: 0,
-            tokens: Tokenizer::new(&c, b""),
-            vars_match_max: usize::MAX,
-            param_check: [false; MAX_PARAMS],
-            includes_num: 0,
-            constants: Vec::new(),
-            constants_map: hashbrown::HashTable::new(),
-            hasher: ahash::RandomState::new(),
-        };
-
-        for (input, expected_result) in [
-            ("$${hex:24 24}", text(&mut compiler, "$$$")),
-            ("$${hex:40}", text(&mut compiler, "$@")),
-            ("${hex: 40 }", text(&mut compiler, "@")),
-            ("${HEX: 40}", text(&mut compiler, "@")),
-            ("${hex:40", text(&mut compiler, "${hex:40")),
-            ("${hex:400}", text(&mut compiler, "${hex:400}")),
-            ("${hex:4${hex:30}}", text(&mut compiler, "${hex:40}")),
-            ("${unicode:40}", text(&mut compiler, "@")),
-            ("${ unicode:40}", text(&mut compiler, "${ unicode:40}")),
-            ("${UNICODE:40}", text(&mut compiler, "@")),
-            ("${UnICoDE:0000040}", text(&mut compiler, "@")),
-            ("${Unicode:40}", text(&mut compiler, "@")),
-            ("${Unicode:40 40 ", text(&mut compiler, "${Unicode:40 40 ")),
-            ("${Unicode:Cool}", text(&mut compiler, "${Unicode:Cool}")),
-            ("", text(&mut compiler, "")),
-            (
-                "${global.full}",
-                Value::Variable(VariableType::Global("full".to_string())),
-            ),
-            (
-                "${BAD${global.Company}",
-                Value::List(
-                    vec![
-                        text(&mut compiler, "${BAD"),
-                        Value::Variable(VariableType::Global("company".to_string())),
-                    ]
-                    .into(),
-                ),
-            ),
-            (
-                "${President, ${global.Company} Inc.}",
-                Value::List(
-                    vec![
-                        text(&mut compiler, "${President, "),
-                        Value::Variable(VariableType::Global("company".to_string())),
-                        text(&mut compiler, " Inc.}"),
-                    ]
-                    .into(),
-                ),
-            ),
-            (
-                "dear${hex:20 24 7b}global.Name}",
-                Value::List(
-                    vec![
-                        text(&mut compiler, "dear "),
-                        Value::Variable(VariableType::Global("name".to_string())),
-                    ]
-                    .into(),
-                ),
-            ),
-            (
-                "INBOX.lists.${2}",
-                Value::List(
-                    vec![
-                        text(&mut compiler, "INBOX.lists."),
-                        Value::Variable(VariableType::Match(2)),
-                    ]
-                    .into(),
-                ),
-            ),
-            (
-                "Ein unerh${unicode:00F6}rt gro${unicode:00DF}er Test",
-                text(&mut compiler, "Ein unerhört großer Test"),
-            ),
-            ("&%${}!", text(&mut compiler, "&%${}!")),
-            ("${doh!}", text(&mut compiler, "${doh!}")),
-            (
-                "${hex: 20 }${global.hi}${hex: 20 }",
-                Value::List(
-                    vec![
-                        text(&mut compiler, " "),
-                        Value::Variable(VariableType::Global("hi".to_string())),
-                        text(&mut compiler, " "),
-                    ]
-                    .into(),
-                ),
-            ),
-            (
-                "${hex:20 24 7b z}${global.hi}${unicode:}${unicode: }${hex:20}",
-                Value::List(
-                    vec![
-                        text(&mut compiler, "${hex:20 24 7b z}"),
-                        Value::Variable(VariableType::Global("hi".to_string())),
-                        text(&mut compiler, "${unicode:}${unicode: } "),
-                    ]
-                    .into(),
-                ),
-            ),
-            (
-                "${header.from}",
-                Value::Variable(VariableType::Header(HeaderVariable {
-                    name: vec![HeaderName::From].into(),
-                    part: HeaderPart::Text,
-                    index_hdr: -1,
-                    index_part: -1,
-                })),
-            ),
-            (
-                "${header.from.addr}",
-                Value::Variable(VariableType::Header(HeaderVariable {
-                    name: vec![HeaderName::From].into(),
-                    part: HeaderPart::Address(AddressPart::All),
-                    index_hdr: -1,
-                    index_part: -1,
-                })),
-            ),
-            (
-                "${header.from[1]}",
-                Value::Variable(VariableType::Header(HeaderVariable {
-                    name: vec![HeaderName::From].into(),
-                    part: HeaderPart::Text,
-                    index_hdr: 1,
-                    index_part: -1,
-                })),
-            ),
-            (
-                "${header.from[*]}",
-                Value::Variable(VariableType::Header(HeaderVariable {
-                    name: vec![HeaderName::From].into(),
-                    part: HeaderPart::Text,
-                    index_hdr: 0,
-                    index_part: -1,
-                })),
-            ),
-            (
-                "${header.from[20].name}",
-                Value::Variable(VariableType::Header(HeaderVariable {
-                    name: vec![HeaderName::From].into(),
-                    part: HeaderPart::Address(AddressPart::Name),
-                    index_hdr: 20,
-                    index_part: -1,
-                })),
-            ),
-            (
-                "${header.from[*].addr}",
-                Value::Variable(VariableType::Header(HeaderVariable {
-                    name: vec![HeaderName::From].into(),
-                    part: HeaderPart::Address(AddressPart::All),
-                    index_hdr: 0,
-                    index_part: -1,
-                })),
-            ),
-            (
-                "${header.from[-5].name[2]}",
-                Value::Variable(VariableType::Header(HeaderVariable {
-                    name: vec![HeaderName::From].into(),
-                    part: HeaderPart::Address(AddressPart::Name),
-                    index_hdr: -5,
-                    index_part: 2,
-                })),
-            ),
-            (
-                "${header.from[*].raw[*]}",
-                Value::Variable(VariableType::Header(HeaderVariable {
-                    name: vec![HeaderName::From].into(),
-                    part: HeaderPart::Raw,
-                    index_hdr: 0,
-                    index_part: 0,
-                })),
-            ),
-        ] {
-            assert_eq!(
-                compiler.tokenize_string(input.as_bytes(), true).unwrap(),
-                expected_result,
-                "Failed for {input}"
-            );
-        }
-
-        for input in ["${unicode:200000}", "${Unicode:DF01}"] {
-            assert!(compiler.tokenize_string(input.as_bytes(), true).is_err());
-        }
-    }
-}
+#[cfg(all(test, stalwart_tests))]
+#[rustfmt::skip]
+#[path = "../../../../../../stalwart-tests/unit/sieve/src/compiler/lexer/string/tests.rs"]
+mod tests;

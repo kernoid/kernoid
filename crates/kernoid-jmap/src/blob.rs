@@ -4,7 +4,7 @@
 
 use bytes::Bytes;
 use futures_util::{Stream, stream};
-use mail_parser::{MessageParser, MimeHeaders, PartType};
+use mail_parser::{Message, MessageParser, MessagePart, PartKind};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -74,17 +74,35 @@ pub(crate) fn readable(email: &EmailInfo, access: &Access) -> bool {
     access.owned || email.mailboxes.iter().any(|(mailbox, _)| access.mailbox(*mailbox).contains(Rights::READ))
 }
 
+/// Part `index` of a message: the parts of the message itself in document order, those of messages nested in it
+/// not counted – as mail-parser 0.11 numbered them, so that part blob ids stay as they were.
+pub(crate) fn part_at<'x>(message: &'x Message<'_>, index: usize) -> Option<MessagePart<'x>> {
+    message.root().parts().nth(index)
+}
+
+/// The number [`part_at`] gives a part of the message itself.
+pub(crate) fn part_index(message: &Message<'_>, part: &MessagePart<'_>) -> Option<usize> {
+    message.root().parts().position(|other| other.id() == part.id())
+}
+
+/// The content of a part: text as UTF-8, other leaves without their transfer encoding, containers as written.
+fn content<'x>(part: &MessagePart<'x>) -> std::borrow::Cow<'x, [u8]> {
+    match part.kind() {
+        PartKind::Text | PartKind::Html => match part.text() {
+            Some(std::borrow::Cow::Borrowed(text)) => std::borrow::Cow::Borrowed(text.as_bytes()),
+            Some(std::borrow::Cow::Owned(text)) => std::borrow::Cow::Owned(text.into_bytes()),
+            None => part.decoded(),
+        },
+        PartKind::Binary | PartKind::InlineBinary => part.decoded(),
+        PartKind::Message(_) | PartKind::Multipart => std::borrow::Cow::Borrowed(part.raw_body()),
+    }
+}
+
 /// The decoded content of part `index` of `raw`.
 pub(crate) fn part_content(raw: &[u8], index: usize) -> Option<Bytes> {
     let message = MessageParser::new().parse(raw)?;
-    let part = message.parts.get(index)?;
-    Some(match &part.body {
-        PartType::Text(text) | PartType::Html(text) => Bytes::from(text.as_bytes().to_vec()),
-        PartType::Binary(bytes) | PartType::InlineBinary(bytes) => Bytes::from(bytes.to_vec()),
-        PartType::Message(_) | PartType::Multipart(_) => {
-            Bytes::from(raw.get(part.offset_body as usize..part.offset_end as usize)?.to_vec())
-        }
-    })
+    let part = part_at(&message, index)?;
+    Some(Bytes::from(content(&part).into_owned()))
 }
 
 /// The largest embedded image an email's view takes, and all of them together.
@@ -97,14 +115,17 @@ const MAX_EMBEDDED_ALL: usize = 20 * 1024 * 1024;
 fn email_view(raw: &[u8], index: usize) -> Option<String> {
     use base64::Engine;
     let message = MessageParser::new().parse(raw)?;
-    let PartType::Html(html) = &message.parts.get(index)?.body else { return None };
-    let mut html = html.to_string();
+    let part = part_at(&message, index)?;
+    if !matches!(part.kind(), PartKind::Html) {
+        return None;
+    }
+    let mut html = part.text()?.into_owned();
     let mut budget = MAX_EMBEDDED_ALL;
-    for part in &message.parts {
-        let (Some(id), PartType::Binary(bytes) | PartType::InlineBinary(bytes)) = (part.content_id(), &part.body)
-        else {
+    for part in message.root().parts() {
+        let (Some(id), PartKind::Binary | PartKind::InlineBinary) = (part.content_id(), part.kind()) else {
             continue;
         };
+        let bytes = part.decoded();
         let kind = part.content_type().map(|kind| match kind.subtype() {
             Some(sub) => format!("{}/{sub}", kind.ctype()),
             None => kind.ctype().to_owned(),
@@ -116,7 +137,7 @@ fn email_view(raw: &[u8], index: usize) -> Option<String> {
         let reference = format!("cid:{}", id.trim_start_matches('<').trim_end_matches('>'));
         if html.contains(&reference) {
             budget -= bytes.len();
-            let data = format!("data:{kind};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes));
+            let data = format!("data:{kind};base64,{}", base64::engine::general_purpose::STANDARD.encode(&bytes));
             html = html.replace(&reference, &data);
         }
     }

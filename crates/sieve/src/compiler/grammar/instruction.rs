@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2020 Stalwart Labs Ltd <hello@stalw.art>
+ * SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
  *
  * SPDX-License-Identifier: AGPL-3.0-only
  */
@@ -36,7 +36,7 @@ use hashbrown::HashTable;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[repr(u8)]
@@ -99,7 +99,7 @@ pub(crate) enum Instruction {
     Let(Box<Let>) = 31,
 
     // Test only
-    #[cfg(test)]
+    #[cfg(all(test, stalwart_tests))]
     TestCmd(Box<[Value]>) = 0x7f,
 }
 
@@ -839,7 +839,7 @@ impl Compiler {
                     state.block = prev_block;
                 }
 
-                #[cfg(test)]
+                #[cfg(all(test, stalwart_tests))]
                 Token::Unknown(instruction) if instruction.contains("test") => {
                     let has_arguments = instruction != "test";
                     let mut arguments = vec![state.text(&instruction)];
@@ -959,7 +959,11 @@ impl CompilerState<'_> {
             var_id
         } else if !register_as_local || self.block_stack.is_empty() {
             let var_id = self.vars_num as u16;
-            self.block.vars_local.insert(name, var_id);
+            self.block_stack
+                .first_mut()
+                .unwrap_or(&mut self.block)
+                .vars_local
+                .insert(name, var_id);
             self.vars_num += 1;
             var_id
         } else {
@@ -1257,7 +1261,7 @@ impl MapLocalVars for Test {
                 v.handle.map_local_vars(last_id);
                 v.reason.map_local_vars(last_id);
             }
-            #[cfg(test)]
+            #[cfg(all(test, stalwart_tests))]
             Test::TestCmd(cmd) => {
                 cmd.arguments.map_local_vars(last_id);
             }

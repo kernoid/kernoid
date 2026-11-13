@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2020 Stalwart Labs Ltd <hello@stalw.art>
+ * SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
  *
  * SPDX-License-Identifier: AGPL-3.0-only
  */
@@ -17,7 +17,7 @@ use crate::compiler::grammar::{AddressPart, MatchType, test::Test};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 pub(crate) struct TestEnvelope {
@@ -216,8 +216,8 @@ impl<'x> TryFrom<&'x str> for Envelope {
 }
 
 fn lookup_envelope(input: &str) -> Option<Envelope> {
-    hashify::tiny_map!(
-        input.as_bytes(),
+    hashify::map!(
+        input.as_bytes(), Envelope,
         "from" => Envelope::From,
         "to" => Envelope::To,
         "bytimeabsolute" => Envelope::ByTimeAbsolute,
@@ -229,4 +229,5 @@ fn lookup_envelope(input: &str) -> Option<Envelope> {
         "ret" => Envelope::Ret,
         "envid" => Envelope::Envid,
     )
+    .copied()
 }

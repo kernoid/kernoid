@@ -1,10 +1,11 @@
 /*
- * SPDX-FileCopyrightText: 2020 Stalwart Labs Ltd <hello@stalw.art>
+ * SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
  *
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
 use super::TestResult;
+use crate::runtime::message::headers::HeaderRef;
 use crate::{
     Context, Sieve,
     bytecode::ops,
@@ -14,9 +15,8 @@ use crate::{
     },
     runtime::{RuntimeError, handler::Handler},
 };
-use mail_parser::{DateTime, Header, HeaderValue, parsers::MessageStream};
+use mail_parser::{DateTime, HeaderForm, HeaderValue};
 use smallvec::SmallVec;
-use std::borrow::Cow;
 
 impl<'x> Context<'x> {
     pub(crate) fn test_date<H: Handler<'x>>(
@@ -37,17 +37,20 @@ impl<'x> Context<'x> {
         let result = match &match_type {
             MatchType::Count(rel_match) => {
                 let mut date_count = 0;
+                let mut meter = self.scan_meter(1);
                 self.find_headers(
                     &header_names,
                     test.index,
                     test.mime_anychild,
-                    |header, _, _| {
+                    &mut meter,
+                    |header, _| {
                         if self.find_dates(header).is_some() {
                             date_count += 1;
                         }
                         false
                     },
                 );
+                self.settle_scan(meter)?;
 
                 self.eval_values(script, test.key_list)?
                     .iter()
@@ -55,13 +58,15 @@ impl<'x> Context<'x> {
             }
             MatchType::List => {
                 let mut values: SmallVec<[&'x str; 4]> = SmallVec::new();
+                let mut meter = self.scan_meter(1);
                 self.find_headers(
                     &header_names,
                     test.index,
                     test.mime_anychild,
-                    |header, _, _| {
+                    &mut meter,
+                    |header, _| {
                         if let Some(dt) = self.find_dates(header) {
-                            let value = date_part.eval(zone.eval(dt.as_ref()).as_ref());
+                            let value = date_part.eval(&zone.eval(dt));
                             if !value.is_empty() && !values.iter().any(|v| *v == value) {
                                 values.push(self.alloc_string(value));
                             }
@@ -69,6 +74,7 @@ impl<'x> Context<'x> {
                         false
                     },
                 );
+                self.settle_scan(meter)?;
                 if !values.is_empty() {
                     let lists = self.eval_strings(script, test.key_list)?;
                     return TestResult::from_reply(
@@ -82,16 +88,18 @@ impl<'x> Context<'x> {
                 let key_list = self.eval_keys(script, test.key_list)?;
                 let mut captured_values = Vec::new();
                 let mut error = None;
+                let mut meter = self.scan_meter(key_list.len());
 
                 let result = self.find_headers(
                     &header_names,
                     test.index,
                     test.mime_anychild,
-                    |header, _, _| {
+                    &mut meter,
+                    |header, _| {
                         let Some(dt) = self.find_dates(header) else {
                             return false;
                         };
-                        let value = date_part.eval(zone.eval(dt.as_ref()).as_ref());
+                        let value = date_part.eval(&zone.eval(dt));
                         for key in &key_list {
                             match self.key_matches(
                                 script,
@@ -112,6 +120,7 @@ impl<'x> Context<'x> {
                         false
                     },
                 );
+                self.settle_scan(meter)?;
                 if let Some(err) = error {
                     return Err(err);
                 }
@@ -194,30 +203,15 @@ impl<'x> Context<'x> {
         }
     }
 
-    pub(crate) fn find_dates<'y>(&self, header: &'y Header<'_>) -> Option<Cow<'y, DateTime>> {
-        if let HeaderValue::DateTime(dt) = &header.value {
-            if dt.is_valid() {
-                return Some(Cow::Borrowed(dt));
-            }
-        } else if header.offset_end > 0 {
-            let bytes = self
-                .message
-                .raw_message
-                .get(header.offset_start as usize..header.offset_end as usize)?;
-            if let HeaderValue::DateTime(dt) = MessageStream::new(bytes).parse_date()
-                && dt.is_valid()
-            {
-                return Some(Cow::Owned(dt));
-            }
-        } else if let HeaderValue::Text(text) = &header.value {
-            let bytes = format!("{text}\n").into_bytes();
-            if let HeaderValue::DateTime(dt) = MessageStream::new(&bytes).parse_date()
-                && dt.is_valid()
-            {
-                return Some(Cow::Owned(dt));
-            }
+    pub(crate) fn find_dates(&self, header: HeaderRef<'x>) -> Option<DateTime> {
+        match header.value() {
+            HeaderValue::DateTime(dt) => dt.is_valid().then_some(dt),
+            _ => header
+                .parse_as(HeaderForm::Date)
+                .value()
+                .as_datetime()
+                .filter(DateTime::is_valid),
         }
-        None
     }
 }
 
@@ -251,11 +245,11 @@ impl DatePart {
 }
 
 impl ops::Zone {
-    pub(crate) fn eval<'y>(&self, dt: &'y DateTime) -> Cow<'y, DateTime> {
+    pub(crate) fn eval(&self, dt: DateTime) -> DateTime {
         match self.kind {
-            0 => Cow::Owned(dt.to_timezone(self.time)),
-            1 => Cow::Borrowed(dt),
-            _ => Cow::Owned(DateTime::from_timestamp(dt.to_timestamp())),
+            0 => dt.to_timezone(self.time),
+            1 => dt,
+            _ => DateTime::from_timestamp(dt.to_timestamp()),
         }
     }
 }

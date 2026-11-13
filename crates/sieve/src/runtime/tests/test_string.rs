@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2020 Stalwart Labs Ltd <hello@stalw.art>
+ * SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
  *
  * SPDX-License-Identifier: AGPL-3.0-only
  */
@@ -78,6 +78,7 @@ impl<'x> Context<'x> {
                 let mut captured_values = Vec::new();
                 let sources = self.eval_values(script, test.source)?;
                 let keys = self.eval_keys(script, test.key_list)?;
+                self.charge_scan(keys.len(), sources.iter().map(|source| source.len()).sum())?;
 
                 'outer: for key in &keys {
                     for source in &sources {

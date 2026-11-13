@@ -5,7 +5,7 @@
  */
 
 //! JMAP objects with JSON Pointer querying and patching, for calcard's JSCalendar and JSContact. Taken over from
-//! Stalwart's `crates/jmap-tools` (v1.0.1, commit 23b6975, 2026-10-28), as it is. Files under other licences (`json`)
+//! Stalwart's `crates/jmap-tools` (v1.1.0, commit e7cde9b, 2026-11-09), as it is. Files under other licences (`json`)
 //! keep their headers.
 
 // Taken over as it is: kernoid's workspace lints are not applied to Stalwart's code.

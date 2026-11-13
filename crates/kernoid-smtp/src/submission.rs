@@ -272,7 +272,7 @@ impl Session {
         };
         let senders: Vec<String> = message
             .from()
-            .map(|from| from.iter().filter_map(|addr| addr.address()).map(str::to_lowercase).collect())
+            .map(|from| from.mailboxes().filter_map(|addr| addr.address()).map(str::to_lowercase).collect())
             .unwrap_or_default();
         if senders.is_empty() {
             return "550 5.6.0 The message has no From".into();

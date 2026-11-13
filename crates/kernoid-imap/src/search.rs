@@ -93,30 +93,22 @@ fn uses_modseq(nodes: &[Node]) -> bool {
 /// A header's decoded text: addresses as `name <address>`.
 fn header_text(message: &Message<'_>, name: &str) -> Option<String> {
     let mut texts = Vec::new();
-    for header in message.parts.first()?.headers.iter().filter(|header| header.name.as_str().eq_ignore_ascii_case(name))
-    {
-        texts.push(match &header.value {
+    for header in message.headers().iter().filter(|header| header.raw_name().eq_ignore_ascii_case(name)) {
+        texts.push(match header.value() {
             HeaderValue::Text(text) => text.to_string(),
-            HeaderValue::TextList(list) => list.join(" "),
-            HeaderValue::Address(address) => {
-                let one = |addr: &mail_parser::Addr<'_>| {
-                    format!(
-                        "{} <{}>",
-                        addr.name.as_deref().unwrap_or_default(),
-                        addr.address.as_deref().unwrap_or_default()
-                    )
-                };
-                match address {
-                    Address::List(list) => list.iter().map(one).collect::<Vec<_>>().join(", "),
-                    Address::Group(groups) => {
-                        groups.iter().flat_map(|group| group.addresses.iter().map(one)).collect::<Vec<_>>().join(", ")
-                    }
-                }
-            }
-            _ => String::from_utf8_lossy(
-                message.raw_message.get(header.offset_start as usize..header.offset_end as usize).unwrap_or_default(),
-            )
-            .into_owned(),
+            HeaderValue::TextList(list) => list.iter().collect::<Vec<_>>().join(" "),
+            HeaderValue::Address(address) => address
+                .iter()
+                .flat_map(|item| match item {
+                    Address::Mailbox(mailbox) => vec![mailbox],
+                    Address::Group(group) => group.mailboxes().collect(),
+                })
+                .map(|mailbox| {
+                    format!("{} <{}>", mailbox.name().unwrap_or_default(), mailbox.address().unwrap_or_default())
+                })
+                .collect::<Vec<_>>()
+                .join(", "),
+            _ => String::from_utf8_lossy(header.raw_value()).into_owned(),
         });
     }
     (!texts.is_empty()).then(|| texts.join("\n"))
@@ -219,8 +211,7 @@ fn node_matches(node: &Node, candidate: &Candidate<'_>, selected: &Selected) -> 
             Filter::Subject(needle) => summary(&|info| subject(info, needle)),
             Filter::Header(name, needle) if needle.is_empty() => candidate
                 .message
-                .and_then(|message| message.parts.first())
-                .is_some_and(|root| root.headers.iter().any(|h| h.name.as_str().eq_ignore_ascii_case(name))),
+                .is_some_and(|message| message.headers().iter().any(|h| h.raw_name().eq_ignore_ascii_case(name))),
             Filter::Header(name, needle) => header(name, needle),
             Filter::Body(needle) => in_body(needle),
             Filter::Text(needle) => {

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2020 Stalwart Labs Ltd <hello@stalw.art>
+ * SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
  *
  * SPDX-License-Identifier: AGPL-3.0-only
  */
@@ -141,8 +141,8 @@ pub(crate) enum Word {
 }
 
 pub(crate) fn lookup_words(input: &str) -> Option<Word> {
-    hashify::tiny_map!(
-        input.as_bytes(),
+    hashify::map!(
+        input.as_bytes(), Word,
         "addflag" => Word::AddFlag,
         "addheader" => Word::AddHeader,
         "address" => Word::Address,
@@ -272,6 +272,7 @@ pub(crate) fn lookup_words(input: &str) -> Option<Word> {
         "let" => Word::Let,
         "continue" => Word::Continue,
     )
+    .copied()
 }
 
 impl Display for Word {

@@ -97,7 +97,7 @@ impl Mail {
     /// a message that has the header already.
     pub(crate) async fn autocrypt_header(&self, account: Uuid, raw: &[u8]) -> Result<Option<String>> {
         let Some(headers) = MessageParser::new().parse_headers(raw) else { return Ok(None) };
-        if headers.header("Autocrypt").is_some() {
+        if headers.headers().contains("Autocrypt") {
             return Ok(None);
         }
         let Some(from) = headers.from().and_then(|from| from.first()).and_then(|from| from.address()) else {

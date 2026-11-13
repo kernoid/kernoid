@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2020 Stalwart Labs Ltd <hello@stalw.art>
+ * SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
  *
  * SPDX-License-Identifier: AGPL-3.0-only
  */
@@ -9,7 +9,7 @@ use std::{borrow::Cow, cmp::Ordering, fmt::Display, hash::Hash};
 
 #[derive(Debug, Clone)]
 #[cfg_attr(
-    any(test, feature = "serde"),
+    any(all(test, stalwart_tests), feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 pub enum Variable<'x> {
@@ -420,14 +420,14 @@ impl Display for Variable<'_> {
     }
 }
 
-#[cfg(any(test, feature = "serde"))]
+#[cfg(any(all(test, stalwart_tests), feature = "serde"))]
 impl serde::Serialize for Array<'_> {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.collect_seq(self.as_slice())
     }
 }
 
-#[cfg(any(test, feature = "serde"))]
+#[cfg(any(all(test, stalwart_tests), feature = "serde"))]
 impl<'de, 'x> serde::Deserialize<'de> for Array<'x> {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         Vec::<Variable<'x>>::deserialize(deserializer).map(Array::Owned)

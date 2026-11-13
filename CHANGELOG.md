@@ -7,6 +7,20 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 ## [Unreleased]
 
+### Changed
+
+- Stalwart's Sieve interpreter, calcard and jmap-tools taken over again, now from Stalwart v1.1.0 (before: sieve-rs
+  1.0.2 from crates.io, calcard and jmap-tools 1.0.1), and the server reads mail with mail-parser 1.0 and writes it
+  with mail-builder 2.0. mail-parser 1.0 is a rewrite with fixes kernoid sees: MIME boundaries are no longer matched
+  inside a line (which cut body parts short), inline images of `multipart/related` are no longer binary attachments,
+  and header names with whitespace inside are no longer read as the known field – kernoid now sees the same From and
+  Subject as DKIM and DMARC do.
+- `hasAttachment` (JMAP, and the summary kept of new mail) follows RFC 8621: inline media shown in the body no longer
+  count as attachments. The summary of mail stored before keeps its value.
+- IMAP `BINARY[…]` returns a text part without its transfer encoding, in its own charset, as RFC 3516 defines it;
+  before, text came converted to UTF-8.
+- `BODY[HEADER.FIELDS …]` and `headers` (JMAP) give header names as the message spells them.
+
 ### Security
 
 - kernoid-sync builds SQLite 3.54.1 (rusqlite 0.41.1, libsqlite3-sys 0.39.1) instead of 3.53.2, which could return

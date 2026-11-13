@@ -1,20 +1,32 @@
 /*
- * SPDX-FileCopyrightText: 2020 Stalwart Labs Ltd <hello@stalw.art>
+ * SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
  *
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
 use crate::compiler::{
-    CompileError,
+    CompileError, ErrorType,
     grammar::{
         Capability,
         instruction::{CompilerState, Instruction},
     },
-    lexer::Token,
+    lexer::{Token, tokenizer::TokenInfo},
 };
 
 impl CompilerState<'_> {
-    fn add_capability(&mut self, capabilities: &mut Vec<Capability>, capability: Capability) {
+    fn add_capability(
+        &mut self,
+        capabilities: &mut Vec<Capability>,
+        capability: Capability,
+        token_info: &TokenInfo,
+    ) -> Result<(), CompileError> {
+        if self.compiler.disabled_capabilities.contains(&capability) {
+            return Err(CompileError {
+                line_num: token_info.line_num,
+                line_pos: token_info.line_pos,
+                error_type: ErrorType::UnsupportedCapability(capability),
+            });
+        }
         if !self.has_capability(&capability) {
             let parent_capability = if matches!(&capability, Capability::SpamTestPlus) {
                 Some(Capability::SpamTest)
@@ -31,6 +43,7 @@ impl CompilerState<'_> {
                 self.block.capabilities.insert(capability);
             }
         }
+        Ok(())
     }
 
     pub(crate) fn parse_require(&mut self) -> Result<(), CompileError> {
@@ -41,11 +54,12 @@ impl CompilerState<'_> {
             Token::BracketOpen => loop {
                 let token_info = self.tokens.unwrap_next()?;
                 match token_info.token {
-                    Token::StringConstant(value) => {
+                    Token::StringConstant(ref value) => {
                         self.add_capability(
                             &mut capabilities,
                             Capability::parse(value.to_string().as_ref()),
-                        );
+                            &token_info,
+                        )?;
                         let token_info = self.tokens.unwrap_next()?;
                         match token_info.token {
                             Token::Comma => (),
@@ -60,11 +74,12 @@ impl CompilerState<'_> {
                     }
                 }
             },
-            Token::StringConstant(value) => {
+            Token::StringConstant(ref value) => {
                 self.add_capability(
                     &mut capabilities,
                     Capability::parse(value.to_string().as_ref()),
-                );
+                    &token_info,
+                )?;
             }
             _ => {
                 return Err(token_info.expected("'[' or string"));
@@ -83,7 +98,7 @@ impl CompilerState<'_> {
                 merged.extend(capabilities);
                 *capabilties = merged.into_boxed_slice();
             } else {
-                #[cfg(test)]
+                #[cfg(all(test, stalwart_tests))]
                 panic!(
                     "Invalid require instruction position {}.",
                     self.block.require_pos
