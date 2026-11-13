@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Known vulnerabilities of the dependencies, every day: CI's job `deps` checks them only on a push, so an advisory
+# published between two pushes stayed unseen until the next one failed for it (RUSTSEC-2026-0459, 2026-11). Only the
+# advisories – licences and sources change only with a push, and `deps` checks those. Actions are pinned by commit,
+# with the version as a comment.
+name: Advisories
+
+on:
+  schedule:
+    - cron: "41 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        manifest:
+          - Cargo.toml
+          - apps/tui/Cargo.toml
+          - operator/Cargo.toml
+          - apps/e2e/Cargo.toml
+          - apps/client/Cargo.toml
+          - apps/sync/Cargo.toml
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          manifest-path: ${{ matrix.manifest }}
+          command: check
+          command-arguments: advisories
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - working-directory: web
+        run: |
+          npm install --global --ignore-scripts --no-audit --no-fund pnpm@12.12.0
+          pnpm audit

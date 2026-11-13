@@ -13,10 +13,10 @@ login and the owner of files are the same account. It runs as a self-hosted serv
 object storage and is free software under the AGPL.
 {: .fs-5 .fw-300 }
 
-**Status:** 0.2, a pre-release – identity and single sign-on, mail with end-to-end encryption, calendars and
+**Status:** pre-releases (0.x) – identity and single sign-on, mail with end-to-end encryption, calendars and
 contacts, files with public links, LDAP, the Kubernetes operator, the first modules, the web app and the terminal app
-are there to try out and test ([changelog](https://github.com/kernoid/kernoid/blob/main/CHANGELOG.md)), the app for
-desktop and mobile as an unsigned preview. Nothing here is ready for production yet: the first stable release comes
+are there to try out and test; the app for desktop and mobile, with files in the system's file manager, as an unsigned
+preview. What each release brings is in the [changelog](https://github.com/kernoid/kernoid/blob/main/CHANGELOG.md). Nothing here is ready for production yet: the first stable release comes
 after an external security audit, with the app signed, once falkOSS is incorporated and holds the app stores'
 developer accounts.
 {: .warning }
