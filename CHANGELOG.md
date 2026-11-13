@@ -7,6 +7,12 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 ## [Unreleased]
 
+### Security
+
+- kernoid-sync builds SQLite 3.54.1 (rusqlite 0.41.1, libsqlite3-sys 0.39.1) instead of 3.53.2, which could return
+  uninitialised memory when it opened a database with a crafted `-wal` file beside it (RUSTSEC-2026-0459,
+  CVE-2026-119375). kernoid-sync opens only its own state database, kept outside the synced folder.
+
 ## [0.3.0] – 2026-11-04
 
 The file sync of kernoid's apps grows up: `kernoid-sync` keeps moves as moves, goes on with transfers that broke off,
