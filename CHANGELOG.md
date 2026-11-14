@@ -7,7 +7,7 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 ## [Unreleased]
 
-## [0.3.1] – DATE
+## [0.3.1] – 2026-11-14
 
 A security fix for kernoid-sync, and Stalwart's Sieve interpreter and libraries taken over from its v1.1.0 with the
 mail parser they need. No migration and no change to the configuration; the API changes only where noted below
