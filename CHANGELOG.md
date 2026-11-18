@@ -7,6 +7,13 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 ## [Unreleased]
 
+## [0.4.0] – DATE
+
+Dates and times move from chrono, which is no longer maintained, to Jiff 1.0. No migration and no change to the
+configuration; times in the APIs stay RFC 3339 and change only in how UTC is written (below). Upgrade by pulling the
+image `ghcr.io/kernoid/kernoid:0.4.0` (the Helm chart and the crates follow the version). The Rust SDK changes its API –
+hence 0.4 –: apps that use it take kernoid-client and kernoid-sync 0.4.0 and Jiff's types.
+
 ### Changed
 
 - Dates and times with [Jiff](https://github.com/BurntSushi/jiff) 1.0 in place of chrono and chrono-tz, which are no

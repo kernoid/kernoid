@@ -7,7 +7,7 @@
 
 [package]
 name = "kernoid-sync"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2024"
 rust-version = "1.94"
 license = "MIT"
@@ -22,14 +22,14 @@ exclude = ["scripts/", "deny.toml", "tests/"]
 [dependencies]
 # Dates and times (Unlicense OR MIT) – in place of chrono (RUSTSEC-2026-0543).
 jiff = "1.0.1"
-kernoid-client = { version = "0.3.1", path = "../client" }
+kernoid-client = { version = "0.4.0", path = "../client" }
 # SQLite built in (its code is in the public domain), so that every platform has the same.
 rusqlite = { version = "0.41.1", features = ["bundled"] }
 serde_json = "1.0.151"
 tokio = { version = "1.53.3", features = ["fs"] }
 
 [dev-dependencies]
-kernoid-e2e = { version = "0.3.1", path = "../e2e" }
+kernoid-e2e = { version = "0.4.0", path = "../e2e" }
 tokio = { version = "1.53.3", features = ["fs", "macros", "rt-multi-thread", "time"] }
 
 [profile.dev.package."*"]
