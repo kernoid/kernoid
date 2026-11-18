@@ -36,8 +36,11 @@ async fn a_session_from_login_to_logout(pool: PgPool) {
         identity.create_session(instance, "Alice@firma.de", PASSWORD, None, &client("192.0.2.1")).await.unwrap();
     assert!(created.token.starts_with(&format!("ks1.{}.", created.id)));
     assert_eq!(created.account.id, account);
-    let lifetime = created.expires_at - chrono::Utc::now();
-    assert!(lifetime > chrono::Duration::hours(7) && lifetime <= chrono::Duration::hours(8), "{lifetime}");
+    let lifetime = created.expires_at - jiff::Timestamp::now();
+    assert!(
+        lifetime > jiff::SignedDuration::from_hours(7) && lifetime <= jiff::SignedDuration::from_hours(8),
+        "{lifetime}"
+    );
 
     let session = identity.session(instance, &created.token).await.unwrap();
     assert_eq!(

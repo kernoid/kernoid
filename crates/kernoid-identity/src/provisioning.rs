@@ -5,7 +5,7 @@
 
 use std::collections::BTreeSet;
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use kernoid_events::{InlineFuture, inline};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
@@ -28,8 +28,8 @@ const TOKEN_PREFIX: &str = "kscim1.";
 pub struct ScimTokenInfo {
     pub id: Uuid,
     pub name: String,
-    pub created_at: DateTime<Utc>,
-    pub last_used_at: Option<DateTime<Utc>>,
+    pub created_at: Timestamp,
+    pub last_used_at: Option<Timestamp>,
 }
 
 /// The tenant a SCIM request acts for, found by its token.
@@ -60,8 +60,8 @@ pub struct ScimUser {
 /// When a resource was made and last changed, and its version – the sequence of its last event (SCIM `meta`, ETags).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ScimMeta {
-    pub created: DateTime<Utc>,
-    pub last_modified: DateTime<Utc>,
+    pub created: Timestamp,
+    pub last_modified: Timestamp,
     pub version: i64,
 }
 
@@ -214,8 +214,8 @@ impl Identity {
             .map(|row| ScimTokenInfo {
                 id: row.id,
                 name: row.name,
-                created_at: row.created_at,
-                last_used_at: row.last_used_at,
+                created_at: row.created_at.to_jiff(),
+                last_used_at: row.last_used_at.map(|t| t.to_jiff()),
             })
             .collect())
     }
@@ -394,7 +394,7 @@ impl Identity {
         .fetch_one(self.pool())
         .await
         .map_err(store_error)?;
-        Ok(ScimMeta { created: row.created, last_modified: row.modified, version: row.version })
+        Ok(ScimMeta { created: row.created.to_jiff(), last_modified: row.modified.to_jiff(), version: row.version })
     }
 
     /// Groups of a tenant for SCIM, filtered and paged.

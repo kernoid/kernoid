@@ -5,7 +5,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
+use jiff_sqlx::ToSqlx;
 use kernoid_events::{
     Error, Event, InlineFuture,
     aggregate::{Aggregate, DomainEvent},
@@ -117,7 +118,7 @@ pub enum AccountEvent {
     FileLinkAdded {
         id: Uuid,
         node: Uuid,
-        expires_at: Option<DateTime<Utc>>,
+        expires_at: Option<Timestamp>,
         password: bool,
         /// What the link lets people do; links made before these fields could read only.
         #[serde(default = "yes")]
@@ -573,7 +574,7 @@ pub(crate) async fn project(connection: &mut PgConnection, events: &[Event]) -> 
                     id,
                     application,
                     &scopes,
-                    event.created_at,
+                    event.created_at.to_sqlx(),
                 )
                 .execute(&mut *connection)
                 .await?;
@@ -643,7 +644,7 @@ pub(crate) async fn project(connection: &mut PgConnection, events: &[Event]) -> 
                     group,
                     rights,
                     send_as,
-                    event.created_at,
+                    event.created_at.to_sqlx(),
                 )
                 .execute(&mut *connection)
                 .await?;
@@ -688,7 +689,7 @@ pub(crate) async fn project(connection: &mut PgConnection, events: &[Event]) -> 
                     account,
                     group,
                     level,
-                    event.created_at,
+                    event.created_at.to_sqlx(),
                 )
                 .execute(&mut *connection)
                 .await?;
@@ -742,7 +743,7 @@ pub(crate) async fn project(connection: &mut PgConnection, events: &[Event]) -> 
                     account,
                     group,
                     rights,
-                    event.created_at,
+                    event.created_at.to_sqlx(),
                 )
                 .execute(&mut *connection)
                 .await?;

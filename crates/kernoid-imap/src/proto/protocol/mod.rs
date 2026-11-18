@@ -8,7 +8,6 @@ use crate::proto::types::Id;
 use crate::proto::types::SliceRange;
 use crate::proto::{Command, ResponseCode, ResponseType, StatusResponse};
 use base64::{Engine, engine::general_purpose::STANDARD};
-use chrono::{DateTime, Utc};
 use std::collections::HashSet as AHashSet;
 use std::{cmp::Ordering, fmt::Display};
 
@@ -255,9 +254,9 @@ pub fn literal_string_slice(buf: &mut Vec<u8>, text: &SliceRange<'_>) {
 pub fn quoted_timestamp(buf: &mut Vec<u8>, timestamp: i64) {
     buf.push(b'"');
     buf.extend_from_slice(
-        DateTime::<Utc>::from_timestamp(timestamp, 0)
+        jiff::Timestamp::from_second(timestamp)
             .unwrap_or_default()
-            .format("%d-%b-%Y %H:%M:%S %z")
+            .strftime("%d-%b-%Y %H:%M:%S %z")
             .to_string()
             .as_bytes(),
     );

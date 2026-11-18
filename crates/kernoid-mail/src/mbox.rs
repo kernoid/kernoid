@@ -3,7 +3,7 @@
 //! `X-Status` and `X-Keywords` headers as Dovecot and Thunderbird write them. Reading uses mail-parser's mbox reader.
 
 use bytes::Bytes;
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use uuid::Uuid;
 
 use crate::{Keyword, Mail, MailboxEntry, NewEmail, Result};
@@ -13,10 +13,10 @@ const FLAG_HEADERS: [&str; 3] = ["status", "x-status", "x-keywords"];
 
 /// One email as an mbox entry: the `From ` line, the keyword headers, the message with its lines ending in LF and
 /// `From ` lines quoted (mboxrd), and an empty line.
-pub fn mbox_entry(raw: &[u8], sender: &str, received_at: DateTime<Utc>, keywords: &[String]) -> Vec<u8> {
+pub fn mbox_entry(raw: &[u8], sender: &str, received_at: Timestamp, keywords: &[String]) -> Vec<u8> {
     let mut out = Vec::with_capacity(raw.len() + 128);
     let sender = if sender.is_empty() || sender.contains(char::is_whitespace) { "MAILER-DAEMON" } else { sender };
-    out.extend_from_slice(format!("From {sender} {}\n", received_at.format("%a %b %e %H:%M:%S %Y")).as_bytes());
+    out.extend_from_slice(format!("From {sender} {}\n", received_at.strftime("%a %b %e %H:%M:%S %Y")).as_bytes());
     let has = |keyword: &str| keywords.iter().any(|k| k == keyword);
     out.extend_from_slice(if has(Keyword::SEEN) { b"Status: RO\n" } else { b"Status: O\n" });
     let x_status: String = [("$answered", 'A'), ("$flagged", 'F'), ("$draft", 'T'), ("$deleted", 'D')]
@@ -57,7 +57,7 @@ pub fn mbox_entry(raw: &[u8], sender: &str, received_at: DateTime<Utc>, keywords
 pub struct MboxMessage {
     pub raw: Vec<u8>,
     pub keywords: Vec<Keyword>,
-    pub received_at: Option<DateTime<Utc>>,
+    pub received_at: Option<Timestamp>,
 }
 
 /// The messages of an mbox.
@@ -67,7 +67,7 @@ pub fn read_mbox(data: &[u8]) -> Vec<MboxMessage> {
         .map(|message| {
             let received_at = match message.internal_date() {
                 0 => None,
-                at => DateTime::from_timestamp(at as i64, 0),
+                at => jiff::Timestamp::from_second(at as i64).ok(),
             };
             let (raw, keywords) = split_flags(message.contents());
             MboxMessage { raw, keywords, received_at }
@@ -180,7 +180,7 @@ mod tests {
     #[test]
     fn round_trip() {
         let raw = b"From: Alice <alice@firma.example>\r\nSubject: Hi\r\n\r\nFrom here on\r\n>From there\r\nBye\r\n";
-        let at = DateTime::from_timestamp(1_792_800_000, 0).unwrap();
+        let at = jiff::Timestamp::from_second(1_792_800_000).unwrap();
         let keywords = vec!["$seen".to_owned(), "$flagged".to_owned(), "work".to_owned()];
         let entry = mbox_entry(raw, "alice@firma.example", at, &keywords);
         let text = String::from_utf8(entry.clone()).unwrap();

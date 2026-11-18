@@ -4,7 +4,8 @@
 
 use std::collections::BTreeMap;
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
+use jiff_sqlx::ToSqlx;
 use sqlx::PgConnection;
 use uuid::Uuid;
 
@@ -168,7 +169,7 @@ impl Mail {
 
     /// Removes up to `limit` journal rows written before `before` and raises each account's floor past them;
     /// returns how many went. For the worker.
-    pub async fn prune_changes(&self, before: DateTime<Utc>, limit: i64) -> Result<u64> {
+    pub async fn prune_changes(&self, before: Timestamp, limit: i64) -> Result<u64> {
         let pruned = sqlx::query_scalar!(
             r#"WITH gone AS (
                    DELETE FROM mail_changes WHERE (account_id, object_type, modseq, object_id) IN (
@@ -181,13 +182,15 @@ impl Mail {
                    WHERE m.account_id = g.account_id
                    RETURNING 1)
                SELECT count(*) AS "count!" FROM gone"#,
-            before,
+            before.to_sqlx(),
             limit,
         )
         .fetch_one(&self.pool)
         .await?;
         // Expunged UIDs go with the journal: a client away longer than that starts over anyway.
-        sqlx::query!("DELETE FROM mailbox_expunged WHERE expunged_at < $1", before).execute(&self.pool).await?;
+        sqlx::query!("DELETE FROM mailbox_expunged WHERE expunged_at < $1", before.to_sqlx())
+            .execute(&self.pool)
+            .await?;
         Ok(pruned as u64)
     }
 }

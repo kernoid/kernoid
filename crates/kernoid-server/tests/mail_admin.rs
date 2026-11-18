@@ -56,7 +56,7 @@ async fn setup_with_store(pool: &PgPool) -> (Router, Uuid, Uuid, (kernoid_mail::
     let blobs = BlobStore::from_config(&Blob::Memory, keys).unwrap();
     let oidc = kernoid_oidc::Oidc::new(events, main, "https");
     let mail = kernoid_mail::Mail::new(pool.clone(), blobs.clone(), kernoid_mail::Limits::default());
-    let jmap = kernoid_jmap::Jmap::new(mail.clone(), 1_000_000, chrono::Duration::days(5));
+    let jmap = kernoid_jmap::Jmap::new(mail.clone(), 1_000_000, jiff::SignedDuration::from_hours(24 * 5));
     let state =
         AppState::new(pool.clone(), blobs.clone(), identity, oidc).with_jmap(jmap, kernoid_mail::MailEvents::default());
     (router(state, Router::new(), &Http::default()), accounts[0], accounts[1], (mail, blobs, tenant))

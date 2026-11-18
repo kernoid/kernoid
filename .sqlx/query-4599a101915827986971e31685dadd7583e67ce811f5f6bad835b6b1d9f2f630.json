@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO calendar_events\n                 (id, account_id, calendar_id, resource_name, uid, component, span, organized, data, size, modseq)\n             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)\n             ON CONFLICT (id) DO UPDATE SET span = excluded.span, organized = excluded.organized,\n                 data = excluded.data, size = excluded.size, modseq = excluded.modseq\n             RETURNING id, calendar_id, resource_name, uid, component, organized, size, schedule_tag, modseq",
+  "query": "SELECT id, calendar_id, resource_name, uid, component, organized, size, schedule_tag, modseq\n             FROM calendar_events\n             WHERE account_id = $1 AND ($2::uuid IS NULL OR calendar_id = $2) AND span && tstzrange($3, $4, '[)')\n             ORDER BY lower(span), id",
   "describe": {
     "columns": [
       {
@@ -107,15 +107,8 @@
       "Left": [
         "Uuid",
         "Uuid",
-        "Uuid",
-        "Text",
-        "Text",
-        "Text",
-        "TstzRange",
-        "Bool",
-        "Bytea",
-        "Int8",
-        "Int8"
+        "Timestamptz",
+        "Timestamptz"
       ]
     },
     "nullable": [
@@ -130,5 +123,5 @@
       false
     ]
   },
-  "hash": "f7d3a0d0deadcbb3c44cd3b6f5615ba35d8ad0789098ad4b51481d4e14e58587"
+  "hash": "4599a101915827986971e31685dadd7583e67ce811f5f6bad835b6b1d9f2f630"
 }

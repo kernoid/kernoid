@@ -15,7 +15,8 @@
 use std::{net::IpAddr, time::Duration};
 
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
+use jiff_sqlx::ToSqlx;
 use kernoid_events::{
     InlineFuture,
     aggregate::{Aggregate, DomainEvent},
@@ -64,7 +65,7 @@ pub const RECENT: Duration = Duration::from_secs(15 * 60);
 #[serde(tag = "type", content = "data")]
 pub enum SessionEvent {
     #[serde(rename = "session.created")]
-    Created { account: Uuid, checks: Vec<String>, expires_at: DateTime<Utc> },
+    Created { account: Uuid, checks: Vec<String>, expires_at: Timestamp },
     /// Logged out, or ended by an administrator.
     #[serde(rename = "session.terminated")]
     Terminated,
@@ -107,7 +108,7 @@ pub struct ClientMeta {
 pub struct NewSession {
     pub id: Uuid,
     pub token: String,
-    pub expires_at: DateTime<Utc>,
+    pub expires_at: Timestamp,
     pub account: AccountInfo,
     /// After a password login: the token that makes this device known for the login name (see
     /// [`Identity::create_session_on_device`]).
@@ -120,8 +121,8 @@ pub struct SessionInfo {
     pub id: Uuid,
     pub account: AccountInfo,
     pub checks: Vec<String>,
-    pub created_at: DateTime<Utc>,
-    pub expires_at: DateTime<Utc>,
+    pub created_at: Timestamp,
+    pub expires_at: Timestamp,
 }
 
 /// A session as its account and administrators see it – never with its token.
@@ -130,8 +131,8 @@ pub struct SessionSummary {
     pub id: Uuid,
     pub account: Uuid,
     pub checks: Vec<String>,
-    pub created_at: DateTime<Utc>,
-    pub expires_at: DateTime<Utc>,
+    pub created_at: Timestamp,
+    pub expires_at: Timestamp,
     pub client_address: Option<String>,
     pub user_agent: Option<String>,
 }
@@ -330,7 +331,7 @@ impl Identity {
         let id = Uuid::now_v7();
         let token = new_token(id)?;
         let token_hash = hash_token(&token);
-        let expires_at = Utc::now() + chrono::Duration::from_std(lifetime).expect("at most 30 days");
+        let expires_at = Timestamp::now() + jiff::SignedDuration::try_from(lifetime).expect("at most 30 days");
         let user_agent =
             client.user_agent.as_deref().map(|agent| agent.chars().take(USER_AGENT_CHARS).collect::<String>());
         let client_address = client.address.map(|address| address.to_string());
@@ -350,7 +351,7 @@ impl Identity {
                 account_id,
                 &token_hash[..],
                 &checks,
-                expires_at,
+                expires_at.to_sqlx(),
                 client_address,
                 user_agent,
             )
@@ -417,8 +418,8 @@ impl Identity {
                 drive: false,
             },
             checks: row.checks,
-            created_at: row.created_at,
-            expires_at: row.expires_at,
+            created_at: row.created_at.to_jiff(),
+            expires_at: row.expires_at.to_jiff(),
         })
     }
 
@@ -522,8 +523,8 @@ impl Identity {
                 id: row.id,
                 account: row.account_id,
                 checks: row.checks,
-                created_at: row.created_at,
-                expires_at: row.expires_at,
+                created_at: row.created_at.to_jiff(),
+                expires_at: row.expires_at.to_jiff(),
                 client_address: row.client_address,
                 user_agent: row.user_agent,
             })
@@ -636,8 +637,8 @@ impl Identity {
     /// The token's session, if it began a short while ago – for changes to how one logs in.
     pub async fn recent_session(&self, instance: Uuid, token: &str) -> Result<SessionInfo> {
         let session = self.session(instance, token).await?;
-        let recent = chrono::Duration::from_std(RECENT).expect("small");
-        if Utc::now() - session.created_at > recent {
+        let recent = jiff::SignedDuration::try_from(RECENT).expect("small");
+        if Timestamp::now() - session.created_at > recent {
             return Err(IdentityError::RecentLoginRequired);
         }
         Ok(session)

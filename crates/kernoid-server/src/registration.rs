@@ -8,7 +8,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use chrono::Utc;
+use jiff::Timestamp;
 use kernoid_identity::{IdentityError, registration::NewRegistration};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -62,7 +62,8 @@ pub(crate) struct RegistrationStarted {
 
 /// The message with the code.
 fn code_message(from: &str, to: &str, code: &str) -> Vec<u8> {
-    let date = Utc::now().to_rfc2822();
+    let date =
+        jiff::fmt::rfc2822::to_string(&Timestamp::now().to_zoned_datetime(jiff::tz::TimeZone::UTC)).unwrap_or_default();
     let host = from.rsplit_once('@').map(|(_, domain)| domain).unwrap_or("kernoid");
     format!(
         "From: {from}\r\nTo: {to}\r\nSubject: {code} – your code / Ihr Code\r\nDate: {date}\r\n\
@@ -121,7 +122,7 @@ pub(crate) async fn begin(
         from: &from,
         recipients: &recipients,
         raw: code_message(&from, &started.email, &started.code).into(),
-        lifetime: chrono::Duration::days(1),
+        lifetime: jiff::SignedDuration::from_hours(24),
     };
     if let Err(error) = jmap.mail().enqueue(outgoing).await {
         tracing::error!(%error, "queueing a registration code");

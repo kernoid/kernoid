@@ -8,8 +8,8 @@
 //! takes the marks back with [`keep`].
 
 use bytes::{Bytes, BytesMut};
-use chrono::{DateTime, Utc};
 use futures_util::{Stream, StreamExt, stream};
+use jiff::Timestamp;
 use sha2::{Digest, Sha256};
 use sqlx::{PgConnection, PgPool};
 use uuid::Uuid;
@@ -57,7 +57,7 @@ pub async fn put<S, E>(
     prefix: &str,
     content: S,
     limit: u64,
-    due: DateTime<Utc>,
+    due: Timestamp,
 ) -> Result<Stored, PartsError>
 where
     S: Stream<Item = Result<Bytes, E>>,
@@ -115,7 +115,7 @@ pub async fn put_bytes(
     prefix: &str,
     content: Bytes,
     limit: u64,
-    due: DateTime<Utc>,
+    due: Timestamp,
 ) -> Result<Stored, PartsError> {
     put(blobs, pool, tenant, prefix, stream::iter([Ok::<_, std::convert::Infallible>(content)]), limit, due).await
 }
@@ -149,7 +149,7 @@ pub async fn mark(
     tenant: Uuid,
     prefix: &str,
     parts: u32,
-    due: DateTime<Utc>,
+    due: Timestamp,
 ) -> Result<(), sqlx::Error> {
     for n in 0..parts {
         garbage::mark(connection, tenant, &part_key(prefix, n), due).await?;

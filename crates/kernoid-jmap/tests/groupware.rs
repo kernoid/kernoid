@@ -52,7 +52,8 @@ async fn setup(pool: PgPool) -> Setup {
     let keys = Arc::new(TenantKeys::with_main_keys(pool.clone(), MainKeys::new(Key::random().unwrap(), Vec::new())));
     let blobs = BlobStore::new(Arc::new(InMemory::new()), keys.clone());
     let mail = Mail::new(pool, blobs, Limits::default());
-    let jmap = Jmap::new(mail.clone(), 1_000_000, chrono::Duration::days(5)).with_groupware(Groupware::new(mail, keys));
+    let jmap = Jmap::new(mail.clone(), 1_000_000, jiff::SignedDuration::from_hours(24 * 5))
+        .with_groupware(Groupware::new(mail, keys));
     Setup { identity, jmap, tenant }
 }
 

@@ -91,12 +91,12 @@ pub struct Limits {
     /// Largest raw message accepted, in bytes.
     pub max_message_size: u64,
     /// How long the queue tries what the store sends itself (Sieve).
-    pub queue_lifetime: chrono::Duration,
+    pub queue_lifetime: jiff::SignedDuration,
 }
 
 impl Default for Limits {
     fn default() -> Self {
-        Self { max_message_size: 50 * 1024 * 1024, queue_lifetime: chrono::Duration::days(5) }
+        Self { max_message_size: 50 * 1024 * 1024, queue_lifetime: jiff::SignedDuration::from_hours(24 * 5) }
     }
 }
 
@@ -127,7 +127,7 @@ impl Mail {
     }
 
     /// How long the queue tries what the store sends itself.
-    pub fn queue_lifetime(&self) -> chrono::Duration {
+    pub fn queue_lifetime(&self) -> jiff::SignedDuration {
         self.limits.queue_lifetime
     }
 

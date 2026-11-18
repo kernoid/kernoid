@@ -65,7 +65,7 @@ async fn setup_with(pool: PgPool, scanner: Option<Arc<dyn Scanner>>) -> Setup {
     }
     let mail = Mail::new(pool.clone(), blobs.clone(), Limits::default());
     let files = Files::new(pool.clone(), blobs, kernoid_files::Limits::default());
-    let jmap = Jmap::new(mail, 20_000_000, chrono::Duration::days(5))
+    let jmap = Jmap::new(mail, 20_000_000, jiff::SignedDuration::from_hours(24 * 5))
         .with_files(files)
         .with_identity(Identity::new(EventStore::new(pool.clone())));
     Setup { pool, identity, jmap, instance, tenant }

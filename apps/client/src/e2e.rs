@@ -560,7 +560,7 @@ impl E2e {
             message_id: format!("{}@{domain}", random_id()),
             in_reply_to: strip(&draft.in_reply_to),
             references: strip(&draft.references),
-            date: chrono::Local::now().to_rfc2822(),
+            date: jiff::fmt::rfc2822::to_string(&jiff::ZonedDateTime::now()).unwrap_or_default(),
             text: draft.body.clone(),
             html: None,
             attachments,

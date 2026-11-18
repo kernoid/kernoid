@@ -5,7 +5,7 @@
 
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use uuid::Uuid;
 
 use crate::{
@@ -19,7 +19,7 @@ use crate::{
 pub struct LinkInfo {
     pub idp: Uuid,
     pub subject: String,
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
 }
 
 fn store_error(error: sqlx::Error) -> IdentityError {
@@ -106,7 +106,7 @@ impl Identity {
         .map_err(store_error)?;
         Ok(rows
             .into_iter()
-            .map(|row| LinkInfo { idp: row.idp_id, subject: row.subject, created_at: row.created_at })
+            .map(|row| LinkInfo { idp: row.idp_id, subject: row.subject, created_at: row.created_at.to_jiff() })
             .collect())
     }
 

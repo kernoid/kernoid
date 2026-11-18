@@ -6,7 +6,7 @@ use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
 };
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use kernoid_identity::link::LinkInfo;
 use kernoid_oidc::federation::{IdpInfo, IdpSettings, SamlSettings};
 use serde::{Deserialize, Serialize};
@@ -163,7 +163,7 @@ pub(crate) struct LinkView {
     identity_provider: String,
     /// The account's `sub` at the provider.
     subject: String,
-    created_at: DateTime<Utc>,
+    created_at: Timestamp,
 }
 
 impl From<LinkInfo> for LinkView {

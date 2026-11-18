@@ -78,7 +78,7 @@ async fn mail_arrives_encrypted_to_the_key_the_client_made(pool: PgPool) {
     identity.verify_tenant_domain(instance, tenant, &domain, &dns, WHO).await.unwrap();
     let keys = Arc::new(TenantKeys::with_main_keys(pool.clone(), MainKeys::new(Key::random().unwrap(), Vec::new())));
     let mail = Mail::new(pool.clone(), BlobStore::new(Arc::new(InMemory::new()), keys), Limits::default());
-    let jmap = Jmap::new(mail.clone(), 1_000_000, chrono::Duration::days(5))
+    let jmap = Jmap::new(mail.clone(), 1_000_000, jiff::SignedDuration::from_hours(24 * 5))
         .with_identity(identity.clone())
         .with_key_directory(Arc::new(Directory));
     let address = "alice@firma.example";
@@ -232,7 +232,7 @@ async fn sent_mail_announces_a_compatible_key(pool: PgPool) {
                 from: &address,
                 recipients: &["x@elsewhere.example".to_owned()],
                 raw: Bytes::from(raw),
-                lifetime: chrono::Duration::days(1),
+                lifetime: jiff::SignedDuration::from_hours(24),
             })
             .await
             .unwrap();
@@ -255,7 +255,7 @@ async fn encrypted_calendars_hold_only_what_the_apps_encrypted(pool: PgPool) {
     let keys = Arc::new(TenantKeys::with_main_keys(pool.clone(), MainKeys::new(Key::random().unwrap(), Vec::new())));
     let mail = Mail::new(pool.clone(), BlobStore::new(Arc::new(InMemory::new()), keys.clone()), Limits::default());
     let groupware = kernoid_groupware::Groupware::new(mail.clone(), keys);
-    let jmap = Jmap::new(mail, 1_000_000, chrono::Duration::days(5))
+    let jmap = Jmap::new(mail, 1_000_000, jiff::SignedDuration::from_hours(24 * 5))
         .with_identity(identity.clone())
         .with_groupware(groupware.clone());
     let address = "alice@firma.example";

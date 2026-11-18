@@ -71,7 +71,7 @@ fn check_name(name: &str) -> Result<()> {
 
 fn check_timezone(timezone: Option<&str>) -> Result<()> {
     match timezone {
-        Some(name) if name.parse::<chrono_tz::Tz>().is_err() => {
+        Some(name) if calcard::common::timezone::Tz::iana(name).is_none() => {
             Err(GroupwareError::Invalid(format!("{name} is not a known time zone")))
         }
         _ => Ok(()),

@@ -10,7 +10,6 @@
 use std::collections::HashMap;
 
 use calcard::{Entry, Parser, common::timezone::Tz};
-use chrono::{DateTime, TimeZone, Utc};
 use kernoid_groupware::{CalendarInfo, CalendarUpdate, CollectionAccess, Expect, Level, NewCalendar, ical};
 use serde_json::{Map, Value, json};
 use uuid::Uuid;
@@ -93,18 +92,15 @@ fn parse_instance_id(id: &str) -> Option<(Uuid, i64)> {
 
 /// A UTC time as JMAP's `UTCDateTime`.
 fn utc(timestamp: i64) -> Value {
-    Utc.timestamp_opt(timestamp, 0)
-        .single()
-        .map_or(Value::Null, |time| json!(time.format("%Y-%m-%dT%H:%M:%SZ").to_string()))
+    jiff::Timestamp::from_second(timestamp)
+        .map_or(Value::Null, |time| json!(time.strftime("%Y-%m-%dT%H:%M:%SZ").to_string()))
 }
 
 /// A UTC time as a JSCalendar `LocalDateTime` in the event's time zone.
 fn local(timestamp: i64, time_zone: Option<&str>) -> String {
-    let utc = Utc.timestamp_opt(timestamp, 0).single().unwrap_or_default();
-    match time_zone.and_then(|name| name.parse::<chrono_tz::Tz>().ok()) {
-        Some(zone) => utc.with_timezone(&zone).format("%Y-%m-%dT%H:%M:%S").to_string(),
-        None => utc.format("%Y-%m-%dT%H:%M:%S").to_string(),
-    }
+    let utc = jiff::Timestamp::from_second(timestamp).unwrap_or_default();
+    let zone = time_zone.and_then(|name| jiff::tz::TimeZone::get(name).ok()).unwrap_or(jiff::tz::TimeZone::UTC);
+    zone.to_datetime(utc).strftime("%Y-%m-%dT%H:%M:%S").to_string()
 }
 
 /// Whether an iCalendar object repeats: an `RRULE` or `RDATE` in one of its components.
@@ -158,8 +154,9 @@ fn recurrence_of(object: &Map<String, Value>, start: &str) -> (String, Option<Ma
 fn parse_utc(value: Option<&Value>) -> Result<Option<i64>, MethodError> {
     match value.and_then(Value::as_str) {
         None => Ok(None),
-        Some(text) => DateTime::parse_from_rfc3339(text)
-            .map(|time| Some(time.timestamp()))
+        Some(text) => text
+            .parse::<jiff::Timestamp>()
+            .map(|time| Some(time.as_second()))
             .map_err(|_| MethodError::invalid(format!("{text} is not a UTCDateTime"))),
     }
 }
@@ -448,8 +445,8 @@ impl Context<'_> {
             .events_between(
                 owner,
                 in_calendar,
-                after.and_then(|after| DateTime::from_timestamp(after, 0)),
-                before.and_then(|before| DateTime::from_timestamp(before, 0)),
+                after.and_then(|after| jiff::Timestamp::from_second(after).ok()),
+                before.and_then(|before| jiff::Timestamp::from_second(before).ok()),
             )
             .await?;
         let mut candidates: Vec<_> = candidates
@@ -732,7 +729,7 @@ impl Context<'_> {
                 groupware.notification_data(owner, note.id).await.ok().and_then(|text| js::event_to_json(&text));
             list.push(json!({
                 "id": note.id.to_string(),
-                "created": note.created_at.format("%Y-%m-%dT%H:%M:%SZ").to_string(),
+                "created": note.created_at.strftime("%Y-%m-%dT%H:%M:%SZ").to_string(),
                 "changedBy": { "calendarAddress": format!("mailto:{}", note.changed_by) },
                 "comment": note.comment,
                 "type": note.kind,

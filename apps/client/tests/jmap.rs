@@ -434,8 +434,9 @@ async fn calendars_and_contacts_of_all_accounts() {
     assert_eq!(list.len(), 2);
     let shared = list.iter().find(|c| c.account == "S").unwrap();
     assert_eq!(shared.shared.as_deref(), Some("bob@firma.example"));
-    let after = chrono::DateTime::parse_from_rfc3339("2026-11-01T00:00:00Z").unwrap().to_utc();
-    let events = calendars::instances(&client, &list, after, after + chrono::Duration::days(14)).await.unwrap();
+    let after: jiff::Timestamp = "2026-11-01T00:00:00Z".parse().unwrap();
+    let events =
+        calendars::instances(&client, &list, after, after + jiff::SignedDuration::from_hours(24 * 14)).await.unwrap();
     let titles: Vec<_> = events.iter().map(|e| e.title.as_deref().unwrap_or_default()).collect();
     assert_eq!(titles, ["Sooner", "Later"]);
     assert_eq!(events[1].location().as_deref(), Some("Room 1"));
@@ -590,7 +591,7 @@ async fn events_made_changed_answered_and_removed() {
     let client = connect(&server).await;
     let list = calendars::calendars(&client).await.unwrap();
     let calendar = list.iter().find(|c| c.account == "A").unwrap();
-    let at = |s: &str| chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M").unwrap();
+    let at = |s: &str| jiff::civil::DateTime::strptime("%Y-%m-%d %H:%M", s).unwrap();
     let form = calendars::EventForm {
         title: "Plans".into(),
         all_day: false,
@@ -633,7 +634,7 @@ async fn one_instance_of_a_series_changed_and_left_out() {
     }))
     .unwrap();
     series.account = "A".into();
-    let at = |s: &str| chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M").unwrap();
+    let at = |s: &str| jiff::civil::DateTime::strptime("%Y-%m-%d %H:%M", s).unwrap();
     let form = calendars::EventForm {
         title: "Moved".into(),
         all_day: false,

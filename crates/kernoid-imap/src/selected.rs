@@ -284,7 +284,7 @@ impl Session {
                 let item = match (attribute, &parsed, &raw) {
                     (Attribute::Uid, _, _) => DataItem::Uid { uid: entry.uid },
                     (Attribute::Flags, _, _) => DataItem::Flags { flags: flags::flags(&entry.keywords) },
-                    (Attribute::InternalDate, _, _) => DataItem::InternalDate { date: entry.received_at.timestamp() },
+                    (Attribute::InternalDate, _, _) => DataItem::InternalDate { date: entry.received_at.as_second() },
                     (Attribute::Rfc822Size, _, _) => DataItem::Rfc822Size { size: entry.size as usize },
                     (Attribute::ModSeq, _, _) => DataItem::ModSeq { modseq: entry.modseq },
                     (Attribute::Rfc822, _, Some(raw)) => DataItem::Rfc822 { contents: SliceRange::Single(raw) },

@@ -1,7 +1,8 @@
 # SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
 # SPDX-License-Identifier: AGPL-3.0-only
 # Taken over from Stalwart's crates/calcard (v1.1.0); dependencies as it declares them, at versions at least two weeks
-# old.
+# old – except Jiff 1.0 (Stalwart: 0.2), which the server takes in place of chrono (RUSTSEC-2026-0543); calcard's code
+# needed no change for it.
 [package]
 name = "calcard"
 description = "iCalendar/JSCalendar and vCard/JSContact parsing, building and conversion library"
@@ -18,7 +19,7 @@ workspace = true
 [dependencies]
 jmap-tools = { version = "1.1.0", path = "../jmap-tools", optional = true }
 ahash = "0.8.12"
-jiff = "0.2.38"
+jiff = "1.0.1"
 hashify = "0.3.1"
 memchr = "2.8.0"
 encodify = "1.0.2"
@@ -32,7 +33,7 @@ serde = { version = "1.0.229", features = ["derive"], optional = true }
 serde_json = { version = "1.0.154", optional = true }
 
 [target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
-jiff = { version = "0.2.38", features = ["js"] }
+jiff = { version = "1.0.1", features = ["js"] }
 
 [features]
 default = ["jmap", "tzdb-bundle"]

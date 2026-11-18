@@ -5,7 +5,8 @@
 //! Front-Channel Logout 1.0).
 
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
+use jiff_sqlx::ToSqlx;
 use kernoid_identity::InstanceInfo;
 use serde::Serialize;
 use serde_json::{Map, Value, json};
@@ -80,7 +81,7 @@ pub struct AuthRequestInfo {
     pub prompt: Vec<String>,
     /// The session may be at most this many seconds old.
     pub max_age: Option<i32>,
-    pub expires_at: DateTime<Utc>,
+    pub expires_at: Timestamp,
 }
 
 /// The form of a token request, with the client as authenticated by the caller (Basic header or form).
@@ -139,9 +140,9 @@ struct Grant {
     family: String,
     scopes: Vec<String>,
     nonce: Option<String>,
-    auth_time: DateTime<Utc>,
+    auth_time: Timestamp,
     checks: Vec<String>,
-    session_expires: DateTime<Utc>,
+    session_expires: Timestamp,
 }
 
 pub type Claims = Map<String, Value>;
@@ -355,7 +356,7 @@ impl Oidc {
             scopes: row.scopes,
             prompt: row.prompt,
             max_age: row.max_age,
-            expires_at: row.expires_at,
+            expires_at: row.expires_at.to_jiff(),
         })
     }
 
@@ -389,9 +390,9 @@ impl Oidc {
             return Err(OidcError::AccessDenied("the application asks for another tenant".into()));
         }
         // prompt=login: a login after the request; max_age: a login at most that long ago.
-        let session_age = Utc::now() - session.created_at;
-        if request.prompt.iter().any(|value| value == "login") && session.created_at < request.created_at
-            || request.max_age.is_some_and(|max| session_age > chrono::Duration::seconds(max.into()))
+        let session_age = Timestamp::now() - session.created_at;
+        if request.prompt.iter().any(|value| value == "login") && session.created_at < request.created_at.to_jiff()
+            || request.max_age.is_some_and(|max| session_age > jiff::SignedDuration::from_secs(max.into()))
         {
             return Err(OidcError::LoginRequired);
         }
@@ -595,9 +596,9 @@ impl Oidc {
             family: found.auth_request,
             scopes: found.scopes,
             nonce: found.nonce,
-            auth_time: session.created_at,
+            auth_time: session.created_at.to_jiff(),
             checks: session.checks,
-            session_expires: session.expires_at,
+            session_expires: session.expires_at.to_jiff(),
         };
         let (access_token, refresh_token) = self.issue(&mut tx, instance, &client, &grant).await?;
         tx.commit().await.map_err(store)?;
@@ -685,9 +686,9 @@ impl Oidc {
             family: found.family,
             scopes,
             nonce: None,
-            auth_time: found.auth_time,
+            auth_time: found.auth_time.to_jiff(),
             checks: found.checks,
-            session_expires: found.session_expires.unwrap_or_else(Utc::now),
+            session_expires: found.session_expires.map_or_else(Timestamp::now, |t| t.to_jiff()),
         };
         let (access_token, refresh_token) = self.issue(&mut tx, instance, &client, &grant).await?;
         tx.commit().await.map_err(store)?;
@@ -727,7 +728,7 @@ impl Oidc {
         .await
         .map_err(store)?;
         let refresh_token = random_secret("krt1.")?;
-        let expires = if grant.offline { Utc::now() + lifetime::OFFLINE_REFRESH } else { grant.session_expires };
+        let expires = if grant.offline { Timestamp::now() + lifetime::OFFLINE_REFRESH } else { grant.session_expires };
         sqlx::query!(
             "INSERT INTO refresh_tokens
                  (token_hash, family, instance_id, application_id, account_id, session_id, scopes, expires_at, offline,
@@ -740,9 +741,9 @@ impl Oidc {
             grant.account,
             grant.session,
             &grant.scopes,
-            expires,
+            expires.to_sqlx(),
             grant.offline,
-            grant.auth_time,
+            grant.auth_time.to_sqlx(),
             &grant.checks,
         )
         .execute(&mut *connection)
@@ -759,7 +760,7 @@ impl Oidc {
         client: &ApplicationInfo,
         grant: &Grant,
     ) -> Result<String> {
-        let now = Utc::now().timestamp();
+        let now = Timestamp::now().as_second();
         let mut claims = json!({
             "iss": self.issuer(&instance.primary_domain),
             "sub": grant.account.to_string(),
@@ -769,7 +770,7 @@ impl Oidc {
             "exp": now + lifetime::ACCESS_TOKEN.as_secs() as i64,
             "jti": random_secret("")?,
             "scope": grant.scopes.join(" "),
-            "auth_time": grant.auth_time.timestamp(),
+            "auth_time": grant.auth_time.as_second(),
         });
         if let Some(session) = grant.session.filter(|_| !grant.offline) {
             claims["sid"] = Value::String(session.to_string());
@@ -790,7 +791,7 @@ impl Oidc {
         access_token: String,
         refresh_token: String,
     ) -> Result<TokenResponse> {
-        let now = Utc::now().timestamp();
+        let now = Timestamp::now().as_second();
         let amr = amr(&grant.checks);
         let mut claims = json!({
             "iss": self.issuer(&instance.primary_domain),
@@ -799,7 +800,7 @@ impl Oidc {
             "azp": client.to_string(),
             "iat": now,
             "exp": now + lifetime::ID_TOKEN.as_secs() as i64,
-            "auth_time": grant.auth_time.timestamp(),
+            "auth_time": grant.auth_time.as_second(),
             "amr": amr,
         });
         if let Some(session) = grant.session {
@@ -925,7 +926,7 @@ impl Oidc {
             "sub": account.to_string(),
             "aud": owner.id.to_string(),
             "iss": self.issuer(&instance.primary_domain),
-            "exp": expires.timestamp(),
+            "exp": expires.to_jiff().as_second(),
             "token_type": kind,
         });
         if scopes.iter().any(|scope| scope == "profile" || scope == "email") {

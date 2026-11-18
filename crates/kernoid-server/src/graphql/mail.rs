@@ -2,9 +2,9 @@
 //! Mail in GraphQL (RFC 0002, 12.3) – the same operations and checks as the REST routes in `crate::admin::mail`,
 //! both through `crate::mail_admin`.
 
+use super::DateTime;
 use async_graphql::{Context, ErrorExtensions, Object, SimpleObject};
 use axum::body::Bytes;
-use chrono::{DateTime, Utc};
 use kernoid_identity::{Identity, mail_access::MailGrant};
 use kernoid_mail::MailError;
 use uuid::Uuid;
@@ -121,7 +121,7 @@ pub struct QueuedRecipientObject {
     address: String,
     status: String,
     attempts: i32,
-    next_attempt_at: DateTime<Utc>,
+    next_attempt_at: DateTime,
     last_error: Option<String>,
 }
 
@@ -247,7 +247,7 @@ impl MailQuery {
                 address: recipient.address,
                 status: recipient.status,
                 attempts: recipient.attempts,
-                next_attempt_at: recipient.next_attempt_at,
+                next_attempt_at: recipient.next_attempt_at.into(),
                 last_error: recipient.last_error,
             })
             .collect())

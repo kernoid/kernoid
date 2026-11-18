@@ -69,7 +69,7 @@ pub struct Jmap {
     /// Largest upload: the larger of `mail.max_message_size` and `files.max_file_size`.
     max_size: u64,
     /// How long submitted mail is tried (`smtp.queue_days`).
-    queue_lifetime: chrono::Duration,
+    queue_lifetime: jiff::SignedDuration,
     /// Calendars and contacts (RFC 0004, 8.2), where the installation has them.
     groupware: Option<kernoid_groupware::Groupware>,
     /// Files (RFC 0005, 8), where the installation has them.
@@ -98,7 +98,7 @@ impl std::ops::Deref for KeyDirectoryHandle {
 }
 
 impl Jmap {
-    pub fn new(mail: Mail, max_size: u64, queue_lifetime: chrono::Duration) -> Self {
+    pub fn new(mail: Mail, max_size: u64, queue_lifetime: jiff::SignedDuration) -> Self {
         Self { mail, max_size, queue_lifetime, groupware: None, files: None, identity: None, key_directory: None }
     }
 

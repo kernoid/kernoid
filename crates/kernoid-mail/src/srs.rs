@@ -85,7 +85,7 @@ pub fn reverse(secret: &[u8], address: &str, day: u64) -> Option<String> {
 
 /// Today, as SRS counts it.
 pub fn today() -> u64 {
-    (chrono::Utc::now().timestamp() / 86_400).max(0) as u64
+    (jiff::Timestamp::now().as_second() / 86_400).max(0) as u64
 }
 
 #[cfg(test)]

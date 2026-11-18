@@ -3,7 +3,7 @@
 //! from the events themselves – the tenant's (with `directory.read`, the auditor's permission) or the instance's own
 //! (with `instance.read`). Newest first, a page at a time. Payloads hold no credentials: those never enter events.
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use uuid::Uuid;
 
 use crate::{
@@ -43,7 +43,7 @@ pub struct AuditEntry {
     pub payload: serde_json::Value,
     /// An account id, `system`, `operator` or a service.
     pub creator: String,
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
 }
 
 impl Identity {
@@ -93,7 +93,7 @@ impl Identity {
                 event_type: row.event_type,
                 payload: row.payload,
                 creator: row.creator,
-                created_at: row.created_at,
+                created_at: row.created_at.to_jiff(),
             })
             .collect())
     }

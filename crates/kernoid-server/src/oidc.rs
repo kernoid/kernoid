@@ -334,7 +334,7 @@ pub(crate) struct AuthRequestView {
     prompt: Vec<String>,
     /// The session may be at most this many seconds old.
     max_age: Option<i32>,
-    expires_at: chrono::DateTime<chrono::Utc>,
+    expires_at: jiff::Timestamp,
 }
 
 impl From<AuthRequestInfo> for AuthRequestView {

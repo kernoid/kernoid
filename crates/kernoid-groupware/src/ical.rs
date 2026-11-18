@@ -8,7 +8,7 @@ use calcard::{
     icalendar::{ICalendar, ICalendarComponentType, ICalendarProperty},
     vcard::{VCard, VCardProperty},
 };
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 
 use crate::{GroupwareError, Result};
 
@@ -27,7 +27,7 @@ pub struct ParsedEvent {
     pub component: &'static str,
     /// From the start of the first instance to the end of the last; `None` above for a recurrence without end, and
     /// no span at all for an object without times (a task without dates).
-    pub span: Option<(DateTime<Utc>, Option<DateTime<Utc>>)>,
+    pub span: Option<(Timestamp, Option<Timestamp>)>,
     /// The organizer's address, lower case, without `mailto:`.
     pub organizer: Option<String>,
 }
@@ -84,11 +84,11 @@ pub fn parse_event(text: &str, default_tz: Tz) -> Result<ParsedEvent> {
 }
 
 /// The span of an object's instances (RFC 0004, 3).
-pub fn span(ical: &ICalendar, default_tz: Tz) -> Option<(DateTime<Utc>, Option<DateTime<Utc>>)> {
+pub fn span(ical: &ICalendar, default_tz: Tz) -> Option<(Timestamp, Option<Timestamp>)> {
     let expanded = ical.expand_dates(default_tz, MAX_INSTANCES);
     let endless = expanded.events.len() >= MAX_INSTANCES;
-    let mut first: Option<DateTime<Utc>> = None;
-    let mut last: Option<DateTime<Utc>> = None;
+    let mut first: Option<Timestamp> = None;
+    let mut last: Option<Timestamp> = None;
     for event in &expanded.events {
         let (Some(start), Some(end)) = (utc(event.start), utc(event.end)) else { continue };
         first = Some(first.map_or(start, |first| first.min(start)));
@@ -99,9 +99,8 @@ pub fn span(ical: &ICalendar, default_tz: Tz) -> Option<(DateTime<Utc>, Option<D
 }
 
 /// An instant of calcard as a time in UTC.
-pub fn utc(time: ZonedDateTime) -> Option<DateTime<Utc>> {
-    let time = time.to_timestamp();
-    DateTime::from_timestamp(time.as_second(), time.subsec_nanosecond().unsigned_abs())
+pub fn utc(time: ZonedDateTime) -> Option<Timestamp> {
+    Some(time.to_timestamp())
 }
 
 /// The time zone named by a calendar, or UTC.
@@ -170,8 +169,8 @@ mod tests {
         assert_eq!(event.component, "VEVENT");
         assert_eq!(event.organizer.as_deref(), Some("alice@example.org"));
         let (start, end) = event.span.unwrap();
-        assert_eq!(start.to_rfc3339(), "2026-10-05T09:00:00+00:00");
-        assert_eq!(end.unwrap().to_rfc3339(), "2026-10-19T10:00:00+00:00");
+        assert_eq!(start.to_string(), "2026-10-05T09:00:00Z");
+        assert_eq!(end.unwrap().to_string(), "2026-10-19T10:00:00Z");
 
         let endless = WEEKLY.replace(";COUNT=3", "");
         assert_eq!(parse_event(&endless, Tz::UTC).unwrap().span.unwrap().1, None);
@@ -179,11 +178,11 @@ mod tests {
         // A UTC start keeps its time across the change of daylight saving time on 2026-10-25.
         let berlin = time_zone(Some("Europe/Berlin"));
         let endless = parse_event(&WEEKLY.replace("COUNT=3", "COUNT=10"), berlin).unwrap();
-        assert_eq!(endless.span.unwrap().1.unwrap().to_rfc3339(), "2026-12-07T10:00:00+00:00");
+        assert_eq!(endless.span.unwrap().1.unwrap().to_string(), "2026-12-07T10:00:00Z");
 
         let floating = WEEKLY.replace("T090000Z", "T090000").replace("T100000Z", "T100000");
         let start = parse_event(&floating, berlin).unwrap().span.unwrap().0;
-        assert_eq!(start.to_rfc3339(), "2026-10-05T07:00:00+00:00");
+        assert_eq!(start.to_string(), "2026-10-05T07:00:00Z");
 
         let two_uids = WEEKLY.replace(
             "END:VCALENDAR",

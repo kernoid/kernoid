@@ -5,7 +5,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use chrono::Utc;
+use jiff::Timestamp;
 use kernoid_mail::{AddressInfo, EmailInfo};
 use mail_parser::{Address, HeaderValue, Message, MessageParser};
 use uuid::Uuid;
@@ -148,8 +148,8 @@ fn matches(nodes: &[Node], candidate: &Candidate<'_>, selected: &Selected) -> bo
 fn node_matches(node: &Node, candidate: &Candidate<'_>, selected: &Selected) -> bool {
     let entry = candidate.entry;
     let has = |keyword: &str| entry.keywords.iter().any(|k| k == keyword);
-    let received = entry.received_at.timestamp();
-    let sent = || candidate.info.and_then(|info| info.sent_at).map(|at| at.timestamp());
+    let received = entry.received_at.as_second();
+    let sent = || candidate.info.and_then(|info| info.sent_at).map(|at| at.as_second());
     let summary = |test: &dyn Fn(&EmailInfo) -> bool| candidate.info.is_some_and(test);
     let in_body = |text: &str| candidate.found.get(text).is_some_and(|ids| ids.contains(&entry.email));
     let subject = |info: &EmailInfo, needle: &str| {
@@ -193,8 +193,8 @@ fn node_matches(node: &Node, candidate: &Candidate<'_>, selected: &Selected) -> 
             Filter::SentBefore(date) => sent().is_some_and(|sent| day(sent) < day(*date)),
             Filter::SentOn(date) => sent().is_some_and(|sent| day(sent) == day(*date)),
             Filter::SentSince(date) => sent().is_some_and(|sent| day(sent) >= day(*date)),
-            Filter::Older(seconds) => received <= Utc::now().timestamp() - i64::from(*seconds),
-            Filter::Younger(seconds) => received >= Utc::now().timestamp() - i64::from(*seconds),
+            Filter::Older(seconds) => received <= Timestamp::now().as_second() - i64::from(*seconds),
+            Filter::Younger(seconds) => received >= Timestamp::now().as_second() - i64::from(*seconds),
             Filter::Larger(size) => entry.size > u64::from(*size),
             Filter::Smaller(size) => entry.size < u64::from(*size),
             Filter::ModSeq((modseq, _)) => entry.modseq >= *modseq,

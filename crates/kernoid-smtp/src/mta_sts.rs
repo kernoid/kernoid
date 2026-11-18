@@ -4,7 +4,8 @@
 //! `crates/smtp/src/outbound/mta_sts` (v0.16.27: parsing the policy, matching MX hosts, looking it up). kernoid keeps
 //! policies in PostgreSQL for their `max_age`, so that every worker knows them and a policy outlives a restart.
 
-use chrono::Utc;
+use jiff::Timestamp;
+use jiff_sqlx::ToSqlx;
 use kernoid_store::PgPool;
 use mail_auth::mta_sts::MtaSts;
 
@@ -103,9 +104,9 @@ impl Policy {
 }
 
 /// How long a policy is kept: its `max_age`, if that is sensible.
-fn lifetime(max_age: u64) -> chrono::Duration {
+fn lifetime(max_age: u64) -> jiff::SignedDuration {
     let seconds = if (3_600..31_557_600).contains(&max_age) { max_age } else { 86_400 };
-    chrono::Duration::seconds(seconds as i64)
+    jiff::SignedDuration::from_secs(seconds as i64)
 }
 
 async fn cached(pool: &PgPool, domain: &str) -> Option<Policy> {
@@ -120,7 +121,7 @@ async fn cached(pool: &PgPool, domain: &str) -> Option<Policy> {
         id: row.policy_id,
         mode: Mode::parse(&row.mode)?,
         mx: row.mx,
-        max_age: (row.expires_at - Utc::now()).num_seconds().max(0) as u64,
+        max_age: (row.expires_at.to_jiff() - Timestamp::now()).as_secs().max(0) as u64,
     })
 }
 
@@ -139,7 +140,7 @@ pub async fn lookup(dns: &Dns, pool: &PgPool, allow_private: bool, domain: &str)
     }
     match fetch(allow_private, domain, &record.id).await {
         Ok(policy) => {
-            let expires = Utc::now() + lifetime(policy.max_age);
+            let expires = Timestamp::now() + lifetime(policy.max_age);
             let stored = sqlx::query!(
                 "INSERT INTO mta_sts_policies (domain, policy_id, mode, mx, expires_at) VALUES ($1, $2, $3, $4, $5)
                  ON CONFLICT (domain) DO UPDATE SET policy_id = $2, mode = $3, mx = $4, fetched_at = now(), expires_at = $5",
@@ -147,7 +148,7 @@ pub async fn lookup(dns: &Dns, pool: &PgPool, allow_private: bool, domain: &str)
                 policy.id,
                 policy.mode.as_str(),
                 &policy.mx,
-                expires,
+                expires.to_sqlx(),
             )
             .execute(pool)
             .await;

@@ -881,7 +881,7 @@ async fn serve(config: Config) -> anyhow::Result<()> {
         kernoid_jmap::Jmap::new(
             mail_store(db.clone(), blobs.clone(), &config),
             config.mail.max_message_size.max(config.files.max_file_size),
-            chrono::Duration::days(i64::from(queue_days)),
+            jiff::SignedDuration::from_hours(24 * i64::from(queue_days)),
         )
         .with_groupware(kernoid_groupware::Groupware::new(mail_store(db.clone(), blobs.clone(), &config), keys.clone()))
         .with_files(file_store(db.clone(), blobs.clone(), &config))
@@ -1025,7 +1025,7 @@ async fn serve(config: Config) -> anyhow::Result<()> {
                         let submission = kernoid_smtp::Submission {
                             identity: Identity::with_secrets(events.clone(), main_keys.clone()),
                             implicit_tls,
-                            queue_lifetime: chrono::Duration::days(i64::from(smtp.queue_days)),
+                            queue_lifetime: jiff::SignedDuration::from_hours(24 * i64::from(smtp.queue_days)),
                         };
                         let server = kernoid_smtp::Server::submission(
                             kernoid_smtp::Settings::from_config(smtp, &config.mail),
@@ -1381,7 +1381,7 @@ fn mail_store(db: kernoid_store::PgPool, blobs: BlobStore, config: &Config) -> k
     let queue_days = config.smtp.as_ref().map_or(5, |smtp| smtp.queue_days);
     let limits = kernoid_mail::Limits {
         max_message_size: config.mail.max_message_size,
-        queue_lifetime: chrono::Duration::days(i64::from(queue_days)),
+        queue_lifetime: jiff::SignedDuration::from_hours(24 * i64::from(queue_days)),
     };
     kernoid_mail::Mail::new(db, blobs, limits)
 }
@@ -1463,7 +1463,8 @@ async fn mail_housekeeping(
                         }
                     }
                 }
-                let before = chrono::Utc::now() - chrono::Duration::days(i64::from(changes_kept_days));
+                let before =
+                    jiff::Timestamp::now() - jiff::SignedDuration::from_hours(24 * i64::from(changes_kept_days));
                 let mut pruned = 0;
                 loop {
                     match mail.prune_changes(before, HOUSEKEEPING_BATCH).await {
@@ -1823,7 +1824,7 @@ async fn mail(config: &Config, command: MailCommand) -> anyhow::Result<()> {
                     recipient.message,
                     recipient.status,
                     recipient.attempts,
-                    recipient.next_attempt_at.format("%Y-%m-%d %H:%M"),
+                    recipient.next_attempt_at.strftime("%Y-%m-%d %H:%M"),
                     recipient.address,
                     recipient.last_error.map(|error| format!("  – {error}")).unwrap_or_default(),
                 );

@@ -4,7 +4,8 @@
 use std::collections::BTreeSet;
 
 use bytes::Bytes;
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
+use jiff_sqlx::ToSqlx;
 use kernoid_store::garbage;
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
@@ -49,7 +50,7 @@ pub struct NewEmail {
     pub mailbox_ids: Vec<Uuid>,
     pub keywords: Vec<Keyword>,
     /// When it was received; now if not given (JMAP `Email/import` may set it).
-    pub received_at: Option<DateTime<Utc>>,
+    pub received_at: Option<Timestamp>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -67,8 +68,8 @@ pub struct EmailInfo {
     pub mailboxes: Vec<(Uuid, u32)>,
     pub keywords: Vec<String>,
     pub size: u64,
-    pub received_at: DateTime<Utc>,
-    pub sent_at: Option<DateTime<Utc>>,
+    pub received_at: Timestamp,
+    pub sent_at: Option<Timestamp>,
     pub message_id: Option<String>,
     pub in_reply_to: Vec<String>,
     pub references: Vec<String>,
@@ -352,8 +353,8 @@ impl Mail {
             account,
             thread_id,
             size as i64,
-            new.received_at.unwrap_or_else(Utc::now),
-            summary.sent_at,
+            new.received_at.unwrap_or_else(Timestamp::now).to_sqlx(),
+            summary.sent_at.map(|t| t.to_sqlx()),
             summary.message_id,
             &summary.in_reply_to,
             &summary.references,
@@ -553,8 +554,8 @@ impl Mail {
                 mailboxes: row.mailboxes.into_iter().zip(row.uids.into_iter().map(|uid| uid as u32)).collect(),
                 keywords: row.keywords,
                 size: row.size as u64,
-                received_at: row.received_at,
-                sent_at: row.sent_at,
+                received_at: row.received_at.to_jiff(),
+                sent_at: row.sent_at.map(|t| t.to_jiff()),
                 message_id: row.message_id,
                 in_reply_to: row.in_reply_to,
                 references: row.references,

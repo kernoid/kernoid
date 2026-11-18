@@ -7,7 +7,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use kernoid_identity::provisioning::ScimTokenInfo;
 use serde::{Deserialize, Serialize};
 
@@ -18,8 +18,8 @@ use crate::{AppState, CurrentInstance};
 pub(crate) struct ScimTokenView {
     id: String,
     name: String,
-    created_at: DateTime<Utc>,
-    last_used_at: Option<DateTime<Utc>>,
+    created_at: Timestamp,
+    last_used_at: Option<Timestamp>,
 }
 
 impl From<ScimTokenInfo> for ScimTokenView {

@@ -22,11 +22,12 @@ use axum::{
     response::{IntoResponse, Redirect, Response},
     routing::get,
 };
-use chrono::{DateTime, Utc};
 use instant_acme::{
     Account, AccountCredentials, AuthorizationStatus, ChallengeType, Identifier, NewAccount, NewOrder, OrderStatus,
     RetryPolicy,
 };
+use jiff::Timestamp;
+use jiff_sqlx::ToSqlx;
 use kernoid_config::Acme;
 use kernoid_identity::Identity;
 use kernoid_store::{MainKeys, PgPool, lock::Lock};
@@ -72,7 +73,7 @@ fn certified_key(chain_pem: &str, key_der: &[u8]) -> Result<CertifiedKey, AcmeEr
 }
 
 /// When the first certificate of a PEM chain ends.
-fn not_after(chain_pem: &str) -> Result<DateTime<Utc>, AcmeError> {
+fn not_after(chain_pem: &str) -> Result<Timestamp, AcmeError> {
     use x509_cert::der::Decode;
     let bad = |e: &dyn std::fmt::Display| AcmeError::Certificate(e.to_string());
     let first = CertificateDer::pem_slice_iter(chain_pem.as_bytes())
@@ -81,7 +82,7 @@ fn not_after(chain_pem: &str) -> Result<DateTime<Utc>, AcmeError> {
         .map_err(|e| bad(&e))?;
     let certificate = x509_cert::Certificate::from_der(&first).map_err(|e| bad(&e))?;
     let end = certificate.tbs_certificate.validity.not_after.to_unix_duration();
-    DateTime::from_timestamp(end.as_secs() as i64, 0).ok_or_else(|| AcmeError::Certificate("no end date".into()))
+    Timestamp::from_second(end.as_secs() as i64).map_err(|_| AcmeError::Certificate("no end date".into()))
 }
 
 /// Whether a CA can issue for a domain at all – names for local use cannot get public certificates.
@@ -111,7 +112,7 @@ pub struct Certificates {
     pool: PgPool,
     main: MainKeys,
     cache: RwLock<HashMap<String, Arc<CertifiedKey>>>,
-    seen: RwLock<Option<DateTime<Utc>>>,
+    seen: RwLock<Option<Timestamp>>,
     fallback: Option<Arc<CertifiedKey>>,
 }
 
@@ -126,7 +127,7 @@ impl Certificates {
         let rows = sqlx::query!(
             "SELECT domain, chain_pem, key_sealed, updated_at FROM tls_certificates
              WHERE $1::timestamptz IS NULL OR updated_at > $1 ORDER BY updated_at",
-            since,
+            since.map(|t| t.to_sqlx()),
         )
         .fetch_all(&self.pool)
         .await?;
@@ -144,7 +145,7 @@ impl Certificates {
                 }
                 Err(error) => tracing::error!(domain = %row.domain, %error, "a stored certificate is not usable"),
             }
-            *self.seen.write().expect("not poisoned") = Some(row.updated_at);
+            *self.seen.write().expect("not poisoned") = Some(row.updated_at.to_jiff());
         }
         Ok(loaded)
     }
@@ -393,7 +394,7 @@ impl Orderer {
             domain,
             chain,
             sealed,
-            not_after(&chain)?,
+            not_after(&chain)?.to_sqlx(),
         )
         .execute(&self.pool)
         .await?;
@@ -405,9 +406,9 @@ impl Orderer {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CertificateState {
     pub domain: String,
-    pub not_after: Option<DateTime<Utc>>,
+    pub not_after: Option<Timestamp>,
     pub attempts: i32,
-    pub next_attempt_at: Option<DateTime<Utc>>,
+    pub next_attempt_at: Option<Timestamp>,
     pub last_error: Option<String>,
 }
 
@@ -426,9 +427,9 @@ pub async fn status(pool: &PgPool) -> Result<Vec<CertificateState>, AcmeError> {
         .into_iter()
         .map(|row| CertificateState {
             domain: row.domain,
-            not_after: row.not_after,
+            not_after: row.not_after.map(|t| t.to_jiff()),
             attempts: row.attempts.unwrap_or(0),
-            next_attempt_at: row.next,
+            next_attempt_at: row.next.map(|t| t.to_jiff()),
             last_error: row.last_error,
         })
         .collect())

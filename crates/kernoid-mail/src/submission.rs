@@ -5,7 +5,7 @@
 //! ([`Mail::cancel_held`]).
 
 use bytes::Bytes;
-use chrono::Duration;
+use jiff::SignedDuration;
 use kernoid_store::garbage;
 use sqlx::PgConnection;
 use uuid::Uuid;
@@ -47,7 +47,7 @@ impl Mail {
         from: &str,
         recipients: &[String],
         raw: Bytes,
-        lifetime: Duration,
+        lifetime: SignedDuration,
     ) -> std::result::Result<(), SendError> {
         let mut local = std::collections::BTreeSet::new();
         let mut remote = Vec::new();

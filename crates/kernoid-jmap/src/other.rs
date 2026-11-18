@@ -4,6 +4,7 @@
 use std::collections::BTreeSet;
 
 use bytes::Bytes;
+use jiff_sqlx::ToSqlx;
 use kernoid_mail::{Access, MailError, SendError};
 use mail_parser::MessageParser;
 use serde_json::{Map, Value, json};
@@ -245,7 +246,7 @@ impl Context<'_> {
         access: &Access,
         object: &Value,
         identities: &[(String, String, String)],
-    ) -> Result<(Uuid, Uuid, chrono::DateTime<chrono::Utc>, &'static str), Value> {
+    ) -> Result<(Uuid, Uuid, jiff::Timestamp, &'static str), Value> {
         let account = access.owner;
         let mail = self.jmap.mail();
         let identity = object
@@ -323,7 +324,7 @@ impl Context<'_> {
                 .await
                 .map_err(send_error)?,
         }
-        let send_at = chrono::Utc::now() + chrono::Duration::seconds(hold.unwrap_or(0));
+        let send_at = jiff::Timestamp::now() + jiff::SignedDuration::from_secs(hold.unwrap_or(0));
         let undo_status = if hold.is_some() { "pending" } else { "final" };
         let mut tx = mail.pool().begin().await.map_err(|error| set_error(&MailError::Store(error)))?;
         // A held message counts as left behind until the submission that needs it is recorded (RFC 0002, 7).
@@ -340,7 +341,7 @@ impl Context<'_> {
             identity,
             mail_from,
             &recipients,
-            send_at,
+            send_at.to_sqlx(),
             undo_status,
         )
         .execute(&mut *tx)
@@ -505,11 +506,9 @@ fn hold_for(envelope: Option<&Value>) -> Result<Option<i64>, String> {
             .or_else(|| value.as_i64())
             .ok_or("HOLDFOR is a number of seconds")?
     } else if let Some(value) = parameters.get("HOLDUNTIL") {
-        let until = value
-            .as_str()
-            .and_then(|text| chrono::DateTime::parse_from_rfc3339(text).ok())
-            .ok_or("HOLDUNTIL is a date-time")?;
-        (until.with_timezone(&chrono::Utc) - chrono::Utc::now()).num_seconds().max(0)
+        let until =
+            value.as_str().and_then(|text| text.parse::<jiff::Timestamp>().ok()).ok_or("HOLDUNTIL is a date-time")?;
+        (until - jiff::Timestamp::now()).as_secs().max(0)
     } else {
         return Ok(None);
     };
@@ -534,7 +533,7 @@ mod hold_tests {
         assert_eq!(hold_for(Some(&with(json!({ "HOLDFOR": "0" })))), Ok(None));
         assert!(hold_for(Some(&with(json!({ "HOLDFOR": "100000" })))).is_err());
         assert!(hold_for(Some(&with(json!({ "HOLDFOR": "soon" })))).is_err());
-        let soon = (chrono::Utc::now() + chrono::Duration::seconds(30)).to_rfc3339();
+        let soon = (jiff::Timestamp::now() + jiff::SignedDuration::from_secs(30)).to_string();
         assert!(matches!(hold_for(Some(&with(json!({ "HOLDUNTIL": soon })))), Ok(Some(29..=30))));
     }
 }

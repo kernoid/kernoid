@@ -19,11 +19,19 @@ ROOT = next(
     (Path(a.split("=", 1)[1]).resolve() for a in sys.argv[1:] if a.startswith("--dir=")),
     Path(__file__).resolve().parent.parent,
 )
-# The one exception to the two weeks: the smallest version that fixes a RustSec advisory, with the advisory's id.
+# The exceptions to the two weeks: the smallest version that fixes a RustSec advisory, with the advisory's id – and
+# Jiff 1.0 with its own crates, taken at once in place of chrono, which RUSTSEC-2026-0543 calls unmaintained (decided
+# by the maintainers, 2026-11-18).
 SECURITY_FIXES = {
     ("rustls-webpki", "0.103.16"): "RUSTSEC-2026-0382",
     ("webpki-roots", "1.0.10"): "RUSTSEC-2026-0381",
     ("webpki-root-certs", "1.0.10"): "RUSTSEC-2026-0383",
+    ("jiff", "1.0.1"): "RUSTSEC-2026-0543",
+    ("jiff-core", "1.0.1"): "RUSTSEC-2026-0543",
+    ("jiff-static", "1.0.1"): "RUSTSEC-2026-0543",
+    ("jiff-tzdb", "1.0.0"): "RUSTSEC-2026-0543",
+    ("jiff-tzdb-platform", "1.0.0"): "RUSTSEC-2026-0543",
+    ("jiff-sqlx", "1.0.0"): "RUSTSEC-2026-0543",
 }
 HEADERS = {"User-Agent": "kernoid-tui check-age (https://github.com/kernoid/kernoid)"}
 

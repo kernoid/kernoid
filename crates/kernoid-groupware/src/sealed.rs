@@ -4,7 +4,7 @@
 //! counts against the quota and tells of (the store's modseq moves), but cannot read: no CalDAV or CardDAV, no
 //! free/busy, no invitations by the server. The collection's secret key is wrapped for each member, as a vault's is.
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use sqlx::PgConnection;
 use uuid::Uuid;
 
@@ -20,7 +20,7 @@ const MAX_KEY: usize = 65_536;
 pub struct SealedItem {
     pub id: Uuid,
     pub data: Vec<u8>,
-    pub updated: DateTime<Utc>,
+    pub updated: Timestamp,
 }
 
 /// Whether a collection of the account is encrypted, and whether it is one at all.
@@ -133,7 +133,10 @@ impl Groupware {
         .fetch_all(read.connection())
         .await?;
         read.finish().await?;
-        Ok(rows.into_iter().map(|row| SealedItem { id: row.id, data: row.data, updated: row.updated_at }).collect())
+        Ok(rows
+            .into_iter()
+            .map(|row| SealedItem { id: row.id, data: row.data, updated: row.updated_at.to_jiff() })
+            .collect())
     }
 
     /// Stores an entry – new, or replacing `id` – and counts it against the quota; returns its id.

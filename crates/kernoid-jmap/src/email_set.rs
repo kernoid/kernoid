@@ -5,7 +5,7 @@
 use std::collections::BTreeSet;
 
 use bytes::Bytes;
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use kernoid_mail::{Access, EmailInfo, Keyword, MailError, NewEmail, Rights};
 use mail_builder::{
     MessageBuilder,
@@ -30,12 +30,12 @@ fn keyword_list(value: &Value) -> Result<Vec<Keyword>, String> {
         .collect()
 }
 
-fn received_at(value: Option<&Value>) -> Result<Option<DateTime<Utc>>, String> {
+fn received_at(value: Option<&Value>) -> Result<Option<Timestamp>, String> {
     match value {
         None | Some(Value::Null) => Ok(None),
-        Some(Value::String(date)) => DateTime::parse_from_rfc3339(date)
-            .map(|date| Some(date.with_timezone(&Utc)))
-            .map_err(|_| "receivedAt is a UTCDate".into()),
+        Some(Value::String(date)) => {
+            date.parse::<jiff::Timestamp>().map(Some).map_err(|_| "receivedAt is a UTCDate".into())
+        }
         Some(_) => Err("receivedAt is a UTCDate".into()),
     }
 }
@@ -85,8 +85,8 @@ impl Context<'_> {
             builder = builder.subject(subject.to_owned());
         }
         let sent = match object.get("sentAt").and_then(Value::as_str) {
-            Some(date) => DateTime::parse_from_rfc3339(date).map_err(|_| "sentAt is a date")?.timestamp(),
-            None => Utc::now().timestamp(),
+            Some(date) => date.parse::<jiff::Timestamp>().map_err(|_| "sentAt is a date")?.as_second(),
+            None => Timestamp::now().as_second(),
         };
         builder = builder.date(Date::new(sent));
         let ids = |key: &str| -> Vec<String> {

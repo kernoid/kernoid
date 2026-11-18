@@ -25,13 +25,14 @@ base64 = "0.22.1"
 bytes = "1.12.1"
 # iCalendar and vCard files – parsed and written as kernoid does (Apache-2.0 OR MIT).
 calcard = "0.3.14"
-chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
 # The PKCE verifier and state of a login (oidc).
 getrandom = "0.3.4"
 futures-util = { version = "0.3.34", default-features = false, features = ["std"] }
 html2text = "0.17.1"
 hickory-proto = { version = "0.26.3", default-features = false, features = ["std"] }
 iana-time-zone = "0.1.65"
+# Dates and times, with the time zones of the system (Unlicense OR MIT) – in place of chrono (RUSTSEC-2026-0543).
+jiff = "1.0.1"
 # End-to-end encryption (RFC 0006): keys, PGP/MIME, building and reading mail in the client – kernoid's own library
 # (MIT), shared with the web app and the server.
 kernoid-e2e = { version = "0.3.1", path = "../e2e" }

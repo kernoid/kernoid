@@ -333,7 +333,8 @@ async fn locks_keep_others_out(pool: PgPool) {
     setup.identity.set_file_access(alice, Some(shared.id), Principal::Account(bob), "randw", WHO).await.unwrap();
     let as_bob = files.access(bob, alice).await.unwrap();
 
-    let request = LockRequest { exclusive: true, deep: true, owner_info: None, timeout: chrono::Duration::minutes(5) };
+    let request =
+        LockRequest { exclusive: true, deep: true, owner_info: None, timeout: jiff::SignedDuration::from_mins(5) };
     let lock = files.lock(&own(alice), shared.id, request.clone()).await.unwrap();
     assert!(matches!(files.lock(&as_bob, shared.id, request).await, Err(FilesError::Locked)));
     assert!(matches!(files.check_unlocked(&as_bob, shared.id, false, &[]).await, Err(FilesError::Locked)));
@@ -367,6 +368,8 @@ async fn the_journal_tells_what_changed(pool: PgPool) {
     files.touch(alice, Some(a.id)).await.unwrap();
     assert_eq!(files.changes(alice, before, None).await.unwrap().updated, vec![a.id]);
 
-    kernoid_files::prune_changes(&setup.pool, chrono::Utc::now() + chrono::Duration::seconds(1), 100).await.unwrap();
+    kernoid_files::prune_changes(&setup.pool, jiff::Timestamp::now() + jiff::SignedDuration::from_secs(1), 100)
+        .await
+        .unwrap();
     assert!(matches!(files.changes(alice, start, None).await, Err(FilesError::CannotCalculateChanges)));
 }

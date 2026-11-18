@@ -5,7 +5,7 @@
 
 use std::collections::BTreeMap;
 
-use chrono::{DateTime, Local, NaiveDateTime, TimeZone, Utc};
+use jiff::{Timestamp, civil::DateTime, tz::TimeZone};
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
@@ -16,21 +16,21 @@ use crate::{Client, Error, MAIL, Result, SUBMISSION, VACATION, e2e::OPENPGP, ids
 pub struct Vacation {
     pub on: bool,
     /// From when it answers; at once if not set.
-    pub from: Option<NaiveDateTime>,
+    pub from: Option<DateTime>,
     /// Until when; until it is switched off if not set.
-    pub until: Option<NaiveDateTime>,
+    pub until: Option<DateTime>,
     pub subject: String,
     pub text: String,
 }
 
-fn local(utc: Option<&str>) -> Option<NaiveDateTime> {
-    let utc = DateTime::parse_from_rfc3339(utc?).ok()?;
-    Some(utc.with_timezone(&Local).naive_local())
+fn local(utc: Option<&str>) -> Option<DateTime> {
+    let utc: Timestamp = utc?.parse().ok()?;
+    Some(TimeZone::system().to_datetime(utc))
 }
 
-fn utc(local: Option<NaiveDateTime>) -> Option<String> {
-    let at = Local.from_local_datetime(&local?).earliest()?;
-    Some(at.with_timezone(&Utc).format("%Y-%m-%dT%H:%M:%SZ").to_string())
+fn utc(local: Option<DateTime>) -> Option<String> {
+    let at = TimeZone::system().to_ambiguous_timestamp(local?).earlier().ok()?;
+    Some(format!("{at:.0}"))
 }
 
 /// The vacation response; none if the server has none for the user.

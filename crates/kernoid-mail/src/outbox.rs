@@ -4,7 +4,8 @@
 //! without sending anything twice.
 
 use bytes::Bytes;
-use chrono::{DateTime, Duration, Utc};
+use jiff::{SignedDuration, Timestamp};
+use jiff_sqlx::ToSqlx;
 use kernoid_store::garbage;
 use uuid::Uuid;
 
@@ -22,7 +23,7 @@ pub struct Outgoing<'a> {
     pub recipients: &'a [String],
     pub raw: Bytes,
     /// How long kernoid tries before it gives up and bounces.
-    pub lifetime: Duration,
+    pub lifetime: SignedDuration,
 }
 
 /// One recipient taken from the queue.
@@ -33,7 +34,7 @@ pub struct Leased {
     pub attempts: i32,
     pub tenant: Uuid,
     pub envelope_from: String,
-    pub expires_at: DateTime<Utc>,
+    pub expires_at: Timestamp,
 }
 
 /// The due recipients of one domain, leased to the caller.
@@ -50,7 +51,7 @@ pub struct QueuedRecipient {
     pub address: String,
     pub status: String,
     pub attempts: i32,
-    pub next_attempt_at: DateTime<Utc>,
+    pub next_attempt_at: Timestamp,
     pub last_error: Option<String>,
 }
 
@@ -92,7 +93,7 @@ impl Mail {
             outgoing.account,
             outgoing.from,
             raw.len() as i64,
-            Utc::now() + outgoing.lifetime,
+            (Timestamp::now() + outgoing.lifetime).to_sqlx(),
         )
         .execute(&mut *tx)
         .await?;
@@ -115,7 +116,7 @@ impl Mail {
     }
 
     /// Leases up to `limit` due recipients of one domain for `lease`; `None` if nothing is due.
-    pub async fn lease_due(&self, lease: Duration, limit: i64) -> Result<Option<Batch>> {
+    pub async fn lease_due(&self, lease: SignedDuration, limit: i64) -> Result<Option<Batch>> {
         let mut tx = self.pool.begin().await?;
         let domain = sqlx::query_scalar!(
             "SELECT domain FROM outbound_recipients
@@ -137,7 +138,7 @@ impl Mail {
                RETURNING r.message_id, r.address, r.attempts, m.tenant_id, m.envelope_from, m.expires_at"#,
             domain,
             limit,
-            lease.num_seconds() as f64,
+            lease.as_secs() as f64,
         )
         .fetch_all(&mut *tx)
         .await?;
@@ -152,7 +153,7 @@ impl Mail {
                     attempts: row.attempts,
                     tenant: row.tenant_id,
                     envelope_from: row.envelope_from,
-                    expires_at: row.expires_at,
+                    expires_at: row.expires_at.to_jiff(),
                 })
                 .collect(),
         }))
@@ -178,14 +179,14 @@ impl Mail {
     }
 
     /// Delivery failed for now: try again at `next`.
-    pub async fn outbound_retry(&self, message: Uuid, address: &str, error: &str, next: DateTime<Utc>) -> Result<()> {
+    pub async fn outbound_retry(&self, message: Uuid, address: &str, error: &str, next: Timestamp) -> Result<()> {
         sqlx::query!(
             "UPDATE outbound_recipients SET attempts = attempts + 1, next_attempt_at = $3, leased_until = NULL,
                  last_error = $4
              WHERE message_id = $1 AND address = $2",
             message,
             address,
-            next,
+            next.to_sqlx(),
             error,
         )
         .execute(&self.pool)

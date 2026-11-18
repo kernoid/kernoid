@@ -3,7 +3,7 @@
 //! `offline_access`. A consent is an event of the account (`account.consent_granted`, `account.consent_revoked`);
 //! withdrawing it, and the tokens issued on it, is up to the account and its administrators.
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use uuid::Uuid;
 
 use crate::{Identity, IdentityError, Result, account::AccountEvent};
@@ -13,7 +13,7 @@ pub struct ConsentInfo {
     pub application: Uuid,
     pub application_name: String,
     pub scopes: Vec<String>,
-    pub granted_at: DateTime<Utc>,
+    pub granted_at: Timestamp,
 }
 
 fn store_error(error: sqlx::Error) -> IdentityError {
@@ -90,7 +90,7 @@ impl Identity {
                 application: row.application_id,
                 application_name: row.name,
                 scopes: row.scopes,
-                granted_at: row.granted_at,
+                granted_at: row.granted_at.to_jiff(),
             })
             .collect())
     }

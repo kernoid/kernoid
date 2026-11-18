@@ -205,7 +205,7 @@ impl Session {
             "Received: from {helo} ({ptr} [{remote}])\r\n\t{tls}by {hostname} (kernoid) with {with};\r\n\t{date}\r\n",
             remote = self.remote,
             hostname = self.inner.settings.hostname,
-            date = chrono::Utc::now().to_rfc2822(),
+            date = date_now(),
         );
         headers.extend_from_slice(received.as_bytes());
     }
@@ -246,6 +246,12 @@ fn is_own_result(line: &[u8], hostname: &str) -> bool {
     let value = String::from_utf8_lossy(&value[1..]);
     let id = value.trim_start().split(|c: char| c == ';' || c.is_whitespace()).next().unwrap_or_default();
     id.eq_ignore_ascii_case(hostname)
+}
+
+/// Now as the date of a header (RFC 5322, 3.3), in UTC with the offset `+0000`.
+pub(crate) fn date_now() -> String {
+    let now = jiff::Timestamp::now().to_zoned_datetime(jiff::tz::TimeZone::UTC);
+    jiff::fmt::rfc2822::to_string(&now).unwrap_or_default()
 }
 
 #[cfg(test)]

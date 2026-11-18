@@ -336,8 +336,13 @@ async fn a_grace_period_gives_time_to_set_up_a_second_factor(pool: PgPool) {
     assert!(s.identity.set_tenant_mfa_grace(s.instance, tenant, 366, WHO).await.is_err());
     s.identity.set_tenant_mfa_grace(s.instance, tenant, 14, WHO).await.unwrap();
     let status = s.identity.mfa_status(s.account).await.unwrap();
-    let left = status.grace_until.expect("in the grace period") - chrono::Utc::now();
-    assert!(status.required && left > chrono::Duration::days(13) && left <= chrono::Duration::days(14), "{left}");
+    let left = status.grace_until.expect("in the grace period") - jiff::Timestamp::now();
+    assert!(
+        status.required
+            && left > jiff::SignedDuration::from_hours(24 * 13)
+            && left <= jiff::SignedDuration::from_hours(24 * 14),
+        "{left}"
+    );
     assert!(!s.identity.mfa_required_now(s.account).await.unwrap());
     s.identity.admin(s.instance, &s.token, None).await.unwrap();
     let factors = s.identity.second_factors(s.instance, &s.token).await.unwrap();

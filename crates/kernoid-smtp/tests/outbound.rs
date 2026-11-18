@@ -133,7 +133,7 @@ impl Setup {
         Outbound::new(settings, self.mail.clone(), dns, Some(self.main.clone()))
     }
 
-    async fn send(&self, from: &str, to: &[&str], raw: String, lifetime: chrono::Duration) {
+    async fn send(&self, from: &str, to: &[&str], raw: String, lifetime: jiff::SignedDuration) {
         // Signed by the worker on the way out.
         let signed = Bytes::from(raw);
         let recipients: Vec<String> = to.iter().map(|to| (*to).to_owned()).collect();
@@ -190,7 +190,7 @@ async fn mail_goes_out_signed_and_failures_bounce(pool: PgPool) {
             "alice@firma.example",
             &["bob@remote.example", "nobody@remote.example"],
             message("Hello"),
-            chrono::Duration::days(5),
+            jiff::SignedDuration::from_hours(24 * 5),
         )
         .await;
     assert_eq!(outbound.deliver_due().await.unwrap(), 2);
@@ -273,7 +273,9 @@ async fn new_dkim_keys_sign_once_their_records_are_published(pool: PgPool) {
     setup.account(setup.firma, "alice@firma.example").await;
     let port = setup.remote_server().await;
     let outbound = setup.outbound(port);
-    setup.send("alice@firma.example", &["bob@remote.example"], message("Both"), chrono::Duration::days(5)).await;
+    setup
+        .send("alice@firma.example", &["bob@remote.example"], message("Both"), jiff::SignedDuration::from_hours(24 * 5))
+        .await;
     assert_eq!(outbound.deliver_due().await.unwrap(), 1);
     let received = setup.inbox(bob).await;
     assert_eq!(received.len(), 1);
@@ -291,7 +293,14 @@ async fn failures_are_tried_again_until_the_message_expires(pool: PgPool) {
     let closed = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
     let outbound = setup.outbound(closed);
 
-    setup.send("alice@firma.example", &["bob@remote.example"], message("Later"), chrono::Duration::days(5)).await;
+    setup
+        .send(
+            "alice@firma.example",
+            &["bob@remote.example"],
+            message("Later"),
+            jiff::SignedDuration::from_hours(24 * 5),
+        )
+        .await;
     assert_eq!(outbound.deliver_due().await.unwrap(), 1);
     assert_eq!(setup.queued().await, [("bob@remote.example".to_owned(), "queued".to_owned(), 1)]);
     // Not due again yet.
@@ -299,15 +308,22 @@ async fn failures_are_tried_again_until_the_message_expires(pool: PgPool) {
     assert!(setup.inbox(alice).await.is_empty());
 
     // A message whose time is up fails at the next attempt, and bounces.
-    setup.send("alice@firma.example", &["carol@remote.example"], message("Too late"), chrono::Duration::zero()).await;
+    setup.send("alice@firma.example", &["carol@remote.example"], message("Too late"), jiff::SignedDuration::ZERO).await;
     assert_eq!(outbound.deliver_due().await.unwrap(), 1);
     let bounces = setup.inbox(alice).await;
     assert_eq!(bounces.len(), 1);
     assert!(bounces[0].contains("gave up"), "{}", bounces[0]);
 
     // A null MX refuses for good at once; a bounce without a sender is not bounced again.
-    setup.send("alice@firma.example", &["x@nomail.example"], message("Nowhere"), chrono::Duration::days(5)).await;
-    setup.send("", &["y@nomail.example"], message("Bounce"), chrono::Duration::days(5)).await;
+    setup
+        .send(
+            "alice@firma.example",
+            &["x@nomail.example"],
+            message("Nowhere"),
+            jiff::SignedDuration::from_hours(24 * 5),
+        )
+        .await;
+    setup.send("", &["y@nomail.example"], message("Bounce"), jiff::SignedDuration::from_hours(24 * 5)).await;
     assert_eq!(outbound.deliver_due().await.unwrap(), 2);
     let bounces = setup.inbox(alice).await;
     assert_eq!(bounces.len(), 2);
@@ -333,7 +349,14 @@ async fn an_mta_sts_policy_in_enforce_mode_requires_its_hosts_and_tls(pool: PgPo
     .unwrap();
 
     // The named host offers no STARTTLS (the test server has no certificate): not delivered, tried again later.
-    setup.send("alice@firma.example", &["bob@remote.example"], message("Secure only"), chrono::Duration::days(5)).await;
+    setup
+        .send(
+            "alice@firma.example",
+            &["bob@remote.example"],
+            message("Secure only"),
+            jiff::SignedDuration::from_hours(24 * 5),
+        )
+        .await;
     assert_eq!(outbound.deliver_due().await.unwrap(), 1);
     let error = sqlx::query_scalar!("SELECT last_error FROM outbound_recipients").fetch_one(&setup.pool).await.unwrap();
     assert!(error.unwrap_or_default().contains("offers no STARTTLS"));

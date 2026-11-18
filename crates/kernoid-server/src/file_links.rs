@@ -13,7 +13,7 @@ use axum::{
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use kernoid_files::{FileAccess, Files, NewNode, NodeInfo, NodeType, OnExists, Rights, SetOptions, View};
 use kernoid_identity::file_link::OpenLink;
 use serde::{Deserialize, Serialize};
@@ -43,7 +43,7 @@ pub(crate) struct LinkNodeView {
     node_type: String,
     size: Option<u64>,
     media_type: Option<String>,
-    modified: DateTime<Utc>,
+    modified: Timestamp,
 }
 
 #[derive(Debug, Serialize, utoipa::ToSchema)]

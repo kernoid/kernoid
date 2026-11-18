@@ -25,7 +25,7 @@ pub struct Submission {
     /// Port 465: TLS from the start; otherwise `STARTTLS` (port 587).
     pub implicit_tls: bool,
     /// How long the queue tries outgoing mail.
-    pub queue_lifetime: chrono::Duration,
+    pub queue_lifetime: jiff::SignedDuration,
 }
 
 impl std::fmt::Debug for Submission {
@@ -294,10 +294,10 @@ impl Session {
         let mut full = format!(
             "Received: from {helo} ([{remote}])\r\n\tby {hostname} (kernoid) with ESMTPSA;\r\n\t{date}\r\n",
             remote = self.remote,
-            date = chrono::Utc::now().to_rfc2822(),
+            date = crate::message::date_now(),
         );
         if !has_date {
-            full.push_str(&format!("Date: {}\r\n", chrono::Utc::now().to_rfc2822()));
+            full.push_str(&format!("Date: {}\r\n", crate::message::date_now()));
         }
         if !has_message_id {
             full.push_str(&format!("Message-ID: <{}@{hostname}>\r\n", uuid::Uuid::now_v7()));

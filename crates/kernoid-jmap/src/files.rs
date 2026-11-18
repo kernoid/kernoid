@@ -10,8 +10,8 @@ use std::{
 };
 
 use bytes::Bytes;
-use chrono::{DateTime, SecondsFormat, Utc};
 use futures_util::Stream;
+use jiff::Timestamp;
 use kernoid_files::{
     Content, FileAccess, Files, FilesError, MAX_DEPTH, MAX_NAME, NewNode, NodeInfo, NodeType, NodeUpdate, OnExists,
     Rights, SetOptions, View,
@@ -82,12 +82,12 @@ impl From<FilesError> for MethodError {
     }
 }
 
-fn utc(date: DateTime<Utc>) -> Value {
-    json!(date.to_rfc3339_opts(SecondsFormat::AutoSi, true))
+fn utc(date: Timestamp) -> Value {
+    json!(date.to_string())
 }
 
-fn parse_date(value: &Value) -> Option<DateTime<Utc>> {
-    DateTime::parse_from_rfc3339(value.as_str()?).ok().map(|date| date.with_timezone(&Utc))
+fn parse_date(value: &Value) -> Option<Timestamp> {
+    (value.as_str()?).parse::<jiff::Timestamp>().ok()
 }
 
 fn type_name(node_type: NodeType) -> &'static str {
@@ -853,9 +853,7 @@ impl Context<'_> {
                     let expires = match object.get("expires") {
                         None | Some(Value::Null) => None,
                         Some(Value::String(date)) => Some(
-                            DateTime::parse_from_rfc3339(date)
-                                .map_err(|_| invalid_properties("expires is a UTCDate"))?
-                                .with_timezone(&Utc),
+                            date.parse::<jiff::Timestamp>().map_err(|_| invalid_properties("expires is a UTCDate"))?,
                         ),
                         Some(_) => return Err(invalid_properties("expires is a UTCDate or null")),
                     };
@@ -1372,7 +1370,7 @@ impl Context<'_> {
         let mut update = NodeUpdate::default();
         let date = |value: &Value| match value {
             // null sets it to now (draft, 3.1.1).
-            Value::Null => Ok(Utc::now()),
+            Value::Null => Ok(Timestamp::now()),
             value => parse_date(value).ok_or_else(|| set(invalid_properties("a date is UTCDate"))),
         };
         // The blob of one of the file's own versions restores it (RFC 0005, 6).

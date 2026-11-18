@@ -117,8 +117,8 @@ pub(crate) struct TotpSetupView {
 pub(crate) struct PasskeyView {
     id: String,
     name: String,
-    created_at: chrono::DateTime<chrono::Utc>,
-    last_used_at: Option<chrono::DateTime<chrono::Utc>>,
+    created_at: jiff::Timestamp,
+    last_used_at: Option<jiff::Timestamp>,
 }
 
 #[derive(Debug, Serialize, utoipa::ToSchema)]
@@ -334,7 +334,7 @@ pub(crate) struct FactorsView {
     /// The tenant requires a second factor.
     required: bool,
     /// The account has none yet and may log in without one until then (the tenant's grace period).
-    setup_due: Option<chrono::DateTime<chrono::Utc>>,
+    setup_due: Option<jiff::Timestamp>,
 }
 
 /// The second factors of one's own account – for the login UI to ask for one, or to have one set up.

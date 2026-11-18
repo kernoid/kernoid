@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 use base64::{Engine, engine::general_purpose::STANDARD};
 use bergshamra::{DsigContext, KeysManager};
-use chrono::{Duration, Utc};
+use jiff::{SignedDuration, Timestamp};
 use kernoid_events::EventStore;
 use kernoid_identity::{DomainName, Identity, session::ClientMeta};
 use kernoid_oidc::{
@@ -37,9 +37,9 @@ fn new_signer() -> Signer {
 }
 
 /// A Response whose Assertion carries an enveloped signature template; `name_id` and `audience` can be varied.
-fn template(name_id: &str, audience: &str, in_response_to: &str, ends: chrono::DateTime<Utc>) -> String {
-    let now = Utc::now().format("%Y-%m-%dT%H:%M:%SZ");
-    let ends = ends.format("%Y-%m-%dT%H:%M:%SZ");
+fn template(name_id: &str, audience: &str, in_response_to: &str, ends: jiff::Timestamp) -> String {
+    let now = Timestamp::now().strftime("%Y-%m-%dT%H:%M:%SZ");
+    let ends = ends.strftime("%Y-%m-%dT%H:%M:%SZ");
     format!(
         r##"<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_r1" Version="2.0" IssueInstant="{now}" Destination="{ACS}" InResponseTo="{in_response_to}"><saml:Issuer>{IDP}</saml:Issuer><samlp:Status><samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/></samlp:Status><saml:Assertion ID="_a1" Version="2.0" IssueInstant="{now}"><saml:Issuer>{IDP}</saml:Issuer><ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#"><ds:SignedInfo><ds:CanonicalizationMethod Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/><ds:SignatureMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha256"/><ds:Reference URI="#_a1"><ds:Transforms><ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/><ds:Transform Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/></ds:Transforms><ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/><ds:DigestValue></ds:DigestValue></ds:Reference></ds:SignedInfo><ds:SignatureValue></ds:SignatureValue></ds:Signature><saml:Subject><saml:NameID Format="urn:oasis:names:tc:SAML:2.0:nameid-format:persistent">{name_id}</saml:NameID><saml:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer"><saml:SubjectConfirmationData InResponseTo="{in_response_to}" NotOnOrAfter="{ends}" Recipient="{ACS}"/></saml:SubjectConfirmation></saml:Subject><saml:Conditions NotBefore="{now}" NotOnOrAfter="{ends}"><saml:AudienceRestriction><saml:Audience>{audience}</saml:Audience></saml:AudienceRestriction></saml:Conditions><saml:AuthnStatement AuthnInstant="{now}" SessionIndex="_s1"><saml:AuthnContext><saml:AuthnContextClassRef>http://schemas.microsoft.com/claims/multipleauthn</saml:AuthnContextClassRef></saml:AuthnContext></saml:AuthnStatement><saml:AttributeStatement><saml:Attribute Name="http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"><saml:AttributeValue>bob@firma.de</saml:AttributeValue></saml:Attribute><saml:Attribute Name="displayName"><saml:AttributeValue>Bob</saml:AttributeValue></saml:Attribute></saml:AttributeStatement></saml:Assertion></samlp:Response>"##
     )
@@ -60,13 +60,13 @@ fn expected<'a>(certificates: &'a [Vec<u8>]) -> Expected<'a> {
         sp_entity_id: SP,
         acs_url: ACS,
         request_id: REQUEST,
-        now: Utc::now(),
+        now: Timestamp::now(),
         decryption_keys: &[],
     }
 }
 
 fn valid(signer: &Signer) -> String {
-    sign(signer, &template("u-123", SP, REQUEST, Utc::now() + Duration::minutes(5)))
+    sign(signer, &template("u-123", SP, REQUEST, Timestamp::now() + SignedDuration::from_mins(5)))
 }
 
 #[test]
@@ -92,7 +92,7 @@ fn tampered_and_foreign_responses_fail() {
     let other = new_signer();
     assert!(verify_response(&encode(&signed), expected(&[other.certificate])).is_err());
     // Unsigned.
-    let unsigned = template("u-123", SP, REQUEST, Utc::now() + Duration::minutes(5));
+    let unsigned = template("u-123", SP, REQUEST, Timestamp::now() + SignedDuration::from_mins(5));
     assert!(verify_response(&encode(&unsigned), expected(&certificates)).is_err());
 }
 
@@ -122,11 +122,11 @@ fn wrapped_signatures_fail() {
 fn responses_for_others_or_out_of_time_fail() {
     let signer = new_signer();
     let certificates = [signer.certificate.clone()];
-    let in_five = Utc::now() + Duration::minutes(5);
+    let in_five = Timestamp::now() + SignedDuration::from_mins(5);
     for (xml, why) in [
         (sign(&signer, &template("u-123", "https://other.example/sp", REQUEST, in_five)), "audience"),
         (sign(&signer, &template("u-123", SP, "_another", in_five)), "request"),
-        (sign(&signer, &template("u-123", SP, REQUEST, Utc::now() - Duration::minutes(10))), "expired"),
+        (sign(&signer, &template("u-123", SP, REQUEST, Timestamp::now() - SignedDuration::from_mins(10))), "expired"),
     ] {
         assert!(verify_response(&encode(&xml), expected(&certificates)).is_err(), "{why}");
     }
@@ -181,7 +181,8 @@ async fn a_saml_login_creates_the_account_once(pool: PgPool) {
     let request_id = request.split("ID=\"").nth(1).unwrap().split('"').next().unwrap().to_owned();
 
     // The provider posts a signed Response for it.
-    let response = sign(&signer, &template("ext-bob", SP, &request_id, Utc::now() + Duration::minutes(5)));
+    let response =
+        sign(&signer, &template("ext-bob", SP, &request_id, Timestamp::now() + SignedDuration::from_mins(5)));
     let back = oidc.saml_acs(&instance, Some(&query["RelayState"]), Some(&encode(&response))).await;
     let fragment: HashMap<String, String> =
         url::form_urlencoded::parse(back.split_once('#').unwrap().1.as_bytes()).into_owned().collect();
@@ -307,7 +308,8 @@ async fn saml_login(s: &SamlSetup, make: impl Fn(String) -> String) -> kernoid_i
     let request = miniz_oxide::inflate::decompress_to_vec(&STANDARD.decode(&query["SAMLRequest"]).unwrap()).unwrap();
     let request = String::from_utf8(request).unwrap();
     let request_id = request.split("ID=\"").nth(1).unwrap().split('"').next().unwrap().to_owned();
-    let response = make(sign(&s.signer, &template("ext-bob", SP, &request_id, Utc::now() + Duration::minutes(5))));
+    let response =
+        make(sign(&s.signer, &template("ext-bob", SP, &request_id, Timestamp::now() + SignedDuration::from_mins(5))));
     let back = s.oidc.saml_acs(&s.instance, Some(&query["RelayState"]), Some(&encode(&response))).await;
     let fragment: HashMap<String, String> =
         url::form_urlencoded::parse(back.split_once('#').unwrap().1.as_bytes()).into_owned().collect();

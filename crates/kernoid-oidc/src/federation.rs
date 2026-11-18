@@ -18,7 +18,7 @@
 
 use std::{collections::BTreeSet, time::Duration};
 
-use chrono::Utc;
+use jiff::Timestamp;
 use kernoid_events::{
     Error, Event, InlineFuture,
     aggregate::{Aggregate, CommandError, DomainEvent},
@@ -286,8 +286,8 @@ pub struct SamlKeyInfo {
     pub id: Uuid,
     /// `next` (in the metadata, not signing), `active` (signing) or `retired` (only decrypting).
     pub state: String,
-    pub created_at: chrono::DateTime<Utc>,
-    pub state_since: chrono::DateTime<Utc>,
+    pub created_at: jiff::Timestamp,
+    pub state_since: jiff::Timestamp,
     /// SHA-256 of the certificate, in hex – what providers show.
     pub fingerprint: String,
 }
@@ -437,8 +437,8 @@ impl Oidc {
             let info = SamlKeyInfo {
                 id: row.id,
                 state: row.state,
-                created_at: row.created_at,
-                state_since: row.state_since,
+                created_at: row.created_at.to_jiff(),
+                state_since: row.state_since.to_jiff(),
                 fingerprint,
             };
             let key =
@@ -1029,7 +1029,7 @@ impl Oidc {
                 &sp,
                 &acs,
                 &state,
-                Utc::now(),
+                Timestamp::now(),
                 key.as_ref(),
             )
             .map_err(|e| refused(e.to_string()));
@@ -1288,7 +1288,7 @@ impl Oidc {
             sp_entity_id: &sp,
             acs_url: &acs,
             request_id: request,
-            now: Utc::now(),
+            now: Timestamp::now(),
             decryption_keys: &keys,
         };
         let verified = crate::saml::verify_response(response, expected).map_err(|error| {
@@ -1354,7 +1354,7 @@ impl Oidc {
             issuer: &metadata.issuer,
             client_id: &info.settings.client_id,
             nonce,
-            now: Utc::now().timestamp(),
+            now: Timestamp::now().as_second(),
         };
         let claims = external::verify_id_token(&tokens.id_token, &keys, expected).map_err(unreachable)?;
         let subject = claims["sub"].as_str().unwrap_or_default().to_owned();
@@ -1588,7 +1588,7 @@ impl Oidc {
         .await
         .map_err(internal)?
         .into_iter()
-        .map(|row| (LinkInfo { idp: row.idp_id, subject: row.subject, created_at: row.created_at }, row.name))
+        .map(|row| (LinkInfo { idp: row.idp_id, subject: row.subject, created_at: row.created_at.to_jiff() }, row.name))
         .collect())
     }
 
@@ -1731,7 +1731,7 @@ impl Oidc {
             name_id_format: saml.name_id_format.as_deref(),
             session_index: saml.session_index.as_deref(),
             relay_state: "logout",
-            now: Utc::now(),
+            now: Timestamp::now(),
         };
         crate::saml::logout_request_url(&request, &key).map(Some).map_err(|e| refused(e.to_string()))
     }
@@ -1775,7 +1775,7 @@ impl Oidc {
             }
             return Ok(Some(logout.return_to.unwrap_or_else(|| format!("{}/account", self.login_url(instance)))));
         }
-        let request = crate::saml::read_logout_request(&message.xml, &slo_here, Utc::now())
+        let request = crate::saml::read_logout_request(&message.xml, &slo_here, Timestamp::now())
             .map_err(|e| refused(e.to_string()))?;
         let candidates = sqlx::query_scalar!(
             "SELECT id FROM identity_providers
@@ -1829,7 +1829,7 @@ impl Oidc {
             &request.id,
             &sp,
             message.relay_state.as_deref(),
-            Utc::now(),
+            Timestamp::now(),
             &key,
         )
         .map_err(|e| refused(e.to_string()))?;

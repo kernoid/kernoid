@@ -315,7 +315,7 @@ fn email_object(
             "mailboxIds" => mailbox_ids(&info.mailboxes),
             "keywords" => keywords(&info.keywords),
             "size" => json!(info.size),
-            "receivedAt" => json!(info.received_at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)),
+            "receivedAt" => json!(format!("{:.0}", info.received_at)),
             "messageId" => info.message_id.as_ref().map_or(Value::Null, |id| json!([id])),
             "inReplyTo" => nonempty(&info.in_reply_to),
             "references" => nonempty(&info.references),
@@ -326,9 +326,7 @@ fn email_object(
             "bcc" => address_list(&info.bcc),
             "replyTo" => address_list(&info.reply_to),
             "subject" => json!(info.subject),
-            "sentAt" => {
-                info.sent_at.map_or(Value::Null, |at| json!(at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)))
-            }
+            "sentAt" => info.sent_at.map_or(Value::Null, |at| json!(format!("{:.0}", at))),
             "hasAttachment" => json!(info.has_attachment),
             "preview" => json!(info.preview),
             // kernoid's own (RFC 0006, 5.2): whether the message is end-to-end encrypted, and its summary encrypted to

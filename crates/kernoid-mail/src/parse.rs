@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! What kernoid keeps of a message in PostgreSQL (RFC 0002, 4), read with mail-parser.
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
+
 use mail_parser::{AddressList, MessageParser, TextList};
 use serde::{Deserialize, Serialize};
 
@@ -20,7 +21,7 @@ pub struct Mailbox {
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct Summary {
-    pub sent_at: Option<DateTime<Utc>>,
+    pub sent_at: Option<Timestamp>,
     pub message_id: Option<String>,
     pub in_reply_to: Vec<String>,
     pub references: Vec<String>,
@@ -72,7 +73,7 @@ pub(crate) fn summarize(raw: &[u8]) -> Option<Summary> {
         .map(|text| text.chars().take(PREVIEW).collect())
         .unwrap_or_default();
     Some(Summary {
-        sent_at: message.date().and_then(|date| DateTime::from_timestamp(date.to_timestamp(), 0)),
+        sent_at: message.date().and_then(|date| jiff::Timestamp::from_second(date.to_timestamp()).ok()),
         message_id: message.message_id().filter(|id| !id.is_empty()).map(str::to_owned),
         in_reply_to: ids(message.in_reply_to()),
         references: ids(message.references()),
@@ -153,7 +154,7 @@ mod tests {
         assert_eq!(summary.references, ["z@firma.example", "a0@firma.example"]);
         assert_eq!(summary.from, [Mailbox { name: Some("Alice".into()), email: "alice@firma.example".into() }]);
         assert_eq!(summary.to.len(), 2);
-        assert_eq!(summary.sent_at.map(|at| at.to_rfc3339()).as_deref(), Some("2026-10-24T08:00:00+00:00"));
+        assert_eq!(summary.sent_at.map(|at| at.to_string()).as_deref(), Some("2026-10-24T08:00:00Z"));
         assert_eq!(summary.preview, "Shall we meet at noon?");
         assert!(!summary.has_attachment);
         assert_eq!(summary.search_text, "Shall we\r\n  meet at noon?\r\n\n");

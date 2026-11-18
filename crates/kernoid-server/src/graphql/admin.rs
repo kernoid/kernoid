@@ -2,8 +2,8 @@
 //! The administration API in GraphQL – the same operations and permission checks as the REST routes in
 //! `crate::admin`. The `kernoid-tenant` header names the tenant an instance administrator acts on.
 
+use super::DateTime;
 use async_graphql::{Context, Json, Object, SimpleObject};
-use chrono::{DateTime, Utc};
 use kernoid_identity::{
     Address, CHALLENGE_LABEL, DomainName, Identity, IdentityError,
     account::AccountInfo,
@@ -181,7 +181,7 @@ pub struct AuditEntryObject {
     payload: Json<serde_json::Value>,
     /// An account id, `system`, `operator` or a service.
     creator: String,
-    created_at: DateTime<Utc>,
+    created_at: DateTime,
 }
 
 impl From<AuditEntry> for AuditEntryObject {
@@ -194,7 +194,7 @@ impl From<AuditEntry> for AuditEntryObject {
             event_type: entry.event_type,
             payload: Json(entry.payload),
             creator: entry.creator,
-            created_at: entry.created_at,
+            created_at: entry.created_at.into(),
         }
     }
 }
@@ -230,8 +230,8 @@ impl From<AccountInfo> for AccountDetails {
 pub struct SessionSummaryObject {
     id: String,
     checks: Vec<String>,
-    created_at: DateTime<Utc>,
-    expires_at: DateTime<Utc>,
+    created_at: DateTime,
+    expires_at: DateTime,
     client_address: Option<String>,
     user_agent: Option<String>,
 }
@@ -241,8 +241,8 @@ impl From<SessionSummary> for SessionSummaryObject {
         Self {
             id: session.id.to_string(),
             checks: session.checks,
-            created_at: session.created_at,
-            expires_at: session.expires_at,
+            created_at: session.created_at.into(),
+            expires_at: session.expires_at.into(),
             client_address: session.client_address,
             user_agent: session.user_agent,
         }
@@ -411,7 +411,7 @@ pub struct Consent {
     application: String,
     application_name: String,
     scopes: Vec<String>,
-    granted_at: DateTime<Utc>,
+    granted_at: DateTime,
 }
 
 impl From<ConsentInfo> for Consent {
@@ -420,7 +420,7 @@ impl From<ConsentInfo> for Consent {
             application: info.application.to_string(),
             application_name: info.application_name,
             scopes: info.scopes,
-            granted_at: info.granted_at,
+            granted_at: info.granted_at.into(),
         }
     }
 }
@@ -486,8 +486,8 @@ pub struct SigningKey {
     kid: String,
     algorithm: String,
     state: String,
-    created_at: DateTime<Utc>,
-    state_since: DateTime<Utc>,
+    created_at: DateTime,
+    state_since: DateTime,
 }
 
 impl From<KeyInfo> for SigningKey {
@@ -496,8 +496,8 @@ impl From<KeyInfo> for SigningKey {
             kid: key.kid,
             algorithm: key.algorithm,
             state: key.state.as_str().into(),
-            created_at: key.created_at,
-            state_since: key.state_since,
+            created_at: key.created_at.into(),
+            state_since: key.state_since.into(),
         }
     }
 }
@@ -507,8 +507,8 @@ pub struct SamlKey {
     id: String,
     /// `next` (in the metadata, not signing yet), `active` (signing) or `retired` (only decrypting).
     state: String,
-    created_at: DateTime<Utc>,
-    state_since: DateTime<Utc>,
+    created_at: DateTime,
+    state_since: DateTime,
     /// SHA-256 of the certificate, in hex.
     fingerprint: String,
 }
@@ -518,8 +518,8 @@ impl From<kernoid_oidc::federation::SamlKeyInfo> for SamlKey {
         Self {
             id: key.id.to_string(),
             state: key.state,
-            created_at: key.created_at,
-            state_since: key.state_since,
+            created_at: key.created_at.into(),
+            state_since: key.state_since.into(),
             fingerprint: key.fingerprint,
         }
     }
@@ -613,15 +613,15 @@ impl From<SamlInput> for kernoid_oidc::federation::SamlSettings {
 pub struct AccountLink {
     identity_provider: String,
     subject: String,
-    created_at: DateTime<Utc>,
+    created_at: DateTime,
 }
 
 #[derive(Debug, SimpleObject)]
 pub struct ScimToken {
     id: String,
     name: String,
-    created_at: DateTime<Utc>,
-    last_used_at: Option<DateTime<Utc>>,
+    created_at: DateTime,
+    last_used_at: Option<DateTime>,
 }
 
 #[derive(Debug, SimpleObject)]
@@ -944,7 +944,7 @@ impl AdminQuery {
             .map(|link| AccountLink {
                 identity_provider: link.idp.to_string(),
                 subject: link.subject,
-                created_at: link.created_at,
+                created_at: link.created_at.into(),
             })
             .collect())
     }
@@ -960,8 +960,8 @@ impl AdminQuery {
             .map(|t| ScimToken {
                 id: t.id.to_string(),
                 name: t.name,
-                created_at: t.created_at,
-                last_used_at: t.last_used_at,
+                created_at: t.created_at.into(),
+                last_used_at: t.last_used_at.map(Into::into),
             })
             .collect())
     }

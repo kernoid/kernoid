@@ -141,8 +141,7 @@ pub(crate) fn patch(object: &mut Map<String, Value>, patch: &Map<String, Value>)
 /// `YYYY-MM-DDTHH:MM:SS` with an optional fraction – JSCalendar's LocalDateTime (RFC 8984, 1.4.4).
 fn is_local_date_time(text: &str) -> bool {
     let (main, fraction) = text.split_once('.').unwrap_or((text, ""));
-    chrono::NaiveDateTime::parse_from_str(main, "%Y-%m-%dT%H:%M:%S").is_ok()
-        && fraction.bytes().all(|b| b.is_ascii_digit())
+    jiff::civil::DateTime::strptime("%Y-%m-%dT%H:%M:%S", main).is_ok() && fraction.bytes().all(|b| b.is_ascii_digit())
 }
 
 #[cfg(test)]

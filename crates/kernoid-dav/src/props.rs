@@ -549,7 +549,7 @@ fn vtimezone(name: &str) -> Option<String> {
             component_ids: vec![],
         }],
     };
-    let now = chrono::Utc::now().timestamp();
+    let now = jiff::Timestamp::now().as_second();
     ical.add_timezone(name, now - 366 * 86_400, now + 10 * 366 * 86_400)?;
     Some(ical.to_string())
 }

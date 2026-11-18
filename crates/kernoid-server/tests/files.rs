@@ -59,7 +59,7 @@ async fn setup_with_mail(pool: &PgPool) -> (Router, Uuid, Uuid, kernoid_mail::Ma
     let oidc = kernoid_oidc::Oidc::new(events, main, "https");
     let mail = kernoid_mail::Mail::new(pool.clone(), blobs.clone(), kernoid_mail::Limits::default());
     let files = kernoid_files::Files::new(pool.clone(), blobs.clone(), kernoid_files::Limits::default());
-    let jmap = kernoid_jmap::Jmap::new(mail.clone(), 1_000_000, chrono::Duration::days(5))
+    let jmap = kernoid_jmap::Jmap::new(mail.clone(), 1_000_000, jiff::SignedDuration::from_hours(24 * 5))
         .with_files(files)
         .with_identity(Identity::new(EventStore::new(pool.clone())));
     let state = AppState::new(pool.clone(), blobs, identity, oidc).with_jmap(jmap, kernoid_mail::MailEvents::default());

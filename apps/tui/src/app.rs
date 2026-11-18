@@ -7,7 +7,7 @@ use std::{
     sync::mpsc::Sender,
 };
 
-use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, TimeZone, Timelike, Utc};
+use jiff::{SignedDuration, Span, Timestamp, ZonedDateTime, civil, tz::TimeZone};
 use ratatui::{
     crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind},
     layout::{Position, Rect},
@@ -350,7 +350,7 @@ pub struct FilesState {
 pub struct CalendarState {
     pub calendars: Vec<Calendar>,
     /// The first day shown.
-    pub from: Option<NaiveDate>,
+    pub from: Option<civil::Date>,
     pub events: Vec<Event>,
     pub list: ListState,
     pub loaded: bool,
@@ -1343,19 +1343,15 @@ impl App {
             self.calendar.calendars = list;
         }
         if self.calendar.from.is_none() {
-            self.calendar.from = Some(Local::now().date_naive());
+            self.calendar.from = Some(today());
         }
         self.load_events();
     }
 
-    pub fn calendar_window(&self) -> (DateTime<Utc>, DateTime<Utc>) {
-        let from = self.calendar.from.unwrap_or_else(|| Local::now().date_naive());
-        let start = Local
-            .from_local_datetime(&from.and_hms_opt(0, 0, 0).unwrap_or_default())
-            .earliest()
-            .map(|t| t.with_timezone(&Utc))
-            .unwrap_or_else(Utc::now);
-        (start, start + Duration::days(DAYS))
+    pub fn calendar_window(&self) -> (Timestamp, Timestamp) {
+        let from = self.calendar.from.unwrap_or_else(today);
+        let start = instant(from.at(0, 0, 0, 0)).unwrap_or_else(Timestamp::now);
+        (start, start + SignedDuration::from_hours(24 * DAYS))
     }
 
     fn load_events(&mut self) {
@@ -1370,8 +1366,8 @@ impl App {
     }
 
     fn shift_calendar(&mut self, days: i64) {
-        let from = self.calendar.from.unwrap_or_else(|| Local::now().date_naive());
-        self.calendar.from = Some(from + Duration::days(days));
+        let from = self.calendar.from.unwrap_or_else(today);
+        self.calendar.from = Some(from.checked_add(Span::new().days(days)).unwrap_or(from));
         self.load_events();
     }
 
@@ -1473,19 +1469,15 @@ impl App {
             return;
         };
         // The selected day, at the next full hour – or tomorrow at nine.
-        let now = Local::now().naive_local();
-        let day = self
-            .selected_event()
-            .and_then(|e| e.starts())
-            .map(|s| s.with_timezone(&Local).date_naive())
-            .unwrap_or(now.date());
-        let hour = if day == now.date() { (now.time().hour() + 1).min(23) } else { 9 };
-        let start = day.and_hms_opt(hour, 0, 0).unwrap_or(now);
+        let now = ZonedDateTime::now().datetime();
+        let day = self.selected_event().and_then(|e| e.starts()).map(|s| local(s).date()).unwrap_or(now.date());
+        let hour = if day == now.date() { (now.hour() + 1).min(23) } else { 9 };
+        let start = day.at(hour, 0, 0, 0);
         let form = EventForm {
             title: String::new(),
             all_day: false,
             start,
-            end: start + Duration::hours(1),
+            end: start.saturating_add(SignedDuration::from_hours(1)),
             time_zone: calendars::local_time_zone(),
             location: String::new(),
             description: String::new(),
@@ -2800,7 +2792,7 @@ impl App {
             KeyCode::Right | KeyCode::Char('l') | KeyCode::Char(']') => self.shift_calendar(7),
             KeyCode::Left | KeyCode::Char('h') | KeyCode::Char('[') => self.shift_calendar(-7),
             KeyCode::Char('t') => {
-                self.calendar.from = Some(Local::now().date_naive());
+                self.calendar.from = Some(today());
                 self.load_events();
             }
             KeyCode::Enter => self.event_info(),
@@ -2877,31 +2869,52 @@ pub fn size_text(bytes: u64) -> String {
     }
 }
 
+/// Today here, in the system's time zone.
+pub fn today() -> civil::Date {
+    ZonedDateTime::now().date()
+}
+
+/// A time as it is here.
+pub fn local(time: Timestamp) -> ZonedDateTime {
+    time.to_zoned_datetime(TimeZone::system())
+}
+
+/// The day of a time in UTC – the day of an all-day event.
+pub fn utc_date(time: Timestamp) -> civil::Date {
+    jiff::tz::Offset::UTC.to_datetime(time).date()
+}
+
+/// A time on the clock here as a time: the earlier one where the clock goes back, none where it skips.
+pub fn instant(time: civil::DateTime) -> Option<Timestamp> {
+    let ambiguous = TimeZone::system().to_ambiguous_timestamp(time);
+    if matches!(ambiguous.offset(), jiff::tz::AmbiguousOffset::Gap { .. }) { None } else { ambiguous.earlier().ok() }
+}
+
 /// A time of the protocol (RFC 3339) in local time: the time alone today, else date and time.
 pub fn time_text(time: &str) -> String {
-    let Ok(time) = DateTime::parse_from_rfc3339(time) else { return time.to_owned() };
-    let local = time.with_timezone(&Local);
-    if local.date_naive() == Local::now().date_naive() {
-        local.format("%H:%M").to_string()
-    } else if local.year() == Local::now().year() {
-        local.format("%d %b %H:%M").to_string()
+    let Ok(time) = time.parse::<Timestamp>() else { return time.to_owned() };
+    let local = local(time);
+    if local.date() == today() {
+        local.strftime("%H:%M").to_string()
+    } else if local.year() == today().year() {
+        local.strftime("%d %b %H:%M").to_string()
     } else {
-        local.format("%Y-%m-%d").to_string()
+        local.strftime("%Y-%m-%d").to_string()
     }
 }
 
 /// A time of the protocol in local time for a file name: `2026-10-28 18-24-05`.
 pub fn stamp_text(time: &str) -> String {
-    match DateTime::parse_from_rfc3339(time) {
-        Ok(time) => time.with_timezone(&Local).format("%Y-%m-%d %H-%M-%S").to_string(),
+    match time.parse::<Timestamp>() {
+        Ok(time) => local(time).strftime("%Y-%m-%d %H-%M-%S").to_string(),
         Err(_) => time.replace(':', "-"),
     }
 }
 
 /// A time of the protocol in local time, to the second.
 pub fn exact_time_text(time: &str) -> String {
-    match DateTime::parse_from_rfc3339(time) {
-        Ok(time) => time.with_timezone(&Local).format("%Y-%m-%d %H:%M:%S").to_string(),
+    match time.parse::<Timestamp>() {
+        Ok(time) => local(time).strftime("%Y-%m-%d %H:%M:%S").to_string(),
         Err(_) => time.to_owned(),
     }
 }
@@ -2926,15 +2939,15 @@ pub fn book_name(book: &AddressBook) -> String {
 pub fn event_when(event: &Event) -> String {
     let Some(start) = event.starts() else { return String::new() };
     if event.show_without_time {
-        return format!("{} (all day)", start.date_naive().format("%a %d %b %Y"));
+        return format!("{} (all day)", utc_date(start).strftime("%a %d %b %Y"));
     }
-    let start = start.with_timezone(&Local);
-    match event.ends().map(|end| end.with_timezone(&Local)) {
-        Some(end) if end.date_naive() == start.date_naive() => {
-            format!("{} {}–{}", start.format("%a %d %b %Y"), start.format("%H:%M"), end.format("%H:%M"))
+    let start = local(start);
+    match event.ends().map(local) {
+        Some(end) if end.date() == start.date() => {
+            format!("{} {}–{}", start.strftime("%a %d %b %Y"), start.strftime("%H:%M"), end.strftime("%H:%M"))
         }
-        Some(end) => format!("{} – {}", start.format("%a %d %b %Y %H:%M"), end.format("%a %d %b %Y %H:%M")),
-        None => start.format("%a %d %b %Y %H:%M").to_string(),
+        Some(end) => format!("{} – {}", start.strftime("%a %d %b %Y %H:%M"), end.strftime("%a %d %b %Y %H:%M")),
+        None => start.strftime("%a %d %b %Y %H:%M").to_string(),
     }
 }
 
@@ -2962,13 +2975,12 @@ fn link_expiry(text: &str) -> Result<Option<String>, String> {
     if text.is_empty() {
         return Ok(None);
     }
-    let day = NaiveDate::parse_from_str(text, "%Y-%m-%d").map_err(|_| format!("not a date: {text} (YYYY-MM-DD)"))?;
-    let end = day.and_hms_opt(23, 59, 59).and_then(|end| Local.from_local_datetime(&end).earliest());
-    let end = end.ok_or_else(|| format!("not a time here: {text}"))?;
-    if end <= Local::now() {
+    let day = civil::Date::strptime("%Y-%m-%d", text).map_err(|_| format!("not a date: {text} (YYYY-MM-DD)"))?;
+    let end = instant(day.at(23, 59, 59, 0)).ok_or_else(|| format!("not a time here: {text}"))?;
+    if end <= Timestamp::now() {
         return Err("the day has passed".into());
     }
-    Ok(Some(end.with_timezone(&Utc).format("%Y-%m-%dT%H:%M:%SZ").to_string()))
+    Ok(Some(format!("{end:.0}")))
 }
 
 #[cfg(test)]

@@ -19,8 +19,8 @@ use crate::{
 pub(crate) struct AppPasswordView {
     id: String,
     name: String,
-    created_at: chrono::DateTime<chrono::Utc>,
-    last_used_at: Option<chrono::DateTime<chrono::Utc>>,
+    created_at: jiff::Timestamp,
+    last_used_at: Option<jiff::Timestamp>,
 }
 
 #[derive(Debug, Deserialize, utoipa::ToSchema)]

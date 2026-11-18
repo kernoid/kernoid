@@ -492,10 +492,11 @@ async fn refresh_tokens_end_with_the_session_and_belong_to_their_client(pool: Pg
     };
     assert!(matches!(setup.oidc.token(&setup.instance, &foreign).await, Err(OidcError::InvalidGrant(_))));
 
-    let expires: chrono::DateTime<chrono::Utc> =
-        sqlx::query_scalar!("SELECT expires_at FROM refresh_tokens LIMIT 1").fetch_one(&pool).await.unwrap();
-    let session_expires: chrono::DateTime<chrono::Utc> =
-        sqlx::query_scalar!("SELECT expires_at FROM sessions LIMIT 1").fetch_one(&pool).await.unwrap();
+    let expires: jiff::Timestamp =
+        (sqlx::query_scalar!("SELECT expires_at FROM refresh_tokens LIMIT 1").fetch_one(&pool).await.unwrap())
+            .to_jiff();
+    let session_expires: jiff::Timestamp =
+        (sqlx::query_scalar!("SELECT expires_at FROM sessions LIMIT 1").fetch_one(&pool).await.unwrap()).to_jiff();
     assert_eq!(expires, session_expires, "a refresh token lives as long as its session");
 
     setup.identity.terminate_session(setup.instance.id, &setup.session).await.unwrap();

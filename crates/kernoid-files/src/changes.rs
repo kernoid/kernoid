@@ -4,7 +4,8 @@
 
 use std::collections::BTreeMap;
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
+use jiff_sqlx::ToSqlx;
 use kernoid_store::PgPool;
 use sqlx::PgConnection;
 use uuid::Uuid;
@@ -121,7 +122,7 @@ impl Files {
 
 /// Removes up to `limit` journal rows written before `before` and raises each account's floor past them; returns how
 /// many went. For the worker, beside the mail journal's pruning.
-pub async fn prune_changes(pool: &PgPool, before: DateTime<Utc>, limit: i64) -> Result<u64> {
+pub async fn prune_changes(pool: &PgPool, before: Timestamp, limit: i64) -> Result<u64> {
     let pruned = sqlx::query_scalar!(
         r#"WITH gone AS (
                DELETE FROM file_changes WHERE (account_id, modseq, node_id) IN (
@@ -134,7 +135,7 @@ pub async fn prune_changes(pool: &PgPool, before: DateTime<Utc>, limit: i64) -> 
                WHERE f.account_id = g.account_id
                RETURNING 1)
            SELECT count(*) AS "count!" FROM gone"#,
-        before,
+        before.to_sqlx(),
         limit,
     )
     .fetch_one(pool)

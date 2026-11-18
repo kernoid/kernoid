@@ -7,7 +7,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use kernoid_identity::{DomainName, IdentityError, TenantInfo, role::Role};
 use kernoid_oidc::{federation::SamlKeyInfo, keys::KeyInfo};
 use serde::{Deserialize, Serialize};
@@ -102,8 +102,8 @@ pub(crate) struct SigningKeyView {
     algorithm: String,
     /// `initial` (published, not signing), `active` (signing) or `inactive` (published, no longer signing).
     state: String,
-    created_at: DateTime<Utc>,
-    state_since: DateTime<Utc>,
+    created_at: Timestamp,
+    state_since: Timestamp,
 }
 
 impl From<KeyInfo> for SigningKeyView {
@@ -377,8 +377,8 @@ pub(crate) struct SamlKeyView {
     id: String,
     /// `next` (in the metadata, not signing yet), `active` (signing) or `retired` (only decrypting).
     state: String,
-    created_at: DateTime<Utc>,
-    state_since: DateTime<Utc>,
+    created_at: Timestamp,
+    state_since: Timestamp,
     /// SHA-256 of the certificate, in hex.
     fingerprint: String,
 }

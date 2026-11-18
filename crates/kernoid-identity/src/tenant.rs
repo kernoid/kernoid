@@ -5,6 +5,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use jiff_sqlx::ToSqlx;
 use kernoid_events::{
     Error, Event,
     aggregate::{Aggregate, DomainEvent},
@@ -318,7 +319,7 @@ pub(crate) async fn project(connection: &mut PgConnection, events: &[Event]) -> 
                          mfa_required_since = CASE WHEN $2 THEN $3::timestamptz END WHERE id = $1",
                     id,
                     required,
-                    event.created_at,
+                    event.created_at.to_sqlx(),
                 )
                 .execute(&mut *connection)
                 .await?;

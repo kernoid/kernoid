@@ -28,8 +28,6 @@ pub mod uidbatches;
 
 use std::{borrow::Cow, str::FromStr};
 
-use chrono::{DateTime, NaiveDate};
-
 use crate::proto::{
     Command,
     protocol::{Flag, Sequence},
@@ -191,9 +189,9 @@ impl Flag {
 pub fn parse_datetime(value: &[u8]) -> Result<i64> {
     std::str::from_utf8(value).map_err(|_| Cow::from("Expected date/time, found an invalid UTF-8 string.")).and_then(
         |datetime| {
-            DateTime::parse_from_str(datetime.trim(), "%d-%b-%Y %H:%M:%S %z")
+            jiff::Timestamp::strptime("%d-%b-%Y %H:%M:%S %z", datetime.trim())
                 .map_err(|_| Cow::from(format!("Failed to parse date/time '{}'.", datetime)))
-                .map(|dt| dt.timestamp())
+                .map(|dt| dt.as_second())
         },
     )
 }
@@ -201,9 +199,10 @@ pub fn parse_datetime(value: &[u8]) -> Result<i64> {
 pub fn parse_date(value: &[u8]) -> Result<i64> {
     std::str::from_utf8(value).map_err(|_| Cow::from("Expected date, found an invalid UTF-8 string.")).and_then(
         |date| {
-            NaiveDate::parse_from_str(date.trim(), "%d-%b-%Y")
+            jiff::civil::Date::strptime("%d-%b-%Y", date.trim())
+                .and_then(|day| jiff::tz::Offset::UTC.to_timestamp(day.to_datetime(jiff::civil::Time::midnight())))
                 .map_err(|_| Cow::from(format!("Failed to parse date '{}'.", date)))
-                .map(|dt| dt.and_hms_opt(0, 0, 0).unwrap_or_default().and_utc().timestamp())
+                .map(|dt| dt.as_second())
         },
     )
 }

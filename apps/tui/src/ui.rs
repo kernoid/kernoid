@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Drawing the app: tabs on top, the tab's panes, a status line, and a popup or input line over them.
 
-use chrono::{Local, NaiveDate};
+use jiff::{SignedDuration, civil::Date};
 use ratatui::{
     Frame,
     layout::{Constraint, Flex, Layout, Rect},
@@ -15,7 +15,7 @@ use kernoid_tui::jmap::{
     mail::{Conversation, Sealed, format_addresses},
 };
 
-use crate::app::{self, App, FilesFocus, MailFocus, Pane, Popup, PopupRegion, Tab};
+use crate::app::{self, App, FilesFocus, MailFocus, Pane, Popup, PopupRegion, Tab, local, utc_date};
 
 /// Mint of the brand, for what is selected and focused.
 const ACCENT: Color = Color::Rgb(0x3D, 0xDC, 0x97);
@@ -347,29 +347,27 @@ fn draw_calendar(frame: &mut Frame, app: &mut App, area: Rect) {
     let (start, end) = app.calendar_window();
     let title = format!(
         "{} – {}",
-        start.with_timezone(&Local).format("%a %d %b %Y"),
-        (end - chrono::Duration::days(1)).with_timezone(&Local).format("%a %d %b %Y")
+        local(start).strftime("%a %d %b %Y"),
+        local(end - SignedDuration::from_hours(24)).strftime("%a %d %b %Y")
     );
     let mut items = Vec::new();
-    let mut day: Option<NaiveDate> = None;
+    let mut day: Option<Date> = None;
     // One row per event; the day is written on the first event of each day.
     for event in &app.calendar.events {
-        let starts = event
-            .starts()
-            .map(|s| if event.show_without_time { s.date_naive() } else { s.with_timezone(&Local).date_naive() });
+        let starts = event.starts().map(|s| if event.show_without_time { utc_date(s) } else { local(s).date() });
         let label = match starts {
             Some(date) if day != Some(date) => {
                 day = Some(date);
-                date.format("%a %d %b").to_string()
+                date.strftime("%a %d %b").to_string()
             }
             _ => String::new(),
         };
         let time = match (event.show_without_time, event.starts(), event.ends()) {
             (true, _, _) => "all day".to_owned(),
             (false, Some(start), Some(end)) => {
-                format!("{}–{}", start.with_timezone(&Local).format("%H:%M"), end.with_timezone(&Local).format("%H:%M"))
+                format!("{}–{}", local(start).strftime("%H:%M"), local(end).strftime("%H:%M"))
             }
-            (false, Some(start), None) => start.with_timezone(&Local).format("%H:%M").to_string(),
+            (false, Some(start), None) => local(start).strftime("%H:%M").to_string(),
             _ => String::new(),
         };
         let mut line = Line::from(vec![

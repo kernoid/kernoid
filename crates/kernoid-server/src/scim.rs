@@ -75,8 +75,8 @@ fn meta_json(resource_type: &str, location: String, meta: &ScimMeta) -> Value {
     json!({
         "resourceType": resource_type,
         "location": location,
-        "created": meta.created.to_rfc3339(),
-        "lastModified": meta.last_modified.to_rfc3339(),
+        "created": meta.created.to_string(),
+        "lastModified": meta.last_modified.to_string(),
         "version": meta.etag(),
     })
 }

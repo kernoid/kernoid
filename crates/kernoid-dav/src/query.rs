@@ -517,7 +517,7 @@ pub fn freebusy_object(
         ICalendarEntry {
             name: ICalendarProperty::Dtstamp,
             params: vec![],
-            values: smallvec::smallvec![time(chrono::Utc::now().timestamp())],
+            values: smallvec::smallvec![time(jiff::Timestamp::now().as_second())],
         },
         ICalendarEntry {
             name: ICalendarProperty::Dtstart,

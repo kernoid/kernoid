@@ -12,14 +12,15 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-async-graphql = { version = "7.2.1", features = ["chrono"] }
+async-graphql = "7.2.1"
 async-graphql-axum = "7.2.1"
 axum = { version = "0.8.9", features = ["ws"] }
 axum-server = { version = "0.8.0", features = ["tls-rustls-no-provider"] }
 base64 = "0.22.1"
 bytes = "1.12.1"
 futures-util = { version = "0.3.34", default-features = false }
-chrono = { version = "0.4.45", features = ["serde"] }
+jiff = { version = "1.0.1", features = ["serde"] }
+jiff-sqlx = { version = "1.0.0", features = ["postgres", "serde"] }
 instant-acme = { version = "0.8.5", default-features = false, features = ["aws-lc-rs", "hyper-rustls", "rcgen"] }
 ipnet = "2.12.2"
 kernoid-e2e = { version = "0.3.1", path = "../../apps/e2e" }
@@ -43,21 +44,20 @@ reqwest = { version = "0.13.5", default-features = false }
 rustls-pki-types = "1.15.1"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
-sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres", "macros", "chrono"] }
+sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres", "macros", "sqlx-toml"] }
 thiserror = "2.0.21"
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "signal", "net", "sync"] }
 rust-embed = { version = "=8.13.0", features = ["mime-guess"] }
 tower-http = { version = "0.6.11", features = ["request-id", "trace", "propagate-header", "timeout", "limit", "catch-panic", "util", "fs", "cors"] }
 tracing = "0.1.44"
 url = "2.5.8"
-utoipa = { version = "6.0.0", features = ["axum_extras", "chrono"] }
+utoipa = { version = "6.0.0", features = ["axum_extras", "jiff_0_2"] }
 utoipa-axum = "0.3.0"
 uuid = { version = "1.28.0", features = ["v4"] }
 x509-cert = "0.2.5"
 zeroize = "1.9.1"
 
 [dev-dependencies]
-chrono = "0.4.45"
 kernoid-jmap = { path = "../kernoid-jmap" }
 kernoid-mail = { path = "../kernoid-mail" }
 base64 = "0.22.1"

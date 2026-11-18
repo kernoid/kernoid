@@ -6,7 +6,8 @@
 
 use std::net::IpAddr;
 
-use chrono::{Duration, Utc};
+use jiff::{SignedDuration, Timestamp};
+use jiff_sqlx::ToSqlx;
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
@@ -19,7 +20,7 @@ use crate::{
 };
 
 /// How long a code is good for.
-const LIFETIME: Duration = Duration::days(1);
+const LIFETIME: SignedDuration = SignedDuration::from_hours(24);
 /// Wrong codes before a registration is dropped.
 const MAX_ATTEMPTS: i32 = 5;
 /// Registrations started from one client address within the failure window (RFC 0001, 7).
@@ -189,7 +190,7 @@ impl Identity {
             display_name,
             hash,
             code_hash(&code),
-            Utc::now() + LIFETIME,
+            (Timestamp::now() + LIFETIME).to_sqlx(),
         )
         .execute(&mut *tx)
         .await

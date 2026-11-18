@@ -41,7 +41,7 @@ pub(crate) struct AuditEntryView {
     payload: serde_json::Value,
     /// An account id, `system`, `operator` or a service.
     creator: String,
-    created_at: chrono::DateTime<chrono::Utc>,
+    created_at: jiff::Timestamp,
 }
 
 impl From<AuditEntry> for AuditEntryView {

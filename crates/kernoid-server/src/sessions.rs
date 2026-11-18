@@ -10,7 +10,7 @@ use axum::{
     http::{HeaderMap, HeaderValue, StatusCode, header, request::Parts},
     response::{IntoResponse, Response},
 };
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use kernoid_identity::{
     IdentityError,
     account::AccountInfo,
@@ -140,7 +140,7 @@ pub(crate) struct SessionCreated {
     /// in the cookie.
     #[serde(skip_serializing_if = "Option::is_none")]
     token: Option<String>,
-    expires_at: DateTime<Utc>,
+    expires_at: Timestamp,
     account: AccountView,
     /// After a password login: keep it for this address, and send it with the next login (`device_token`).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -165,8 +165,8 @@ pub(crate) struct SessionView {
     account: AccountView,
     /// The checks the session passed, e.g. `password`.
     checks: Vec<String>,
-    created_at: DateTime<Utc>,
-    expires_at: DateTime<Utc>,
+    created_at: Timestamp,
+    expires_at: Timestamp,
 }
 
 impl From<SessionInfo> for SessionView {

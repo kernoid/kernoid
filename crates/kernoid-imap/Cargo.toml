@@ -14,7 +14,7 @@ workspace = true
 [dependencies]
 base64 = "0.22.1"
 bytes = "1.12.1"
-chrono = "0.4.45"
+jiff = { version = "1.0.1", features = ["serde"] }
 hashify = "0.2.9"
 kernoid-config = { version = "0.3.1", path = "../kernoid-config" }
 kernoid-identity = { version = "0.3.1", path = "../kernoid-identity" }

@@ -268,7 +268,7 @@ impl Mail {
         let mut outcome = outcome;
         if !delivery.junk
             && !outcome.targets.is_empty()
-            && let Some(script) = self.vacation_response(account).await?.script(chrono::Utc::now())
+            && let Some(script) = self.vacation_response(account).await?.script(jiff::Timestamp::now())
         {
             let (raw, from, to) = (raw.clone(), delivery.from.to_owned(), delivery.to.to_owned());
             let names: Vec<String> = paths.keys().cloned().collect();

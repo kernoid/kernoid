@@ -500,8 +500,11 @@ async fn accounts_submit_over_tls_as_themselves(pool: PgPool) {
         junk_score: 5.0,
         timeout: Duration::from_secs(5),
     };
-    let submission =
-        Submission { identity: setup.identity.clone(), implicit_tls: false, queue_lifetime: chrono::Duration::days(5) };
+    let submission = Submission {
+        identity: setup.identity.clone(),
+        implicit_tls: false,
+        queue_lifetime: jiff::SignedDuration::from_hours(24 * 5),
+    };
     let server =
         Server::submission(settings.clone(), setup.mail.clone(), Dns::offline(), server_tls.clone(), submission);
 
@@ -566,8 +569,11 @@ async fn accounts_submit_over_tls_as_themselves(pool: PgPool) {
     );
 
     // Port 465: TLS before the greeting.
-    let submission =
-        Submission { identity: setup.identity.clone(), implicit_tls: true, queue_lifetime: chrono::Duration::days(5) };
+    let submission = Submission {
+        identity: setup.identity.clone(),
+        implicit_tls: true,
+        queue_lifetime: jiff::SignedDuration::from_hours(24 * 5),
+    };
     let implicit = Server::submission(settings, setup.mail.clone(), Dns::offline(), server_tls, submission);
     let (client_end, served) = tokio::io::duplex(64 * 1024);
     let remote: IpAddr = REMOTE.parse().unwrap();

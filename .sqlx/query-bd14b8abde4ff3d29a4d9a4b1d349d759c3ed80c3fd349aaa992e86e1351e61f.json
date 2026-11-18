@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, calendar_id, resource_name, uid, component, organized, size, schedule_tag, modseq\n             FROM calendar_events\n             WHERE account_id = $1 AND ($2::uuid IS NULL OR calendar_id = $2) AND span && $3\n             ORDER BY lower(span), id",
+  "query": "INSERT INTO calendar_events\n                 (id, account_id, calendar_id, resource_name, uid, component, span, organized, data, size, modseq)\n             VALUES ($1, $2, $3, $4, $5, $6,\n                 CASE WHEN $7::timestamptz IS NULL THEN NULL ELSE tstzrange($7, $12, '[]') END,\n                 $8, $9, $10, $11)\n             ON CONFLICT (id) DO UPDATE SET span = excluded.span, organized = excluded.organized,\n                 data = excluded.data, size = excluded.size, modseq = excluded.modseq\n             RETURNING id, calendar_id, resource_name, uid, component, organized, size, schedule_tag, modseq",
   "describe": {
     "columns": [
       {
@@ -107,7 +107,16 @@
       "Left": [
         "Uuid",
         "Uuid",
-        "TstzRange"
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Timestamptz",
+        "Bool",
+        "Bytea",
+        "Int8",
+        "Int8",
+        "Timestamptz"
       ]
     },
     "nullable": [
@@ -122,5 +131,5 @@
       false
     ]
   },
-  "hash": "9f6eb1b4fc936dd9aaaa9e73706354cb67cdecc7101a21983c2b5692c8d68f15"
+  "hash": "bd14b8abde4ff3d29a4d9a4b1d349d759c3ed80c3fd349aaa992e86e1351e61f"
 }

@@ -80,7 +80,7 @@ impl Mail {
             let new = NewEmail {
                 mailbox_ids: row.mailboxes,
                 keywords: row.keywords.iter().filter_map(|k| Keyword::parse(k).ok()).collect(),
-                received_at: Some(row.received_at),
+                received_at: Some(row.received_at.to_jiff()),
             };
             match self.import(row.account_id, arrival.raw, new, arrival.encrypted_summary, Some(row.id)).await {
                 Ok(_) => done += 1,

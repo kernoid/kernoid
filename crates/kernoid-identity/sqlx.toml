@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Date and time columns come out of sqlx's checked macros as Jiff's types (through jiff-sqlx), not chrono's
+# (unmaintained, RUSTSEC-2026-0543). Every crate with queries has this same file: sqlx reads it per crate.
+[macros.type-overrides]
+'TIMESTAMPTZ' = "jiff_sqlx::Timestamp"
+'TIMESTAMP' = "jiff_sqlx::DateTime"
+'DATE' = "jiff_sqlx::Date"
+'TIME' = "jiff_sqlx::Time"

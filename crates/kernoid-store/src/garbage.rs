@@ -3,14 +3,15 @@
 //! `blob_garbage` names an object before it is written and is removed in the transaction that commits whatever
 //! needs the object; a row that removes something writes one due at once. The worker deletes what is due.
 
-use chrono::{DateTime, Duration, Utc};
+use jiff::{SignedDuration, Timestamp};
+use jiff_sqlx::ToSqlx;
 use sqlx::{PgConnection, PgPool};
 use uuid::Uuid;
 
 use crate::{BlobError, BlobStore};
 
 /// How long an object written for a transaction may wait for it before it counts as left behind.
-pub const PENDING: Duration = Duration::hours(1);
+pub const PENDING: SignedDuration = SignedDuration::from_hours(1);
 
 #[derive(Debug, thiserror::Error)]
 pub enum GarbageError {
@@ -25,14 +26,14 @@ pub async fn mark(
     connection: &mut PgConnection,
     tenant: Uuid,
     key: &str,
-    due_at: DateTime<Utc>,
+    due_at: Timestamp,
 ) -> Result<(), sqlx::Error> {
     sqlx::query!(
         "INSERT INTO blob_garbage (tenant_id, key, due_at) VALUES ($1, $2, $3)
          ON CONFLICT (tenant_id, key) DO UPDATE SET due_at = least(blob_garbage.due_at, EXCLUDED.due_at)",
         tenant,
         key,
-        due_at,
+        due_at.to_sqlx(),
     )
     .execute(connection)
     .await?;
@@ -56,7 +57,7 @@ pub async fn mark_now(connection: &mut PgConnection, tenant: Uuid, key: &str) ->
 /// Marks `key` before the object is written: garbage in [`PENDING`] unless the transaction that needs it commits.
 pub async fn pending(pool: &PgPool, tenant: Uuid, key: &str) -> Result<(), sqlx::Error> {
     let mut connection = pool.acquire().await?;
-    mark(&mut connection, tenant, key, Utc::now() + PENDING).await
+    mark(&mut connection, tenant, key, Timestamp::now() + PENDING).await
 }
 
 /// Takes `key` back from the garbage, in the transaction that now needs the object. `false` if it is too late: the
@@ -67,7 +68,7 @@ pub async fn keep(connection: &mut PgConnection, tenant: Uuid, key: &str) -> Res
         "DELETE FROM blob_garbage WHERE tenant_id = $1 AND key = $2 AND due_at > clock_timestamp() + make_interval(secs => $3)",
         tenant,
         key,
-        MARGIN.num_seconds() as f64,
+        MARGIN.as_secs() as f64,
     )
     .execute(connection)
     .await?;
@@ -75,7 +76,7 @@ pub async fn keep(connection: &mut PgConnection, tenant: Uuid, key: &str) -> Res
 }
 
 /// Time a transaction that took an object back has left to commit before the worker could collect it.
-pub const MARGIN: Duration = Duration::minutes(10);
+pub const MARGIN: SignedDuration = SignedDuration::from_mins(10);
 
 /// Deletes up to `limit` due objects and their rows; returns how many. A row goes only after its object did, so an
 /// object storage that fails leaves the row for the next run. Meant for one process at a time

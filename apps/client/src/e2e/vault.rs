@@ -260,10 +260,11 @@ impl E2e {
             .ok_or_else(|| Error::Protocol("the file name is not UTF-8".into()))?
             .to_owned();
         let data = tokio::fs::read(path).await?;
-        let modified =
-            tokio::fs::metadata(path).await?.modified().ok().map(|time| {
-                chrono::DateTime::<chrono::Utc>::from(time).to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
-            });
+        let modified = tokio::fs::metadata(path)
+            .await?
+            .modified()
+            .ok()
+            .map(|time| jiff::Timestamp::try_from(time).map(|time| format!("{time:.0}")).ok());
         let public = key.public();
         let sealed = tokio::task::spawn_blocking(move || message::encrypt(&data, &[&public], Some(&signer), false))
             .await

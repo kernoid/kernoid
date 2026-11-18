@@ -4,7 +4,6 @@
 //! user's own store and in those shared with them, with the rights of RFC 0002, 12.2.
 
 use bytes::Bytes;
-use chrono::DateTime;
 use kernoid_mail::{Access, MailboxUpdate, NewEmail, NewMailbox, Rights, Role};
 use uuid::Uuid;
 
@@ -347,7 +346,7 @@ impl Session {
                     .filter_map(flags::keyword)
                     .filter(|keyword| rights.contains(flags::right(keyword.as_str())))
                     .collect(),
-                received_at: message.received_at.and_then(|at| DateTime::from_timestamp(at, 0)),
+                received_at: message.received_at.and_then(|at| jiff::Timestamp::from_second(at).ok()),
             };
             let raw = Bytes::from(message.message);
             if let Err(error) = self.inner.mail.scan_message(&[owner], &[], &raw).await {

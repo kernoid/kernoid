@@ -7,6 +7,16 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 ## [Unreleased]
 
+### Changed
+
+- Dates and times with [Jiff](https://github.com/BurntSushi/jiff) 1.0 in place of chrono and chrono-tz, which are no
+  longer maintained (RUSTSEC-2026-0543, RUSTSEC-2026-0555) – in the server, the Rust SDK, kernoid-sync and the terminal
+  app. Times in the APIs stay RFC 3339 in UTC; where one was written with `+00:00` (GraphQL's `DateTime`, SCIM's
+  `meta.lastModified`), it is now written with `Z`.
+- **Rust SDK, breaking:** `calendars::Event::starts` and `ends`, and the window of `calendars::instances`, are
+  `jiff::Timestamp`; `calendars::EventForm` (`start`, `end`, `was`) and `mail::Vacation` (`from`, `until`) hold
+  `jiff::civil::DateTime` – before, chrono's types. Apps on the SDK change with it.
+
 ## [0.3.1] – 2026-11-14
 
 A security fix for kernoid-sync, and Stalwart's Sieve interpreter and libraries taken over from its v1.1.0 with the

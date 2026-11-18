@@ -3,7 +3,6 @@
 
 use std::{collections::HashMap, sync::Arc, sync::Mutex};
 
-use chrono::{TimeZone, Utc};
 use kernoid_events::EventStore;
 use kernoid_groupware::{CalendarUpdate, Expect, Groupware, GroupwareError, NewAddressBook, NewCalendar, ObjectType};
 use kernoid_identity::{Address, CHALLENGE_LABEL, DomainName, Identity, TxtLookup};
@@ -135,10 +134,10 @@ async fn events_are_stored_sealed_found_by_time_and_synced(pool: PgPool) {
     assert_eq!(data[0].1, weekly);
 
     // Time ranges: an endless recurrence meets every later window; a single event only its own.
-    let window = |from: (u32, u32), to: (u32, u32)| {
+    let window = |from: (i8, i8), to: (i8, i8)| {
         (
-            Some(Utc.with_ymd_and_hms(2026, from.0, from.1, 0, 0, 0).unwrap()),
-            Some(Utc.with_ymd_and_hms(2026, to.0, to.1, 0, 0, 0).unwrap()),
+            Some(jiff::tz::Offset::UTC.to_timestamp(jiff::civil::datetime(2026, from.0, from.1, 0, 0, 0, 0)).unwrap()),
+            Some(jiff::tz::Offset::UTC.to_timestamp(jiff::civil::datetime(2026, to.0, to.1, 0, 0, 0, 0)).unwrap()),
         )
     };
     let (from, to) = window((12, 1), (12, 31));

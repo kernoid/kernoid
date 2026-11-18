@@ -6,15 +6,16 @@
 //! object at the prefix itself.
 
 use bytes::Bytes;
-use chrono::{Duration, Utc};
 use futures_util::Stream;
+use jiff::{SignedDuration, Timestamp};
+use jiff_sqlx::ToSqlx;
 use kernoid_store::{BlobError, parts};
 use uuid::Uuid;
 
 use crate::{Mail, MailError, Result};
 
 /// How long an upload is kept.
-pub const UPLOAD_LIFETIME: Duration = Duration::days(1);
+pub const UPLOAD_LIFETIME: SignedDuration = SignedDuration::from_hours(24);
 
 fn key(account: Uuid, id: Uuid) -> String {
     format!("upload/{account}/{id}")
@@ -62,7 +63,7 @@ impl Mail {
             .await?
             .ok_or(MailError::NotFound("the account"))?;
         let id = Uuid::now_v7();
-        let expires = Utc::now() + UPLOAD_LIFETIME;
+        let expires = Timestamp::now() + UPLOAD_LIFETIME;
         let stored = parts::put(&self.blobs, &self.pool, tenant, &key(account, id), content, max_size, expires).await?;
         sqlx::query!(
             "INSERT INTO jmap_uploads (id, account_id, tenant_id, content_type, size, expires_at, parts, sha256)
@@ -72,7 +73,7 @@ impl Mail {
             tenant,
             content_type,
             stored.size as i64,
-            expires,
+            expires.to_sqlx(),
             stored.parts as i32,
             &stored.sha256[..],
         )

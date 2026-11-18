@@ -3,7 +3,7 @@
 //! `CalendarEventNotification`; the iTIP message is kept sealed. They go after 30 days.
 
 use calcard::icalendar::ICalendar;
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use uuid::Uuid;
 
 use crate::{
@@ -21,7 +21,7 @@ pub struct NotificationInfo {
     /// The address of who changed it.
     pub changed_by: String,
     pub comment: Option<String>,
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
 }
 
 fn path(tenant: Uuid, account: Uuid, id: Uuid) -> String {
@@ -84,7 +84,7 @@ impl Groupware {
                 kind: row.kind,
                 changed_by: row.changed_by.unwrap_or_default().trim_start_matches("mailto:").to_owned(),
                 comment: row.comment,
-                created_at: row.created_at,
+                created_at: row.created_at.to_jiff(),
             })
             .collect())
     }

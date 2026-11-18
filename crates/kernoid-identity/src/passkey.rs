@@ -13,7 +13,7 @@
 
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use kernoid_events::{InlineFuture, aggregate::CommandError, inline};
 use serde_json::Value;
 use uuid::Uuid;
@@ -53,8 +53,8 @@ pub struct Challenge {
 pub struct PasskeyInfo {
     pub id: Uuid,
     pub name: String,
-    pub created_at: DateTime<Utc>,
-    pub last_used_at: Option<DateTime<Utc>>,
+    pub created_at: Timestamp,
+    pub last_used_at: Option<Timestamp>,
 }
 
 fn webauthn(rp: &RelyingParty) -> Result<Webauthn> {
@@ -271,8 +271,8 @@ impl Identity {
             .map(|row| PasskeyInfo {
                 id: row.id,
                 name: row.name,
-                created_at: row.created_at,
-                last_used_at: row.last_used_at,
+                created_at: row.created_at.to_jiff(),
+                last_used_at: row.last_used_at.map(|t| t.to_jiff()),
             })
             .collect())
     }

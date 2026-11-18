@@ -15,7 +15,7 @@ use axum::{
     http::{HeaderMap, HeaderValue, Method, StatusCode, header},
     response::{IntoResponse, Response},
 };
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use kernoid_identity::{IdentityError, InstanceInfo};
 
 use crate::{AppState, Problem, sessions};
@@ -35,8 +35,8 @@ fn name(state: &AppState) -> &'static str {
 }
 
 /// `Set-Cookie` for a new session.
-pub(crate) fn set(state: &AppState, token: &str, expires_at: DateTime<Utc>) -> HeaderValue {
-    let seconds = (expires_at - Utc::now()).num_seconds().max(0);
+pub(crate) fn set(state: &AppState, token: &str, expires_at: Timestamp) -> HeaderValue {
+    let seconds = (expires_at - Timestamp::now()).as_secs().max(0);
     let secure = if secure(state) { "; Secure" } else { "" };
     let cookie = format!("{}={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={seconds}{secure}", name(state));
     HeaderValue::from_str(&cookie).expect("a session token is a header value")

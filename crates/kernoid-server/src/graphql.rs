@@ -8,7 +8,7 @@ use std::time::Duration;
 use async_graphql::{Context, EmptySubscription, ErrorExtensions, Object, Schema, SimpleObject};
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
 use axum::{Extension, extract::State, http::HeaderMap, response::IntoResponse};
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use kernoid_identity::{
     Identity, IdentityError, InstanceInfo,
     account::AccountInfo,
@@ -107,6 +107,33 @@ pub struct Query;
 #[derive(Debug, Default)]
 pub struct Mutation;
 
+/// A point in time as GraphQL's `DateTime`: RFC 3339, in UTC. async-graphql's own scalar is for an older Jiff.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DateTime(pub Timestamp);
+
+/// A point in time, in UTC
+///
+/// The input/output is a string in RFC 3339 format.
+#[async_graphql::Scalar(name = "DateTime")]
+impl async_graphql::ScalarType for DateTime {
+    fn parse(value: async_graphql::Value) -> async_graphql::InputValueResult<Self> {
+        match &value {
+            async_graphql::Value::String(text) => Ok(Self(text.parse()?)),
+            _ => Err(async_graphql::InputValueError::expected_type(value)),
+        }
+    }
+
+    fn to_value(&self) -> async_graphql::Value {
+        async_graphql::Value::String(self.0.to_string())
+    }
+}
+
+impl From<Timestamp> for DateTime {
+    fn from(time: Timestamp) -> Self {
+        Self(time)
+    }
+}
+
 #[derive(Debug, SimpleObject)]
 pub struct Version {
     name: &'static str,
@@ -145,8 +172,8 @@ pub struct Session {
     account: Account,
     /// The checks the session passed, e.g. `password`.
     checks: Vec<String>,
-    created_at: DateTime<Utc>,
-    expires_at: DateTime<Utc>,
+    created_at: DateTime,
+    expires_at: DateTime,
 }
 
 impl From<SessionInfo> for Session {
@@ -155,8 +182,8 @@ impl From<SessionInfo> for Session {
             id: session.id.to_string(),
             account: session.account.into(),
             checks: session.checks,
-            created_at: session.created_at,
-            expires_at: session.expires_at,
+            created_at: session.created_at.into(),
+            expires_at: session.expires_at.into(),
         }
     }
 }
@@ -171,7 +198,7 @@ pub struct AuthRequest {
     prompt: Vec<String>,
     /// The session may be at most this many seconds old.
     max_age: Option<i32>,
-    expires_at: DateTime<Utc>,
+    expires_at: DateTime,
 }
 
 /// An OpenID Connect error as a GraphQL error with a code.
@@ -224,15 +251,15 @@ pub struct SecondFactors {
     /// The tenant requires a second factor.
     required: bool,
     /// The account has none yet and may log in without one until then.
-    setup_due: Option<DateTime<Utc>>,
+    setup_due: Option<DateTime>,
 }
 
 #[derive(Debug, SimpleObject)]
 pub struct Passkey {
     id: String,
     name: String,
-    created_at: DateTime<Utc>,
-    last_used_at: Option<DateTime<Utc>>,
+    created_at: DateTime,
+    last_used_at: Option<DateTime>,
 }
 
 fn relying_party(context: &Context<'_>) -> async_graphql::Result<kernoid_identity::passkey::RelyingParty> {
@@ -244,7 +271,7 @@ impl From<kernoid_identity::session::NewSession> for CreatedSession {
         Self {
             id: session.id.to_string(),
             token: session.token,
-            expires_at: session.expires_at,
+            expires_at: session.expires_at.into(),
             account: session.account.into(),
             device_token: session.device_token,
         }
@@ -269,7 +296,7 @@ pub struct CreatedSession {
     id: String,
     /// The session token: shown this once, sent as `Authorization: Bearer <token>`.
     token: String,
-    expires_at: DateTime<Utc>,
+    expires_at: DateTime,
     account: Account,
     /// After a password login: keep it for this address and send it with the next login (`deviceToken`).
     device_token: Option<String>,
@@ -301,7 +328,7 @@ impl Query {
             scopes: info.scopes,
             prompt: info.prompt,
             max_age: info.max_age,
-            expires_at: info.expires_at,
+            expires_at: info.expires_at.into(),
         })
     }
 
@@ -314,7 +341,7 @@ impl Query {
             passkeys: factors.passkeys,
             recovery_codes_left: factors.recovery_codes_left,
             required: factors.required,
-            setup_due: factors.setup_due,
+            setup_due: factors.setup_due.map(Into::into),
         })
     }
 
@@ -327,8 +354,8 @@ impl Query {
             .map(|p| Passkey {
                 id: p.id.to_string(),
                 name: p.name,
-                created_at: p.created_at,
-                last_used_at: p.last_used_at,
+                created_at: p.created_at.into(),
+                last_used_at: p.last_used_at.map(Into::into),
             })
             .collect())
     }

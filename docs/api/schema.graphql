@@ -186,9 +186,9 @@ type CreatedSession {
 }
 
 """
-Implement the DateTime<Utc> scalar
+A point in time, in UTC
 
-The input/output is a string in RFC3339 format.
+The input/output is a string in RFC 3339 format.
 """
 scalar DateTime
 
@@ -1511,10 +1511,6 @@ directive @include(if: Boolean!) on FIELD | FRAGMENT_SPREAD | INLINE_FRAGMENT
 Directs the executor to skip this field or fragment when the `if` argument is true.
 """
 directive @skip(if: Boolean!) on FIELD | FRAGMENT_SPREAD | INLINE_FRAGMENT
-"""
-Provides a scalar specification URL for specifying the behavior of custom scalar types.
-"""
-directive @specifiedBy(url: String!) on SCALAR
 schema {
 	query: QueryRoot
 	mutation: MutationRoot

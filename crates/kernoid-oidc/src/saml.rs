@@ -24,7 +24,7 @@ use std::collections::BTreeMap;
 
 use base64::{Engine, engine::general_purpose::STANDARD};
 use bergshamra::{DsigContext, EncContext, KeysManager, VerifyResult, dsig::verify::verify_all_document};
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use uppsala::{Document, NodeId};
 
 const PROTOCOL: &str = "urn:oasis:names:tc:SAML:2.0:protocol";
@@ -93,18 +93,18 @@ impl SpKey {
     /// A new RSA key (2048 bits) with a certificate for `entity_id`, valid for ten years – the certificate only
     /// carries the key; providers trust it because it is in kernoid's metadata, not because of who signed it.
     pub fn generate(entity_id: &str) -> Result<Self, SamlError> {
-        use chrono::Datelike;
         let failed = |e: rcgen::Error| SamlError(format!("cannot make kernoid's SAML key: {e}"));
         let key =
             rcgen::KeyPair::generate_rsa_for(&rcgen::PKCS_RSA_SHA256, rcgen::RsaKeySize::_2048).map_err(failed)?;
         let mut params = rcgen::CertificateParams::new(Vec::<String>::new()).map_err(failed)?;
         let name: String = entity_id.chars().take(64).collect();
         params.distinguished_name.push(rcgen::DnType::CommonName, name);
-        let today = Utc::now();
+        let today = jiff::tz::Offset::UTC.to_datetime(Timestamp::now()).date();
+        let year = i32::from(today.year());
         let month = u8::try_from(today.month()).unwrap_or(1);
         let day = u8::try_from(today.day().min(28)).unwrap_or(1);
-        params.not_before = rcgen::date_time_ymd(today.year(), month, day);
-        params.not_after = rcgen::date_time_ymd(today.year() + 10, month, day);
+        params.not_before = rcgen::date_time_ymd(year, month, day);
+        params.not_after = rcgen::date_time_ymd(year + 10, month, day);
         let certificate = params.self_signed(&key).map_err(failed)?;
         Ok(Self { private: zeroize::Zeroizing::new(key.serialize_der()), certificate: certificate.der().to_vec() })
     }
@@ -179,7 +179,7 @@ pub fn authn_request_url(
     sp_entity_id: &str,
     acs_url: &str,
     relay_state: &str,
-    now: DateTime<Utc>,
+    now: Timestamp,
     key: Option<&SpKey>,
 ) -> Result<String, SamlError> {
     let request = format!(
@@ -192,7 +192,7 @@ pub fn authn_request_url(
         protocol = PROTOCOL,
         assertion = ASSERTION,
         id = escape(request_id),
-        instant = now.format("%Y-%m-%dT%H:%M:%SZ"),
+        instant = now.strftime("%Y-%m-%dT%H:%M:%SZ"),
         destination = escape(sso_url),
         acs = escape(acs_url),
         issuer = escape(sp_entity_id),
@@ -210,7 +210,7 @@ pub struct LogoutRequestOut<'a> {
     pub name_id_format: Option<&'a str>,
     pub session_index: Option<&'a str>,
     pub relay_state: &'a str,
-    pub now: DateTime<Utc>,
+    pub now: Timestamp,
 }
 
 pub fn logout_request_url(request: &LogoutRequestOut<'_>, key: &SpKey) -> Result<String, SamlError> {
@@ -229,7 +229,7 @@ pub fn logout_request_url(request: &LogoutRequestOut<'_>, key: &SpKey) -> Result
         protocol = PROTOCOL,
         assertion = ASSERTION,
         id = escape(request.request_id),
-        instant = request.now.format("%Y-%m-%dT%H:%M:%SZ"),
+        instant = request.now.strftime("%Y-%m-%dT%H:%M:%SZ"),
         destination = escape(request.slo_url),
         reason = LOGOUT_USER,
         issuer = escape(request.sp_entity_id),
@@ -248,7 +248,7 @@ pub fn logout_response_url(
     in_response_to: &str,
     sp_entity_id: &str,
     relay_state: Option<&str>,
-    now: DateTime<Utc>,
+    now: Timestamp,
     key: &SpKey,
 ) -> Result<String, SamlError> {
     let xml = format!(
@@ -261,7 +261,7 @@ pub fn logout_response_url(
         protocol = PROTOCOL,
         assertion = ASSERTION,
         id = escape(response_id),
-        instant = now.format("%Y-%m-%dT%H:%M:%SZ"),
+        instant = now.strftime("%Y-%m-%dT%H:%M:%SZ"),
         destination = escape(slo_url),
         request = escape(in_response_to),
         issuer = escape(sp_entity_id),
@@ -414,7 +414,7 @@ fn parse_message(xml: &str) -> Result<Document<'_>, SamlError> {
 }
 
 /// Reads a LogoutRequest (after its signature was verified); checks destination and validity.
-pub fn read_logout_request(xml: &str, slo_url: &str, now: DateTime<Utc>) -> Result<LogoutRequestIn, SamlError> {
+pub fn read_logout_request(xml: &str, slo_url: &str, now: Timestamp) -> Result<LogoutRequestIn, SamlError> {
     let doc = parse_message(xml)?;
     let root = doc.document_element().ok_or_else(|| SamlError("the message is empty".into()))?;
     if !element_named(&doc, root, PROTOCOL, "LogoutRequest") {
@@ -423,7 +423,8 @@ pub fn read_logout_request(xml: &str, slo_url: &str, now: DateTime<Utc>) -> Resu
     if doc.get_attribute(root, "Destination").is_some_and(|destination| destination != slo_url) {
         return fail("the request is meant for another service");
     }
-    if time(doc.get_attribute(root, "NotOnOrAfter"))?.is_some_and(|end| end + chrono::Duration::seconds(LEEWAY) <= now)
+    if time(doc.get_attribute(root, "NotOnOrAfter"))?
+        .is_some_and(|end| end + jiff::SignedDuration::from_secs(LEEWAY) <= now)
     {
         return fail("the request has expired");
     }
@@ -499,7 +500,7 @@ pub struct Expected<'a> {
     pub acs_url: &'a str,
     /// The ID of kernoid's AuthnRequest.
     pub request_id: &'a str,
-    pub now: DateTime<Utc>,
+    pub now: Timestamp,
     /// kernoid's SAML keys, to decrypt an encrypted Assertion with the one it was encrypted for.
     pub decryption_keys: &'a [SpKey],
 }
@@ -543,9 +544,9 @@ fn text(doc: &Document<'_>, id: NodeId) -> String {
     doc.text_content_deep(id).trim().to_owned()
 }
 
-fn time(value: Option<&str>) -> Result<Option<DateTime<Utc>>, SamlError> {
+fn time(value: Option<&str>) -> Result<Option<Timestamp>, SamlError> {
     value
-        .map(|value| DateTime::parse_from_rfc3339(value).map(|time| time.with_timezone(&Utc)))
+        .map(|value| value.parse::<Timestamp>())
         .transpose()
         .map_err(|_| SamlError("a time in the response is not valid".into()))
 }
@@ -653,7 +654,7 @@ fn read_assertion(doc: &Document<'_>, assertion: NodeId, expected: &Expected<'_>
     if text(doc, issuer) != expected.idp_entity_id {
         return fail("the assertion comes from another provider");
     }
-    let leeway = chrono::Duration::seconds(LEEWAY);
+    let leeway = jiff::SignedDuration::from_secs(LEEWAY);
     let conditions = only_child(doc, assertion, ASSERTION, "Conditions")?;
     if time(doc.get_attribute(conditions, "NotBefore"))?.is_some_and(|not_before| not_before - leeway > expected.now) {
         return fail("the assertion is not valid yet");

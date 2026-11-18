@@ -20,7 +20,8 @@ readme = "README.md"
 exclude = ["scripts/", "deny.toml", "tests/"]
 
 [dependencies]
-chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
+# Dates and times (Unlicense OR MIT) – in place of chrono (RUSTSEC-2026-0543).
+jiff = "1.0.1"
 kernoid-client = { version = "0.3.1", path = "../client" }
 # SQLite built in (its code is in the public domain), so that every platform has the same.
 rusqlite = { version = "0.41.1", features = ["bundled"] }

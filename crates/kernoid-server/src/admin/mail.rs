@@ -9,8 +9,8 @@ use axum::{
     extract::{Path, Query, State},
     response::{IntoResponse, Response},
 };
-use chrono::{DateTime, Utc};
 use futures_util::StreamExt;
+use jiff::Timestamp;
 use kernoid_identity::mail_access::MailGrant;
 use kernoid_mail::{Access, MailboxInfo, QueuedRecipient, SharedStore, SieveScript};
 use serde::{Deserialize, Serialize};
@@ -193,7 +193,7 @@ pub(crate) struct QueuedView {
     address: String,
     status: String,
     attempts: i32,
-    next_attempt_at: DateTime<Utc>,
+    next_attempt_at: Timestamp,
     last_error: Option<String>,
 }
 

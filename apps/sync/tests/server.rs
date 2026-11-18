@@ -165,7 +165,7 @@ async fn large_files_go_in_pieces_and_transfers_go_on() {
     {
         let state = State::open(&work.join("a.db")).unwrap();
         state.set_meta("store", &store).unwrap();
-        let started = chrono::Utc::now().timestamp();
+        let started = jiff::Timestamp::now().as_second();
         let pieces = Pieces { size: meta.len(), modified, blobs: vec![first.blob_id], started };
         state.set_upload("Pieces/large.bin", Some(&pieces)).unwrap();
     }

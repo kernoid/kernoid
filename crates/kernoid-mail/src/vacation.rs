@@ -3,7 +3,8 @@
 //! and a body. While it is on, delivery answers what arrives as a Sieve `vacation` (RFC 5230) does – once per sender
 //! in seven days, not to lists, bounces or automatic mail – after the account's own script.
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
+use jiff_sqlx::ToSqlx;
 use uuid::Uuid;
 
 use crate::{Mail, MailError, Result};
@@ -14,8 +15,8 @@ const MAX_TEXT: usize = 16 * 1024;
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct VacationResponse {
     pub enabled: bool,
-    pub from_date: Option<DateTime<Utc>>,
-    pub to_date: Option<DateTime<Utc>>,
+    pub from_date: Option<Timestamp>,
+    pub to_date: Option<Timestamp>,
     /// Without one, the reply's subject is "Auto: " and the subject of what it answers.
     pub subject: Option<String>,
     pub text_body: Option<String>,
@@ -24,12 +25,12 @@ pub struct VacationResponse {
 
 impl VacationResponse {
     /// Whether it answers at `now`.
-    pub fn answers_at(&self, now: DateTime<Utc>) -> bool {
+    pub fn answers_at(&self, now: Timestamp) -> bool {
         self.enabled && self.from_date.is_none_or(|from| from <= now) && self.to_date.is_none_or(|to| now < to)
     }
 
     /// The Sieve script it runs as at `now`, if it answers then.
-    pub(crate) fn script(&self, now: DateTime<Utc>) -> Option<String> {
+    pub(crate) fn script(&self, now: Timestamp) -> Option<String> {
         if !self.answers_at(now) {
             return None;
         }
@@ -92,8 +93,8 @@ impl Mail {
         .await?;
         Ok(row.map_or_else(VacationResponse::default, |row| VacationResponse {
             enabled: row.is_enabled,
-            from_date: row.from_date,
-            to_date: row.to_date,
+            from_date: row.from_date.map(|t| t.to_jiff()),
+            to_date: row.to_date.map(|t| t.to_jiff()),
             subject: row.subject,
             text_body: row.text_body,
             html_body: row.html_body,
@@ -119,8 +120,8 @@ impl Mail {
                  text_body = $6, html_body = $7, updated_at = now()",
             account,
             vacation.enabled,
-            vacation.from_date,
-            vacation.to_date,
+            vacation.from_date.map(|t| t.to_sqlx()),
+            vacation.to_date.map(|t| t.to_sqlx()),
             vacation.subject,
             vacation.text_body,
             vacation.html_body,
@@ -133,13 +134,11 @@ impl Mail {
 
 #[cfg(test)]
 mod tests {
-    use chrono::TimeZone;
-
     use super::*;
 
     #[test]
     fn it_answers_within_its_dates_as_a_sieve_vacation() {
-        let at = |day| Utc.with_ymd_and_hms(2026, 11, day, 12, 0, 0).unwrap();
+        let at = |day| jiff::tz::Offset::UTC.to_timestamp(jiff::civil::datetime(2026, 11, day, 12, 0, 0, 0)).unwrap();
         let mut vacation = VacationResponse {
             enabled: true,
             from_date: Some(at(2)),

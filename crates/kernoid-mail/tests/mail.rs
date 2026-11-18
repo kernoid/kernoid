@@ -5,7 +5,7 @@
 use std::{collections::HashMap, sync::Arc, sync::Mutex};
 
 use bytes::Bytes;
-use chrono::{Duration, Timelike, Utc};
+use jiff::{SignedDuration, Timestamp};
 use kernoid_events::EventStore;
 use kernoid_identity::{Address, CHALLENGE_LABEL, DomainName, Identity, TxtLookup};
 use kernoid_mail::{
@@ -365,7 +365,7 @@ async fn changes_are_reported_from_a_state_on(pool: PgPool) {
 
     // Unknown future states and pruned history cannot be brought up to date.
     assert!(matches!(mail.changes(alice, ObjectType::Email, 1000, None).await, Err(MailError::CannotCalculateChanges)));
-    assert!(mail.prune_changes(Utc::now() + Duration::seconds(1), 1000).await.unwrap() > 0);
+    assert!(mail.prune_changes(Timestamp::now() + SignedDuration::from_secs(1), 1000).await.unwrap() > 0);
     assert!(matches!(
         mail.changes(alice, ObjectType::Email, start, None).await,
         Err(MailError::CannotCalculateChanges)
@@ -387,7 +387,9 @@ async fn garbage_waits_for_its_time_and_can_be_taken_back(pool: PgPool) {
     assert!(!garbage::keep(&mut connection, tenant, "mail/x/kept").await.unwrap(), "taken back once");
     // Not due yet.
     assert_eq!(garbage::collect(&pool, &setup.blobs, 10).await.unwrap(), 0);
-    garbage::mark(&mut connection, tenant, "mail/x/left", Utc::now() - Duration::seconds(1)).await.unwrap();
+    garbage::mark(&mut connection, tenant, "mail/x/left", Timestamp::now() - SignedDuration::from_secs(1))
+        .await
+        .unwrap();
     assert_eq!(garbage::collect(&pool, &setup.blobs, 10).await.unwrap(), 1);
     assert!(setup.blobs.get(tenant, "mail/x/kept").await.is_ok());
     assert!(matches!(setup.blobs.get(tenant, "mail/x/left").await, Err(BlobError::NotFound)));
@@ -522,7 +524,7 @@ async fn text_is_found_retention_empties_trash_and_mbox_round_trips(pool: PgPool
     assert_eq!(done.imported, 1);
     let imported = mail.mailbox_entries(alice, archive).await.unwrap();
     assert_eq!(imported[0].keywords, ["$seen"]);
-    assert_eq!(imported[0].received_at, entries[0].received_at.with_nanosecond(0).unwrap());
+    assert_eq!(imported[0].received_at, Timestamp::from_second(entries[0].received_at.as_second()).unwrap());
     let raw = mail.raw_email(alice, imported[0].email).await.unwrap();
     assert_eq!(raw, mail.raw_email(alice, lunch.id).await.unwrap(), "the message is as it was");
 }
@@ -569,11 +571,11 @@ async fn the_vacation_response_answers_while_it_is_on(pool: PgPool) {
     // On, with the account's own script beside it: one reply per sender – not to junk, nor to automatic mail.
     mail.put_sieve_script(alice, "files", r#"require "fileinto"; keep;"#, true).await.unwrap();
     // Whole seconds: PostgreSQL keeps microseconds, and Linux's clock has nanoseconds.
-    let now = chrono::Utc::now().with_nanosecond(0).unwrap();
+    let now = Timestamp::from_second(Timestamp::now().as_second()).unwrap();
     let vacation = kernoid_mail::VacationResponse {
         enabled: true,
-        from_date: Some(now - chrono::Duration::hours(1)),
-        to_date: Some(now + chrono::Duration::days(3)),
+        from_date: Some(now - jiff::SignedDuration::from_hours(1)),
+        to_date: Some(now + jiff::SignedDuration::from_hours(24 * 3)),
         subject: Some("Away".into()),
         text_body: Some("Back on Monday.".into()),
         html_body: None,
@@ -587,11 +589,15 @@ async fn the_vacation_response_answers_while_it_is_on(pool: PgPool) {
     assert_eq!(replies().await, ["carol@other.example"]);
 
     // Its dates hold, and they must make sense.
-    let later = kernoid_mail::VacationResponse { from_date: Some(now + chrono::Duration::days(1)), ..vacation.clone() };
+    let later = kernoid_mail::VacationResponse {
+        from_date: Some(now + jiff::SignedDuration::from_hours(24)),
+        ..vacation.clone()
+    };
     mail.set_vacation_response(alice, &later).await.unwrap();
     deliver("dave@other.example", "a6", "", false).await.unwrap();
     assert_eq!(replies().await, ["carol@other.example"]);
-    let backwards = kernoid_mail::VacationResponse { to_date: Some(now - chrono::Duration::days(1)), ..vacation };
+    let backwards =
+        kernoid_mail::VacationResponse { to_date: Some(now - jiff::SignedDuration::from_hours(24)), ..vacation };
     assert!(matches!(mail.set_vacation_response(alice, &backwards).await, Err(MailError::Invalid(_))));
 }
 

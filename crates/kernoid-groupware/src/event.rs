@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Events and tasks (RFC 0004, 4): one iCalendar object per resource, sealed, with its index.
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
+use jiff_sqlx::ToSqlx;
 use kernoid_mail::StoreChange;
-use sqlx::postgres::types::PgRange;
 use uuid::Uuid;
 
 use crate::{
@@ -66,14 +66,6 @@ impl Row {
     }
 }
 
-fn range(span: Option<(DateTime<Utc>, Option<DateTime<Utc>>)>) -> Option<PgRange<DateTime<Utc>>> {
-    use std::ops::Bound;
-    span.map(|(start, end)| PgRange {
-        start: Bound::Included(start),
-        end: end.map_or(Bound::Unbounded, Bound::Included),
-    })
-}
-
 /// Whether the account organizes the event: the organizer is one of its addresses, or there is none.
 async fn organized(change: &mut StoreChange, organizer: Option<&str>) -> Result<bool> {
     let Some(organizer) = organizer else { return Ok(false) };
@@ -110,24 +102,20 @@ impl Groupware {
         &self,
         account: Uuid,
         calendar: Option<Uuid>,
-        start: Option<DateTime<Utc>>,
-        end: Option<DateTime<Utc>>,
+        start: Option<Timestamp>,
+        end: Option<Timestamp>,
     ) -> Result<Vec<EventInfo>> {
-        use std::ops::Bound;
-        let window = PgRange {
-            start: start.map_or(Bound::Unbounded, Bound::Included),
-            end: end.map_or(Bound::Unbounded, Bound::Excluded),
-        };
         let mut read = self.read(account).await?;
         let rows = sqlx::query_as!(
             Row,
             "SELECT id, calendar_id, resource_name, uid, component, organized, size, schedule_tag, modseq
              FROM calendar_events
-             WHERE account_id = $1 AND ($2::uuid IS NULL OR calendar_id = $2) AND span && $3
+             WHERE account_id = $1 AND ($2::uuid IS NULL OR calendar_id = $2) AND span && tstzrange($3, $4, '[)')
              ORDER BY lower(span), id",
             account,
             calendar,
-            window,
+            start.map(|t| t.to_sqlx()),
+            end.map(|t| t.to_sqlx()),
         )
         .fetch_all(read.connection())
         .await?;
@@ -377,7 +365,9 @@ impl Groupware {
             Row,
             "INSERT INTO calendar_events
                  (id, account_id, calendar_id, resource_name, uid, component, span, organized, data, size, modseq)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+             VALUES ($1, $2, $3, $4, $5, $6,
+                 CASE WHEN $7::timestamptz IS NULL THEN NULL ELSE tstzrange($7, $12, '[]') END,
+                 $8, $9, $10, $11)
              ON CONFLICT (id) DO UPDATE SET span = excluded.span, organized = excluded.organized,
                  data = excluded.data, size = excluded.size, modseq = excluded.modseq
              RETURNING id, calendar_id, resource_name, uid, component, organized, size, schedule_tag, modseq",
@@ -387,11 +377,12 @@ impl Groupware {
             name,
             parsed.uid,
             parsed.component,
-            range(parsed.span),
+            parsed.span.map(|(start, _)| start.to_sqlx()),
             organized,
             sealed,
             size,
             modseq,
+            parsed.span.and_then(|(_, end)| end).map(|t| t.to_sqlx()),
         )
         .fetch_one(change.connection())
         .await?;

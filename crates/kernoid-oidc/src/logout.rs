@@ -6,7 +6,7 @@
 
 use std::time::Duration;
 
-use chrono::Utc;
+use jiff::Timestamp;
 use serde_json::json;
 use uuid::Uuid;
 
@@ -137,7 +137,7 @@ impl Oidc {
                 .fetch_one(self.pool())
                 .await
                 .map_err(|error| error.to_string())?;
-        let now = Utc::now().timestamp();
+        let now = Timestamp::now().as_second();
         let claims = json!({
             "iss": self.issuer(&primary),
             "aud": application.to_string(),

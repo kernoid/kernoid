@@ -3,7 +3,7 @@
 //! lines, a blank line, then the text – the description of an event, the note of a contact, the reply. Lines starting
 //! with `#` are hints and are ignored.
 
-use chrono::{NaiveDate, NaiveDateTime};
+use jiff::civil::{Date, DateTime};
 
 use crate::jmap::{
     calendars::{EventForm, FREQUENCIES},
@@ -22,13 +22,11 @@ fn split(text: &str) -> Result<(Vec<(String, String)>, String), String> {
     Ok((fields, body.trim_end().to_owned()))
 }
 
-fn time(text: &str) -> Result<NaiveDateTime, String> {
+fn time(text: &str) -> Result<DateTime, String> {
     let text = text.trim();
-    NaiveDateTime::parse_from_str(text, "%Y-%m-%d %H:%M")
-        .or_else(|_| NaiveDateTime::parse_from_str(text, "%Y-%m-%dT%H:%M"))
-        .or_else(|_| {
-            NaiveDate::parse_from_str(text, "%Y-%m-%d").map(|date| date.and_hms_opt(0, 0, 0).unwrap_or_default())
-        })
+    DateTime::strptime("%Y-%m-%d %H:%M", text)
+        .or_else(|_| DateTime::strptime("%Y-%m-%dT%H:%M", text))
+        .or_else(|_| Date::strptime("%Y-%m-%d", text).map(|date| date.at(0, 0, 0, 0)))
         .map_err(|_| format!("not a time (YYYY-MM-DD HH:MM): {text}"))
 }
 
@@ -49,8 +47,8 @@ pub fn render_event(form: &EventForm, calendar: &str, calendars: &[String]) -> S
     if calendars.len() > 1 {
         out.push_str(&format!("# Calendars: {}\n", calendars.join(", ")));
     }
-    out.push_str(&format!("Start: {}\n", form.start.format(format)));
-    out.push_str(&format!("End: {}\n", form.end.format(format)));
+    out.push_str(&format!("Start: {}\n", form.start.strftime(format)));
+    out.push_str(&format!("End: {}\n", form.end.strftime(format)));
     out.push_str(&format!("All day: {}\n", if form.all_day { "yes" } else { "no" }));
     out.push_str(&format!("Time zone: {}\n", form.time_zone.clone().unwrap_or_default()));
     out.push_str(&format!("Repeat: {}\n", form.repeat.clone().unwrap_or_else(|| "none".into())));
@@ -112,8 +110,7 @@ pub fn parse_event(text: &str, form: &EventForm) -> Result<(EventForm, String), 
 
 /// The text the editor opens with for the vacation response.
 pub fn render_vacation(vacation: &Vacation) -> String {
-    let at =
-        |time: Option<NaiveDateTime>| time.map(|time| time.format("%Y-%m-%d %H:%M").to_string()).unwrap_or_default();
+    let at = |time: Option<DateTime>| time.map(|time| time.strftime("%Y-%m-%d %H:%M").to_string()).unwrap_or_default();
     let mut out = String::new();
     out.push_str(&format!("On: {}\n", if vacation.on { "yes" } else { "no" }));
     out.push_str(&format!("From: {}\n", at(vacation.from)));
@@ -212,7 +209,7 @@ mod tests {
 
     #[test]
     fn a_vacation_response_round_trips() {
-        let at = |text: &str| NaiveDateTime::parse_from_str(text, "%Y-%m-%d %H:%M").unwrap();
+        let at = |text: &str| DateTime::strptime("%Y-%m-%d %H:%M", text).unwrap();
         let vacation = Vacation {
             on: true,
             from: Some(at("2026-11-02 08:00")),
@@ -227,7 +224,7 @@ mod tests {
     }
 
     fn form() -> EventForm {
-        let at = |s: &str| NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M").unwrap();
+        let at = |s: &str| DateTime::strptime("%Y-%m-%d %H:%M", s).unwrap();
         EventForm {
             title: String::new(),
             all_day: false,
@@ -258,7 +255,7 @@ mod tests {
         let (parsed, calendar) = parse_event(&edited, &form()).unwrap();
         assert_eq!(calendar, "Team");
         assert_eq!(parsed.title, "Plans");
-        assert_eq!(parsed.end.format("%H:%M").to_string(), "11:30");
+        assert_eq!(parsed.end.strftime("%H:%M").to_string(), "11:30");
         assert_eq!(parsed.repeat.as_deref(), Some("weekly"));
         assert_eq!(parsed.participants, ["bob@x.example", "carol@x.example"]);
         assert_eq!(parsed.description, "Bring coffee.");

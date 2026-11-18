@@ -52,7 +52,7 @@ async fn setup(pool: PgPool) -> Setup {
     let keys = Arc::new(TenantKeys::with_main_keys(pool.clone(), MainKeys::new(Key::random().unwrap(), Vec::new())));
     let blobs = BlobStore::new(Arc::new(InMemory::new()), keys);
     let mail = Mail::new(pool.clone(), blobs, Limits::default());
-    Setup { pool, identity, jmap: Jmap::new(mail, 1_000_000, chrono::Duration::days(5)), tenant }
+    Setup { pool, identity, jmap: Jmap::new(mail, 1_000_000, jiff::SignedDuration::from_hours(24 * 5)), tenant }
 }
 
 impl Setup {

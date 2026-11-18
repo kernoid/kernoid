@@ -8,7 +8,8 @@
 use std::time::Duration;
 
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
+use jiff_sqlx::ToSqlx;
 use kernoid_events::{InlineFuture, inline};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
@@ -40,11 +41,11 @@ pub struct FileLinkInfo {
     pub id: Uuid,
     pub owner: Uuid,
     pub node: Uuid,
-    pub expires_at: Option<DateTime<Utc>>,
+    pub expires_at: Option<Timestamp>,
     pub password: bool,
     pub rights: LinkRights,
     pub created_by: String,
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
 }
 
 /// What came in through one link since its last notice, for whoever is told: the link's maker, or the store's owner.
@@ -91,11 +92,11 @@ impl Identity {
         owner: Uuid,
         node: Uuid,
         rights: LinkRights,
-        expires_at: Option<DateTime<Utc>>,
+        expires_at: Option<Timestamp>,
         password: Option<&str>,
         creator: &str,
     ) -> Result<(Uuid, String)> {
-        if expires_at.is_some_and(|expires| expires <= Utc::now()) {
+        if expires_at.is_some_and(|expires| expires <= Timestamp::now()) {
             return Err(IdentityError::Refused("the link would have expired already".into()));
         }
         if !rights.read && !rights.add {
@@ -139,7 +140,7 @@ impl Identity {
                     node,
                     &token_hash[..],
                     password_hash,
-                    expires_at,
+                    expires_at.map(|t| t.to_sqlx()),
                     who,
                     rights.read,
                     rights.add,
@@ -208,11 +209,11 @@ impl Identity {
                 id: row.id,
                 owner,
                 node: row.node_id,
-                expires_at: row.expires_at,
+                expires_at: row.expires_at.map(|t| t.to_jiff()),
                 password: row.password,
                 rights: LinkRights { read: row.may_read, add: row.may_add },
                 created_by: row.created_by,
-                created_at: row.created_at,
+                created_at: row.created_at.to_jiff(),
             })
             .collect())
     }
@@ -253,12 +254,12 @@ impl Identity {
         .await
         .map_err(store_error)?
         .ok_or(IdentityError::InvalidCredentials)?;
-        let window = chrono::Duration::from_std(FAILURE_WINDOW).unwrap_or_default();
-        if let (Some(failures), Some(start)) = (row.failures, row.window_start)
+        let window = jiff::SignedDuration::try_from(FAILURE_WINDOW).unwrap_or_default();
+        if let (Some(failures), Some(start)) = (row.failures, row.window_start.map(|t| t.to_jiff()))
             && failures >= MAX_FAILURES
-            && start + window > Utc::now()
+            && start + window > Timestamp::now()
         {
-            let left = (start + window - Utc::now()).to_std().unwrap_or_default();
+            let left = std::time::Duration::try_from(start + window - Timestamp::now()).unwrap_or_default();
             return Err(IdentityError::TooManyAttempts { retry_after: left });
         }
         let stored = row.password_hash.clone();

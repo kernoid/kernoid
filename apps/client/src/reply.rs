@@ -86,8 +86,13 @@ pub fn start(kind: Kind, original: Option<(&Email, &str)>, identities: &[Identit
     let subject = email.summary.subject.clone().unwrap_or_default();
     let sender = email.summary.from.clone().unwrap_or_default();
     let date = email.sent_at.clone().unwrap_or_else(|| email.summary.received_at.clone());
-    let date = chrono::DateTime::parse_from_rfc3339(&date)
-        .map(|time| time.with_timezone(&chrono::Local).format(&phrases.date_format).to_string())
+    let date = date
+        .parse::<jiff::Timestamp>()
+        .ok()
+        .and_then(|time| {
+            let local = time.to_zoned_datetime(jiff::tz::TimeZone::system());
+            jiff::fmt::strtime::format(phrases.date_format.as_bytes(), &local).ok()
+        })
         .unwrap_or(date);
     match kind {
         Kind::Reply | Kind::ReplyAll => {

@@ -10,7 +10,7 @@ use std::{
     time::Duration,
 };
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use kernoid_mail::{Delivery, Leased, Mail, Outgoing, Recipient};
 use mail_auth::IpLookupStrategy;
 use rustls::pki_types::ServerName;
@@ -23,7 +23,7 @@ use crate::{
 };
 
 /// How long a worker holds the recipients it took.
-const LEASE: chrono::Duration = chrono::Duration::minutes(10);
+const LEASE: jiff::SignedDuration = jiff::SignedDuration::from_mins(10);
 /// Recipients taken at once.
 const BATCH: i64 = 100;
 /// How often the worker looks for due mail when it found none.
@@ -77,14 +77,14 @@ impl OutboundSettings {
 }
 
 /// When to try again after `attempts` failed tries: 2, 5, 15 and 30 minutes, then hourly, then every four hours.
-pub fn retry_after(attempts: i32) -> chrono::Duration {
+pub fn retry_after(attempts: i32) -> jiff::SignedDuration {
     match attempts {
-        ..=1 => chrono::Duration::minutes(2),
-        2 => chrono::Duration::minutes(5),
-        3 => chrono::Duration::minutes(15),
-        4 => chrono::Duration::minutes(30),
-        5..=8 => chrono::Duration::hours(1),
-        _ => chrono::Duration::hours(4),
+        ..=1 => jiff::SignedDuration::from_mins(2),
+        2 => jiff::SignedDuration::from_mins(5),
+        3 => jiff::SignedDuration::from_mins(15),
+        4 => jiff::SignedDuration::from_mins(30),
+        5..=8 => jiff::SignedDuration::from_hours(1),
+        _ => jiff::SignedDuration::from_hours(4),
     }
 }
 
@@ -523,7 +523,7 @@ impl Outbound {
             let result = match outcome {
                 Outcome::Delivered => mail.outbound_delivered(recipient.message, &recipient.address).await,
                 Outcome::Retry(reason) => {
-                    let next: DateTime<Utc> = Utc::now() + retry_after(recipient.attempts + 1);
+                    let next: Timestamp = Timestamp::now() + retry_after(recipient.attempts + 1);
                     if next > recipient.expires_at {
                         let failure = Failure {
                             recipient: recipient.address.clone(),
@@ -595,7 +595,7 @@ impl Outbound {
                     from: "",
                     recipients: &[sender.to_owned()],
                     raw: bounce,
-                    lifetime: chrono::Duration::days(5),
+                    lifetime: jiff::SignedDuration::from_hours(24 * 5),
                 })
                 .await?;
             }

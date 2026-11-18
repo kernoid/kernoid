@@ -43,7 +43,7 @@ async fn app(pool: &PgPool) -> (Router, String) {
         "https",
     );
     let mail = kernoid_mail::Mail::new(pool.clone(), blobs.clone(), kernoid_mail::Limits::default());
-    let jmap = kernoid_jmap::Jmap::new(mail, 1_000_000, chrono::Duration::days(5));
+    let jmap = kernoid_jmap::Jmap::new(mail, 1_000_000, jiff::SignedDuration::from_hours(24 * 5));
     // Changes reach the push streams as in the server: through PostgreSQL's notifications.
     let events = kernoid_mail::MailEvents::default();
     tokio::spawn(events.clone().listen(pool.clone(), tokio_util::sync::CancellationToken::new()));

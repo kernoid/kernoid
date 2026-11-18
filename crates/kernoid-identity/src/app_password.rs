@@ -6,7 +6,7 @@
 
 use std::net::IpAddr;
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use kernoid_events::{InlineFuture, aggregate::CommandError, inline};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
@@ -28,8 +28,8 @@ const ALPHABET: &[u8; 32] = b"abcdefghijklmnopqrstuvwxyz234567";
 pub struct AppPasswordInfo {
     pub id: Uuid,
     pub name: String,
-    pub created_at: DateTime<Utc>,
-    pub last_used_at: Option<DateTime<Utc>>,
+    pub created_at: Timestamp,
+    pub last_used_at: Option<Timestamp>,
 }
 
 /// The hash of an app password, as typed: dashes and spaces do not count, nor does case.
@@ -152,14 +152,23 @@ impl Identity {
     }
 
     pub async fn app_passwords(&self, account: Uuid) -> Result<Vec<AppPasswordInfo>> {
-        sqlx::query_as!(
-            AppPasswordInfo,
+        sqlx::query!(
             "SELECT id, name, created_at, last_used_at FROM account_app_passwords WHERE account_id = $1 ORDER BY created_at",
             account,
         )
         .fetch_all(self.pool())
         .await
         .map_err(store_error)
+        .map(|rows| {
+            rows.into_iter()
+                .map(|row| AppPasswordInfo {
+                    id: row.id,
+                    name: row.name,
+                    created_at: row.created_at.to_jiff(),
+                    last_used_at: row.last_used_at.map(|t| t.to_jiff()),
+                })
+                .collect()
+        })
     }
 
     /// An app password for the session's own account (needs a recent login, and the second factor the tenant

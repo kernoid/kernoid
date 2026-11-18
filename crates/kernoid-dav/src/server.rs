@@ -999,8 +999,8 @@ impl Dav {
 }
 
 /// A Unix time as a date, for the store's time ranges; the open ends of a range stay open.
-fn timestamp(value: i64) -> Option<chrono::DateTime<chrono::Utc>> {
-    if value == i64::MIN || value == i64::MAX { None } else { chrono::DateTime::from_timestamp(value, 0) }
+fn timestamp(value: i64) -> Option<jiff::Timestamp> {
+    if value == i64::MIN || value == i64::MAX { None } else { jiff::Timestamp::from_second(value).ok() }
 }
 
 fn set_namespaces(multistatus: &mut MultiStatus, propfind: &PropFind) {
@@ -1031,7 +1031,7 @@ fn apply_calendar_prop(prop: &DavPropertyValue, new: &mut NewCalendar, dead: &mu
                 .and_then(|comp| comp.property(&calcard::icalendar::ICalendarProperty::Tzid))
                 .and_then(|entry| entry.values.first())
                 .and_then(|value| value.as_text())
-                .filter(|name| name.parse::<chrono_tz::Tz>().is_ok())
+                .filter(|name| calcard::common::timezone::Tz::iana(name).is_some())
             {
                 new.timezone = Some(tz.to_owned());
             }

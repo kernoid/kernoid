@@ -390,7 +390,7 @@ pub(crate) struct OwnLinkView {
     name: String,
     /// Who the account is at the provider.
     subject: String,
-    created_at: chrono::DateTime<chrono::Utc>,
+    created_at: jiff::Timestamp,
 }
 
 /// The providers one's own account is linked to.

@@ -5,7 +5,7 @@
 
 use std::collections::BTreeSet;
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use kernoid_e2e::{Kind, PublicKey};
 use kernoid_events::{InlineFuture, aggregate::CommandError, inline};
 use uuid::Uuid;
@@ -37,8 +37,8 @@ pub struct OpenPgpKeyInfo {
     pub fingerprint: String,
     pub kind: String,
     pub public_key: Vec<u8>,
-    pub created_at: DateTime<Utc>,
-    pub retired_at: Option<DateTime<Utc>>,
+    pub created_at: Timestamp,
+    pub retired_at: Option<Timestamp>,
     pub copies: Vec<KeyCopy>,
 }
 
@@ -368,8 +368,8 @@ impl Identity {
                 fingerprint: key.fingerprint,
                 kind: key.kind,
                 public_key: key.public_key,
-                created_at: key.created_at,
-                retired_at: key.retired_at,
+                created_at: key.created_at.to_jiff(),
+                retired_at: key.retired_at.map(|t| t.to_jiff()),
             })
             .collect())
     }

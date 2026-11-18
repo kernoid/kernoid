@@ -522,7 +522,7 @@ impl Folder {
             let file = tokio::fs::File::open(at).await?;
             return Ok(client.upload(&self.store, kind, file, local.size, |_, _| {}).await?);
         }
-        let now = chrono::Utc::now().timestamp();
+        let now = jiff::Timestamp::now().as_second();
         let mut pieces = self
             .state
             .upload(path)?
@@ -798,7 +798,7 @@ pub fn scan(root: &Path) -> Result<BTreeMap<RelPath, Local>> {
 pub fn conflict_copy(path: &Path) -> PathBuf {
     let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
     let extension = path.extension().map(|e| format!(".{}", e.to_string_lossy())).unwrap_or_default();
-    let when = chrono::Local::now().format("%Y-%m-%d %H%M");
+    let when = jiff::ZonedDateTime::now().strftime("%Y-%m-%d %H%M");
     let mut candidate = path.with_file_name(format!("{stem} (conflict {when}){extension}"));
     let mut n = 2;
     while candidate.exists() {

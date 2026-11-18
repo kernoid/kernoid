@@ -19,7 +19,7 @@ use aws_lc_rs::{
     signature::KeyPair as _,
 };
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use kernoid_events::{
     Error, Event, InlineFuture,
     aggregate::{Aggregate, CommandError, DomainEvent},
@@ -157,8 +157,8 @@ pub struct KeyInfo {
     pub kid: String,
     pub algorithm: String,
     pub state: KeyState,
-    pub created_at: DateTime<Utc>,
-    pub state_since: DateTime<Utc>,
+    pub created_at: Timestamp,
+    pub state_since: Timestamp,
 }
 
 fn command_error(error: CommandError<OidcError>) -> OidcError {
@@ -249,7 +249,7 @@ impl Oidc {
         let earliest = info.as_ref().map(|key| key.state_since + lifetime::ID_TOKEN);
         self.key_command(instance, creator, |keys| match keys.keys.get(kid) {
             None => Err(OidcError::InvalidRequest(format!("no key {kid}"))),
-            Some(KeyState::Inactive) if earliest.is_some_and(|earliest| earliest <= Utc::now()) => {
+            Some(KeyState::Inactive) if earliest.is_some_and(|earliest| earliest <= Timestamp::now()) => {
                 Ok(vec![SigningKeyEvent::Removed { kid: kid.to_owned() }])
             }
             Some(KeyState::Inactive) => {
@@ -279,8 +279,8 @@ impl Oidc {
                     "inactive" => KeyState::Inactive,
                     _ => KeyState::Initial,
                 },
-                created_at: row.created_at,
-                state_since: row.state_since,
+                created_at: row.created_at.to_jiff(),
+                state_since: row.state_since.to_jiff(),
             })
             .collect())
     }
@@ -291,7 +291,7 @@ impl Oidc {
     /// [`Oidc::signer`], which makes one when it is needed.
     pub async fn rotate_signing_keys(&self, rotation: Duration, publish: Duration, keep: Duration) -> Result<Rotated> {
         let mut done = Rotated::default();
-        let now = Utc::now();
+        let now = Timestamp::now();
         // Never before ID tokens it signed have expired (`remove_signing_key` refuses that anyway).
         let keep = keep.max(lifetime::ID_TOKEN);
         for instance in self.identity.instances().await? {

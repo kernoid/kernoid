@@ -297,7 +297,7 @@ pub struct SecondFactors {
     /// The tenant requires a second factor.
     pub required: bool,
     /// Without one yet: the end of the tenant's grace period – set one up before.
-    pub setup_due: Option<chrono::DateTime<chrono::Utc>>,
+    pub setup_due: Option<jiff::Timestamp>,
 }
 
 /// A code as typed: lower case, without dashes and spaces.

@@ -7,7 +7,8 @@ use std::{
     collections::{HashMap, HashSet},
 };
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
+
 use kernoid_mail::{AddressInfo, EmailInfo};
 use serde_json::{Map, Value, json};
 use uuid::Uuid;
@@ -46,11 +47,10 @@ fn text_conditions(filter: &Value, out: &mut Vec<String>) {
     }
 }
 
-fn date(value: &Value) -> Result<DateTime<Utc>, MethodError> {
+fn date(value: &Value) -> Result<Timestamp, MethodError> {
     value
         .as_str()
-        .and_then(|date| DateTime::parse_from_rfc3339(date).ok())
-        .map(|date| date.with_timezone(&Utc))
+        .and_then(|date| date.parse::<jiff::Timestamp>().ok())
         .ok_or_else(|| MethodError::invalid("a date is UTCDate"))
 }
 

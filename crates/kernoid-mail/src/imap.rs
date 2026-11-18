@@ -4,7 +4,7 @@
 
 use std::collections::BTreeSet;
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use uuid::Uuid;
 
 use crate::{
@@ -24,7 +24,7 @@ pub struct MailboxEntry {
     pub modseq: u64,
     pub keywords: Vec<String>,
     pub size: u64,
-    pub received_at: DateTime<Utc>,
+    pub received_at: Timestamp,
 }
 
 impl Mail {
@@ -48,7 +48,7 @@ impl Mail {
                 modseq: row.modseq as u64,
                 keywords: row.keywords,
                 size: row.size as u64,
-                received_at: row.received_at,
+                received_at: row.received_at.to_jiff(),
             })
             .collect())
     }

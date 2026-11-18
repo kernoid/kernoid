@@ -422,10 +422,8 @@ pub async fn upload_file(
         .to_owned();
     let kind = media_type(&name);
     let upload = client.upload(account, kind, file, metadata.len(), progress).await?;
-    let modified = metadata
-        .modified()
-        .ok()
-        .map(|time| chrono::DateTime::<chrono::Utc>::from(time).to_rfc3339_opts(chrono::SecondsFormat::Secs, true));
+    let modified =
+        metadata.modified().ok().and_then(|time| jiff::Timestamp::try_from(time).ok()).map(|time| format!("{time:.0}"));
     match existing.filter(|node| !node.is_directory()) {
         Some(node) => {
             let update = json!({ "update": { node.id.as_str(): {

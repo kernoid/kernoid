@@ -187,7 +187,8 @@ and end-to-end encryption, [0007](rfcs/0007-push-notifications.md) push notifica
   there is no tag, GitHub Actions by commit with the version as a comment, Rust via `rust-toolchain.toml`, crates
   via `Cargo.lock` (CI and the image build with `--locked`). New versions are at least two weeks old – except the
   smallest version that fixes a RustSec advisory, taken at once and named with the advisory in the commit (and in
-  `SECURITY_FIXES` of `apps/tui/scripts/check-age.py`). `cargo deny check` (`deny.toml`, `apps/tui/deny.toml`) fails
+  `SECURITY_FIXES` of `apps/tui/scripts/check-age.py`). The one other exception: Jiff 1.0 (with jiff-sqlx), taken at
+  once in place of chrono (unmaintained, RUSTSEC-2026-0543). `cargo deny check` (`deny.toml`, `apps/tui/deny.toml`) fails
   on known vulnerabilities, licences that do not fit (permissive only for the MIT apps) and sources besides
   crates.io; an advisory that does not affect kernoid is ignored there with a reason.
 - Facts need a source; what is not settled is marked `OPEN`.

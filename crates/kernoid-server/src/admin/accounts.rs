@@ -7,7 +7,7 @@ use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
 };
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use kernoid_identity::{Address, IdentityError, account::AccountInfo, session::SessionSummary};
 use serde::{Deserialize, Serialize};
 
@@ -76,8 +76,8 @@ pub(crate) struct NewPassword {
 pub(crate) struct SessionSummaryView {
     id: String,
     checks: Vec<String>,
-    created_at: DateTime<Utc>,
-    expires_at: DateTime<Utc>,
+    created_at: Timestamp,
+    expires_at: Timestamp,
     client_address: Option<String>,
     user_agent: Option<String>,
 }

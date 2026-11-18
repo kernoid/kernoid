@@ -20,9 +20,10 @@ name = "kernoid-tui"
 path = "src/main.rs"
 
 [dependencies]
-chrono = { version = "=0.4.45", default-features = false, features = ["clock", "std"] }
 clap = { version = "=4.6.7", features = ["derive", "env"] }
 directories = "=6.0.0"
+# Dates and times in the system's time zone (Unlicense OR MIT) – in place of chrono (RUSTSEC-2026-0543).
+jiff = "=1.0.1"
 # kernoid's Rust SDK (MIT): JMAP, push, end-to-end encryption, DNS, iCalendar and vCard files – async; the app waits for
 # it on a runtime of its own (`block`).
 kernoid-client = { path = "../client" }

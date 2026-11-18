@@ -7,7 +7,7 @@ use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
 };
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use kernoid_identity::consent::ConsentInfo;
 use serde::Serialize;
 
@@ -22,7 +22,7 @@ pub(crate) struct ConsentView {
     application: String,
     application_name: String,
     scopes: Vec<String>,
-    granted_at: DateTime<Utc>,
+    granted_at: Timestamp,
 }
 
 impl From<ConsentInfo> for ConsentView {

@@ -14,7 +14,7 @@ pub mod projection;
 
 use std::{future::Future, pin::Pin};
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 use sqlx::{PgConnection, PgExecutor, PgPool};
 use uuid::Uuid;
@@ -57,7 +57,7 @@ pub struct Event {
     pub revision: i16,
     pub payload: serde_json::Value,
     pub creator: String,
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// Where a reader of all events stands after this event.
     pub cursor: Cursor,
 }
@@ -306,7 +306,7 @@ struct EventRow {
     revision: i16,
     payload: serde_json::Value,
     creator: String,
-    created_at: DateTime<Utc>,
+    created_at: Timestamp,
 }
 
 impl From<EventRow> for Event {

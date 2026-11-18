@@ -3,14 +3,15 @@
 //! directory with all below it, that expire. File managers of operating systems take them before they write. Only
 //! WebDAV honours them; JMAP does not know locks (OPEN).
 
-use chrono::{DateTime, Duration, Utc};
+use jiff::{SignedDuration, Timestamp};
+use jiff_sqlx::ToSqlx;
 use sqlx::PgConnection;
 use uuid::Uuid;
 
 use crate::{FileAccess, Files, FilesError, Result, Rights};
 
 /// The longest a lock lasts before it is refreshed.
-const MAX_TIMEOUT: Duration = Duration::hours(1);
+const MAX_TIMEOUT: SignedDuration = SignedDuration::from_hours(1);
 
 /// A lock to take.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -20,7 +21,7 @@ pub struct LockRequest {
     pub deep: bool,
     /// The client's `owner` element, as it sent it.
     pub owner_info: Option<String>,
-    pub timeout: Duration,
+    pub timeout: SignedDuration,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -32,7 +33,7 @@ pub struct Lock {
     pub exclusive: bool,
     pub deep: bool,
     pub owner_info: Option<String>,
-    pub expires_at: DateTime<Utc>,
+    pub expires_at: Timestamp,
 }
 
 /// The locks in force on `node`: its own, and the deep ones of its ancestors – and, if `below`, those of the nodes
@@ -68,7 +69,7 @@ async fn in_force(connection: &mut PgConnection, node: Uuid, below: bool) -> Res
             exclusive: row.exclusive,
             deep: row.deep,
             owner_info: row.owner_info,
-            expires_at: row.expires_at,
+            expires_at: row.expires_at.to_jiff(),
         })
         .collect())
 }
@@ -111,7 +112,7 @@ impl Files {
             exclusive: request.exclusive,
             deep: request.deep,
             owner_info: request.owner_info,
-            expires_at: Utc::now() + request.timeout.clamp(Duration::seconds(1), MAX_TIMEOUT),
+            expires_at: Timestamp::now() + request.timeout.clamp(SignedDuration::from_secs(1), MAX_TIMEOUT),
         };
         sqlx::query!("DELETE FROM file_locks WHERE expires_at <= now() AND account_id = $1", access.owner)
             .execute(&mut *tx)
@@ -126,7 +127,7 @@ impl Files {
             lock.exclusive,
             lock.deep,
             lock.owner_info,
-            lock.expires_at,
+            lock.expires_at.to_sqlx(),
         )
         .execute(&mut *tx)
         .await?;
@@ -135,14 +136,14 @@ impl Files {
     }
 
     /// Extends a lock the caller holds.
-    pub async fn refresh_lock(&self, access: &FileAccess, token: &str, timeout: Duration) -> Result<Lock> {
+    pub async fn refresh_lock(&self, access: &FileAccess, token: &str, timeout: SignedDuration) -> Result<Lock> {
         let row = sqlx::query!(
             "UPDATE file_locks SET expires_at = now() + make_interval(secs => $3)
              WHERE token = $1 AND holder_id = $2 AND expires_at > now()
              RETURNING node_id, exclusive, deep, owner_info, expires_at",
             token,
             access.user,
-            timeout.clamp(Duration::seconds(1), MAX_TIMEOUT).num_seconds() as f64,
+            timeout.clamp(SignedDuration::from_secs(1), MAX_TIMEOUT).as_secs() as f64,
         )
         .fetch_optional(&self.pool)
         .await?
@@ -154,7 +155,7 @@ impl Files {
             exclusive: row.exclusive,
             deep: row.deep,
             owner_info: row.owner_info,
-            expires_at: row.expires_at,
+            expires_at: row.expires_at.to_jiff(),
         })
     }
 

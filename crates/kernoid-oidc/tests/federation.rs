@@ -68,7 +68,7 @@ async fn token(
     {
         return (axum::http::StatusCode::BAD_REQUEST, Json(json!({ "error": "invalid_grant" })));
     }
-    let now = chrono::Utc::now().timestamp();
+    let now = jiff::Timestamp::now().as_second();
     let mut claims =
         json!({ "iss": provider.issuer, "aud": "kernoid", "exp": now + 300, "iat": now, "nonce": provider.nonce });
     for (key, value) in provider.claims.as_object().unwrap() {

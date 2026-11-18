@@ -4,7 +4,8 @@
 
 use std::hash::{DefaultHasher, Hash, Hasher};
 
-use chrono::{DateTime, SecondsFormat, Utc};
+use jiff::Timestamp;
+
 use kernoid_mail::VacationResponse;
 use serde_json::{Map, Value, json};
 
@@ -16,8 +17,8 @@ use crate::{
 pub const VACATION: &str = "urn:ietf:params:jmap:vacationresponse";
 const SINGLETON: &str = "singleton";
 
-fn date(value: Option<DateTime<Utc>>) -> Value {
-    value.map_or(Value::Null, |date| json!(date.to_rfc3339_opts(SecondsFormat::Secs, true)))
+fn date(value: Option<Timestamp>) -> Value {
+    value.map_or(Value::Null, |date| json!(format!("{:.0}", date)))
 }
 
 fn object(vacation: &VacationResponse) -> Value {
@@ -48,8 +49,9 @@ fn apply(vacation: &mut VacationResponse, patch: &Map<String, Value>) -> Result<
     };
     let when = |value: &Value| match value {
         Value::Null => Ok(None),
-        Value::String(text) => DateTime::parse_from_rfc3339(text)
-            .map(|date| Some(date.with_timezone(&Utc)))
+        Value::String(text) => text
+            .parse::<jiff::Timestamp>()
+            .map(Some)
             .map_err(|_| invalid_properties(format!("{text} is not a UTCDate"))),
         _ => Err(invalid_properties("a UTCDate or null")),
     };

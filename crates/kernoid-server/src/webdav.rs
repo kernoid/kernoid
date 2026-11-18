@@ -254,7 +254,7 @@ pub(crate) fn guess(name: &str) -> &'static str {
 fn etag(node: &NodeInfo) -> String {
     match node.content {
         Some(content) => format!("\"{content}\""),
-        None => format!("\"{}\"", node.changed.timestamp_micros()),
+        None => format!("\"{}\"", node.changed.as_microsecond()),
     }
 }
 
@@ -374,7 +374,11 @@ async fn dispatch(
             if let Ok(value) = HeaderValue::from_str(&etag(node)) {
                 response.headers_mut().insert(header::ETAG, value);
             }
-            if let Ok(value) = HeaderValue::from_str(&node.modified.to_rfc2822().replace("+0000", "GMT")) {
+            if let Ok(value) = jiff::fmt::rfc2822::DateTimePrinter::new()
+                .timestamp_to_rfc9110_string(&node.modified)
+                .map_err(|_| ())
+                .and_then(|date| HeaderValue::from_str(&date).map_err(|_| ()))
+            {
                 response.headers_mut().insert(header::LAST_MODIFIED, value);
             }
             if method == Method::HEAD {
@@ -506,7 +510,7 @@ async fn dispatch(
                 Timeout::Second(seconds) => seconds,
                 Timeout::Infinite | Timeout::None => DEFAULT_LOCK_SECONDS,
             };
-            let timeout = chrono::Duration::seconds(i64::try_from(timeout).unwrap_or(i64::MAX).min(3600));
+            let timeout = jiff::SignedDuration::from_secs(i64::try_from(timeout).unwrap_or(i64::MAX).min(3600));
             let body = xml_body(body).await?;
             // No body: a refresh of a lock named in the If header.
             if body.is_empty() {
@@ -556,7 +560,7 @@ fn lock_response(
     root: &str,
     owner: Option<kernoid_dav::proto::types::dead_property::DeadProperty>,
 ) -> Response {
-    let seconds = (lock.expires_at - chrono::Utc::now()).num_seconds().max(1) as u64;
+    let seconds = (lock.expires_at - jiff::Timestamp::now()).as_secs().max(1) as u64;
     let scope = if lock.exclusive { LockScope::Exclusive } else { LockScope::Shared };
     let active = ActiveLock::new(root, scope)
         .with_depth(if lock.deep { Depth::Infinity } else { Depth::Zero })
@@ -656,9 +660,9 @@ async fn value(property: &DavProperty, item: &Item<'_>, files: &Files) -> Option
         WebDavProperty::GetContentType => node.and_then(|node| node.media_type.clone()).map(DavValue::String),
         WebDavProperty::GetETag => node.map(|node| DavValue::String(etag(node))),
         WebDavProperty::GetLastModified => {
-            node.map(|node| DavValue::Rfc1123Date(Rfc1123DateTime::new(node.modified.timestamp())))
+            node.map(|node| DavValue::Rfc1123Date(Rfc1123DateTime::new(node.modified.as_second())))
         }
-        WebDavProperty::CreationDate => node.map(|node| DavValue::Timestamp(node.created.timestamp())),
+        WebDavProperty::CreationDate => node.map(|node| DavValue::Timestamp(node.created.as_second())),
         WebDavProperty::SupportedLock => Some(SupportedLock::default().into()),
         WebDavProperty::LockDiscovery => {
             let Item::Node(store, node) = item else { return Some(DavValue::ActiveLocks(List(Vec::new()))) };
@@ -667,7 +671,7 @@ async fn value(property: &DavProperty, item: &Item<'_>, files: &Files) -> Option
                 .into_iter()
                 .map(|lock| {
                     let scope = if lock.exclusive { LockScope::Exclusive } else { LockScope::Shared };
-                    let seconds = (lock.expires_at - chrono::Utc::now()).num_seconds().max(1) as u64;
+                    let seconds = (lock.expires_at - jiff::Timestamp::now()).as_secs().max(1) as u64;
                     ActiveLock::new(href(&store.name, &[], true), scope)
                         .with_depth(if lock.deep { Depth::Infinity } else { Depth::Zero })
                         .with_timeout(seconds)

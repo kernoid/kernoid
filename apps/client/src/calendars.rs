@@ -5,7 +5,7 @@
 
 use std::collections::BTreeMap;
 
-use chrono::{DateTime, NaiveDateTime, SecondsFormat, Utc};
+use jiff::{SignedDuration, Timestamp, civil::DateTime};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -111,16 +111,18 @@ pub struct Event {
 
 impl Event {
     /// When it starts, in UTC: `utcStart`, or the start of an all-day event.
-    pub fn starts(&self) -> Option<DateTime<Utc>> {
-        if let Some(start) = self.utc_start.as_deref().and_then(|s| DateTime::parse_from_rfc3339(s).ok()) {
-            return Some(start.with_timezone(&Utc));
+    pub fn starts(&self) -> Option<Timestamp> {
+        if let Some(start) = self.utc_start.as_deref().and_then(|s| s.parse().ok()) {
+            return Some(start);
         }
         let start = self.start.as_deref()?;
-        chrono::NaiveDateTime::parse_from_str(start, "%Y-%m-%dT%H:%M:%S").ok().map(|naive| naive.and_utc())
+        DateTime::strptime("%Y-%m-%dT%H:%M:%S", start)
+            .ok()
+            .and_then(|naive| jiff::tz::Offset::UTC.to_timestamp(naive).ok())
     }
 
-    pub fn ends(&self) -> Option<DateTime<Utc>> {
-        self.utc_end.as_deref().and_then(|s| DateTime::parse_from_rfc3339(s).ok()).map(|end| end.with_timezone(&Utc))
+    pub fn ends(&self) -> Option<Timestamp> {
+        self.utc_end.as_deref().and_then(|s| s.parse().ok())
     }
 
     pub fn is_cancelled(&self) -> bool {
@@ -182,8 +184,8 @@ pub async fn calendars(client: &Client) -> Result<Vec<Calendar>> {
     Ok(out)
 }
 
-fn utc(time: DateTime<Utc>) -> String {
-    time.to_rfc3339_opts(SecondsFormat::Secs, true)
+fn utc(time: Timestamp) -> String {
+    format!("{time:.0}")
 }
 
 /// One event as stored – for an instance, the recurring event it is of.
@@ -199,8 +201,8 @@ pub async fn event(client: &Client, account: &str, id: &str) -> Result<Option<Ev
 pub async fn instances(
     client: &Client,
     calendars: &[Calendar],
-    after: DateTime<Utc>,
-    before: DateTime<Utc>,
+    after: Timestamp,
+    before: Timestamp,
 ) -> Result<Vec<Event>> {
     let mut accounts: Vec<&str> = calendars.iter().map(|calendar| calendar.account.as_str()).collect();
     accounts.dedup();
@@ -295,8 +297,8 @@ pub struct EventForm {
     pub title: String,
     pub all_day: bool,
     /// Local times in `time_zone`; for all-day events the days (the end is the last day).
-    pub start: NaiveDateTime,
-    pub end: NaiveDateTime,
+    pub start: DateTime,
+    pub end: DateTime,
     pub time_zone: Option<String>,
     pub location: String,
     pub description: String,
@@ -307,21 +309,21 @@ pub struct EventForm {
     /// For an event changed: the answers participants gave (address, status) and when it was – the answers stay
     /// while the time does (RFC 5546, 2.1.4: a new time asks again).
     pub answers: Vec<(String, String)>,
-    pub was: Option<(NaiveDateTime, NaiveDateTime, bool)>,
+    pub was: Option<(DateTime, DateTime, bool)>,
 }
 
 impl EventForm {
     /// The form of an event, to change it.
     pub fn of(event: &Event, own: &[String]) -> Option<Self> {
-        let start = NaiveDateTime::parse_from_str(event.start.as_deref()?, "%Y-%m-%dT%H:%M:%S").ok()?;
+        let start = DateTime::strptime("%Y-%m-%dT%H:%M:%S", event.start.as_deref()?).ok()?;
         let seconds = event.duration.as_deref().and_then(parse_duration).unwrap_or(if event.show_without_time {
             86_400
         } else {
             3_600
         });
-        let mut end = start + chrono::Duration::seconds(seconds);
+        let mut end = start.checked_add(SignedDuration::from_secs(seconds)).ok()?;
         if event.show_without_time {
-            end -= chrono::Duration::days(1);
+            end = end.checked_sub(SignedDuration::from_hours(24)).ok()?;
         }
         let participants = event
             .participants
@@ -365,15 +367,15 @@ impl EventForm {
     /// The JSCalendar object (without `calendarIds`); `own` is the organizer's address.
     pub fn object(&self, own: &str) -> Value {
         let (start, seconds) = if self.all_day {
-            let days = (self.end.date() - self.start.date()).num_days().max(0) + 1;
-            (self.start.date().and_hms_opt(0, 0, 0).unwrap_or(self.start), days * 86_400)
+            let days = self.start.date().until(self.end.date()).map_or(0, |span| i64::from(span.get_days())).max(0) + 1;
+            (self.start.date().at(0, 0, 0, 0), days * 86_400)
         } else {
-            (self.start, (self.end - self.start).num_seconds())
+            (self.start, self.start.duration_until(self.end).as_secs())
         };
         let mut value = json!({
             "@type": "Event",
             "title": self.title,
-            "start": start.format("%Y-%m-%dT%H:%M:%S").to_string(),
+            "start": start.strftime("%Y-%m-%dT%H:%M:%S").to_string(),
             "duration": format_duration(seconds),
             "showWithoutTime": self.all_day,
             "timeZone": if self.all_day { Value::Null } else { json!(self.time_zone) },
@@ -577,7 +579,7 @@ mod tests {
 
     #[test]
     fn forms() {
-        let at = |s: &str| NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M").unwrap();
+        let at = |s: &str| DateTime::strptime("%Y-%m-%d %H:%M", s).unwrap();
         let form = EventForm {
             title: "Plans".into(),
             all_day: false,

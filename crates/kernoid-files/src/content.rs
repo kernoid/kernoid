@@ -4,8 +4,9 @@
 //! the last content that names their parts.
 
 use bytes::Bytes;
-use chrono::{DateTime, Utc};
 use futures_util::Stream;
+use jiff::Timestamp;
+use jiff_sqlx::ToSqlx;
 use kernoid_store::{
     BlobError, garbage,
     parts::{self, PartsError, Stored},
@@ -32,8 +33,8 @@ pub struct ContentInfo {
     pub media_type: String,
     pub sha256: Vec<u8>,
     /// The file's modification time while this was its content.
-    pub modified: DateTime<Utc>,
-    pub created_at: DateTime<Utc>,
+    pub modified: Timestamp,
+    pub created_at: Timestamp,
     pub current: bool,
 }
 
@@ -65,7 +66,7 @@ impl Files {
     {
         let tenant = self.tenant_of(owner).await?;
         let prefix = format!("files/{owner}/{}", Uuid::now_v7());
-        let due = Utc::now() + garbage::PENDING;
+        let due = Timestamp::now() + garbage::PENDING;
         let stored =
             parts::put(&self.blobs, &self.pool, tenant, &prefix, content, self.limits.max_file_size, due).await?;
         Ok(Content { tenant, prefix, stored })
@@ -132,7 +133,7 @@ pub(crate) async fn attach(
     node: Uuid,
     content: &Content,
     media_type: &str,
-    modified: DateTime<Utc>,
+    modified: Timestamp,
 ) -> Result<Uuid> {
     if content.tenant != locked.tenant {
         return Err(FilesError::Invalid("the content belongs to another tenant".into()));
@@ -163,7 +164,7 @@ pub(crate) async fn attach(
         content.stored.size as i64,
         &content.stored.sha256[..],
         media_type,
-        modified,
+        modified.to_sqlx(),
     )
     .execute(&mut **tx)
     .await?;
@@ -236,8 +237,8 @@ pub(crate) async fn contents(connection: &mut PgConnection, node: Uuid) -> Resul
             size: row.size as u64,
             media_type: row.media_type,
             sha256: row.sha256,
-            modified: row.modified,
-            created_at: row.created_at,
+            modified: row.modified.to_jiff(),
+            created_at: row.created_at.to_jiff(),
             current: row.current,
         })
         .collect())

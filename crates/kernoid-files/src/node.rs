@@ -2,7 +2,8 @@
 //! Directories and files (RFC 0005, 3–6): creating, changing, moving and destroying them, with names unique among
 //! siblings, a limited depth, the content in object storage, its versions, and the rights of whoever acts (11).
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
+use jiff_sqlx::ToSqlx;
 use sqlx::{PgConnection, Postgres, Transaction};
 use uuid::Uuid;
 
@@ -73,10 +74,10 @@ pub struct NodeInfo {
     pub size: Option<u64>,
     pub media_type: Option<String>,
     pub executable: Option<bool>,
-    pub created: DateTime<Utc>,
-    pub modified: DateTime<Utc>,
-    pub accessed: DateTime<Utc>,
-    pub changed: DateTime<Utc>,
+    pub created: Timestamp,
+    pub modified: Timestamp,
+    pub accessed: Timestamp,
+    pub changed: Timestamp,
     pub is_subscribed: bool,
     /// The vault it lies in (RFC 0006, 6) – its own id for a vault's root –, the vault's public key (on the root), and
     /// its real name, encrypted to the vault.
@@ -88,7 +89,7 @@ pub struct NodeInfo {
 impl NodeInfo {
     #[cfg(test)]
     pub(crate) fn directory_for_tests(id: Uuid, parent: Option<Uuid>, name: &str) -> Self {
-        let now = Utc::now();
+        let now = Timestamp::now();
         Self {
             id,
             parent,
@@ -120,9 +121,9 @@ pub struct NewNode {
     pub content: Option<Content>,
     pub media_type: Option<String>,
     pub executable: bool,
-    pub created: Option<DateTime<Utc>>,
-    pub modified: Option<DateTime<Utc>>,
-    pub accessed: Option<DateTime<Utc>>,
+    pub created: Option<Timestamp>,
+    pub modified: Option<Timestamp>,
+    pub accessed: Option<Timestamp>,
     pub is_subscribed: bool,
     /// A directory made a vault (RFC 0006, 6): the vault's public key, and its secret key encrypted to the creator.
     pub vault: Option<NewVault>,
@@ -169,8 +170,8 @@ pub struct NodeUpdate {
     pub content: Option<Content>,
     pub media_type: Option<String>,
     pub executable: Option<bool>,
-    pub modified: Option<DateTime<Utc>>,
-    pub accessed: Option<DateTime<Utc>>,
+    pub modified: Option<Timestamp>,
+    pub accessed: Option<Timestamp>,
     pub is_subscribed: Option<bool>,
     /// Inside a vault: the real name, encrypted anew with a rename.
     pub encrypted_name: Option<Vec<u8>>,
@@ -259,10 +260,10 @@ macro_rules! node_info {
             size: row.size.map(|size| size as u64),
             media_type: row.media_type,
             executable: row.executable,
-            created: row.created,
-            modified: row.modified,
-            accessed: row.accessed,
-            changed: row.changed,
+            created: row.created.to_jiff(),
+            modified: row.modified.to_jiff(),
+            accessed: row.accessed.to_jiff(),
+            changed: row.changed.to_jiff(),
             is_subscribed: row.is_subscribed,
             vault: row.vault_id,
             vault_key: row.vault_key,
@@ -668,7 +669,7 @@ impl Files {
         let id = Uuid::now_v7();
         let vault =
             placed_in_vault(&mut tx, account, id, new.parent, new.vault.as_ref(), new.encrypted_name.is_some()).await?;
-        let now = Utc::now();
+        let now = Timestamp::now();
         let modified = new.modified.unwrap_or(now);
         let content = match &new.content {
             Some(content) => Some((
@@ -693,9 +694,9 @@ impl Files {
             content.map(|(_, size)| size),
             file.then_some(media_type),
             file.then_some(new.executable),
-            new.created.unwrap_or(now),
-            modified,
-            new.accessed.unwrap_or(now),
+            new.created.unwrap_or(now).to_sqlx(),
+            modified.to_sqlx(),
+            new.accessed.unwrap_or(now).to_sqlx(),
             new.is_subscribed,
             vault,
             new.vault.as_ref().map(|vault| vault.public_key.clone()),
@@ -798,7 +799,7 @@ impl Files {
         } else {
             (name, Vec::new())
         };
-        let modified = update.modified.or(update.content.as_ref().map(|_| Utc::now()));
+        let modified = update.modified.or(update.content.as_ref().map(|_| Timestamp::now()));
         let new_content = match &update.content {
             Some(content) => {
                 let kind = media_type.clone().or(node.media_type.clone()).unwrap_or(DEFAULT_MEDIA_TYPE.into());
@@ -825,8 +826,8 @@ impl Files {
             new_content.map(|(_, size)| size as i64),
             media_type,
             update.executable,
-            modified,
-            update.accessed,
+            modified.map(|t| t.to_sqlx()),
+            update.accessed.map(|t| t.to_sqlx()),
             is_subscribed,
             update.encrypted_name,
         )
@@ -856,7 +857,7 @@ impl Files {
         let update = NodeUpdate {
             content: Some(content),
             media_type: Some(media_type.unwrap_or(DEFAULT_MEDIA_TYPE).to_owned()),
-            modified: Some(Utc::now()),
+            modified: Some(Timestamp::now()),
             ..NodeUpdate::default()
         };
         Ok(self.update(access, id, update, &SetOptions::default()).await?.node)

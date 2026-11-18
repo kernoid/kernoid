@@ -12,7 +12,6 @@ use std::{
 };
 
 use base64::{Engine, engine::general_purpose::STANDARD};
-use chrono::SecondsFormat;
 use kernoid_identity::{
     Address, Identity, IdentityError,
     openpgp::{E2eSettings, KeyCopy, OpenPgpKeyInfo},
@@ -84,8 +83,8 @@ fn key_object(key: &OpenPgpKeyInfo) -> Value {
         "id": key.fingerprint,
         "kind": key.kind,
         "publicKey": b64(&key.public_key),
-        "created": key.created_at.to_rfc3339_opts(SecondsFormat::Secs, true),
-        "retired": key.retired_at.map(|at| at.to_rfc3339_opts(SecondsFormat::Secs, true)),
+        "created": format!("{:.0}", key.created_at),
+        "retired": key.retired_at.map(|at| format!("{:.0}", at)),
         "copies": copies,
     })
 }
@@ -454,7 +453,7 @@ impl Context<'_> {
                 json!({
                     "id": item.id.to_string(),
                     "data": b64(&item.data),
-                    "updated": item.updated.to_rfc3339_opts(SecondsFormat::Secs, true),
+                    "updated": format!("{:.0}", item.updated),
                 })
             })
             .collect();

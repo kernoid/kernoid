@@ -50,7 +50,7 @@ pub use dns::{DnsResolver, TxtLookup};
 pub use domain::{DomainName, InvalidDomain};
 pub use password::{MAX_BYTES as PASSWORD_MAX_BYTES, MIN_CHARS as PASSWORD_MIN_CHARS};
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use kernoid_events::{
     EventStore,
     aggregate::{CommandError, Loaded},
@@ -167,7 +167,7 @@ pub struct MfaStatus {
     /// The tenant requires a second factor.
     pub required: bool,
     /// The account has none yet and may log in without one until then.
-    pub grace_until: Option<DateTime<Utc>>,
+    pub grace_until: Option<Timestamp>,
 }
 
 impl MfaStatus {
@@ -690,7 +690,8 @@ impl Identity {
         .ok_or(IdentityError::NotFound("the account"))?;
         let grace_until = row
             .grace_until
-            .filter(|until| row.mfa_required && row.mfa_grace_days > 0 && !row.has_factor && *until > Utc::now());
+            .map(|until| until.to_jiff())
+            .filter(|until| row.mfa_required && row.mfa_grace_days > 0 && !row.has_factor && *until > Timestamp::now());
         Ok(MfaStatus { required: row.mfa_required, grace_until })
     }
 
