@@ -64,7 +64,8 @@ space is its program's – under another scheme it is not there.
   would exceed it is refused (`413`), what is there stays.
 - **Who may write and read:** members, by signed requests – the relay checks signatures against the ordered list, as
   aktujo's does; it never sees a key of a space.
-- **Limits:** a request at most 64 MiB (aktujo's limit); larger originals in parts (OPEN, aktujo RFC 0001).
+- **Limits:** a request at most 64 MiB (aktujo's limit); larger originals in parts – protocol 2 splits them into parts
+  of 16 MiB on the device (`kernoid_replica::streams::PART`).
 - **Administration:** a tenant's spaces (identity, program, founder, size, last write) and removing one – REST
   (`/v1/relay/spaces`), GraphQL (`relaySpaces`, `removeRelaySpace`), CLI (`kernoid relay`).
 
@@ -113,8 +114,9 @@ version). ML-DSA is ml-dsa 0.1, which signs in constant time – the server sign
 
 ## 8. Open
 
-- **OPEN:** streams, erasure and visibility (aktujo RFCs 0007–0009) – after 0.5.0; the mechanism of streams is proposed
-  in [0012](0012-streams.md), for review before it is built.
+- Streams, with what the foundation gives erasure and visibility – purging a stream, removing a person, streams shown to
+  one person, links and their generations –, are [0012](0012-streams.md) (implemented in 0.5.0). Locks, roles and the
+  other permissions of aktujo RFCs 0007–0009 are a program's data in its streams, checked at a record's `at`.
 - **OPEN:** vaults on spaces (section 5) – with streams.
 - **OPEN:** a space's events read by the server for an account that allows it (a node with keys, aktujo RFC 0009) –
   with aktujo's server mode.

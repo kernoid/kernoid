@@ -24,6 +24,11 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   (`KFeature.localizationsDelegates`).
 - **Post-quantum hybrid keys** for the foundation (`kernoid_crypt::pq`, RFC 0010, 6): X-Wing (ML-KEM-768 + X25519)
   to seal to, Ed25519 + ML-DSA-65 to sign, both from one seed; X-Wing checked against the draft's test vectors.
+- **Streams** (RFC 0012): spaces as many logs joined by a tree of hybrid post-quantum keys – `kernoid_crypt::stream`
+  (roster, person keys, stream keys per generation, records, read and write tokens), the relay's protocol 2 below
+  `/relay/<scheme>/v2/` (migration 0057), `kernoid_space_store::streams` (schema version 2) and
+  `kernoid_replica::streams::Streams` (found, invite, join, follow, write, share, renew when due, originals in parts,
+  remove devices and persons, recover, purge). Protocol 1 stays beside it.
 - **kernoid-auth:** sessions in PostgreSQL (`PgSessions`, feature `postgres`, on by default) – a table in the program's
   database with migrations of their own; ids stored only as hashes.
 

@@ -10,6 +10,8 @@
 //!
 //! OPEN: the seed is kept in the store beside the data; the key store of the operating system is not used yet.
 
+pub mod streams;
+
 use std::{
     collections::BTreeMap,
     sync::Arc,

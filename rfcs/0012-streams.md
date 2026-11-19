@@ -1,9 +1,11 @@
 <!-- SPDX-License-Identifier: CC-BY-4.0 -->
 # RFC 0012 – Streams in the foundation
 
-- **Status:** proposal, 2026-11-19, **for review before it is built**. The direction is aktujo RFC 0009 (decided by
-  the maintainer on 2026-11-19); this RFC is the mechanism kernoid's foundation would implement for every program – the
-  formats, the keys, the relay's protocol. Changes [0010](0010-foundation.md), sections 3, 4 and 6.
+- **Status:** accepted by the maintainer on 2026-11-19 ("Alles umsetzen"), implemented in 0.5.0 – `kernoid_crypt::stream`,
+  the relay's protocol 2 (`kernoid-relay`, migration 0057), `kernoid_space_store::streams` and
+  `kernoid_replica::streams`, checked end to end against kernoid (`kit/replica/tests/streams.rs`). The direction is
+  aktujo RFC 0009; this RFC is the mechanism. Building it settled three points, marked *(settled while building)*
+  below. Changes [0010](0010-foundation.md), sections 3, 4 and 6.
 - **Scope:** what is generic about streams – identities, keys and their tree, records, tokens, the relay, removing a
   device, a server as a node. What a program keeps in its streams – documents, folders, branches, locks, purges, guest
   links, the names of roles (aktujo RFCs 0007, 0008) – stays the program's.
@@ -52,6 +54,11 @@ its canonical encoding, as events are today ([0010](0010-foundation.md), 3); mer
 stream, written under the **new** key, holding the previous key sealed with the new one – so that whoever gets the
 newest key reads back to the beginning, as space keys chain today.
 
+**Roster.** The member list of protocol 2 is the **roster** (section 7). Besides devices and persons it carries what a
+device needs before it can read any stream *(settled while building)*: each person's key per generation – its seed
+sealed to each of the person's devices, the seed before chained to it – and the links of the space stream to every
+person. A device's own person stream could not hold them: its key comes from the person's seed.
+
 ## 4. The tree of keys
 
 A **link** gives a stream's key to whoever can open something above it:
@@ -64,7 +71,11 @@ link = { stream, generation, sealed }   // a record in the stream above
   key, associated data `link`, the stream and the generation.
 - To a **person** (a document shown to them; the space stream to every person): `sealed` is `pq::seal` to the person's
   receiving key, context the same.
-- A **person stream** gets one link per device of the person, to the device's receiving key: the person's seed.
+- A **person stream** has a derived identity (`StreamId::of_person`: SHA-256 of the domain, the space and the person)
+  so that any device can find it, and a key per generation of the person's key (`StreamKey::of_person`). It is an
+  **inbox** *(settled while building)*: a device with `write` appends records of kind `sealed` to it **without** its
+  write token – a link sealed to the person, which only the person opens; everything else there needs the token, and
+  reading always does.
 
 A device starts at its person stream, opens the links there and follows them down; it knows every stream it may read
 and no other ([aktujo RFC 0009](https://github.com/aktujo/aktujo/blob/main/docs/rfc/0009-streams.md), 2). Which links a
@@ -125,7 +136,10 @@ permissions and roles; the foundation knows the four the relay enforces.
 
 1. A record of the member list removes the device: the relay serves it **nothing more** at once – no stream, no
    original, sealed or not (its signatures no longer verify against the list).
-2. Its person gets a new seed, sealed to the person's other devices (a new link in the person stream).
+2. Its person gets a new seed, sealed to the person's other devices (a new generation of the person's key in the
+   roster). The person's own device chains the seed before to it; a device of another person with `members` cannot
+   *(settled while building)* – the person's devices then keep the keys they had learned, and links sealed to the old
+   generation are read by devices that already read them, not by devices added later.
 3. Every device of the space marks **due** each stream the removed device could open – those it reached from that
    person stream. A device knows them: it follows the same links.
 4. The first device that writes into a due stream first makes a new generation, writes the links for the stream's
@@ -136,10 +150,12 @@ A person is removed the same way, without step 2.
 
 ## 9. On a device
 
-`kernoid-space-store` keeps streams, generations, links, positions and the due marks in SQLite; `kernoid-replica`
-follows the streams a device can open, writes into one (making a generation first when it is due), fetches originals
-on demand or for a whole stream ahead of time, and adds and removes devices and persons. A new crate is not needed:
-streams replace the one log per space inside the crates there are.
+`kernoid-space-store` keeps the roster, streams, their keys, parents, records, events, positions and the due marks in
+SQLite (schema version 2, `kernoid_space_store::streams`); `kernoid_replica::streams::Streams` founds a space with a
+recovery code, invites devices of the inviting person and new persons, follows the streams a device can open, writes
+into one (making a generation first when it is due, and the generation of a stream above when that is due too), makes
+streams below a stream or for a person, shares a stream with a person, keeps originals in parts of 16 MiB, removes
+devices and persons, recovers, and purges. Protocol 1 (`Replica`) stays beside it until every program has moved.
 
 ## 10. What changes for 0.4's spaces
 
@@ -148,8 +164,10 @@ then go. kernoid's own vaults move onto `v2` with [0010](0010-foundation.md), 5.
 
 ## 11. Open
 
-- **OPEN:** this RFC's review – by the maintainer, and of sections 3 to 5 and `kernoid_crypt::pq` by someone who
-  reviews cryptography.
+- **OPEN:** a review of sections 3 to 5, `kernoid_crypt::stream` and `kernoid_crypt::pq` by someone who reviews
+  cryptography, besides their author.
+- **OPEN:** keys of streams and seeds are kept in the store on the device, not yet in the key store of the operating
+  system (as for protocol 1).
 - **OPEN:** whether the relay's `follow` hides which streams a device asks for together (it does not, by decision 5 of
   aktujo RFC 0009).
 - **OPEN:** following tens of thousands of streams, and new generations in large groups – to be measured (aktujo RFC

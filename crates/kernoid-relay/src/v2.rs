@@ -43,10 +43,7 @@ use crate::{
     INLINE, MAX_BODY, MAX_REQUESTS, REQUEST_LIFETIME, Relay, RelayError, bad, forbidden, not_found, now, space_id,
 };
 
-/// The header with a read token.
-pub const READ_HEADER: &str = "kernoid-read";
-/// The header with a write token.
-pub const WRITE_HEADER: &str = "kernoid-write";
+pub use kernoid_crypt::stream::{READ_HEADER, WRITE_HEADER};
 /// How many records a page holds at most.
 const PAGE: i64 = 1000;
 /// How many streams one `follow` may name.

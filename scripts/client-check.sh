@@ -89,6 +89,6 @@ export KERNOID_TEST_VAULT_ADDRESS=bob@firma.test KERNOID_TEST_VAULT_PASSWORD="$p
 (cd "$root/kit/client" && cargo test --locked --test server -- --test-threads 1) || { tail -n 30 "$work/server.log"; fail "the SDK"; }
 (cd "$root/kit/sync" && cargo test --locked --test server -- --test-threads 1) || { tail -n 30 "$work/server.log"; fail "kernoid-sync"; }
 KERNOID_TEST_RELAY="http://127.0.0.1:$port/relay/kernoid" \
-    cargo test --manifest-path "$root/kit/Cargo.toml" --locked -p kernoid-replica --test server \
+    cargo test --manifest-path "$root/kit/Cargo.toml" --locked -p kernoid-replica --test server --test streams \
     || { tail -n 30 "$work/server.log"; fail "the replica through the relay"; }
 echo "the SDK, kernoid-sync and the replica work against kernoid"

@@ -10,6 +10,8 @@
 //! What the foundation keeps is the trait [`Backend`]: [`Store`] keeps it in SQLite, on a device. A server keeps spaces
 //! through kernoid's relay (`kernoid-relay`, PostgreSQL), not here.
 
+pub mod streams;
+
 use std::{collections::BTreeSet, fmt, path::Path};
 
 use kernoid_base::{Sha256Hash, SpaceId, to_root};
@@ -56,7 +58,7 @@ pub enum StoreError {
 }
 
 /// The version of the schema, kept in `user_version`.
-pub const SCHEMA_VERSION: i64 = 1;
+pub const SCHEMA_VERSION: i64 = 2;
 
 const SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS settings (
@@ -180,6 +182,8 @@ impl Store {
             return Err(StoreError::Version(version));
         }
         connection.execute_batch(SCHEMA)?;
+        // Version 2: the tables of streams (RFC 0012), added beside those of 1.
+        connection.execute_batch(streams::SCHEMA)?;
         connection.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION};"))?;
         Ok(Store { connection })
     }

@@ -98,7 +98,26 @@ macro_rules! name {
 }
 
 name!(StreamId, "s-", "stream identity");
+
+impl StreamId {
+    /// The stream of a person in a space: derived, so that every device can write links sealed to the person into it.
+    pub fn of_person(domain: Domain, space: &SpaceId, person: &PersonId) -> Self {
+        let hash = Sha256Hash::of(format!("{} person stream {space} {person}", domain.label).as_bytes());
+        let mut bits = u128::from_be_bytes(hash.0[..16].try_into().expect("16 bytes"));
+        let mut name = [0u8; 26];
+        for slot in name.iter_mut().rev() {
+            *slot = ALPHABET[(bits & 31) as usize];
+            bits >>= 5;
+        }
+        StreamId(format!("s-{}", String::from_utf8(name.to_vec()).expect("ASCII")))
+    }
+}
 name!(PersonId, "p-", "person identity");
+
+/// The header of a request with a read token, base64url.
+pub const READ_HEADER: &str = "kernoid-read";
+/// The header of a request with a write token, base64url.
+pub const WRITE_HEADER: &str = "kernoid-write";
 
 /// The identity of a device: SHA-256 of its hybrid verifying key.
 pub type DeviceKeyId = Sha256Hash;
@@ -609,7 +628,8 @@ impl Roster {
                 Some(g) if g == key.generation => {
                     key.previous.is_none() && person_keys[&(key.person.clone(), g)].receiving == key.receiving
                 }
-                Some(g) => key.generation == g + 1 && key.previous.is_some(),
+                // The person's own device chains the seed before; a device of another person (one with `members`) cannot.
+                Some(g) => key.generation == g + 1,
             };
             if !fits || key.receiving.0.len() != pq::RECEIVING_KEY_LEN {
                 return Err(RosterProblem::PersonKey(key.person.to_string()));
@@ -719,11 +739,11 @@ impl Roster {
             if g == 0 {
                 break;
             }
-            let previous = self
-                .person_keys
-                .get(&(person.clone(), g))
-                .and_then(|key| key.previous.as_ref())
-                .ok_or(EncryptionError::NoKey(g - 1))?;
+            // Without a chain (a new generation made by another person's device), only the newer seeds are known.
+            let Some(previous) = self.person_keys.get(&(person.clone(), g)).and_then(|key| key.previous.as_ref())
+            else {
+                break;
+            };
             seed = StreamKey(derive(&seed, &format!("{} person chain", self.domain.label)))
                 .unchain(&person_chain_label(self.domain, &person, g), previous)?;
             g -= 1;
