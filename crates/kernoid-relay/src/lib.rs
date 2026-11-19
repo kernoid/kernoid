@@ -224,6 +224,38 @@ impl Relay {
         Ok((list, member))
     }
 
+    /// Refuses `more` bytes when the tenant's spaces would take more than its relay quota (`tenant.relay_quota_set`).
+    async fn within_quota(&self, tenant: Uuid, more: i64) -> Result<(), RelayError> {
+        let quota = sqlx::query_scalar!("SELECT relay_quota FROM tenants WHERE id = $1", tenant)
+            .fetch_optional(&self.db)
+            .await?
+            .flatten();
+        let Some(quota) = quota else { return Ok(()) };
+        let used = sqlx::query_scalar!(
+            r#"SELECT coalesce(sum(bytes), 0)::bigint AS "used!" FROM relay_spaces WHERE tenant_id = $1"#,
+            tenant,
+        )
+        .fetch_one(&self.db)
+        .await?;
+        if used.saturating_add(more) > quota {
+            return Err(RelayError(
+                StatusCode::PAYLOAD_TOO_LARGE,
+                "the relay quota of the space's tenant is used up".into(),
+            ));
+        }
+        Ok(())
+    }
+
+    /// What a tenant's spaces take together, in bytes.
+    pub async fn used(&self, tenant: Uuid) -> Result<i64, sqlx::Error> {
+        sqlx::query_scalar!(
+            r#"SELECT coalesce(sum(bytes), 0)::bigint AS "used!" FROM relay_spaces WHERE tenant_id = $1"#,
+            tenant,
+        )
+        .fetch_one(&self.db)
+        .await
+    }
+
     /// The spaces of a tenant, newest first.
     pub async fn spaces(&self, tenant: Uuid) -> Result<Vec<SpaceInfo>, sqlx::Error> {
         let rows = sqlx::query!(
@@ -427,6 +459,7 @@ async fn add_envelope(
     }
     let canonical = to_root(&envelope).map_err(|e| bad(e.to_string()))?;
     let size = canonical.len() as i64;
+    relay.within_quota(tenant, size).await?;
     // Large envelopes go to object storage first – named as garbage until the row that needs them commits.
     let owner = tenant;
     let (inline, blob) = if canonical.len() <= INLINE {

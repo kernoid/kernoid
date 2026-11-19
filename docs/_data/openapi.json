@@ -7802,6 +7802,92 @@
         }
       }
     },
+    "/v1/relay/quota": {
+      "get": {
+        "tags": [
+          "relay"
+        ],
+        "summary": "The tenant's relay quota and what its spaces take (needs `directory.read`).",
+        "operationId": "get_v1_relay_quota",
+        "parameters": [
+          {
+            "name": "kernoid-tenant",
+            "in": "header",
+            "description": "The tenant to act on – for instance administrators; the caller's own tenant if left out.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelayQuotaView"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "relay"
+        ],
+        "summary": "Sets the tenant's relay quota (needs `tenant.manage`); what is there stays, what would exceed it is refused.",
+        "operationId": "put_v1_relay_quota",
+        "parameters": [
+          {
+            "name": "kernoid-tenant",
+            "in": "header",
+            "description": "The tenant to act on – for instance administrators; the caller's own tenant if left out.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RelayQuotaView"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/relay/spaces": {
       "get": {
         "tags": [
@@ -13002,6 +13088,20 @@
               "type": "string"
             },
             "description": "Verified domains of the tenant on which new accounts may take an address – a mailbox."
+          }
+        }
+      },
+      "RelayQuotaView": {
+        "type": "object",
+        "properties": {
+          "bytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "What the tenant's spaces may take together, in bytes; null for no limit.",
+            "minimum": 0
           }
         }
       },

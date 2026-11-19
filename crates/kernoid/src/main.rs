@@ -92,6 +92,14 @@ enum RelayCommand {
     Spaces { tenant: Uuid },
     /// Remove a space of the tenant with everything it holds.
     Remove { tenant: Uuid, space: String },
+    /// What the tenant's spaces may take together: shown, or set (`--bytes`; `--unlimited` for no limit).
+    Quota {
+        tenant: Uuid,
+        #[arg(long)]
+        bytes: Option<u64>,
+        #[arg(long, conflicts_with = "bytes")]
+        unlimited: bool,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -1608,7 +1616,7 @@ async fn relay(config: &Config, command: RelayCommand) -> anyhow::Result<()> {
     let db = kernoid_store::connect(&config.database).await.context("connecting to PostgreSQL")?;
     let keys = Arc::new(TenantKeys::with_main_keys(db.clone(), main_keys(config)?));
     let blobs = BlobStore::open(&config.blob, keys, db.clone()).context("setting up object storage")?;
-    let relay = relay_of(config, db.clone(), blobs, Identity::new(EventStore::new(db)))?;
+    let relay = relay_of(config, db.clone(), blobs, Identity::new(EventStore::new(db.clone())))?;
     match command {
         RelayCommand::Spaces { tenant } => {
             for space in relay.spaces(tenant).await? {
@@ -1621,6 +1629,18 @@ async fn relay(config: &Config, command: RelayCommand) -> anyhow::Result<()> {
                 anyhow::bail!("tenant {tenant} has no space {space}");
             }
             println!("removed {space}");
+        }
+        RelayCommand::Quota { tenant, bytes, unlimited } => {
+            let identity = Identity::new(EventStore::new(db));
+            if bytes.is_some() || unlimited {
+                identity.set_relay_quota(tenant, bytes, OPERATOR).await?;
+            }
+            let quota = identity.relay_quota(tenant).await?;
+            let used = relay.used(tenant).await?;
+            match quota {
+                Some(quota) => println!("{used} of {quota} bytes"),
+                None => println!("{used} bytes, no limit"),
+            }
         }
     }
     Ok(())

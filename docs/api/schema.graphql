@@ -928,6 +928,10 @@ type MutationRoot {
 	"""
 	setTenantFilesQuota(bytes: Int): Boolean!
 	"""
+	Sets the tenant's relay quota (needs `tenant.manage`); null for no limit.
+	"""
+	setRelayQuota(bytes: Int): Boolean!
+	"""
 	Removes a space of the tenant with everything it holds (needs `tenant.manage`); false if there is none.
 	"""
 	removeRelaySpace(space: String!): Boolean!
@@ -1249,6 +1253,10 @@ type QueryRoot {
 	"""
 	fileAccess(account: String!): [FileGrantObject!]!
 	"""
+	The tenant's relay quota and what its spaces take (needs `directory.read`).
+	"""
+	relayQuota: RelayQuota!
+	"""
 	The tenant's spaces on this relay, newest first (needs `directory.read`).
 	"""
 	relaySpaces: [RelaySpace!]!
@@ -1298,6 +1306,17 @@ type RegistrationOptions {
 	kernoid can send the code; without it, registering works only with providers.
 	"""
 	byEmail: Boolean!
+}
+
+"""
+The tenant's relay quota.
+"""
+type RelayQuota {
+	"""
+	In bytes; null for no limit.
+	"""
+	bytes: Int
+	used: Int!
 }
 
 """

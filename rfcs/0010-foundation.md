@@ -59,7 +59,9 @@ space is its program's – under another scheme it is not there.
 - **Who may found a space:** an account of the installation, with its session or an access token of kernoid's apps in
   the header `kernoid-session` (`kernoid_replica::Replica::start_sync_for`) – the space is its tenant's; or anyone, on a
   relay open for a tenant (`relay.open_for_tenant`, for a relay that is all an installation does) – the space is that
-  tenant's. A space counts against its tenant (OPEN: quotas of the relay, section 8).
+  tenant's. A space counts against its tenant: a tenant's spaces together may take at most its **relay quota**
+  (`tenant.relay_quota_set`; REST `/v1/relay/quota`, GraphQL `relayQuota`, `kernoid relay quota`); an envelope that
+  would exceed it is refused (`413`), what is there stays.
 - **Who may write and read:** members, by signed requests – the relay checks signatures against the ordered list, as
   aktujo's does; it never sees a key of a space.
 - **Limits:** a request at most 64 MiB (aktujo's limit); larger originals in parts (OPEN, aktujo RFC 0001).
@@ -96,7 +98,6 @@ the tree of keys of aktujo RFC 0009 – one change of the format rather than two
 
 ## 8. Open
 
-- **OPEN:** quotas and limits of the relay per tenant and per space.
 - **OPEN:** streams, erasure and visibility (aktujo RFCs 0007–0009) – after 0.5.0.
 - **OPEN:** vaults on spaces (section 5) and post-quantum keys (section 6) – with streams.
 - **OPEN:** a space's events read by the server for an account that allows it (a node with keys, aktujo RFC 0009) –

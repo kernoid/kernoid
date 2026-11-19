@@ -212,6 +212,41 @@ impl Identity {
         Ok(bytes.map(|bytes| bytes as u64))
     }
 
+    /// Sets what the tenant's spaces on the relay may take together (RFC 0010, 4); `None` for no limit.
+    pub async fn set_relay_quota(&self, tenant: Uuid, bytes: Option<u64>, creator: &str) -> Result<()> {
+        let instance = self.tenant_instance(tenant).await?;
+        self.tenant_command(instance, tenant, creator, None, |state| {
+            if !state.exists {
+                return Err(IdentityError::NotFound("the tenant"));
+            }
+            if state.relay_quota == bytes {
+                return Ok(Vec::new());
+            }
+            Ok(vec![TenantEvent::RelayQuotaSet { bytes }])
+        })
+        .await
+    }
+
+    /// The tenant's relay quota.
+    pub async fn relay_quota(&self, tenant: Uuid) -> Result<Option<u64>> {
+        let bytes = sqlx::query_scalar!("SELECT relay_quota FROM tenants WHERE id = $1", tenant)
+            .fetch_optional(self.pool())
+            .await
+            .map_err(store_error)?
+            .ok_or(IdentityError::NotFound("the tenant"))?;
+        Ok(bytes.map(|bytes| bytes as u64))
+    }
+
+    pub async fn admin_relay_quota(&self, admin: &Admin) -> Result<Option<u64>> {
+        admin.require(Permission::DirectoryRead)?;
+        self.relay_quota(admin.tenant()).await
+    }
+
+    pub async fn admin_set_relay_quota(&self, admin: &Admin, bytes: Option<u64>) -> Result<()> {
+        admin.require(Permission::TenantManage)?;
+        self.set_relay_quota(admin.tenant(), bytes, &admin.creator()).await
+    }
+
     /// An account's own files quota; `None` when the tenant's default holds.
     pub async fn files_quota(&self, account: Uuid) -> Result<Option<u64>> {
         let bytes = sqlx::query_scalar!("SELECT files_quota FROM accounts WHERE id = $1", account)

@@ -37,6 +37,14 @@ pub struct RelayQuery;
 
 #[Object]
 impl RelayQuery {
+    /// The tenant's relay quota and what its spaces take (needs `directory.read`).
+    async fn relay_quota(&self, context: &Context<'_>) -> async_graphql::Result<RelayQuota> {
+        let relay = relay(context)?;
+        let (identity, admin) = admin(context).await?;
+        let bytes = identity.admin_relay_quota(&admin).await.map_err(error)?;
+        Ok(RelayQuota { bytes, used: relay.used(admin.tenant()).await.map_err(store)? })
+    }
+
     /// The tenant's spaces on this relay, newest first (needs `directory.read`).
     async fn relay_spaces(&self, context: &Context<'_>) -> async_graphql::Result<Vec<RelaySpace>> {
         let relay = relay(context)?;
@@ -62,8 +70,24 @@ impl RelayQuery {
 #[derive(Default)]
 pub struct RelayMutation;
 
+/// The tenant's relay quota.
+#[derive(SimpleObject)]
+pub struct RelayQuota {
+    /// In bytes; null for no limit.
+    bytes: Option<u64>,
+    used: i64,
+}
+
 #[Object]
 impl RelayMutation {
+    /// Sets the tenant's relay quota (needs `tenant.manage`); null for no limit.
+    async fn set_relay_quota(&self, context: &Context<'_>, bytes: Option<u64>) -> async_graphql::Result<bool> {
+        relay(context)?;
+        let (identity, admin) = admin(context).await?;
+        identity.admin_set_relay_quota(&admin, bytes).await.map_err(error)?;
+        Ok(true)
+    }
+
     /// Removes a space of the tenant with everything it holds (needs `tenant.manage`); false if there is none.
     async fn remove_relay_space(&self, context: &Context<'_>, space: String) -> async_graphql::Result<bool> {
         let relay = relay(context)?;

@@ -70,6 +70,9 @@ pub enum TenantEvent {
     /// The files quota of every account without its own (RFC 0005, 10); `None` for no limit.
     #[serde(rename = "tenant.default_files_quota_set")]
     DefaultFilesQuotaSet { bytes: Option<u64> },
+    /// What the tenant's end-to-end encrypted spaces on the relay may take together (RFC 0010, 4); `None` for no limit.
+    #[serde(rename = "tenant.relay_quota_set")]
+    RelayQuotaSet { bytes: Option<u64> },
     /// Days after which emails leave the accounts' Trash and Junk (RFC 0002, 13.2); `None` keeps them.
     #[serde(rename = "tenant.mail_retention_set")]
     MailRetentionSet { trash_days: Option<u32>, junk_days: Option<u32> },
@@ -159,6 +162,7 @@ pub struct Tenant {
     pub scim_tokens: BTreeSet<Uuid>,
     pub default_mail_quota: Option<u64>,
     pub default_files_quota: Option<u64>,
+    pub relay_quota: Option<u64>,
     /// Days in Trash and in Junk.
     pub mail_retention: (Option<u32>, Option<u32>),
     /// Days in the file trash.
@@ -242,6 +246,7 @@ impl Aggregate for Tenant {
             }
             TenantEvent::DefaultMailQuotaSet { bytes } => self.default_mail_quota = bytes,
             TenantEvent::DefaultFilesQuotaSet { bytes } => self.default_files_quota = bytes,
+            TenantEvent::RelayQuotaSet { bytes } => self.relay_quota = bytes,
             TenantEvent::MailRetentionSet { trash_days, junk_days } => self.mail_retention = (trash_days, junk_days),
             TenantEvent::FilesRetentionSet { trash_days } => self.files_retention = trash_days,
             TenantEvent::LanguageSet { language } => self.language = language,
@@ -410,6 +415,12 @@ pub(crate) async fn project(connection: &mut PgConnection, events: &[Event]) -> 
             TenantEvent::DefaultFilesQuotaSet { bytes } => {
                 let bytes = bytes.map(|bytes| i64::try_from(bytes).unwrap_or(i64::MAX));
                 sqlx::query!("UPDATE tenants SET default_files_quota = $2 WHERE id = $1", id, bytes)
+                    .execute(&mut *connection)
+                    .await?;
+            }
+            TenantEvent::RelayQuotaSet { bytes } => {
+                let bytes = bytes.map(|bytes| i64::try_from(bytes).unwrap_or(i64::MAX));
+                sqlx::query!("UPDATE tenants SET relay_quota = $2 WHERE id = $1", id, bytes)
                     .execute(&mut *connection)
                     .await?;
             }

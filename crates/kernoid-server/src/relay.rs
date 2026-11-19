@@ -40,7 +40,48 @@ impl Founders for AccountFounders {
 
 /// The REST routes of the relay's administration.
 pub(crate) fn rest() -> OpenApiRouter<AppState> {
-    OpenApiRouter::new().routes(routes!(spaces)).routes(routes!(remove_space))
+    OpenApiRouter::new().routes(routes!(spaces)).routes(routes!(remove_space)).routes(routes!(quota, set_quota))
+}
+
+#[derive(Debug, serde::Deserialize, Serialize, utoipa::ToSchema)]
+pub(crate) struct RelayQuotaView {
+    /// What the tenant's spaces may take together, in bytes; null for no limit.
+    bytes: Option<u64>,
+    /// What they take now (only in answers).
+    #[serde(default, skip_deserializing)]
+    used: i64,
+}
+
+/// The tenant's relay quota and what its spaces take (needs `directory.read`).
+#[utoipa::path(get, path = "/v1/relay/quota", tag = "relay", params(TenantHeader),
+    responses((status = 200, body = RelayQuotaView), (status = 403, body = Problem)))]
+pub(crate) async fn quota(State(state): State<AppState>, AdminSession(admin): AdminSession) -> Response {
+    let bytes = match state.identity.admin_relay_quota(&admin).await {
+        Ok(bytes) => bytes,
+        Err(error) => return crate::sessions::problem(error),
+    };
+    let relay = match relay(&state) {
+        Ok(relay) => relay,
+        Err(response) => return response,
+    };
+    match relay.used(admin.tenant()).await {
+        Ok(used) => Json(RelayQuotaView { bytes, used }).into_response(),
+        Err(error) => store(error),
+    }
+}
+
+/// Sets the tenant's relay quota (needs `tenant.manage`); what is there stays, what would exceed it is refused.
+#[utoipa::path(put, path = "/v1/relay/quota", tag = "relay", params(TenantHeader), request_body = RelayQuotaView,
+    responses((status = 204), (status = 403, body = Problem)))]
+pub(crate) async fn set_quota(
+    State(state): State<AppState>,
+    AdminSession(admin): AdminSession,
+    Json(body): Json<RelayQuotaView>,
+) -> Response {
+    match state.identity.admin_set_relay_quota(&admin, body.bytes).await {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(error) => crate::sessions::problem(error),
+    }
 }
 
 #[derive(Debug, Serialize, utoipa::ToSchema)]

@@ -235,6 +235,16 @@ async fn large_envelopes_go_to_object_storage_and_leave_with_their_space(pool: P
     assert_eq!(received, envelope);
     assert!(relay.relay.spaces(relay.founder.tenant).await.unwrap()[0].bytes > 200 * 1024);
 
+    // A quota the tenant's spaces exceed refuses what comes next.
+    sqlx::query!("UPDATE tenants SET relay_quota = 1000 WHERE id = $1", relay.founder.tenant)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let more = Envelope::seal(&space(), 0, &key, &laptop, EnvelopeContent::Original, b"one more");
+    let (status, _) = relay.send("POST", &envelopes, Some(&laptop), false, to_root(&more).unwrap()).await;
+    assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+    assert!(relay.relay.used(relay.founder.tenant).await.unwrap() > 200 * 1024);
+
     // Removed by its tenant – not by another –, its object becomes garbage.
     assert!(!relay.relay.remove_space(Uuid::now_v7(), space().as_str()).await.unwrap());
     assert!(relay.relay.remove_space(relay.founder.tenant, space().as_str()).await.unwrap());

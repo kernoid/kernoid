@@ -7,6 +7,11 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 ## [Unreleased]
 
+### Added
+
+- **Relay quota** per tenant (`tenant.relay_quota_set`, migration 0055): REST `/v1/relay/quota`, GraphQL `relayQuota`
+  and `setRelayQuota`, `kernoid relay quota`; an envelope beyond it is refused.
+
 ## [0.5.0] – DATE
 
 kernoid becomes the core of a suite of building blocks ([RFC 0008](rfcs/0008-suite-and-building-blocks.md)–0011): an
