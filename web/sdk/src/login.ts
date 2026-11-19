@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // The session API: what a login UI needs – logging in, further checks, finishing OpenID Connect auth requests – and
 // what an account does for itself (second factors, password, sessions).
 

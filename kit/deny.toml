@@ -1,16 +1,16 @@
 # SPDX-License-Identifier: MIT
-# cargo-deny: what the Rust SDK's dependencies may be (CI, job `deps`). Known vulnerabilities fail the build,
-# licences must keep the SDK usable under MIT, crates come only from crates.io. A finding that does not affect the
-# SDK is ignored below with a reason, never silently.
+# cargo-deny: what the dependencies of the kit (RFC 0008, 2) may be (CI, job `deps`). Known vulnerabilities fail the build,
+# licences must keep it usable under MIT, crates come only from crates.io. A finding that does not affect the
+# kit is ignored below with a reason, never silently.
 
 [graph]
 all-features = true
 
 [advisories]
-# Unmaintained crates are reported, but only those the SDK depends on directly fail the build.
+# Unmaintained crates are reported, but only those the kit depends on directly fail the build.
 unmaintained = "workspace"
 ignore = [
-    # The three below come with rpgp, through kernoid-e2e (end-to-end encryption, RFC 0006); `apps/e2e/deny.toml`
+    # The three below come with rpgp, through kernoid-e2e (end-to-end encryption, RFC 0006); kernoid-e2e
     # ignores them for the same reasons.
     # crypto-bigint 0.5 is not constant-time; the fix is 0.7.6, which rpgp 0.21's curves (elliptic-curve 0.13) do not
     # take. It serves only RSA, the NIST curves and X448. kernoid's keys are Curve25519 and ML-KEM/ML-DSA (RFC 0006,
@@ -29,7 +29,7 @@ ignore = [
 
 [licenses]
 confidence-threshold = 0.93
-# Permissive licences, so that the SDK stays usable under MIT – and MPL-2.0, whose copyleft covers only its own files
+# Permissive licences, so that the kit stays usable under MIT – and MPL-2.0, whose copyleft covers only its own files
 # (option-ext, through dirs); they stay under the MPL.
 allow = ["0BSD", "MPL-2.0", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "BSL-1.0", "CC0-1.0", "CDLA-Permissive-2.0", "ISC", "MIT", "MIT-0", "Unicode-3.0", "Unlicense", "Zlib"]
 

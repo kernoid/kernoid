@@ -3,7 +3,7 @@
 
 kernoid stands on the work of others. This file names the two projects whose roles it takes over and what it took
 from each; every file says the same in its SPDX header and its first lines. The libraries kernoid builds on are in
-`Cargo.lock`, `apps/*/Cargo.lock`, `operator/Cargo.lock` and `web/pnpm-lock.yaml`, each with its own licence.
+`Cargo.lock`, `kit/Cargo.lock`, `tui/Cargo.lock`, `operator/Cargo.lock` and `web/pnpm-lock.yaml`, each with its own licence.
 
 ## Stalwart
 

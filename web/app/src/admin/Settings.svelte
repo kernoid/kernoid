@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- The tenant's settings: name, second factor, how accounts log in, registration, who gets which service, quotas and
      how long the trash and junk keep mail, and the modules the tenant uses. -->
 <script lang="ts">

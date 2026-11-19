@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- The account, as a section of the app: name, appearance, password, second factors, recovery codes, app passwords
      for mail programs, applications and sessions – through kernoid's session API with the same cookie as JMAP. -->
 <script lang="ts">

@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- Loads the JMAP session – and whether the account may administer something –, then shows the frame. -->
 <script lang="ts">
   import { adminAccess } from "./admin/access.js";

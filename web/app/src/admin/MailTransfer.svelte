@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- An account's mailboxes: each saved as an mbox file (with its keywords), and messages of an mbox file stored in one –
      up to 2 MiB here; larger files go with the CLI (`kernoid mail import-mbox`). -->
 <script lang="ts">

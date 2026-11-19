@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // The theme chosen in the web app (web/app/src/theme.ts, same key and origin): light or dark overrides the system's.
 
 export function applyTheme(): void {

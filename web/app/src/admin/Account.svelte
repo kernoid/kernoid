@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- One account in detail: name, state, addresses, logins, password and second factors, services, quotas, who may use
      its mail and files, sessions, applications and linked providers. -->
 <script lang="ts" module>

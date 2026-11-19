@@ -189,7 +189,7 @@ running (`pg_snapshot_xmin`), which needs no locks between writers and readers.
 
 ## 7. Login, sessions and the web app
 
-- kernoid's web app is its own **TypeScript progressive web app**; with it comes a **TypeScript SDK** (MIT), so that
+- kernoid's web app is its own **TypeScript progressive web app**; with it comes a **TypeScript SDK** (AGPL since 0.5, RFC 0008, 6), so that
   anyone can build a login – or a whole client – into their own web app.
 - The login runs on a **session API**, following ZITADEL's session API v2
   ([custom login](https://zitadel.com/docs/guides/integrate/login-ui/oidc-standard)): an OIDC or SAML request is
@@ -467,8 +467,9 @@ As in ZITADEL, a project is "the vessel that holds your Applications and Roles"
   as a public client: authorization code with PKCE, the ID token verified against the instance's JWKS (signature,
   issuer, audience, expiry, nonce), refresh, userinfo, revocation, logout. `LoginClient` wraps the session API for
   login UIs and account pages, with the WebAuthn translation for passkeys.
-- **Licence:** both are MIT, like every first-party app – only the protocol connects them to the server, they share
-  no code with it.
+- **Licence:** both were MIT until 0.4; since 0.5 they are AGPL like the server, as is everything no MIT app uses (RFC
+  0008, 6). Only the protocol connects them to the server; they share no code with it. A web app under another licence
+  logs in with any OpenID Connect library.
 - **Cross-origin calls:** discovery, keys, token, revocation and userinfo answer requests from any origin (CORS,
   without cookies), so that a web app can use them from the browser. The `/v1` API answers the same origin and the
   instance's own login UI, if it has one (section 7.2).

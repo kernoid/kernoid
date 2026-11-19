@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { describe, expect, it } from "vitest";
 
 import { base64urlDecode, base64urlEncode, creationOptions, getCredential, isMultiFactor, KernoidError, LoginClient, passkeyAutofillAvailable, pkceChallenge, requestOptions } from "../src/index.js";

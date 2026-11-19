@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- The code kernoid sent to the address given when registering; then the new account logs in. -->
 <script lang="ts">
   import { t } from "../i18n.js";

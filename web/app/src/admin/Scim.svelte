@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- SCIM tokens, with which a directory creates and removes the tenant's accounts. -->
 <script lang="ts">
   import { emptyText, loaded } from "../app.svelte.js";

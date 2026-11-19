@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Files over JMAP (draft-ietf-jmap-filenode): the stores the user reaches – their own, those shared with them, the
 // tenant's drives –, directories and files with the rights on them, uploads, sharing, versions, the trash.
 

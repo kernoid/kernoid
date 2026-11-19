@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- A TOTP secret to scan or type in, confirmed with a first code. -->
 <script lang="ts">
   import type { TotpSetup } from "@kernoid/sdk";

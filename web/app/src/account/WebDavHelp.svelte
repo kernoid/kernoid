@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- Connecting a file manager over WebDAV, per system: the address as user name and an app password. -->
 <script lang="ts">
   import { t } from "../i18n.js";

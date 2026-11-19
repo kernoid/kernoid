@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- A page's heading with its buttons. -->
 <script lang="ts">
   import type { Snippet } from "svelte";

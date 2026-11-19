@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: MIT */
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 /* kernoid's colours (kernoid/brand's README): Night, glitch white, mint – dark by default, light when the system is light,
    unless the web app's choice says otherwise (data-theme, theme.ts). */
 :root {

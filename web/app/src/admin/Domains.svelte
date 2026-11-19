@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- The tenant's domains: adding one (with the TXT record that proves it), checking it, removing it – and the DNS
      records mail needs (MX, SPF, DKIM, DMARC), with what DNS answers today; a domain's DKIM keys can be changed. -->
 <script lang="ts">

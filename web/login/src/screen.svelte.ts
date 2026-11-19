@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // What the page shows: one screen at a time – a component and its props. The steps of logging in (flow.ts,
 // factors.ts, …) move from screen to screen with `show`; App.svelte draws the current one and moves the focus there.
 

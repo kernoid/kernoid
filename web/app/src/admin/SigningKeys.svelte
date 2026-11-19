@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- For instance administrators: the keys that sign the instance's tokens. -->
 <script lang="ts">
   import { loaded } from "../app.svelte.js";

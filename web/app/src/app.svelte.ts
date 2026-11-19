@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // What every view shares: the JMAP session (a context), the counters push bumps per type, and resources – values
 // loaded from the server that load again when what they depend on changes.
 

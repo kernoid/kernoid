@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- The tenant's accounts: people with an address of the tenant, external accounts (logins only), shared mailboxes –
      and one account in detail (Account.svelte): name, state, addresses, logins, password and second factors, services,
      quotas, who may use its mail and files, sessions, applications and linked providers. -->

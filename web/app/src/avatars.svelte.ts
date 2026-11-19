@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // The pictures of the tenant's accounts (GET /v1/avatars): loaded once, again after one's own changes; Avatar.svelte
 // finds a person's picture by address. Who has none shows initials.
 

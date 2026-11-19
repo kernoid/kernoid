@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- A file shown in place (kind.ts). The browser loads the content from the download URL with the session's cookie;
      the server serves it with a policy that keeps it from running as a page (jmap.rs, download_response). Office
      documents and the rest: download. `url` saves the file; `inline` shows it in place (the server's `inline=1`). -->

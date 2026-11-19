@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- Administration, as a section of the app (#/admin/<page>/<id>): the tenant's settings, domains, accounts, groups,
      team folders, roles, projects and applications, identity providers and provisioning – and, for instance
      administrators, the instance, its tenants, roles, signing keys and mail queue. Pages appear as the account's

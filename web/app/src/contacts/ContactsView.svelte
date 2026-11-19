@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- Contacts: the address books' cards, one shown, made and changed here. -->
 <script lang="ts">
   import { Lock, Pencil, Search, Trash2, UserPlus } from "@lucide/svelte";

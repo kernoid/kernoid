@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // JMAP (RFC 8620) from the browser: the session of the instance's HttpOnly cookie – the same login as the account
 // page – with the CSRF header kernoid asks for. Without a session the browser goes to the login, and comes back.
 

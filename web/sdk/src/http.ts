@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Requests to kernoid's REST API: JSON in, JSON out, problems thrown as KernoidError.
 
 import { KernoidError, type Problem } from "./errors.js";

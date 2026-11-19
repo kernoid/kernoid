@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // What every administration page shares: actions that tell how they ended, the tenant's directory (accounts and
 // groups, for names and choosers), the way between pages, and how values are shown and read.
 

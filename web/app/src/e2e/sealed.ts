@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Encrypted calendars and address books in the web app (RFC 0006, 7): a collection with a key of its own, made here,
 // its secret wrapped for each member's key (`CollectionKey`). Its entries are JSON objects – events and contacts as
 // the app describes them – encrypted to the collection's key and signed (`SealedItem`); kernoid stores them blind.

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Base64url without padding (RFC 4648, section 5) – the encoding of PKCE, JWTs and WebAuthn data.
 
 export function encode(bytes: ArrayBuffer | ArrayBufferView): string {

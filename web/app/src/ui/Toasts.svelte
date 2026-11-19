@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- The toasts (toasts.svelte.ts), at the bottom of the window; read out by screen readers as they come. -->
 <script lang="ts">
   import { CircleAlert, CircleCheck, X } from "@lucide/svelte";

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // The authorization code flow against a fake kernoid that signs ID tokens with a real RSA key.
 import { beforeAll, describe, expect, it } from "vitest";
 

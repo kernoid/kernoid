@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- What a link opens: lists, shows and downloads what the link leads to; where the link lets people add files to a
      folder, they are uploaded with progress (also by dropping them), into a drop box without seeing what is in it. -->
 <script lang="ts">

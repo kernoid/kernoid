@@ -32,7 +32,7 @@ kernoid brings its own login UI, served at `https://<instance domain>/login`:
   provider come back to `<that URL>/idp`, and that origin – no other – may call the `/v1` API from the browser (CORS,
   without cookies). Build it on the [SDK]({{ '/sdk/' | relative_url }}).
 
-It is a small PWA in TypeScript (`web/login`, MIT) on the [SDK]({{ '/sdk/' | relative_url }}). Its pages carry a
+It is a small PWA in TypeScript (`web/login`, AGPL) on the [SDK]({{ '/sdk/' | relative_url }}). Its pages carry a
 strict Content-Security-Policy and may not be framed. It speaks English and German – the browser's first language of
 the two, or `?lang=de` / `?lang=en`. The address field offers the person's passkeys in the browser's autofill where
 the browser can (conditional mediation); setting up an authenticator app shows a QR code.

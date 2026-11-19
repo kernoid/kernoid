@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Light, dark or as the system is: kept in the browser for the instance's origin, so the login UI follows it too
 // (web/login/src/theme.ts reads the same key). `data-theme` on <html> overrides the system's choice in style.css.
 

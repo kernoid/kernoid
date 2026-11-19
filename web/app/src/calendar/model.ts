@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Calendars over JMAP (draft-ietf-jmap-calendars): calendars, the instances of a time window, events as JSCalendar
 // 2.0 as kernoid writes them, invitations and answers (`sendSchedulingMessages`).
 

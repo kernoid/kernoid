@@ -8,9 +8,9 @@ web/sdk/dist
 web/login/dist
 web/app/node_modules
 web/app/dist
-apps/tui/
-apps/client/
-apps/sync/
-apps/e2e/target/
+tui/
+kit/target/
+kit/*/target/
+kit/flutter/
 web/e2e/node_modules
 web/e2e/dist

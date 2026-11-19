@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // End-to-end encryption in the web app (RFC 0006): kernoid's own OpenPGP code as WebAssembly (`@kernoid/e2e`), loaded
 // only when needed; the account's key made here and kept on the server only as protected copies; unlocked with a
 // passkey (its PRF extension gives the passphrase) or the recovery code; the keys of others looked up over JMAP.

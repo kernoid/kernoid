@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Comfortable or compact: how much room rows and controls take. Kept in the browser like the theme; `data-density`
 // on <html> picks the spacing in style.css.
 

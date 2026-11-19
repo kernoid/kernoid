@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // The administration API (REST, /v1/…) from the browser: the session cookie with the CSRF header, and – for an
 // instance administrator working on another tenant – the tenant in `kernoid-tenant`. Errors are kernoid's problem
 // details (RFC 9457).

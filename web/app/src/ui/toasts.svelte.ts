@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Short messages at the bottom of the window ("Sent"), each gone after a while – some with an action ("Undo") that
 // works until then. Toasts.svelte shows them.
 

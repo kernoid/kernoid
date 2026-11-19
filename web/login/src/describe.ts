@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // kernoid's errors in the page's words.
 
 import { KernoidError } from "@kernoid/sdk";

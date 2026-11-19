@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- Mail: the mailboxes (Folders.svelte), the emails of the one chosen, the one read, and writing. Emails are chosen one
      by one, with Ctrl or ⌘ more, with Shift a range – and dragged onto a folder to move them there. -->
 <script lang="ts">

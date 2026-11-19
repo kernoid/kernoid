@@ -3,7 +3,7 @@
 # processes start, one Deployment per role. A workspace of its own, apart from the server's: the Kubernetes client
 # and the mail libraries need versions of the same crates that do not go together, and the server's image need not
 # carry the client. It talks to kernoid only through Kubernetes. Dependencies are exact (`=`) and at least two weeks
-# old when taken (`apps/tui/scripts/check-age.py --dir=operator`).
+# old when taken (`tui/scripts/check-age.py --dir=operator`).
 [workspace]
 
 [package]

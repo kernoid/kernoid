@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- New recovery codes, shown once. -->
 <script lang="ts">
   import { t } from "../i18n.js";

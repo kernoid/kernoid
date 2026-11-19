@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // What the logged-in account may administer: its permissions in the tenant worked on (role.rs), and whether it
 // administers the instance. Nothing for most; kernoid checks again on every request.
 //

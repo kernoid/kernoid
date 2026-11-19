@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- The frame: navigation between mail, calendar, contacts and files (by the URL's fragment) – those the account has –,
      the account (#/account), the administration (#/admin), and the views. -->
 <script lang="ts">

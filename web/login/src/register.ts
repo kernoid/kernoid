@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Registering (/login/register, RFC 0003; Registration.svelte).
 
 import { t } from "./i18n.js";

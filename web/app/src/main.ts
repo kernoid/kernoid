@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // kernoid's web app: mail, calendar, contacts and files of the logged-in account over JMAP, the account, and the
 // administration.
 

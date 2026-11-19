@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- Links to a file or folder for people without an account: made with an expiry and a password if wanted, shown once
      when made (kernoid keeps only a hash), removed when no longer wanted. -->
 <script lang="ts">

@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- Roles and who holds them – of the tenant (`/v1/roles`) or of the instance (`/v1/instance/roles`). Built-in roles
      are fixed; a tenant or instance defines its own from the permissions kernoid knows (role.rs). -->
 <script lang="ts">

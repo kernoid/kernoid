@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- An account's Sieve scripts (RFC 5228): which runs when mail arrives, each to read, change, switch on or remove –
      kernoid checks that a script compiles before it keeps it. The vacation response is the account's own (account page). -->
 <script lang="ts">

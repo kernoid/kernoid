@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- The mail store's settings: the address new emails come from, and how long the Trash keeps emails before they are
      deleted for good – the tenant's days unless one chooses one's own. -->
 <script lang="ts">

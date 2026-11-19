@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# Runs the tests of the Rust SDK (apps/client) and of kernoid-sync (apps/sync) that need a real kernoid: this
+# Runs the tests of the Rust SDK (kit/client) and of kernoid-sync (kit/sync) that need a real kernoid: this
 # checkout's binary, serving a fresh database in the PostgreSQL of DATABASE_URL (a role that may create databases),
 # objects in memory, on http://clients.localhost:$PORT (18380 unless set). An instance, a tenant and the account
 # alice@firma.test with mail and files are made with the CLI; the tests log in with its password. kernoid-sync's vault
@@ -76,6 +76,6 @@ curl -fsS "http://127.0.0.1:$port/readyz" >/dev/null || { tail -n 30 "$work/serv
 
 export KERNOID_TEST_SERVER="http://$host:$port" KERNOID_TEST_ADDRESS=alice@firma.test KERNOID_TEST_PASSWORD="$password"
 export KERNOID_TEST_VAULT_ADDRESS=bob@firma.test KERNOID_TEST_VAULT_PASSWORD="$password"
-(cd "$root/apps/client" && cargo test --locked --test server -- --test-threads 1) || { tail -n 30 "$work/server.log"; fail "the SDK"; }
-(cd "$root/apps/sync" && cargo test --locked --test server -- --test-threads 1) || { tail -n 30 "$work/server.log"; fail "kernoid-sync"; }
+(cd "$root/kit/client" && cargo test --locked --test server -- --test-threads 1) || { tail -n 30 "$work/server.log"; fail "the SDK"; }
+(cd "$root/kit/sync" && cargo test --locked --test server -- --test-threads 1) || { tail -n 30 "$work/server.log"; fail "kernoid-sync"; }
 echo "the SDK and kernoid-sync work against kernoid"

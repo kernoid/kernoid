@@ -1,19 +1,19 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # One image for every role; the configuration decides what a container does. It carries the Kubernetes operator too.
 
-# The end-to-end library (apps/e2e, MIT) as WebAssembly for the web app.
+# The end-to-end library (kit/e2e, MIT) as WebAssembly for the web app.
 FROM docker.io/library/rust:1.99.1-slim-trixie AS e2e
 WORKDIR /src
 COPY rust-toolchain.toml ./
-COPY apps/e2e apps/e2e
+COPY kit kit
 RUN rustup target add wasm32-unknown-unknown
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    cargo install wasm-bindgen-cli --version "$(apps/e2e/scripts/wasm-bindgen-version.sh)" --locked
+    cargo install wasm-bindgen-cli --version "$(kit/e2e/scripts/wasm-bindgen-version.sh)" --locked
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/src/apps/e2e/target \
-    apps/e2e/scripts/build-wasm.sh
+    --mount=type=cache,target=/src/kit/target \
+    kit/e2e/scripts/build-wasm.sh
 
-# The login UI and the web app (web/, MIT): built first, then built into the binary (rust-embed). Install scripts of
+# The login UI and the web app (web/): built first, then built into the binary (rust-embed). Install scripts of
 # dependencies do not run.
 FROM docker.io/library/node:26.11.1-trixie-slim AS web
 RUN npm install --global --ignore-scripts --no-audit --no-fund pnpm@12.12.0

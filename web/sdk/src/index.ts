@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // @kernoid/sdk – log in with kernoid. `OidcClient` is for web apps that let people log in with kernoid;
 // `LoginClient` is for login UIs and account pages that use kernoid's session API directly.
 

@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- A form's buttons: perhaps Cancel, and the one that submits. -->
 <script lang="ts">
   import { t } from "../../i18n.js";

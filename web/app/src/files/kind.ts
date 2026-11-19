@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // How a file can be shown in place (Viewer.svelte): images, audio and video as the browser plays them, PDFs in the
 // browser's viewer, text as text – and loading the text.
 

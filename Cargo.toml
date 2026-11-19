@@ -2,8 +2,9 @@
 [workspace]
 resolver = "3"
 members = ["crates/*"]
-# The end-to-end library is a dependency of the server, not a member: a workspace of its own (MIT), like apps/tui.
-exclude = ["apps/e2e"]
+# The kit (MIT, RFC 0008) and the terminal app are workspaces of their own; the server takes kernoid-e2e from the kit by
+# path, as a dependency, never as a member.
+exclude = ["kit", "tui"]
 
 [workspace.package]
 version = "0.4.0"

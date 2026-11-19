@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- Writing with formatting (TipTap, MIT): bold, italic, underline, strike-through, headings, lists, quotes, links.
      What it holds is only what its schema knows – pasted or quoted HTML loses scripts, styles and images on the way
      in –, so its HTML can be sent as it is; the plain text goes alongside for programs that show no HTML. TipTap's

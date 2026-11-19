@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- A screen of text and buttons: a notice, what to know, a list, and what one can do next. -->
 <script lang="ts" module>
   export interface Choose {

@@ -17,7 +17,7 @@ It sends the credentials – HTTP Basic, or the access token – only to the ori
 machine unless asked for. TLS through rustls on AWS-LC with the system's trust store, the post-quantum key exchange
 X25519MLKEM768 preferred.
 
-kernoid's terminal app (`apps/tui`) is built on it, and so will be the apps of
+kernoid's terminal app (`tui`) is built on it, and so will be the apps of
 [kernoid/apps](https://github.com/kernoid/apps).
 
 ```rust

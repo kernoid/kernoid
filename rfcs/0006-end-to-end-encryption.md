@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: CC-BY-4.0 -->
 # RFC 0006 – End-to-end and post-quantum encryption
 
-- **Status:** draft, 2026-10-30; implemented: section 2 (post-quantum TLS), 4 (keys: `apps/e2e`, `kernoid-identity`'s
+- **Status:** draft, 2026-10-30; implemented: section 2 (post-quantum TLS), 4 (keys: `kit/e2e`, `kernoid-identity`'s
   `openpgp`, migration 0048; WKD and Autocrypt), 5.1–5.2 on the server (`kernoid-mail`'s `e2e`), 8 (policy, recovery
   key) and the JMAP extension; the web app's side of 5 and 8; section 6 (vaults: `kernoid-files`' `vault`, migration
   0049, the web app, the Rust SDK's `e2e::vault`); section 7 (encrypted calendars and address books: `kernoid-groupware`'s `sealed`, migration 0050,
@@ -65,7 +65,7 @@ people outside kernoid have keys, and "do not invent cryptography" (CLAUDE.md). 
 for every person – **OPEN**, perhaps later as a second way for mail.
 
 There is **one implementation**: [rpgp](https://github.com/rpgp/rpgp) (crate `pgp`, MIT OR Apache-2.0) with its
-feature `pqc`. The server uses it for what it does (5.2, 4.4); the apps use it through `apps/e2e` (MIT, section 10),
+feature `pqc`. The server uses it for what it does (5.2, 4.4); the apps use it through `kit/e2e` (MIT, section 10),
 compiled to WebAssembly for the web app and natively for the terminal app – the same code everywhere. rpgp's ML-KEM
 and ML-DSA come from RustCrypto's `ml-kem` 0.2 and `ml-dsa` 0.0.4, which have had no external audit: part of the
 audit before 1.0 (whitepaper), like bergshamra. `ml-dsa` 0.0.4 signs in variable time (RUSTSEC-2025-0144, fixed in
@@ -184,7 +184,7 @@ that the sender encrypted does that (5.3).
 
 ### 5.4 Reading
 
-The apps decrypt in the client: the summary for lists, the message (parsed with mail-parser in `apps/e2e`, the same
+The apps decrypt in the client: the summary for lists, the message (parsed with mail-parser in `kit/e2e`, the same
 parser as the server) for reading. Search over text happens in the app over what it has decrypted; **OPEN:** an
 encrypted search index kept by the app.
 
@@ -261,7 +261,7 @@ can check what a server delivers.
 
 ## 10. The apps
 
-`apps/e2e` (MIT, a Cargo workspace of its own like the terminal app) is the end-to-end layer of kernoid's apps:
+`kit/e2e` (MIT, a Cargo workspace of its own like the terminal app) is the end-to-end layer of kernoid's apps:
 keys and their copies, encrypting and decrypting messages, PGP/MIME and parsing mail, vaults – on rpgp. The web app
 uses it as WebAssembly (`@kernoid/e2e`), the terminal app as a library, native apps later the same way.
 

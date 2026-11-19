@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- For instance administrators: the instance (name, domains, login UI, passkeys, where people register). Creating
      instances and the main key stay with the operator's CLI. -->
 <script lang="ts">

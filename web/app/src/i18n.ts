@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // The app's texts in German and English – the browser's language decides; English when it is neither.
 
 const de: Record<string, string> = {

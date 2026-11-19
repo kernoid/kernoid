@@ -1,6 +1,6 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // The WebAssembly build as the web app uses it: a keyring that makes a key, protects and unlocks it, and encrypts
-// mail as PGP/MIME – the same code as apps/e2e's own tests, here through its JavaScript bindings.
+// mail as PGP/MIME – the same code as kit/e2e's own tests, here through its JavaScript bindings.
 import { readFileSync } from 'node:fs';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { initSync, isEncrypted, Keyring, normalizeRecoveryCode, recoveryCode } from '../dist/kernoid_e2e.js';

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Vaults in the web app (RFC 0006, 6): directories whose content only their members read. A vault has an OpenPGP key
 // of its own, made here; its secret key goes to the server only wrapped – encrypted to the key of each member. Inside,
 // files are uploaded encrypted to the vault's key and names are an id with the real name encrypted beside it

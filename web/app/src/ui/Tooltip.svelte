@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- One tooltip for the whole app: whatever carries `data-tip` shows it on hover or keyboard focus, placed above (or
      below, near the top) in the window – so no scrolling container cuts it off. -->
 <script lang="ts">

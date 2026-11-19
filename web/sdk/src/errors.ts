@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // kernoid answers errors as problem details (RFC 9457); the SDK throws them as KernoidError.
 
 /** An error as kernoid describes it. */

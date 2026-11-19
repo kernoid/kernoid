@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Format, lints, the sqlx query cache, tests against PostgreSQL and the API files of the documentation – on Linux and
-# on macOS; the web SDK, login UI and web app (types, tests, build); the terminal app (its own Cargo workspace:
-# format, lints, tests); the operator and its Helm chart; no Stalwart Enterprise License material; known
+# on macOS; the kit (kit/, MIT); the web SDK, login UI and web app (types, tests, build); the terminal app (its own
+# Cargo workspace: format, lints, tests); the operator and its Helm chart; no Stalwart Enterprise License material; known
 # vulnerabilities and licences of the dependencies; the container image builds, and is pushed to ghcr.io from main.
 # A version tag checks nothing again: it releases the commit main's run checked – its image under the version, the
-# operator's Helm chart, the Rust SDK on crates.io – and checks the upgrade from the release before. The licence check
+# operator's Helm chart, the kit's crates on crates.io – and checks the upgrade from the release before. The licence check
 # (REUSE) and the sign-off (DCO) come from falkoss/starterpack, pinned by commit. Actions are pinned by commit, with the
 # version as a comment.
 name: CI
@@ -59,47 +59,43 @@ jobs:
           ./target/debug/kernoid openapi | diff - docs/_data/openapi.json
           ./target/debug/kernoid graphql-schema | diff - docs/api/schema.graphql
       - run: cargo test --locked
-      - name: The Rust SDK and kernoid-sync against this kernoid
+      - name: The kit against this kernoid
         run: scripts/client-check.sh target/debug/kernoid
       - if: always()
         run: df -h .
 
-  # kernoid's Rust SDK (apps/client, MIT): a workspace of its own, tested against a server that records requests.
-  client:
+  # The kit (kit/, MIT, RFC 0008): one workspace – the Rust SDK, kernoid-e2e, kernoid-sync –, apart from the server's;
+  # it may reach no server crate and nothing that is not MIT (scripts/kit-check.sh). The SDK is tested against a server
+  # that records requests, the SDK and kernoid-sync against a real kernoid in the job `rust` (scripts/client-check.sh).
+  # The end-to-end library is built as WebAssembly for the web app, which takes the build from here.
+  kit:
     if: github.ref_type != 'tag'
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: apps/client
+        working-directory: kit
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Rust toolchain from rust-toolchain.toml
         run: rustup toolchain install
       - uses: Swatinem/rust-cache@2201cc584a476d1b508be977bbe4b7d1c7a52e9c # v2.9.3
         with:
-          workspaces: apps/client
+          workspaces: kit
+      - name: Only MIT, and no server crate
+        run: ../scripts/kit-check.sh
       - run: cargo fmt --check
       - run: cargo clippy --locked --all-targets
+      - run: cargo clippy --locked -p kernoid-e2e --target wasm32-unknown-unknown --features wasm
       - run: cargo test --locked
-
-  # kernoid-sync (apps/sync, MIT): a folder kept in step with a file store, on the SDK. Against a real kernoid in the
-  # job `rust` (scripts/client-check.sh).
-  sync:
-    if: github.ref_type != 'tag'
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: apps/sync
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Rust toolchain from rust-toolchain.toml
-        run: rustup toolchain install
-      - uses: Swatinem/rust-cache@2201cc584a476d1b508be977bbe4b7d1c7a52e9c # v2.9.3
+      - name: WebAssembly for the web app
+        run: |
+          cargo install wasm-bindgen-cli --version "$(e2e/scripts/wasm-bindgen-version.sh)" --locked
+          e2e/scripts/build-wasm.sh
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          workspaces: apps/sync
-      - run: cargo fmt --check
-      - run: cargo clippy --locked --all-targets
-      - run: cargo test --locked
+          name: e2e-wasm
+          path: web/e2e/dist
+          retention-days: 7
 
   # The terminal app: a Cargo workspace of its own (AGPL), apart from the server's, on the SDK.
   tui:
@@ -107,47 +103,18 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: apps/tui
+        working-directory: tui
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Rust toolchain from rust-toolchain.toml
         run: rustup toolchain install
       - uses: Swatinem/rust-cache@2201cc584a476d1b508be977bbe4b7d1c7a52e9c # v2.9.3
         with:
-          workspaces: apps/tui
+          workspaces: tui
       - run: cargo fmt --check
       - run: cargo clippy --locked --all-targets
       - run: cargo test --locked
       - run: cargo build --locked --release
-
-  # The end-to-end library (apps/e2e, MIT): a workspace of its own, tested natively and built as WebAssembly for the
-  # web app, which takes the build from here.
-  e2e:
-    if: github.ref_type != 'tag'
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: apps/e2e
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Rust toolchain from rust-toolchain.toml
-        run: rustup toolchain install
-      - uses: Swatinem/rust-cache@2201cc584a476d1b508be977bbe4b7d1c7a52e9c # v2.9.3
-        with:
-          workspaces: apps/e2e
-      - run: cargo fmt --check
-      - run: cargo clippy --locked --all-targets
-      - run: cargo clippy --locked --target wasm32-unknown-unknown --features wasm
-      - run: cargo test --locked
-      - name: WebAssembly for the web app
-        run: |
-          cargo install wasm-bindgen-cli --version "$(scripts/wasm-bindgen-version.sh)" --locked
-          scripts/build-wasm.sh
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: e2e-wasm
-          path: web/e2e/dist
-          retention-days: 7
 
   # The Kubernetes operator: a workspace of its own (operator/); its CustomResourceDefinition must be the one in
   # deploy/kubernetes and in the Helm chart, which must lint (with the runner's Helm).
@@ -177,7 +144,7 @@ jobs:
           helm lint ../deploy/helm/kernoid-operator --set watchNamespace=mail
 
   web:
-    needs: e2e
+    needs: kit
     runs-on: ubuntu-latest
     container: docker.io/library/node:26.11.1-trixie-slim
     defaults:
@@ -200,7 +167,8 @@ jobs:
       - run: pnpm test
       - run: pnpm run build
 
-  # Known vulnerabilities, licences and sources of the dependencies (deny.toml, apps/*/deny.toml; pnpm's audit for
+  # Known vulnerabilities, licences and sources of the dependencies (deny.toml, kit/deny.toml, tui/deny.toml,
+  # operator/deny.toml; pnpm's audit for
   # web/). Separate from the image: an advisory published today fails this job, not the release of unrelated changes.
   deps:
     if: github.ref_type != 'tag'
@@ -212,30 +180,22 @@ jobs:
       - name: Terminal app
         uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
         with:
-          manifest-path: apps/tui/Cargo.toml
+          manifest-path: tui/Cargo.toml
       - name: Operator
         uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
         with:
           manifest-path: operator/Cargo.toml
-      - name: End-to-end library
+      - name: Kit
         uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
         with:
-          manifest-path: apps/e2e/Cargo.toml
-      - name: Rust SDK
-        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
-        with:
-          manifest-path: apps/client/Cargo.toml
-      - name: kernoid-sync
-        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
-        with:
-          manifest-path: apps/sync/Cargo.toml
+          manifest-path: kit/Cargo.toml
       - name: Web
         working-directory: web
         run: |
           npm install --global --ignore-scripts --no-audit --no-fund pnpm@12.12.0
           pnpm audit
 
-  # The server, the SDK and the terminal app on macOS too, where much of the development happens. macOS runners have no
+  # The server, the kit and the terminal app on macOS too, where much of the development happens. macOS runners have no
   # containers: PostgreSQL comes from Homebrew, its major version pinned (the minor one is Homebrew's).
   macos:
     if: github.ref_type != 'tag'
@@ -260,23 +220,17 @@ jobs:
         with:
           workspaces: |
             .
-            apps/client
-            apps/sync
-            apps/tui
+            kit
+            tui
       - run: cargo clippy --locked --all-targets
       - run: cargo test --locked
-      - name: Rust SDK
-        working-directory: apps/client
-        run: |
-          cargo clippy --locked --all-targets
-          cargo test --locked
-      - name: kernoid-sync
-        working-directory: apps/sync
+      - name: Kit
+        working-directory: kit
         run: |
           cargo clippy --locked --all-targets
           cargo test --locked
       - name: Terminal app
-        working-directory: apps/tui
+        working-directory: tui
         run: |
           cargo clippy --locked --all-targets
           cargo test --locked
@@ -303,7 +257,7 @@ jobs:
   # digest, and `manifest` names both `main` and `sha-<commit>` – so an image `sha-<commit>` says that commit passed
   # all of them, and `release` gives it a version.
   image:
-    needs: [rust, client, sync, macos, tui, e2e, operator, web, deps, stalwart, licences]
+    needs: [rust, kit, macos, tui, operator, web, deps, stalwart, licences]
     strategy:
       matrix:
         include:
@@ -445,8 +399,8 @@ jobs:
           echo "$TOKEN" | helm registry login ghcr.io --username "$ACTOR" --password-stdin
           helm push /tmp/chart/kernoid-operator-*.tgz oci://ghcr.io/kernoid/charts
 
-  # The Rust SDK on crates.io, on a release: kernoid-e2e, kernoid-client and kernoid-sync in this order, each in the
-  # tag's version, through crates.io's trusted publishing (a short-lived token for this workflow and the environment
+  # The kit's crates on crates.io, on a release: every crate of kit/ that is published, each after those it depends on
+  # (kit/scripts/publish-order.sh), in the tag's version, through crates.io's trusted publishing (a short-lived token for this workflow and the environment
   # `crates-io`, no stored secret). A version already on crates.io is left alone, so the job can run again. The crates
   # were checked by main's run of the commit, which `release` waited for.
   crates:
@@ -459,23 +413,23 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Rust toolchain from rust-toolchain.toml
-        working-directory: apps/client
+        working-directory: kit
         run: rustup toolchain install
       - uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
         id: auth
       - name: Publish
+        working-directory: kit
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
         run: |
-          for crate in e2e client sync; do
-            name="kernoid-$crate"
-            version=$(sed -n 's/^version = "\(.*\)"/\1/p' "apps/$crate/Cargo.toml" | head -1)
-            test "v$version" = "$GITHUB_REF_NAME" || { echo "::error::$name is $version, the tag $GITHUB_REF_NAME"; exit 1; }
+          version=$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml)
+          test "v$version" = "$GITHUB_REF_NAME" || { echo "::error::the kit is $version, the tag $GITHUB_REF_NAME"; exit 1; }
+          for name in $(scripts/publish-order.sh); do
             if curl -fsS -A "kernoid release (https://github.com/kernoid/kernoid)" \
                  "https://crates.io/api/v1/crates/$name/$version" >/dev/null 2>&1; then
               echo "$name $version is on crates.io already"; continue
             fi
-            (cd "apps/$crate" && cargo publish --locked)
+            cargo publish --locked -p "$name"
           done
 
   # An installation of the last release, with mail and a file in it, upgraded to the image just pushed: the schema

@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- The tenant's projects, and the projects other tenants have granted to it. -->
 <script lang="ts">
   import { emptyText, loaded } from "../app.svelte.js";

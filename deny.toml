@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# cargo-deny: what the server's dependencies may be (CI, job `deps`; the terminal app has its own, apps/tui/deny.toml). Known vulnerabilities fail the build, licences
+# cargo-deny: what the server's dependencies may be (CI, job `deps`; the terminal app has its own, tui/deny.toml). Known vulnerabilities fail the build, licences
 # must be compatible with the AGPL, crates come only from crates.io. A finding that does not affect kernoid is ignored
 # below with a reason, never silently.
 
@@ -9,8 +9,8 @@ all-features = true
 [advisories]
 # Unmaintained crates are reported, but only those kernoid depends on directly fail the build.
 unmaintained = "workspace"
-# Three of rpgp's dependencies, which kernoid takes through apps/e2e (RFC 0006) – the same reasons as in
-# apps/e2e/deny.toml. The server never decrypts or signs with an account's key: it only encrypts to public keys and
+# Three of rpgp's dependencies, which kernoid takes through kit/e2e (RFC 0006) – the same reasons as in
+# kit/deny.toml. The server never decrypts or signs with an account's key: it only encrypts to public keys and
 # reads them.
 ignore = [
     # crypto-bigint 0.5 (NIST curves, X448) is not constant-time; the fix is 0.7.6, which rpgp 0.21 does not take.

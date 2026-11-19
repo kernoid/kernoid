@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- Asking for a second factor the account has: a code from the authenticator app, a passkey, or a recovery code. -->
 <script lang="ts">
   import type { SecondFactors } from "@kernoid/sdk";

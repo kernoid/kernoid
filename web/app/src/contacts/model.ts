@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Contacts over JMAP (RFC 9610): address books and cards as JSContact.
 
 import { putSealed, removeSealed, sealedEntries } from "../e2e/sealed.js";

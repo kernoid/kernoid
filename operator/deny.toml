@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# cargo-deny: what the server's dependencies may be (CI, job `deps`; the terminal app has its own, apps/tui/deny.toml). Known vulnerabilities fail the build, licences
+# cargo-deny: what the server's dependencies may be (CI, job `deps`; the terminal app has its own, tui/deny.toml). Known vulnerabilities fail the build, licences
 # must be compatible with the AGPL, crates come only from crates.io. A finding that does not affect kernoid is ignored
 # below with a reason, never silently.
 

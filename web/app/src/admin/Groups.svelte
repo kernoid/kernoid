@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- Groups: members (accounts of the tenant), and addresses – a group with an address is a distribution list. Groups
      receive roles, access to mail and files, and team folders. -->
 <script lang="ts">

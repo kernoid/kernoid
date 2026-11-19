@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- A file's icon by what it is: image, audio, video, PDF, text or anything else (files/kind.ts). -->
 <script lang="ts">
   import { File, FileAudio, FileImage, FileText, FileType, FileVideo } from "@lucide/svelte";

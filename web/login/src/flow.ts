@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Answering an OpenID Connect auth request: kernoid sends the browser to /login?authRequest=<id>; this page logs the
 // person in – honouring prompt and max_age – and finishes the request, which sends the browser back to the
 // application.

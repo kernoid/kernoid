@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // HTML emails shown as rich text without risk: parsed into an inert document, cut down to text, structure, tables,
 // links and embedded (data:) images, and shown in a shadow root so that nothing of the email reaches the app's
 // styles. The page's Content-Security-Policy stays the second line: no scripts and no remote images, whatever slips

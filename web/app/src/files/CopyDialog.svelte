@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- Copies or moves a node to a folder of another store the user may add to – or moves it within its own. -->
 <script lang="ts">
   import { emptyText, resource, useJmap } from "../app.svelte.js";

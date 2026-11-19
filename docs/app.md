@@ -23,7 +23,7 @@ to be taken back –, replying with the email quoted, forwarding, flagging, dele
 The app talks to kernoid through JMAP ([Mail]({{ '/mail/' | relative_url }}),
 [Calendars and contacts]({{ '/calendars/' | relative_url }}), [Files]({{ '/files/' | relative_url }})) – the account
 and the administration through the [REST API]({{ '/api/' | relative_url }}) –, in German or English as the browser
-prefers. It is free software under the MIT licence (`web/app`), built with [Svelte](https://svelte.dev) and
+prefers. It is free software under the AGPL like the server (`web/app`), built with [Svelte](https://svelte.dev) and
 TypeScript, built into kernoid, and can be installed as an app from the browser. Its icons are
 [Lucide](https://lucide.dev) (ISC), its typeface IBM Plex Sans (OFL, served by kernoid itself), its editor
 [TipTap](https://tiptap.dev) (MIT).
@@ -42,7 +42,7 @@ see [Mail]({{ '/mail/' | relative_url }})). The key is unlocked per page – wit
   Key Directory) goes out end-to-end encrypted and signed – the writing window says whether it will – and its copy in
   Sent is encrypted to the sender. Files attached stay in the browser until then.
 
-The encryption itself is kernoid's library `apps/e2e` (rpgp) as WebAssembly, loaded only when it is needed; the app's
+The encryption itself is kernoid's library `kit/e2e` (rpgp) as WebAssembly, loaded only when it is needed; the app's
 policy allows WebAssembly (`'wasm-unsafe-eval'`) and decrypted images and media (`blob:`), never decrypted pages.
 
 {: .note }

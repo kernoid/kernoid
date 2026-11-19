@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- One group on the groups page: renaming and deleting it, its members, its addresses and whether members may send
      as the group. -->
 <script lang="ts">

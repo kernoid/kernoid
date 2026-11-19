@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- With whom a folder is shared, and at which level: read, edit, or full (which may share on). -->
 <script lang="ts">
   import { resource, useJmap } from "../app.svelte.js";

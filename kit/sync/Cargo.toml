@@ -1,23 +1,21 @@
 # SPDX-License-Identifier: MIT
 # kernoid-sync: a folder kept in step with a file store of kernoid (RFC 0005) – changes, transfers, conflicts and the
-# local state in SQLite; part of kernoid's Rust SDK beside kernoid-client, which it talks through. MIT and a workspace
-# of its own like the SDK; its requirements are minimum versions, its Cargo.lock pins them, each at least two weeks old
-# when taken (`../tui/scripts/check-age.py --dir=apps/sync`).
-[workspace]
-
+# local state in SQLite; part of the kit (MIT, RFC 0008) beside kernoid-client, which it talks through. Its
+# requirements are minimum versions, the kit's Cargo.lock pins them, each at least two weeks old when taken
+# (`../tui/scripts/check-age.py --dir=kit`).
 [package]
 name = "kernoid-sync"
-version = "0.4.0"
-edition = "2024"
-rust-version = "1.94"
-license = "MIT"
-repository = "https://github.com/kernoid/kernoid"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
 description = "kernoid's file sync: a folder kept in step with a file store over JMAP"
 keywords = ["kernoid", "jmap", "sync", "files"]
 categories = ["filesystem", "network-programming"]
-homepage = "https://kernoid.dev"
+homepage.workspace = true
 readme = "README.md"
-exclude = ["scripts/", "deny.toml", "tests/"]
+exclude = ["scripts/", "tests/"]
 
 [dependencies]
 # Dates and times (Unlicense OR MIT) – in place of chrono (RUSTSEC-2026-0543).
@@ -32,12 +30,5 @@ tokio = { version = "1.53.3", features = ["fs"] }
 kernoid-e2e = { version = "0.4.0", path = "../e2e" }
 tokio = { version = "1.53.3", features = ["fs", "macros", "rt-multi-thread", "time"] }
 
-[profile.dev.package."*"]
-opt-level = 2
-
-[lints.rust]
-unsafe_code = "forbid"
-missing_debug_implementations = "warn"
-
-[lints.clippy]
-all = { level = "warn", priority = -1 }
+[lints]
+workspace = true

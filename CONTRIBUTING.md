@@ -5,7 +5,8 @@ Thank you for helping. Issues and pull requests are welcome.
 
 - **Sign off every commit** (`git commit -s`): contributions are accepted under the
   [Developer Certificate of Origin](https://developercertificate.org). There is no contributor licence agreement.
-- **Licences:** kernoid's own code is AGPL-3.0-or-later, the apps in `web/` and `apps/tui` are MIT, the RFCs CC BY 4.0.
+- **Licences:** kernoid's own code is AGPL-3.0-or-later, the kit in `kit/` – what apps use – is MIT, the RFCs CC BY 4.0
+  (RFC 0008, 6).
   Every file carries an `SPDX-License-Identifier`. Code under the Stalwart Enterprise License never enters
   (`scripts/check-sel.sh`).
 - **Design changes** – to the protocol, the data model or the licence – go through a public RFC in [`rfcs/`](rfcs/).
@@ -19,6 +20,6 @@ How to build and test, and the rules the code follows, are on
 ```sh
 cargo fmt --check && cargo clippy --all-targets && cargo test     # tests need DATABASE_URL
 (cd web && pnpm run check && pnpm test)
-(cd apps/tui && cargo fmt --check && cargo clippy --locked --all-targets && cargo test --locked)
+(cd tui && cargo fmt --check && cargo clippy --locked --all-targets && cargo test --locked)
 ./scripts/check-sel.sh
 ```

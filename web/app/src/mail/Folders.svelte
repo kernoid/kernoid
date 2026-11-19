@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- The mailboxes of one mail account – one's own, or a shared mailbox – as a tree: choose one; make, rename, move and
      delete folders; empty Junk and Trash.
      Emails dragged from the list – and folders dragged within the tree – are dropped onto a folder to move them there,

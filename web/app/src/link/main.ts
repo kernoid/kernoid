@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // What a link opens (RFC 0005, 11.3), for people without an account: link.html#<token> (LinkPage.svelte).
 
 import { mount } from "svelte";

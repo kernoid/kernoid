@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- Recovers an account's key with the tenant's recovery key (RFC 0006, 8.2): the account's copy for the recovery key
      comes from kernoid, the recovery key's secret from a file chosen here – both meet only in this browser. The result
      is the account's secret key as a file, to hand to its owner, who sets it in again on their account page. -->

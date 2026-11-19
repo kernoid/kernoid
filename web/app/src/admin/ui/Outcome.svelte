@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- How an action ended: its notice or its failure. -->
 <script lang="ts">
   import Failure from "../../Failure.svelte";

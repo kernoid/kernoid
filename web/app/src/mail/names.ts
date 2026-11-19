@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // How mailboxes are shown: those with a role by the role's name in the browser's language and its icon; the account's
 // own folders by their name and a folder.
 

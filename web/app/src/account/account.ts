@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // What the account section shares: kernoid's session API with the same cookie as JMAP, and a few texts.
 
 import { LoginClient } from "@kernoid/sdk";

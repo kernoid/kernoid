@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // What a link opens (RFC 0005, 11.3), for people without an account: link.html#<token>. The token stays in the
 // fragment, which the browser does not send; the page (LinkPage.svelte) asks /v1/links/<token> – for the password
 // first, where the link has one. No session, no JMAP.

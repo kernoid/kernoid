@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- For instance administrators: the queue of outgoing mail not yet delivered. -->
 <script lang="ts">
   import { emptyText, loaded } from "../app.svelte.js";

@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- How programs connect: mail (from the instance's mail autoconfiguration), calendars and contacts (CalDAV, CardDAV),
      files (WebDAV) – each with the address as user name and an app password. -->
 <script lang="ts">

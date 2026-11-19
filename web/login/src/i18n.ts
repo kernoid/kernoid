@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // The texts of the login UI in English and German. The English text is the key; the language is the browser's first
 // one kernoid knows (`?lang=de` or `?lang=en` overrides it). Placeholders are written `{name}`.
 

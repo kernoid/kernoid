@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- The applications that log people in with kernoid (OpenID Connect clients), each in a project. -->
 <script lang="ts">
   import { emptyText, loaded } from "../app.svelte.js";

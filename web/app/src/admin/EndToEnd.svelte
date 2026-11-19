@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- The tenant's end-to-end policy (RFC 0006, 8): what its accounts may encrypt, and recovery through the tenant. The
      recovery key is made in this browser: its public key goes to kernoid, its secret key is saved here as a file – it
      never reaches the server, and without it no key can be recovered. -->

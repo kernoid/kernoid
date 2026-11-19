@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Logging in to a web app with kernoid: OpenID Connect's authorization code flow with PKCE, as a public client (the
 // app has no secret). The ID token is verified – signature against the instance's keys, issuer, audience, expiry,
 // nonce – before its claims are trusted.

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // /login/account: logs in if needed, then goes where `?next=` said – or to the account section of the web app, which
 // holds the account page (name, password, second factors, sessions …).
 

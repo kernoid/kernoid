@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- Projects (as in Zitadel): roles of one's own applications, who holds them (authorizations), and which other
      tenants may use the project (grants). The applications are in Applications.svelte. -->
 <script lang="ts">

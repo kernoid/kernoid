@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- A form whose submit handler gets the values; the button is disabled while it runs. -->
 <script lang="ts">
   import type { Snippet } from "svelte";

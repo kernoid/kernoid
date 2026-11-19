@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- Grants with whom, where, how much – and a way to remove each. -->
 <script lang="ts" module>
   /** What every grant has: mail grants add a mailbox and "send as", file grants a folder. */

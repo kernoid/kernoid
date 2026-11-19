@@ -1,24 +1,22 @@
 # SPDX-License-Identifier: MIT
 # kernoid's Rust SDK: the protocols of kernoid for clients – JMAP for mail, files, calendars, contacts and principals,
 # push, the end-to-end encryption of RFC 0006 on kernoid-e2e, finding a server through DNS, iCalendar and vCard files.
-# Async on tokio. MIT and a workspace of its own like the terminal app and kernoid-e2e: apps under any licence may use
-# it, and it reaches no server code. Its requirements are minimum versions (it is a library for others); its
-# Cargo.lock pins them, each at least two weeks old when taken (`../tui/scripts/check-age.py --dir=apps/client`).
-[workspace]
-
+# Async on tokio. Part of the kit (MIT, RFC 0008): apps under any licence may use it, and it reaches no server code.
+# Its requirements are minimum versions (it is a library for others); the kit's Cargo.lock pins them, each at least
+# two weeks old when taken (`../tui/scripts/check-age.py --dir=kit`).
 [package]
 name = "kernoid-client"
-version = "0.4.0"
-edition = "2024"
-rust-version = "1.94"
-license = "MIT"
-repository = "https://github.com/kernoid/kernoid"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
 description = "kernoid's protocols for clients: JMAP mail, files, calendars, contacts, push and end-to-end encryption"
 keywords = ["kernoid", "jmap", "mail", "webdav", "openpgp"]
 categories = ["api-bindings", "email"]
-homepage = "https://kernoid.dev"
+homepage.workspace = true
 readme = "README.md"
-exclude = ["scripts/", "deny.toml", "tests/"]
+exclude = ["scripts/", "tests/"]
 
 [dependencies]
 base64 = "0.22.1"
@@ -51,13 +49,6 @@ url = "2.5.8"
 tokio = { version = "1.53.3", features = ["fs", "io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
 
 # Argon2 (unlocking the key) and the post-quantum algorithms are slow without optimisation; tests build dependencies
-# optimised, as the end-to-end library does.
-[profile.dev.package."*"]
-opt-level = 2
 
-[lints.rust]
-unsafe_code = "forbid"
-missing_debug_implementations = "warn"
-
-[lints.clippy]
-all = { level = "warn", priority = -1 }
+[lints]
+workspace = true

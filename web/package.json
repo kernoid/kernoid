@@ -1,7 +1,7 @@
 {
   "name": "kernoid-web",
   "private": true,
-  "license": "MIT",
+  "license": "AGPL-3.0-or-later",
   "description": "kernoid's first-party web code: the TypeScript SDK, the login UI and the web app",
   "packageManager": "pnpm@12.12.0",
   "engines": {

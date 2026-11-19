@@ -1,7 +1,7 @@
 {
   "name": "@kernoid/sdk",
   "version": "0.4.0",
-  "license": "MIT",
+  "license": "AGPL-3.0-or-later",
   "description": "Log in with kernoid: OpenID Connect for web apps, and the session API for login UIs",
   "type": "module",
   "exports": {

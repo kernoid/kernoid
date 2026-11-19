@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- Unlocks the account's key on this page (RFC 0006, 4.2): with a passkey that has a copy – its PRF extension gives
      the passphrase –, or with the recovery code. The key stays in this page's memory until it closes. -->
 <script lang="ts">

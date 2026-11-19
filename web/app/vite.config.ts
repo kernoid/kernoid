@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // The build goes to dist/, which the kernoid binary embeds and serves at /app: the app (index.html) and what a link
 // opens (link.html). In development, http.web_app may name dist/ instead.
 /// <reference types="vitest/config" />

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // kernoid's login UI. /login?authRequest=<id> answers an OpenID Connect auth request; /login/account is the account
 // page; /login/register registers; /login/idp is where kernoid sends the browser back from an identity provider;
 // /login alone logs in and goes to the account page.

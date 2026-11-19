@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- The password for an address. -->
 <script lang="ts">
   import type { LoginOptions } from "../factors.js";

@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- Identity providers: logging in with another OpenID Connect or SAML 2.0 provider (an organisation's directory, or
      "continue with …"), for the tenant or the whole instance. SCIM tokens are in Scim.svelte. -->
 <script lang="ts">

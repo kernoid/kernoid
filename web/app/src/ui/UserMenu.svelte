@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- The account's menu behind its avatar: who is logged in, the account, the administration, appearance (theme and
      density) and logging out. Escape or a click elsewhere closes it. -->
 <script lang="ts">

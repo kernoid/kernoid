@@ -6,7 +6,7 @@ permalink: /sdk/
 
 # TypeScript SDK
 
-`@kernoid/sdk` (in [`web/sdk`](https://github.com/kernoid/kernoid/tree/main/web/sdk), MIT) lets a web app log in with
+`@kernoid/sdk` (in [`web/sdk`](https://github.com/kernoid/kernoid/tree/main/web/sdk), AGPL like the server) lets a web app log in with
 kernoid, and lets anyone build a login UI or account page of their own. It has no runtime dependencies and runs in
 every current browser.
 

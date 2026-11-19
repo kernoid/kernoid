@@ -16,7 +16,7 @@ calcard = { version = "1.1.0", path = "../calcard" }
 bytes = "1.12.1"
 jiff = { version = "1.0.1", features = ["serde", "tzdb-bundle-always"] }
 jiff-sqlx = { version = "1.0.0", features = ["postgres", "serde"] }
-kernoid-e2e = { version = "0.4.0", path = "../../apps/e2e" }
+kernoid-e2e = { version = "0.4.0", path = "../../kit/e2e" }
 kernoid-files = { version = "0.4.0", path = "../kernoid-files" }
 kernoid-groupware = { version = "0.4.0", path = "../kernoid-groupware" }
 kernoid-identity = { version = "0.4.0", path = "../kernoid-identity" }

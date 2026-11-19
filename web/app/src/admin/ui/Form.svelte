@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- A form whose fields arrive by name, trimmed; checkboxes as "on" or missing. -->
 <script lang="ts">
   import type { Snippet } from "svelte";

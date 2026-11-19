@@ -206,7 +206,7 @@ PDF), searches names and content (`text`, section 8), copies and moves files and
 and add, or a drop box – which its page `link.html` opens, with an upload with progress for links that add. It
 speaks only JMAP, like the rest of the app, and shows only what the rights allow. Docs: Web app.
 
-The terminal app (`apps/tui`, docs: Terminal app) speaks the same JMAP: browsing, versions, sharing, links, search,
+The terminal app (`tui`, docs: Terminal app) speaks the same JMAP: browsing, versions, sharing, links, search,
 and copying and moving between stores.
 
 ## 11. Sharing

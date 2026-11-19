@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- One project: its settings, its roles, who holds which role, and the other tenants it is granted to. -->
 <script lang="ts">
   import { emptyText, loaded } from "../app.svelte.js";

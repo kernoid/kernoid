@@ -18,7 +18,7 @@ kernoid is before 1.0: only the latest release gets security fixes. Run the late
 
 ## Scope
 
-The server (`crates/`), the web app, login UI and SDK (`web/`), the terminal app (`apps/tui`), the container image and
+The server (`crates/`), the web app, login UI and SDK (`web/`), the terminal app (`tui/`), the kit (`kit/`), the container image and
 the deployment files in `deploy/`. Code taken over from Stalwart and Zitadel is in scope here too; we report what
 affects them upstream as well.
 

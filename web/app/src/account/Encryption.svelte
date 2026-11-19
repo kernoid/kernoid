@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- End-to-end encryption of the account (RFC 0006): its key – made here, kept on the server only as protected
      copies –, how it is unlocked (passkeys, the recovery code), and whether mail is encrypted on arrival, as the
      tenant allows. Says what it costs: programs without OpenPGP cannot read encrypted mail, and a lost key means lost

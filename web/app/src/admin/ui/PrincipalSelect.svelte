@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- Choosing an account or a group of the tenant: `account:<id>` or `group:<id>`. -->
 <script lang="ts">
   import { t } from "../../i18n.js";

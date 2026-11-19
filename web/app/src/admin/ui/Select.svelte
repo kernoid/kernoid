@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- A labelled choice of [value, text] options. -->
 <script lang="ts">
   let { label, name, value, options }: { label: string; name: string; value?: string | undefined; options: [string, string][] } = $props();

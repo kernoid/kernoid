@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- One team folder: its usage and quota, who may do what in it, and granting access. -->
 <script lang="ts">
   import { loaded } from "../app.svelte.js";

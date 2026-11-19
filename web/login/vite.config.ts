@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // kernoid serves the build at /login (http.login_ui).
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { defineConfig } from "vite";

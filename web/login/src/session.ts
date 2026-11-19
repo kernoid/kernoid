@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // The session of this browser lives in kernoid's HttpOnly cookie, so that one login serves every application of the
 // instance (single sign-on) and no script – not even this page's – can read the token. Changes carry the CSRF header
 // the SDK adds.

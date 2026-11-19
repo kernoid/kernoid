@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Mail over JMAP (RFC 8621): mailboxes, the emails of one, one email to read, and sending.
 
 import { base64, e2e, lookup, OPENPGP, unlockedRing } from "../e2e/e2e.svelte.js";

@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- The audit log: what happened in the tenant – or the instance – and who did it, newest first, from kernoid's events.
      `#/admin/audit/<type>:<id>` shows one object's history (an account's, a group's …). -->
 <script lang="ts">

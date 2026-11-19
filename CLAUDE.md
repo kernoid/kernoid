@@ -33,7 +33,7 @@ can run on its own.
 | `kernoid-server` | config, store, identity, oidc | router with REST + OpenAPI (utoipa), GraphQL (async-graphql; `graphql/admin.rs`), the administration routes (`admin/`, extractor `AdminSession`, header `kernoid-tenant`), SCIM 2.0 (`scim.rs`), mail administration for REST and GraphQL (`mail_admin.rs`, `admin/mail.rs`, `graphql/mail.rs`), CalDAV and CardDAV over HTTP (`dav.rs`, logging in like JMAP with `jmap::MailCaller`), registration (`registration.rs`), logins and services (`admin/logins.rs`, `graphql/logins.rs`), identity provider endpoints (`federation.rs`), `openapi()`, `graphql_schema()`, problem details, request ids, metrics, trusted-proxy `Client`; `serve` (plain or TLS), `serve_with` and `acme` (certificates from an ACME CA, kept in PostgreSQL, served by SNI), `certificate_files` (the mail protocols' certificates from files, `mail.tls`, read again when they change), files administration – quotas, drives, grants (`files_admin.rs`, `admin/files.rs`, `graphql/files.rs`), WebDAV for files at `/webdav/` (`webdav.rs`, XML through `kernoid_dav::proto`); the Web Key Directory, served and asked (`wkd.rs`, RFC 0006, 4.4); uploads, direct writes and WebDAV have their own body limit and timeout (transfers) |
 | `kernoid` | all | CLI (`serve`, `migrate`, `openapi`, `graphql-schema`, `keys`, `instance`, `tenant`, `account`, `project`, `app`, `signing-key`, `acme`, `mail`, `collections`, `files`), logging and OTLP traces, roles `api`, `worker` (every worker job safe in several processes), `smtp`, `imap` and `ldap`, one shutdown for all tasks; `MODULES` lists the compiled-in modules |
 
-`web/` (pnpm workspace, MIT; Node 26, TypeScript 7) holds the TypeScript SDK (`web/sdk`, `@kernoid/sdk`, no runtime
+`web/` (pnpm workspace, AGPL – RFC 0008, 6; Node 26, TypeScript 7) holds the TypeScript SDK (`web/sdk`, `@kernoid/sdk`, no runtime
 dependencies), the login UI (`web/login`) and the web app (`web/app`: mail, calendar, contacts and files over JMAP; the
 account and the administration over the REST API, typed from `docs/_data/openapi.json` with openapi-typescript and
 openapi-fetch – `pnpm --filter @kernoid/app run api`, checked in CI), both Vite + Svelte 5 without SvelteKit. kernoid
@@ -44,51 +44,55 @@ server code, and keep dependencies exact (`package.json` without ranges, `pnpm-l
 once as for crates (an `overrides` entry, named with the advisory in the commit) –, without install scripts of
 dependencies (pnpm's default).
 
-`apps/client` (MIT) is kernoid's Rust SDK `kernoid-client`, async on tokio with reqwest (rustls on AWS-LC, post-quantum
+`kit/client` (MIT) is kernoid's Rust SDK `kernoid-client`, async on tokio with reqwest (rustls on AWS-LC, post-quantum
 key exchange preferred): the session, method calls, uploads, downloads and push (`lib.rs`, `push.rs`); mail with
 threads, files with versions, sharing and links, calendars with scheduling, contacts (`mail`, `files`, `calendars`,
 `contacts`); the account's everyday settings over kernoid's own API (`account`); end-to-end encrypted mail and vaults on `kernoid-e2e` (`e2e`, `e2e/vault.rs`); finding the server through `_jmap._tcp` (`srv`, DNS
 messages by hickory-proto, over tokio's sockets); iCalendar and vCard files through calcard (`transfer`); logging in with OpenID Connect as kernoid's apps do –
 PKCE, the built-in client of the apps, the scope `urn:kernoid:data`, refresh (`oidc`; `Client::connect_with_token`,
 `set_access_token`). Tests run
-against a recording HTTP server (`tests/`). A **Cargo workspace of its own** with its own `Cargo.lock`, not a member of
-the server's: the server's workspace sets `license = "AGPL-3.0-or-later"` for its crates and shares one lock file, and
-a member could depend on `kernoid-*` by a path without anyone noticing – apart, the SDK cannot reach server code at
-all. Its requirements are minimum versions, as a library's; its `Cargo.lock` pins them (at least two weeks old,
-`apps/tui/scripts/check-age.py --dir=apps/client`). It logs in with HTTP Basic (an address and an app password) and
-sends the credentials only to the origin it logged in to. It is on crates.io with `kernoid-e2e` and `kernoid-sync`, released
-with kernoid in the same version – CI's job `crates` publishes them on a version tag through crates.io's trusted
-publishing (environment `crates-io`); the apps of
-`kernoid/apps` take it from there.
+against a recording HTTP server (`tests/`).
 
-`apps/sync` (MIT) is `kernoid-sync`, the file sync of kernoid's apps on the SDK: one round (`Folder::sync`) reads the
+**The kit** (`kit/`, RFC 0008, 2) is a **Cargo workspace of its own** with one `Cargo.lock` – the SDK, `kernoid-e2e`,
+`kernoid-sync` and, later, the foundation and the Flutter packages: everything apps use, all MIT. Not part of the
+server's workspace: that one sets `license = "AGPL-3.0-or-later"` for its crates, and a member could depend on a
+server crate by a path without anyone noticing; apart, the kit cannot reach server code at all, and
+`scripts/kit-check.sh` (CI's job `kit`) checks that every crate is MIT, that no path leads out of `kit/` and that every
+file in it says MIT. Its requirements are minimum versions, as a library's; `kit/Cargo.lock` pins them (at least two
+weeks old, `tui/scripts/check-age.py --dir=kit`), and `kit/deny.toml` allows only permissive licences. The server
+takes `kernoid-e2e` from it by path. The SDK logs in with HTTP Basic (an address and an app password) and sends the
+credentials only to the origin it logged in to. The kit's crates are on crates.io, released with kernoid in the same
+version (`[workspace.package] version` in `kit/Cargo.toml`) – CI's job `crates` publishes them in the order
+`kit/scripts/publish-order.sh` gives on a version tag, through crates.io's trusted publishing (environment
+`crates-io`); the apps of `kernoid/apps` take them from there.
+
+`kit/sync` (MIT) is `kernoid-sync`, the file sync of kernoid's apps on the SDK: one round (`Folder::sync`) reads the
 store's changes (`FileNode/changes`, the whole store when the state is too old), scans the folder (size and modification
 time) and decides in `plan` – a pure function with the tests of every case – what to carry over; a change on both sides
 keeps the local version as a copy beside the server's; moves stay moves (node ids on the server, inodes here), downloads
 go on from where they broke off and large uploads go in pieces (`Blob/upload`), vaults are kept in step with the
 account's key (`Folder::sync_with`), and names the file system cannot hold are left out (`Names`). Its state is SQLite
-through rusqlite (bundled) outside the folder (`state`, upgraded by `PRAGMA user_version`). A workspace of its own like the SDK, minimum versions with a lock file. `scripts/client-check.sh` runs the
+through rusqlite (bundled) outside the folder (`state`, upgraded by `PRAGMA user_version`). `scripts/client-check.sh` runs the
 SDK's and its tests against a real kernoid (this checkout's binary, a fresh database, objects in memory) – CI does in
 the job `rust`.
 
-`apps/tui` (AGPL) is the terminal app `kernoid-tui` (ratatui; `docs/tui.md`) on the SDK: what the user writes in their
+`tui` (AGPL) is the terminal app `kernoid-tui` (ratatui; `docs/tui.md`) on the SDK: what the user writes in their
 editor – messages (`src/compose.rs`), events and contacts (`src/forms.rs`) – is a library with tests; the screen is
 `src/app.rs` (state and keys) and `src/ui.rs` (drawing). The SDK's calls run on a runtime of the app's own
 (`kernoid_tui::RUNTIME`): the screen waits for each with `block`, the push stream and transfers run on it in the
-background. A **Cargo workspace of its own** like the SDK – its dependencies are its own (and stay out of the server's
+background. A **Cargo workspace of its own** like the kit – its dependencies are its own (and stay out of the server's
 image: `.dockerignore`), and CI checks it in a job of its own. The password comes from `KERNOID_PASSWORD`, a command or
 a prompt, never an argument. Dependencies are exact (`=` in `Cargo.toml`) and at least two weeks old when taken –
-`apps/tui/scripts/check-age.py [--fix]` lists the younger ones in `Cargo.lock` (and sets them back); run it after
+`tui/scripts/check-age.py [--fix]` lists the younger ones in `Cargo.lock` (and sets them back); run it after
 changing the lock file.
 
-`apps/e2e` (MIT) is the end-to-end library of kernoid's apps (`kernoid-e2e`, RFC 0006): an account's OpenPGP key of
+`kit/e2e` (MIT) is the end-to-end library of kernoid's apps (`kernoid-e2e`, RFC 0006): an account's OpenPGP key of
 one of two kinds (`pqc`: v6 with ML-DSA-65+Ed25519 and ML-KEM-768+X25519, RFC 9980; `compatible`: v4 Curve25519), its
 protected copies (Argon2 with AES-256-OCB), encrypting and decrypting (`message`), PGP/MIME with header protection and
-the encrypted summary (`mime`) – all through rpgp (crate `pgp`, feature `pqc`), nothing of its own. A **Cargo workspace
-of its own** like the terminal app; `--features wasm` gives the web app's `Keyring` (`src/wasm.rs`), which
-`scripts/build-wasm.sh` turns into `web/e2e/dist` (`@kernoid/e2e`, not checked in; CI's job `e2e` and the image's
-stage `e2e` build it with wasm-bindgen-cli of the version in its `Cargo.lock`). Homebrew's Rust has no WebAssembly
-target – build with rustup's (`PATH=$HOME/.cargo/bin:$PATH`). Its `deny.toml` ignores three advisories of rpgp's
+the encrypted summary (`mime`) – all through rpgp (crate `pgp`, feature `pqc`), nothing of its own. `--features wasm` gives the web app's `Keyring` (`src/wasm.rs`), which
+`scripts/build-wasm.sh` turns into `web/e2e/dist` (`@kernoid/e2e`, not checked in; CI's job `kit` and the image's
+stage `e2e` build it with wasm-bindgen-cli of the version in the kit's `Cargo.lock`). Homebrew's Rust has no WebAssembly
+target – build with rustup's (`PATH=$HOME/.cargo/bin:$PATH`). The kit's `deny.toml` ignores three advisories of rpgp's
 dependencies, each with the reason it does not reach kernoid's keys.
 
 `operator/` (AGPL) is the Kubernetes operator `kernoid-operator` (kube-rs; docs: Operations, Kubernetes): the resource
@@ -99,7 +103,7 @@ crates that do not go together (smallvec), and the server need not carry the Kub
 beside `kernoid` (`/usr/local/bin/kernoid-operator`). `deploy/kubernetes/crd.json` comes from `kernoid-operator crd`,
 and CI checks it is current – the Helm chart `deploy/helm/kernoid-operator` carries a copy in `crds/`, which CI
 compares too, and lints the chart. Dependencies are exact and at least two weeks old
-(`apps/tui/scripts/check-age.py --dir=operator`).
+(`tui/scripts/check-age.py --dir=operator`).
 
 The documentation site lives in `docs/` (GitHub Pages, Jekyll with Just the Docs); `docs/_data/openapi.json` and
 `docs/api/schema.graphql` come from `kernoid openapi` and `kernoid graphql-schema`, and CI checks they are current –
@@ -181,7 +185,7 @@ the code.
 - **iCalendar and vCard only through calcard** – parsing, writing, recurrences, JSCalendar and JSContact; no own
   parsers of these formats. calcard is Stalwart's, taken over as it is into `crates/calcard` (with `crates/jmap-tools`,
   both `AGPL-3.0-only`, formatted with rustfmt's defaults as there); change it only where kernoid's dependencies need it
-  and say so in the file. The MIT SDK (`apps/client`) stays on calcard 0.3.14 from crates.io – nothing from
+  and say so in the file. The MIT SDK (`kit/client`) stays on calcard 0.3.14 from crates.io – nothing from
   `crates/calcard` may go there.
 - **Mail authentication only through mail-auth** (SPF, DKIM, DMARC, ARC, iprev) and SMTP parsing only through
   smtp-proto, Sieve only through sieve-rs – no own parsers of these records, signatures or protocols.
@@ -191,9 +195,10 @@ the code.
   there is no tag, GitHub Actions by commit with the version as a comment, Rust via `rust-toolchain.toml`, crates
   via `Cargo.lock` (CI and the image build with `--locked`). New versions are at least two weeks old – except the
   smallest version that fixes a RustSec advisory, taken at once and named with the advisory in the commit (and in
-  `SECURITY_FIXES` of `apps/tui/scripts/check-age.py`). The one other exception: Jiff 1.0 (with jiff-sqlx), taken at
-  once in place of chrono (unmaintained, RUSTSEC-2026-0543). `cargo deny check` (`deny.toml`, `apps/tui/deny.toml`) fails
-  on known vulnerabilities, licences that do not fit (permissive only for the MIT apps) and sources besides
+  `SECURITY_FIXES` of `tui/scripts/check-age.py`). The one other exception: Jiff 1.0 (with jiff-sqlx), taken at
+  once in place of chrono (unmaintained, RUSTSEC-2026-0543). `cargo deny check` (`deny.toml`, `kit/deny.toml`,
+  `tui/deny.toml`, `operator/deny.toml`) fails on known vulnerabilities, licences that do not fit (permissive only for
+  the kit) and sources besides
   crates.io; an advisory that does not affect kernoid is ignored there with a reason.
 - Facts need a source; what is not settled is marked `OPEN`.
 
@@ -205,8 +210,9 @@ A release is a commit of main that main's CI run passed, tagged afterwards – t
    Kubernetes examples, the Helm chart, `kernoid-operator crd`), `kernoid openapi`, and the changelog's section with
    the day of the release – in one commit, pushed to main.
 2. Once main's run of that commit passed (its image `sha-<commit>` is on ghcr.io), tag it `vX.Y.Z` and push the tag.
-3. The tag's run: `release` gives that image the version's tags, `chart` pushes the chart, `crates` publishes
-   `kernoid-e2e`, `kernoid-client` and `kernoid-sync` after the approval of the environment `crates-io`, and
+3. The tag's run: `release` gives that image the version's tags, `chart` pushes the chart, `crates` publishes the
+   kit's crates after the approval of the environment `crates-io` (a crate new to crates.io the maintainer publishes
+   by hand the first time, then sets up trusted publishing for it), and
    `upgrade` upgrades the release before to the new image.
 
 `release` waits up to 90 minutes for main's run when the commit and the tag were pushed together, and refuses a tag
@@ -223,8 +229,8 @@ pinned by commit, CI on Linux and macOS. Where kernoid deviates, it has a reason
   (identity, mail, files, the protocols, modules) behind roles – kernoid replaces two existing servers and runs as
   separately scaled processes. GraphQL besides REST: decided for the administration API.
 - **The apps.** The web app talks JMAP for mail, calendar, contacts and files – only its administration takes types
-  from OpenAPI. The Rust SDK (`apps/client`, MIT) and the terminal app on it (`apps/tui`, AGPL) are workspaces of their
-  own, not crates of the server: they must not reach server code, and the SDK may go into app stores with the apps.
+  from OpenAPI. The kit (`kit/`, MIT) and the terminal app on it (`tui/`, AGPL) are workspaces of their own, not
+  crates of the server: they must not reach server code, and the kit goes into app stores with the apps.
 - **Files where tools need them.** The API descriptions are in `docs/` (`_data/openapi.json`, `api/`) – Jekyll cannot
   read outside its folder – under MIT as the starter pack's `api/openapi.json` would be; Compose is in
   `deploy/compose/` beside Kubernetes and the test VM.
@@ -234,14 +240,12 @@ pinned by commit, CI on Linux and macOS. Where kernoid deviates, it has a reason
 
 ```sh
 cargo fmt --check && cargo clippy --all-targets && cargo test   # tests need DATABASE_URL, see README
-(cd apps/client && cargo fmt --check && cargo clippy --locked --all-targets && cargo test --locked)
-(cd apps/sync && cargo fmt --check && cargo clippy --locked --all-targets && cargo test --locked)
+(cd kit && ../scripts/kit-check.sh && cargo fmt --check && cargo clippy --locked --all-targets && cargo test --locked && e2e/scripts/build-wasm.sh)
 scripts/client-check.sh   # the SDK and kernoid-sync against this checkout's kernoid (DATABASE_URL, psql)
-(cd apps/tui && cargo fmt --check && cargo clippy --locked --all-targets && cargo test --locked)
+(cd tui && cargo fmt --check && cargo clippy --locked --all-targets && cargo test --locked)
 (cd operator && cargo fmt --check && cargo clippy --locked --all-targets && cargo test --locked)
-(cd apps/e2e && cargo fmt --check && cargo clippy --locked --all-targets && cargo test --locked && scripts/build-wasm.sh)
 scripts/upgrade-check.sh v0.1.0 kernoid:local   # after `docker build -t kernoid:local .`
 ./scripts/check-sel.sh
-cargo deny check && (cd apps/client && cargo deny check) && (cd apps/sync && cargo deny check) && (cd apps/tui && cargo deny check) && (cd operator && cargo deny check) && (cd apps/e2e && cargo deny check)    # cargo-deny 0.20.2
+cargo deny check && (cd kit && cargo deny check) && (cd tui && cargo deny check) && (cd operator && cargo deny check)    # cargo-deny 0.20.2
 docker run --rm -v "$PWD":/data fsfe/reuse:6.2.0 lint
 ```

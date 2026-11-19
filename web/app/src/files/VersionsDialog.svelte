@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- A file's current content and its earlier versions, each to download; an earlier one can become current again. -->
 <script lang="ts">
   import { loaded, useJmap } from "../app.svelte.js";

@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- A contact made or changed: name, email, phone, organisation, address book, note. -->
 <script lang="ts">
   import { useJmap } from "../app.svelte.js";

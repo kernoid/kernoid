@@ -11,7 +11,7 @@ precedence = "aggregate"
 SPDX-FileCopyrightText = "falkOSS – Falcon Lake Open Source Software gUG (haftungsbeschränkt) i. G. and the kernoid contributors"
 
 [[annotations]]
-path = ["**/*.md", "Cargo.lock", "operator/Cargo.lock", "apps/tui/Cargo.lock", "deploy/kubernetes/crd.json", "deploy/helm/kernoid-operator/crds/kernoids.kernoid.dev.json", ".sqlx/**", "**/.gitignore", ".dockerignore"]
+path = ["**/*.md", "Cargo.lock", "operator/Cargo.lock", "tui/Cargo.lock", "deploy/kubernetes/crd.json", "deploy/helm/kernoid-operator/crds/kernoids.kernoid.dev.json", ".sqlx/**", "**/.gitignore", ".dockerignore"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "falkOSS – Falcon Lake Open Source Software gUG (haftungsbeschränkt) i. G. and the kernoid contributors"
 SPDX-License-Identifier = "AGPL-3.0-or-later"
@@ -31,19 +31,17 @@ precedence = "aggregate"
 SPDX-FileCopyrightText = "falkOSS – Falcon Lake Open Source Software gUG (haftungsbeschränkt) i. G. and the kernoid contributors"
 SPDX-License-Identifier = "MIT"
 
-# The web SDK and login UI are MIT (decided for first-party apps): only the protocol connects them to the server.
+# The web SDK, login UI and web app are AGPL like the server (RFC 0008, 6); files that cannot carry a header.
 [[annotations]]
 path = ["web/**/package.json", "web/pnpm-lock.yaml", "web/**/tsconfig*.json", "web/login/public/manifest.webmanifest", "web/app/public/manifest.webmanifest",
         "web/app/src/admin/api-types.ts"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "falkOSS – Falcon Lake Open Source Software gUG (haftungsbeschränkt) i. G. and the kernoid contributors"
-SPDX-License-Identifier = "MIT"
+SPDX-License-Identifier = "AGPL-3.0-or-later"
 
-# The Rust SDK and the end-to-end library are MIT as well (Cargo workspaces of their own: apps/client, apps/sync,
-# apps/e2e).
+# The kit is MIT (RFC 0008, 2): what apps under any licence use.
 [[annotations]]
-path = ["apps/client/Cargo.lock", "apps/client/.gitignore", "apps/sync/Cargo.lock", "apps/sync/.gitignore",
-        "apps/e2e/Cargo.lock", "apps/e2e/.gitignore"]
+path = ["kit/**"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "falkOSS – Falcon Lake Open Source Software gUG (haftungsbeschränkt) i. G. and the kernoid contributors"
 SPDX-License-Identifier = "MIT"

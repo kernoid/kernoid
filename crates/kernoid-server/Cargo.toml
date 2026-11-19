@@ -23,7 +23,7 @@ jiff = { version = "1.0.1", features = ["serde"] }
 jiff-sqlx = { version = "1.0.0", features = ["postgres", "serde"] }
 instant-acme = { version = "0.8.5", default-features = false, features = ["aws-lc-rs", "hyper-rustls", "rcgen"] }
 ipnet = "2.12.2"
-kernoid-e2e = { version = "0.4.0", path = "../../apps/e2e" }
+kernoid-e2e = { version = "0.4.0", path = "../../kit/e2e" }
 kernoid-config = { version = "0.4.0", path = "../kernoid-config" }
 kernoid-identity = { version = "0.4.0", path = "../kernoid-identity" }
 kernoid-dav = { version = "0.4.0", path = "../kernoid-dav" }

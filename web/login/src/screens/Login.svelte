@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- Logging in: the address first – which may belong to an identity provider – then the password (Password.svelte);
      or a passkey alone, also from the address field's autofill. Then "sign in with …" for the instance's open
      providers, and registering where it is possible. -->

@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: MIT
+# The kit (RFC 0008, 2): everything kernoid's apps – and the apps of programs built on kernoid – use, under MIT. A Cargo
+# workspace of its own with one lock file, apart from the server's: no crate here may depend on a server crate, and
+# `deny.toml` allows only permissive licences. Requirements are minimum versions, as a library's; `Cargo.lock` pins
+# them (at least two weeks old, `tui/scripts/check-age.py --dir=kit`).
+[workspace]
+resolver = "3"
+members = ["client", "e2e", "sync"]
+
+[workspace.package]
+version = "0.4.0"
+edition = "2024"
+rust-version = "1.94"
+license = "MIT"
+repository = "https://github.com/kernoid/kernoid"
+homepage = "https://kernoid.dev"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+
+# OpenPGP's Argon2 and post-quantum keys are slow without optimisation, even in debug builds.
+[profile.dev.package."*"]
+opt-level = 2
+
+# The end-to-end library as WebAssembly for the web app (e2e/scripts/build-wasm.sh): small.
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

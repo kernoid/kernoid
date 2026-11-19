@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- A person as a picture: their own if they uploaded one, else their initials on a colour of their own – the same
      colour for the same address everywhere. -->
 <script lang="ts">

@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- Registering (RFC 0003): a name, an email address and a password – where the instance offers it, an address of
      one's own on one of its domains (a mailbox) or a username – then the code kernoid sends (ConfirmEmail.svelte). -->
 <script lang="ts">

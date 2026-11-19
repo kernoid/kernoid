@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- A button that runs an action, showing its error next to it. -->
 <script lang="ts">
   import { describe } from "../describe.js";

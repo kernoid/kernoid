@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- The calendar: a month, a week or a day at a time, the account's calendars and those shared with it; events made,
      changed and answered here send their invitations and answers. Colours and positions are set as style properties
      (style:), which the Content-Security-Policy allows – not as style attributes. -->

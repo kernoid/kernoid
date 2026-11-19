@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- The vacation response (JMAP, RFC 8621, 8): on or off, from and to a time, a subject and a text – kernoid answers
      mail with it while it is on, once per sender within a week, not to lists or automatic mail. -->
 <script lang="ts">

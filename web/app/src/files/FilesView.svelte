@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- Files: the stores the user reaches on the side – their own, the tenant's drives, what others share –, one directory
      at a time with the way up; uploading with progress (also by dropping), new folders, renaming, the trash, sharing
      folders, links for people without an account, copying and moving to another store, earlier versions of files,

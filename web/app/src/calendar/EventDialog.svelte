@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- One event: made or changed by its organizer (or anyone, without participants), answered by those invited. -->
 <script lang="ts" module>
   import type { CalendarEvent } from "./model.js";

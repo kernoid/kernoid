@@ -1615,6 +1615,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -2010,6 +2011,7 @@ dependencies = [
  "elliptic-curve",
  "flate2",
  "generic-array",
+ "getrandom 0.2.17",
  "hex",
  "hkdf",
  "idea",
@@ -2041,6 +2043,7 @@ dependencies = [
  "snafu",
  "subtle",
  "twofish",
+ "web-time",
  "x25519-dalek",
  "zeroize",
 ]

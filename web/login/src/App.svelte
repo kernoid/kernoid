@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- The current screen (screen.svelte.ts); each new one gets the focus on its first field, button or heading. -->
 <script lang="ts">
   import { screen } from "./screen.svelte.js";

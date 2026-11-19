@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Logging in and second factors – the steps the login flow, registering and the account page share.
 
 import { type KernoidError, passkeyAutofillAvailable } from "@kernoid/sdk";

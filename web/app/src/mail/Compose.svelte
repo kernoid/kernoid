@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- Writing an email: from one of the account's identities or of a shared mailbox it may send as – the one chosen as
      default unless another is picked, or the shared mailbox's own when answering an email in it –,
      with formatting (Editor.svelte), the email answered or forwarded quoted beneath, and attachments. It goes out as

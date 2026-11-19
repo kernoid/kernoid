@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Notifications for new mail: while the app is open but not in front, each new unread email in the inbox is shown by
 // the browser – if the user switched them on (account page) and the browser allows it. Kept per browser.
 

@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- Team folders (drives, RFC 0005): file stores that belong to the tenant, not to a person. Administrators create them
      and decide who may do what in them; people find them in Files. -->
 <script lang="ts">

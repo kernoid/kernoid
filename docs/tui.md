@@ -33,12 +33,12 @@ programs, is the way until then.
 
 ## Building
 
-It lives in `apps/tui/` – a Cargo workspace of its own, apart from the server's, with its own `Cargo.lock`; the SDK it
-uses in `apps/client/`, the end-to-end library in `apps/e2e/`. Rust from
+It lives in `tui/` – a Cargo workspace of its own, apart from the server's, with its own `Cargo.lock`; the SDK it
+uses in `kit/client/`, the end-to-end library in `kit/e2e/`. Rust from
 `rust-toolchain.toml`; no OpenSSL (TLS through rustls, certificates checked by the operating system's verifier).
 
 ```sh
-cd apps/tui
+cd tui
 cargo build --release --locked
 ./target/release/kernoid-tui --help
 ```
@@ -137,7 +137,7 @@ by you, removed once the editor closed.
 
 Where the account has a key for end-to-end encryption ([RFC 0006](https://github.com/kernoid/kernoid/blob/main/rfcs/0006-end-to-end-encryption.md),
 made in the web app), the app reads and sends encrypted mail as the web app does – with the same library,
-`apps/e2e`.
+`kit/e2e`.
 
 - **Unlocking:** the key is unlocked with its recovery code: from `KERNOID_RECOVERY_CODE` at the start, or typed
   (hidden) when an encrypted email is opened, or with `K`. Case, spaces and dashes do not matter. The unlocked key
@@ -197,7 +197,7 @@ a note after the blank line. Something the server did not take, or that could no
 |---|---|
 | Session, requests, uploads, downloads | JMAP Core (RFC 8620), HTTP Basic |
 | Mail | JMAP Mail (RFC 8621): `Mailbox`, `Email`, `Identity`, `EmailSubmission` |
-| End-to-end encryption | kernoid's `https://kernoid.dev/jmap/openpgp`: `OpenPgpKey/get`, `OpenPgpKey/lookup`, `kernoid:encrypted` and `kernoid:encryptedSummary`, `Email/import`; OpenPGP (RFC 9580, 9980) and PGP/MIME (RFC 3156) with header protection (RFC 9788) through `apps/e2e` (rpgp) |
+| End-to-end encryption | kernoid's `https://kernoid.dev/jmap/openpgp`: `OpenPgpKey/get`, `OpenPgpKey/lookup`, `kernoid:encrypted` and `kernoid:encryptedSummary`, `Email/import`; OpenPGP (RFC 9580, 9980) and PGP/MIME (RFC 3156) with header protection (RFC 9788) through `kit/e2e` (rpgp) |
 | Threads | `Email/query` with `collapseThreads`, `Thread/get` (RFC 8621, 3) |
 | Files | JMAP for files ([draft-ietf-jmap-filenode-19](https://datatracker.ietf.org/doc/draft-ietf-jmap-filenode/)): `FileNode` with `shareWith`; kernoid's `FileVersion/get` (`https://kernoid.dev/jmap/file-versions`); principals (RFC 9670) to find people and groups |
 | Calendars | JMAP for Calendars (draft-ietf-jmap-calendars): `Calendar`, `CalendarEvent/query` with `expandRecurrences`, `CalendarEvent/set` with `sendSchedulingMessages` (invitations, answers, cancellations through iTIP) |

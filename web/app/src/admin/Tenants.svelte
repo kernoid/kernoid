@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MIT -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!-- For instance administrators: the instance's tenants – creating, renaming, deactivating them, and managing one. -->
 <script lang="ts">
   import { loaded } from "../app.svelte.js";
