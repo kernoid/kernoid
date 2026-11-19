@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: MIT
+# flutter_rust_bridge_codegen generate: rust/src/api/ → lib/src/rust/ and rust/src/frb_generated.rs.
+rust_input: crate::api
+rust_root: rust/
+dart_output: lib/src/rust
+# As the rest of the Dart code (analysis_options.yaml).
+dart_format_line_length: 120

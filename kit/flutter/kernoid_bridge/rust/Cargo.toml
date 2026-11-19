@@ -1,0 +1,67 @@
+# SPDX-License-Identifier: MIT
+# The Rust side of kernoid's apps: what Dart calls through flutter_rust_bridge (`src/api/`), on kernoid's Rust SDK
+# (`kernoid-client`, docs/plan.md, 1). A workspace of its own; dependencies are exact (`=`), permissive (`deny.toml`) and
+# at least two weeks old when taken.
+[workspace]
+
+[package]
+name = "kernoid_bridge"
+version = "0.4.1"
+edition = "2024"
+rust-version = "1.94"
+license = "MIT"
+repository = "https://github.com/kernoid/kernoid"
+description = "The Rust side of kernoid's apps: JMAP over HTTPS, called from Dart"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[dependencies]
+flutter_rust_bridge = "=2.13.0"
+# Dates and times in the device's time zone (Unlicense OR MIT) – in place of chrono (RUSTSEC-2026-0543).
+jiff = "=1.0.1"
+# kernoid's Rust SDK (MIT): JMAP, push, end-to-end encryption (on kernoid-e2e), and a folder of the device kept in step
+# with a store – the kit's crates, by path in this repository (RFC 0011, 6): no release to wait for between a change of
+# the kit and the apps.
+kernoid-client = { path = "../../../client" }
+kernoid-e2e = { path = "../../../e2e" }
+kernoid-sync = { path = "../../../sync" }
+# Named only for its feature: prefer the post-quantum key exchange X25519MLKEM768, as kernoid does (RFC 0006, 2).
+rustls = { version = "=0.23.46", default-features = false, features = ["aws-lc-rs", "prefer-post-quantum", "std", "tls12"] }
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.151"
+tokio = { version = "=1.53.3", features = ["rt-multi-thread", "fs", "io-util"] }
+
+# Android: Kotlin calls the core of the file shells through JNI (`src/provider/jni.rs`), and rustls-platform-verifier –
+# which reqwest checks certificates with – needs the JVM handed to it before the first connection. Both come already
+# with reqwest on Android; named here in the versions of `Cargo.lock`. Its Kotlin part is a dependency of
+# `android/app/build.gradle.kts` in the same version as `rustls-platform-verifier-android`.
+[target.'cfg(target_os = "android")'.dependencies]
+jni = { version = "=0.22.4", default-features = false }
+rustls-platform-verifier = "=0.7.1"
+# Windows' Cloud Files API (cfapi) for the stores in Explorer, and DPAPI for the shell's login (docs/plan.md, 5).
+[target.'cfg(windows)'.dependencies]
+windows = { version = "=0.62.2", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Cryptography",
+    "Win32_Storage_CloudFilters",
+    "Win32_Storage_FileSystem",
+    "Win32_System_CorrelationVector",
+    "Win32_System_IO",
+] }
+
+[dev-dependencies]
+tokio = { version = "=1.53.3", features = ["rt-multi-thread", "macros", "net", "io-util", "time"] }
+
+# OpenPGP's Argon2 and post-quantum keys are slow without optimisation, even in debug builds.
+[profile.dev.package."*"]
+opt-level = 2
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }
+missing_debug_implementations = "warn"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }

@@ -57,7 +57,9 @@ against a recording HTTP server (`tests/`).
 
 **The kit** (`kit/`, RFC 0008, 2) is a **Cargo workspace of its own** with one `Cargo.lock` – the SDK, `kernoid-e2e`,
 `kernoid-sync`, the foundation (RFC 0010: `kernoid-base`, `-blob`, `-log`, `-crypt`, `-space-store`, `-replica`, taken
-over from aktujo 0.4.1) and, later, the Flutter packages: everything apps use, all MIT. The server takes the
+over from aktujo 0.4.1) and the Flutter packages of `kit/flutter/` (RFC 0011, `kit/flutter/README.md`; not Cargo
+members – the bridge's crate `kit/flutter/kernoid_bridge/rust` is a workspace of its own on the kit by path, with its own
+lock and `deny.toml`): everything apps use, all MIT. The server takes the
 foundation's crates by path too (`kernoid-relay`); none of its crates may bring SQLite into the server's lock file
 (rusqlite and sqlx-sqlite both link `sqlite3`) – the replica's test against a relay runs from the kit
 (`kit/replica/tests/server.rs`, through `scripts/client-check.sh`). Not part of the

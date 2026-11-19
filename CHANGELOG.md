@@ -36,6 +36,10 @@ Migrations 0052 to 0054 add tables and a function; installations that keep mail,
   (`relay.open_for_tenant`), by anyone; `relay.domains` names the programs. A tenant's spaces in REST
   (`/v1/relay/spaces`), GraphQL and the CLI (`kernoid relay`).
 - The claim `urn:kernoid:tenant` – the account's tenant – in ID tokens, JWT access tokens and userinfo answers.
+- **The app kit** ([RFC 0011](rfcs/0011-app-kit.md)): kernoid's apps as Flutter packages in `kit/flutter/` (MIT) –
+  `kernoid_shell` (the frame, `KFeature`, `runKernoidApp`), `kernoid_mail`, `kernoid_calendar`, `kernoid_contacts`,
+  `kernoid_files`, `kernoid_ui`, `kernoid_l10n` and `kernoid_bridge` (the Rust side, on the kit's SDK by path). An app
+  shows the features its server offers. kernoid/apps is the app around them.
 - RFCs 0008 (the suite: building blocks, services, licences), 0009 (kernoid's identity in other servers), 0010 (the
   foundation of end-to-end encrypted spaces) and 0011 (the app kit).
 

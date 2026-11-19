@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: MIT
+# Part of kernoid's app kit (RFC 0011): MIT. Dependencies are exact, as in kernoid's apps, and at least two weeks old
+# when taken; the packages of the kit refer to each other by path – an app overrides them all at once.
+name: kernoid_mail
+description: "Mail in an app on kernoid: folders, reading (HTML, end to end), writing"
+version: 0.4.0
+publish_to: 'none'
+repository: https://github.com/kernoid/kernoid
+
+environment:
+  sdk: ^3.14.0
+  flutter: ">=3.47.8"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  kernoid_bridge:
+    path: ../kernoid_bridge
+  kernoid_l10n:
+    path: ../kernoid_l10n
+  kernoid_shell:
+    path: ../kernoid_shell
+  kernoid_ui:
+    path: ../kernoid_ui
+  intl: any
+  lucide_icons_flutter: 4.0.0
+  file_selector: 1.1.0
+  flutter_widget_from_html_core: 0.17.4
+  url_launcher: 6.3.3
+
+dev_dependencies:
+  flutter_lints: 6.0.0
+  flutter_test:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter

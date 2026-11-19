@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: MIT
+# Part of kernoid's app kit (RFC 0011): MIT. Dependencies are exact, as in kernoid's apps, and at least two weeks old
+# when taken; the packages of the kit refer to each other by path – an app overrides them all at once.
+name: kernoid_shell
+description: "The frame of an app on kernoid: logging in, the home with the server's features, the account"
+version: 0.4.0
+publish_to: 'none'
+repository: https://github.com/kernoid/kernoid
+
+environment:
+  sdk: ^3.14.0
+  flutter: ">=3.47.8"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  kernoid_bridge:
+    path: ../kernoid_bridge
+  kernoid_l10n:
+    path: ../kernoid_l10n
+  kernoid_ui:
+    path: ../kernoid_ui
+  file_selector: 1.1.0
+  flutter_localizations:
+    sdk: flutter
+  flutter_secure_storage: 11.2.0
+  flutter_web_auth_2: 5.1.0
+  intl: any
+  lucide_icons_flutter: 4.0.0
+  path_provider: 2.1.6
+  url_launcher: 6.3.3
+
+dev_dependencies:
+  flutter_lints: 6.0.0
+  flutter_test:
+    sdk: flutter

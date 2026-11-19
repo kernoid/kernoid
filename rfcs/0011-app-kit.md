@@ -2,7 +2,9 @@
 # RFC 0011 – The app kit
 
 - **Status:** draft, 2026-11-19; the direction decided by the maintainer the same day (RFC 0008, 1), the mechanism a
-  proposal. Implemented with 0.5.0 as far as section 7 says.
+  proposal. Implemented with 0.5.0: the packages in `kit/flutter/`, `KFeature` with `Kernoid.offers` (the server's
+  capabilities), kernoid/apps on them. Each feature also adds sections to the account page and keeps what it needs
+  while the account is signed in (`KFeatureSession`: the folders kept in step and the tray of `kernoid_files`).
 - **Scope:** how kernoid's apps – and the apps of programs built on kernoid – are put together from Flutter packages
   in this repository, how one app shows only what its server offers, and what stays in `kernoid/apps`.
 

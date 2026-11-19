@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: MIT
+# Part of kernoid's app kit (RFC 0011): MIT. Dependencies are exact, as in kernoid's apps, and at least two weeks old
+# when taken; the packages of the kit refer to each other by path – an app overrides them all at once.
+name: kernoid_l10n
+description: "The strings of kernoid's app kit, English and German"
+version: 0.4.0
+publish_to: 'none'
+repository: https://github.com/kernoid/kernoid
+
+environment:
+  sdk: ^3.14.0
+  flutter: ">=3.47.8"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  intl: any
+
+dev_dependencies:
+  flutter_lints: 6.0.0
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  generate: true

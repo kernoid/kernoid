@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: MIT
+# How cargokit builds rust/ for the Flutter app: with the Rust kernoid pins (rust-toolchain.toml), in both builds.
+cargo:
+  debug:
+    toolchain: 1.99.1
+  release:
+    toolchain: 1.99.1

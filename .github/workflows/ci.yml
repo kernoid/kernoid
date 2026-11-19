@@ -101,6 +101,49 @@ jobs:
           path: web/e2e/dist
           retention-days: 7
 
+  # The kit's Flutter packages (kit/flutter/, MIT, RFC 0011): each analysed and tested; the bridge's Rust side checked
+  # (its own workspace, on the kit by path), and the code flutter_rust_bridge and gen-l10n generate up to date.
+  flutter:
+    if: github.ref_type != 'tag'
+    runs-on: ubuntu-latest
+    env:
+      FLUTTER_VERSION: 3.50.0
+      FRB_VERSION: 2.13.0
+      CARGO_EXPAND_VERSION: 1.0.127
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Flutter
+        run: |
+          git clone --depth 1 --branch "$FLUTTER_VERSION" https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+      - name: Rust toolchain from the bridge's rust-toolchain.toml
+        working-directory: kit/flutter/kernoid_bridge/rust
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@2201cc584a476d1b508be977bbe4b7d1c7a52e9c # v2.9.3
+        with:
+          workspaces: kit/flutter/kernoid_bridge/rust
+      - name: The bridge's Rust side
+        working-directory: kit/flutter/kernoid_bridge/rust
+        run: |
+          cargo fmt --check
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo test --locked
+      - name: Generated code up to date (flutter_rust_bridge, gen-l10n)
+        run: |
+          cargo install --locked "flutter_rust_bridge_codegen@$FRB_VERSION" "cargo-expand@$CARGO_EXPAND_VERSION"
+          (cd kit/flutter/kernoid_bridge && flutter pub get && flutter_rust_bridge_codegen generate && (cd rust && cargo fmt))
+          (cd kit/flutter/kernoid_l10n && flutter pub get && flutter gen-l10n)
+          git diff --exit-code kit/flutter
+      - name: Every package analysed and tested
+        working-directory: kit/flutter
+        run: |
+          for package in kernoid_*; do
+            echo "::group::$package"
+            (cd "$package" && flutter pub get && dart format --output=none --set-exit-if-changed lib $( [ -d test ] && echo test ) \
+              && flutter analyze && if [ -d test ]; then flutter test; fi) || exit 1
+            echo "::endgroup::"
+          done
+
   # The terminal app: a Cargo workspace of its own (AGPL), apart from the server's, on the SDK.
   tui:
     if: github.ref_type != 'tag'
@@ -193,6 +236,10 @@ jobs:
         uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
         with:
           manifest-path: kit/Cargo.toml
+      - name: The apps' bridge
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          manifest-path: kit/flutter/kernoid_bridge/rust/Cargo.toml
       - name: Web
         working-directory: web
         run: |
@@ -261,7 +308,7 @@ jobs:
   # digest, and `manifest` names both `main` and `sha-<commit>` – so an image `sha-<commit>` says that commit passed
   # all of them, and `release` gives it a version.
   image:
-    needs: [rust, kit, macos, tui, operator, web, deps, stalwart, licences]
+    needs: [rust, kit, flutter, macos, tui, operator, web, deps, stalwart, licences]
     strategy:
       matrix:
         include:
