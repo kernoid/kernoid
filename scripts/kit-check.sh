@@ -24,9 +24,11 @@ for line in bad:
     print(line)
 sys.exit(1 if bad else 0)
 '
+# REUSE-IgnoreStart – the patterns below are what this script looks for, not this file's licence.
 other=$(grep -rIl --exclude-dir=target --exclude-dir=build --exclude-dir=.dart_tool "SPDX-License-Identifier:" . \
   | xargs grep -L "SPDX-License-Identifier: MIT" || true)
 if [ -n "$other" ]; then
   echo "files in kit/ with a licence other than MIT:"; echo "$other"; exit 1
 fi
+# REUSE-IgnoreEnd
 echo "the kit is MIT and apart from the server"

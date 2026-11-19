@@ -7,9 +7,16 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 ## [Unreleased]
 
+## [0.5.0] – DATE
+
 kernoid becomes the core of a suite of building blocks ([RFC 0008](rfcs/0008-suite-and-building-blocks.md)–0011): an
-installation runs only the services it wants, down to identity alone, and the parts apps use are one kit under MIT.
-Migrations 0052 to 0054 add tables and a function; installations that keep mail, calendars and files change nothing in their configuration.
+installation runs only the services it wants, down to identity alone or a relay alone; other programs log in with
+kernoid or build its identity in; the foundation of end-to-end encrypted spaces – aktujo's core – is kernoid's, with a
+relay; and the parts apps use are one kit under MIT, Flutter packages included. Upgrade by pulling the image
+`ghcr.io/kernoid/kernoid:0.5.0` (the Helm chart and the crates follow the version): migrations 0052 to 0054 add tables
+and a function, and installations that keep mail, calendars and files change nothing in their configuration. The web
+SDK, login UI and web app are AGPL now (below). Apps on the kit take its crates 0.5.0; kernoid's app takes the kit's
+Flutter packages from this release.
 
 ### Added
 
