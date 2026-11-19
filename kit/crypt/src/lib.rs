@@ -15,6 +15,7 @@
 //! holds, who sends when and how much, and the member list – not the events.
 
 pub mod pq;
+pub mod stream;
 
 use std::{collections::BTreeMap, fmt, str::FromStr};
 
