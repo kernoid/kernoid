@@ -1,0 +1,48 @@
+# SPDX-License-Identifier: MIT
+# kernoid's vaults on spaces (RFC 0010, 5): directories and files as streams of the foundation – the same on a device
+# (kernoid-client) and in the web app (WebAssembly, the feature `wasm`).
+[package]
+name = "kernoid-vault"
+description = "kernoid's end-to-end encrypted vaults on the foundation's streams: directories, files, names, versions, members"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+keywords = ["e2ee", "files", "vault", "kernoid"]
+categories = ["cryptography", "filesystem"]
+
+[lints]
+workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = ["native"]
+# Relays reached through ureq (kernoid-replica's `native`).
+native = ["kernoid-replica/native"]
+# The web app's bindings (`wasm-bindgen`), built with `scripts/build-wasm.sh`: the relay reached through a function of
+# the page's worker, the store kept as bytes by the page.
+wasm = ["dep:wasm-bindgen", "dep:js-sys", "kernoid-space-store/serialize"]
+
+[dependencies]
+kernoid-base = { version = "0.5.0", path = "../base" }
+kernoid-crypt = { version = "0.5.0", path = "../crypt" }
+kernoid-log = { version = "0.5.0", path = "../log" }
+kernoid-replica = { version = "0.5.0", path = "../replica", default-features = false }
+kernoid-space-store = { version = "0.5.0", path = "../space-store" }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+js-sys = { version = "0.3.91", optional = true }
+wasm-bindgen = { version = "0.2.129", optional = true }
+
+# Random numbers in a web page come from the browser's crypto.getRandomValues: each version of getrandom in the graph
+# is told so (feature `wasm_js`, for 0.2 `js`).
+[target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
+getrandom = { version = "0.4.3", features = ["wasm_js"] }
+getrandom-03 = { package = "getrandom", version = "0.3.4", features = ["wasm_js"] }
+# SQLite in a web page (rusqlite's backend there): the clock, randomness and sleeping it needs from the browser.
+sqlite-wasm-rs = { version = "0.6.3", default-features = false, features = ["wasm-bindgen"] }

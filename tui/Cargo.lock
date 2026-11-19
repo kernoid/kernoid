@@ -1474,9 +1474,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "899def5c37c4fd7b2664648c28120ecec138e4d395b459e5ca34f9cce2dd77fd"
 dependencies = [
  "cfg-if",
+ "js-sys",
  "libc",
  "r-efi 5.3.0",
  "wasip2",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -2259,6 +2261,7 @@ dependencies = [
  "kernoid-e2e",
  "kernoid-replica",
  "kernoid-space-store",
+ "kernoid-vault",
  "reqwest",
  "rustls",
  "serde",
@@ -2319,6 +2322,7 @@ name = "kernoid-replica"
 version = "0.5.0"
 dependencies = [
  "hex",
+ "js-sys",
  "kernoid-base",
  "kernoid-blob",
  "kernoid-crypt",
@@ -2356,6 +2360,22 @@ dependencies = [
  "serde_json",
  "tokio",
  "toml",
+]
+
+[[package]]
+name = "kernoid-vault"
+version = "0.5.0"
+dependencies = [
+ "getrandom 0.3.4",
+ "getrandom 0.4.3",
+ "kernoid-base",
+ "kernoid-crypt",
+ "kernoid-log",
+ "kernoid-replica",
+ "kernoid-space-store",
+ "serde",
+ "serde_json",
+ "sqlite-wasm-rs",
 ]
 
 [[package]]
@@ -4243,7 +4263,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a6cd504cecbfe7eef649988840f9a6cb768d11085efec138f8e99f160632d867"
 dependencies = [
  "cc",
+ "js-sys",
  "rsqlite-vfs",
+ "wasm-bindgen",
 ]
 
 [[package]]
