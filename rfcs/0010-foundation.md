@@ -84,7 +84,8 @@ a space shown as a folder of the file store.
 With streams in place ([0012](0012-streams.md)), the maintainer gave the go ahead on 2026-11-19 ("Yes, start"). The
 move, as built so far:
 
-1. **A vault is a space of protocol 2 at the account's kernoid** (`kernoid_client::e2e::Vaults`). Its root directory
+1. **A vault is a space of protocol 2 at the account's kernoid** (`kernoid-vault`, used by `kernoid_client::e2e::Vaults`
+   and, as WebAssembly, by the web app). Its root directory
    is the space stream; every directory and file is a stream linked below its directory. A directory's events name what
    lies in it (`entry`: stream, name, directory or file, in the vault's trash or not; `gone`), the space stream also the
    vault's name (`vault`); a file's events are its versions (`version`: the parts of its original, size, type, time);
@@ -105,9 +106,14 @@ move, as built so far:
    directories, files, members); the OpenPGP vault stays until whoever moved it checked the copy and removes it. The
    server keeps taking OpenPGP vaults until every client moved.
 
-**OPEN:** `kernoid-sync`, the apps (through the bridge), the terminal app and the web app – the web app needs streams in
-the browser (`kernoid-crypt` built for WebAssembly as `kernoid-e2e` is, requests and a store in TypeScript on
-IndexedDB); making a vault needs a login by token (the relay takes no app passwords); members' permissions follow the
+5. **In the browser** the same code runs as WebAssembly in a worker (`@kernoid/vault`): SQLite in memory
+   (sqlite-wasm-rs), saved whole to IndexedDB after each change; the relay is reached by synchronous requests, which
+   only a worker may make (`kernoid_replica::transport::Transport`). The page founds with its session cookie, which the
+   relay takes with the CSRF header and an `Origin` of the instance.
+
+**OPEN:** `kernoid-sync` and the terminal app; making a vault needs a login by token or the web app's session (the
+relay takes no app passwords); keys of streams are kept in the store – in the browser in IndexedDB – not in a key store
+of the system; members' permissions follow the
 grant only when they are made (`members` for everyone shared with), not when it changes; groups as members.
 
 ## 6. Post-quantum

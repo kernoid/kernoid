@@ -187,6 +187,9 @@ importers:
       '@kernoid/sdk':
         specifier: workspace:*
         version: link:../sdk
+      '@kernoid/vault':
+        specifier: workspace:*
+        version: link:../vault
       '@lucide/svelte':
         specifier: 1.57.0
         version: 1.57.0(svelte@5.57.2)
@@ -247,6 +250,8 @@ importers:
         version: 4.7.6(picomatch@4.0.7)(svelte@5.57.2)(typescript@6.0.3)
 
   sdk: {}
+
+  vault: {}
 
 packages:
 

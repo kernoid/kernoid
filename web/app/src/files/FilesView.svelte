@@ -12,6 +12,7 @@
     Folder,
     FolderLock,
     FolderPlus,
+    FolderSync,
     Lock,
     HardDrive,
     History,
@@ -57,6 +58,8 @@
   import { current, e2e, refresh as refreshE2e } from "../e2e/e2e.svelte.js";
   import Unlock from "../e2e/Unlock.svelte";
   import { createDirectoryIn, createVault, inVault, renameIn, saveFrom, uploadInto } from "./vault.js";
+  import * as spaces from "./spaces.js";
+  import SpaceVault from "./SpaceVault.svelte";
   import VersionsDialog from "./VersionsDialog.svelte";
   import Viewer from "./Viewer.svelte";
 
@@ -117,6 +120,25 @@
   let copying = $state<FileNode>();
   let viewing = $state<FileNode>();
   let connecting = $state(false);
+  /** A vault on a space opened (RFC 0010, 5): shown by SpaceVault instead of the list. */
+  let spaceVault = $state<FileNode>();
+  /** The names of vaults on spaces this page has opened, by their directory's id – the store knows only ids. */
+  let spaceNames = $state<Record<string, string>>({});
+  let note = $state<string>();
+
+  // The names of vaults on spaces in the list, once the key is unlocked.
+  $effect(() => {
+    const nodes = list.value ?? [];
+    if (!e2e.unlocked) return;
+    for (const node of nodes) {
+      if (!node["kernoid:space"] || spaceNames[node.id]) continue;
+      void spaces
+        .enter(jmap, account, node)
+        .then((entered) => (entered ? spaces.name(jmap, node) : undefined))
+        .then((name) => name && (spaceNames = { ...spaceNames, [node.id]: name }))
+        .catch(() => undefined);
+    }
+  });
 
   /** The rights here: the directory's, or at the top whether the user may add there. */
   const here = $derived.by((): Rights => {
@@ -186,7 +208,18 @@
 
   function newVault(): void {
     const name = window.prompt(t("Name of the new vault"));
-    if (name?.trim()) void run(() => createVault(jmap, account, directory, name.trim()));
+    if (!name?.trim()) return;
+    // New vaults are spaces where the server has the relay for them (RFC 0010, 5).
+    if (spaces.available(jmap)) void run(async () => void (await spaces.create(jmap, account, directory, name.trim())));
+    else void run(() => createVault(jmap, account, directory, name.trim()));
+  }
+
+  function moveOnto(node: FileNode): void {
+    if (!window.confirm(t("Copy this vault into a new one beside it, kept end to end with post-quantum keys? The old vault stays until you remove it."))) return;
+    void run(async () => {
+      await spaces.moveVault(jmap, account, node);
+      note = t("Copied into a new vault. Check it, then remove the old one.");
+    });
   }
 
   function renameNode(node: FileNode): void {
@@ -205,7 +238,8 @@
     }
   }
 
-  const label = (node: FileNode) => (node.role === "trash" ? t("Trash") : node.name);
+  const label = (node: FileNode) =>
+    node.role === "trash" ? t("Trash") : node["kernoid:space"] ? (spaceNames[node.id] ?? t("Vault")) : node.name;
   const storeName = (entry: Store) => (entry.kind === "own" ? t("My files") : entry.name);
   const when = (iso: string) => new Date(iso).toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" });
 </script>
@@ -245,6 +279,16 @@
       upload(event.dataTransfer?.files);
     }}
   >
+    {#if spaceVault}
+      <SpaceVault
+        {account}
+        vault={spaceVault}
+        onclose={() => {
+          spaceVault = undefined;
+          touch("FileNode");
+        }}
+      />
+    {:else}
     <div class="toolbar">
       <nav class="trail" aria-label={t("Folders")}>
         <button type="button" class="quiet" onclick={() => open(account, null)}>
@@ -298,6 +342,7 @@
       {/if}
     </div>
     <Failure error={error ?? list.error ?? trail.error} />
+    {#if note}<p class="pad small">{note}</p>{/if}
     {#if e2e.available && current() && !e2e.unlocked}
       <div class="pad">
         <p class="muted small">{t("Vaults open – and new ones can be made – once your key is unlocked on this page.")}</p>
@@ -329,7 +374,8 @@
                   onclick={() => {
                     query = "";
                     typed = "";
-                    open(account, node.id);
+                    if (node["kernoid:space"]) spaceVault = node;
+                    else open(account, node.id);
                   }}
                 >
                   {#if node.role === "trash"}<Trash2 size={18} />{:else if inVault(node)}<FolderLock size={18} />{:else}<Folder size={18} />{/if}
@@ -360,7 +406,10 @@
             <td class="muted small">{node.modified ? when(node.modified) : ""}</td>
             <td class="end">
               {#if !node.role}
-                {#if isDirectory(node) && rights.mayShare && (!inVault(node) || node["kernoid:vaultKey"])}
+                {#if node["kernoid:vaultKey"] && !node.locked && e2e.unlocked && spaces.available(jmap)}
+                  <button type="button" class="quiet icon small" disabled={busy} aria-label={t("Move onto a space")} data-tip={t("Move onto a space")} onclick={() => moveOnto(node)}><FolderSync size={17} /></button>
+                {/if}
+                {#if isDirectory(node) && rights.mayShare && (!inVault(node) || node["kernoid:vaultKey"] || node["kernoid:space"])}
                   <button type="button" class="quiet icon small" disabled={busy || node.locked} aria-label={t("Share")} data-tip={t("Share")} onclick={() => (sharing = node)}><Share2 size={17} /></button>
                 {/if}
                 <!-- Links, versions and copies of what is in a vault are not offered yet (RFC 0006, OPEN). -->
@@ -375,7 +424,7 @@
                     <Copy size={17} />
                   </button>
                 {/if}
-                {#if rights.mayRename && !node.locked}
+                {#if rights.mayRename && !node.locked && !node["kernoid:space"]}
                   <button type="button" class="quiet icon small" disabled={busy} aria-label={t("Rename")} data-tip={t("Rename")} onclick={() => renameNode(node)}><Pencil size={17} /></button>
                 {/if}
                 {#if rights.mayDelete}
@@ -396,6 +445,7 @@
         {/each}
       </tbody>
     </table>
+    {/if}
   </div>
   {#if sharing}
     <ShareDialog

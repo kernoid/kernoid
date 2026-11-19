@@ -95,15 +95,27 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --locked --all-targets
       - run: cargo clippy --locked -p kernoid-e2e --target wasm32-unknown-unknown --features wasm
+      # The vaults for the web app compile SQLite for the browser: clang and llvm-ar.
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends clang llvm
+      - run: cargo clippy --locked -p kernoid-vault --target wasm32-unknown-unknown --no-default-features --features wasm
+        env:
+          CC_wasm32_unknown_unknown: clang
+          AR_wasm32_unknown_unknown: llvm-ar
       - run: cargo test --locked
       - name: WebAssembly for the web app
         run: |
           cargo install wasm-bindgen-cli --version "$(e2e/scripts/wasm-bindgen-version.sh)" --locked
           e2e/scripts/build-wasm.sh
+          vault/scripts/build-wasm.sh
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: e2e-wasm
           path: web/e2e/dist
+          retention-days: 7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: vault-wasm
+          path: web/vault/dist
           retention-days: 7
 
   # The kit's Flutter packages (kit/flutter/, MIT, RFC 0011): each analysed and tested; the bridge's Rust side checked
@@ -210,6 +222,10 @@ jobs:
         with:
           name: e2e-wasm
           path: web/e2e/dist
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: vault-wasm
+          path: web/vault/dist
       - run: npm install --global --ignore-scripts --no-audit --no-fund pnpm@12.12.0
       - run: pnpm install --frozen-lockfile
       - name: The administration's API types match docs/_data/openapi.json

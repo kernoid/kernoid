@@ -79,13 +79,14 @@ Vaults are moving onto **spaces** of kernoid's relay ([RFC 0010](https://github.
 files, names and versions live in the space, end to end encrypted with post-quantum keys, and kernoid does not even see
 how many files there are or how they are named. Each member account gets a recovery code of the space, encrypted to
 its key; every device of the account comes in with it. Ending someone's membership keeps what is written afterwards
-out of their reach. The SDK (`kernoid_client::e2e::Vaults`) makes such vaults and moves an existing one onto a space
-beside it, keeping the old one until it is removed. The relay must be on (`services.relay`, on wherever files are);
-making a vault needs a login by token, not an app password.
+out of their reach. The web app and kernoid's apps make new vaults this way and offer to move an existing one onto a
+space beside it (**Move onto a space**), keeping the old one until it is removed. In the browser, the vault is kept in
+the browser's storage of the page; a new browser comes in with the account's code. The relay must be on
+(`services.relay`, on wherever files are); making a vault needs a login by token or the web app, not an app password.
 
 {: .note }
-OPEN: the apps, the terminal app, the web app and the file sync on vaults on spaces – until then they keep making
-OpenPGP vaults.
+OPEN: the terminal app and the file sync on vaults on spaces; files in such vaults are not shown in Finder or Explorer
+yet.
 
 ## Search and the trash
 

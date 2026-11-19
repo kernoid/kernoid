@@ -145,6 +145,18 @@ export async function renameIn(jmap: Jmap, accountId: string, node: FileNode, na
   });
 }
 
+/** The content of a file of a vault, downloaded and decrypted here. */
+export async function openContent(jmap: Jmap, accountId: string, node: FileNode): Promise<Uint8Array> {
+  const vault = node["kernoid:vault"];
+  if (!vault || !node.blobId) throw new JmapError("invalidArguments", "not a file of a vault");
+  await needKey(jmap, accountId, vault);
+  const ring = await unlockedRing();
+  if (!ring) throw new JmapError("locked", "unlock your key first");
+  const response = await fetch(jmap.downloadPath(accountId, node.blobId, "encrypted", "application/octet-stream"), { credentials: "same-origin" });
+  if (!response.ok) throw new JmapError("downloadFailed", String(response.status));
+  return ring.decrypt(new Uint8Array(await response.arrayBuffer()), []).data;
+}
+
 /** A file of a vault, downloaded and decrypted here, saved under its real name – never opened in the app. */
 export async function saveFrom(jmap: Jmap, accountId: string, node: FileNode, path: string): Promise<void> {
   const vault = node["kernoid:vault"];

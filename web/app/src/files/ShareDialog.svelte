@@ -5,6 +5,7 @@
   import Failure from "../Failure.svelte";
   import { t } from "../i18n.js";
   import { type FileNode, LEVELS, type Principal, type Rights, findPrincipals, level, principals, share } from "./model.js";
+  import { share as shareSpace } from "./spaces.js";
   import { giveKeys } from "./vault.js";
 
   type Level = keyof typeof LEVELS;
@@ -45,8 +46,10 @@
     try {
       await share(jmap, account, node, shareWith);
       // A vault's key goes to everyone it is shared with, wrapped for their key (RFC 0006, 6).
-      if (node["kernoid:vaultKey"]) {
-        waiting = await giveKeys(jmap, account, node.id, entries.map((entry) => entry.principal));
+      // A vault on a space makes them members, each with a code of the space sealed to their key (RFC 0010, 5).
+      if (node["kernoid:vaultKey"] || node["kernoid:space"]) {
+        const people = entries.map((entry) => entry.principal);
+        waiting = node["kernoid:space"] ? await shareSpace(jmap, account, node, people) : await giveKeys(jmap, account, node.id, people);
         if (waiting.length > 0) return;
       }
       onclose(true);

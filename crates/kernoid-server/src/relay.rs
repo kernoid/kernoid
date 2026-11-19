@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! The relay of kernoid's foundation in the server (RFC 0010, 4): who founds a space – an account of the instance, by
-//! its session or app token in `kernoid-session` – and the administration of a tenant's spaces.
+//! its session or app token in `kernoid-session`, or the web app's session cookie with the CSRF header and an `Origin`
+//! of the instance – and the administration of a tenant's spaces.
 
 use axum::{
     Json,
@@ -19,20 +20,25 @@ use crate::{AppState, Client, Problem, admin::AdminSession, admin::tenant::Tenan
 #[derive(Debug, Clone)]
 pub struct AccountFounders {
     identity: Identity,
+    /// Whether the installation is reached over HTTPS (`http.public_scheme`): pages of the instance are, then.
+    secure: bool,
 }
 
 impl AccountFounders {
-    pub fn new(identity: Identity) -> Self {
-        Self { identity }
+    pub fn new(identity: Identity, secure: bool) -> Self {
+        Self { identity, secure }
     }
 }
 
 impl Founders for AccountFounders {
     fn founder<'a>(&'a self, extensions: &'a Extensions, headers: &'a HeaderMap) -> BoxFuture<'a, Option<Founder>> {
         Box::pin(async move {
-            let token = headers.get(FOUNDER_HEADER)?.to_str().ok()?;
             let instance = crate::instance::of_request(&self.identity, extensions.get::<Client>()).await.ok()??;
-            let account = self.identity.settings_account(instance.id, token, true).await.ok()?;
+            let token = match headers.get(FOUNDER_HEADER) {
+                Some(token) => token.to_str().ok()?.to_owned(),
+                None => crate::cookie::posted_session(headers, &instance, self.secure)?,
+            };
+            let account = self.identity.settings_account(instance.id, &token, true).await.ok()?;
             // A tenant without the relay founds no spaces (RFC 0008, 4).
             let off = self.identity.tenant_services_off(account.tenant).await.ok()?;
             if off.iter().any(|service| service == "relay") {

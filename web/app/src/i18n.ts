@@ -761,7 +761,19 @@ const de: Record<string, string> = {
   "New encrypted address book": "Neues verschlüsseltes Adressbuch",
   "Encrypted address books show their contacts once your key is unlocked on this page.": "Verschlüsselte Adressbücher zeigen ihre Kontakte, sobald Ihr Schlüssel auf dieser Seite entsperrt ist.",
   "Its contacts only those it is shared with can read": "Seine Kontakte können nur die lesen, mit denen es geteilt ist",
-  "No invitations from an encrypted calendar yet": "Aus einem verschlüsselten Kalender gehen noch keine Einladungen hinaus",
+  "No invitations from an encrypted calendar yet": "Aus einem verschlüsselten Kalender gehen noch keine Einladungen hinaus",  Vault: "Tresor",
+  "Opening the vault …": "Tresor wird geöffnet …",
+  "No member has given you access to this vault yet. Once one shares it with you again, it opens here.": "Noch hat Ihnen kein Mitglied Zugang zu diesem Tresor gegeben. Sobald es ihn erneut mit Ihnen teilt, öffnet er sich hier.",
+  "Move onto a space": "Auf einen Space umziehen",
+  "Copy this vault into a new one beside it, kept end to end with post-quantum keys? The old vault stays until you remove it.": "Diesen Tresor in einen neuen daneben kopieren, Ende zu Ende mit Post-Quanten-Schlüsseln? Der alte bleibt, bis Sie ihn entfernen.",
+  "Copied into a new vault. Check it, then remove the old one.": "In einen neuen Tresor kopiert. Prüfen Sie ihn und entfernen Sie dann den alten.",
+  "Trash of the vault": "Papierkorb des Tresors",
+  "Back to the vault": "Zurück zum Tresor",
+  "Move to …": "Verschieben nach …",
+  "Top of the vault": "Oberste Ebene des Tresors",
+  "Back to the files": "Zurück zu den Dateien",
+  "Rename the vault": "Tresor umbenennen",
+  "Decrypted here": "Hier entschlüsselt",
 };
 
 const lang = (navigator.languages?.[0] ?? navigator.language ?? "en").toLowerCase().startsWith("de") ? "de" : "en";

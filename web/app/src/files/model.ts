@@ -30,6 +30,8 @@ export interface FileNode {
   "kernoid:vault"?: string | null;
   "kernoid:vaultKey"?: string | null;
   "kernoid:encryptedName"?: string | null;
+  /** A vault on a space (RFC 0010, 5): its space – what is in it lives there (`spaces.ts`). */
+  "kernoid:space"?: string | null;
   /** In a vault whose key is not at hand here: the name is not known. */
   locked?: boolean;
 }
@@ -71,6 +73,7 @@ const PROPERTIES = [
   "kernoid:vault",
   "kernoid:vaultKey",
   "kernoid:encryptedName",
+  "kernoid:space",
 ];
 const USING = [FILENODE, FILE_VERSIONS, PRINCIPALS];
 

@@ -14,13 +14,25 @@
     size,
     url,
     inline,
+    body,
     onclose,
-  }: { name: string; type: string | null | undefined; size: number | null; url: string; inline: string; onclose: () => void } =
-    $props();
+  }: {
+    name: string;
+    type: string | null | undefined;
+    size: number | null;
+    url: string;
+    inline: string;
+    /** The content at hand already – decrypted here –: text is read from it, not fetched (the page fetches only from
+     * its own origin, never from `blob:`). */
+    body?: Uint8Array;
+    onclose: () => void;
+  } = $props();
 
   // svelte-ignore state_referenced_locally
   const kind = kindOf(name, type);
-  const content = loaded(() => (kind === "text" ? text(inline, size) : Promise.resolve("")));
+  const content = loaded(() =>
+    kind !== "text" ? Promise.resolve("") : body ? Promise.resolve(new TextDecoder().decode(body)) : text(inline, size),
+  );
 
   $effect(() => {
     const onKey = (event: KeyboardEvent) => {

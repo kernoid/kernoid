@@ -1640,7 +1640,8 @@ fn relay_of(
         Some(tenant) => Some(Uuid::parse_str(tenant).context("relay.open_for_tenant is not a tenant's id")?),
         None => None,
     };
-    let founders = Arc::new(kernoid_server::relay::AccountFounders::new(identity));
+    let secure = matches!(config.http.public_scheme, kernoid_config::PublicScheme::Https);
+    let founders = Arc::new(kernoid_server::relay::AccountFounders::new(identity, secure));
     Ok(kernoid_relay::Relay::new(db, blobs, &config.relay.domains, open_for, founders))
 }
 

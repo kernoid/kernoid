@@ -35,6 +35,11 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   its directory, naming the space (`kernoid:space`, migration 0058); destroyed, the worker removes the space. The JMAP
   session names the relay (`https://kernoid.dev/jmap/space-vaults`). The replica adds persons with a recovery code
   (`Streams::add_person`) and links a stream below another (`link_below`).
+- **Vaults on spaces in the web app:** the crate `kernoid-vault` (MIT) holds the vaults' model for the SDK and, as
+  WebAssembly (`@kernoid/vault`, `kit/vault/scripts/build-wasm.sh`), for the web app – in a worker, SQLite in memory
+  kept in IndexedDB. New vaults are made there, OpenPGP vaults can be moved onto a space, sharing makes members. The
+  replica reaches relays through a `Transport` (ureq natively, feature `native`), the store can be kept as bytes
+  (`kernoid-space-store`, feature `serialize`), and the relay takes the web app's session cookie of a founder.
 
 ### Changed
 

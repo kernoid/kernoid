@@ -77,6 +77,14 @@ version (`[workspace.package] version` in `kit/Cargo.toml`) – CI's job `crates
 `kit/scripts/publish-order.sh` gives on a version tag, through crates.io's trusted publishing (environment
 `crates-io`); the apps of `kernoid/apps` take them from there.
 
+`kit/vault` (MIT) is `kernoid-vault`, kernoid's vaults on spaces (RFC 0010, 5) on the replica's streams: the model
+(directories and files as streams, `entry`/`gone`/`version` events) and its operations, synchronous. The SDK runs it
+off its runtime; with `--features wasm` (and `--no-default-features`: no ureq) it is the web app's `WebVaults`, which
+`scripts/build-wasm.sh` turns into `web/vault/dist` (`@kernoid/vault`, not checked in) – SQLite is compiled for the
+browser by sqlite-wasm-rs, which needs a clang that knows wasm32 and llvm-ar (Apple's ar writes no WebAssembly objects;
+the script takes Homebrew's LLVM on macOS). The web app runs it in a worker (`web/app/src/files/space.worker.ts`):
+the relay by synchronous requests, the store kept in IndexedDB.
+
 `kit/sync` (MIT) is `kernoid-sync`, the file sync of kernoid's apps on the SDK: one round (`Folder::sync`) reads the
 store's changes (`FileNode/changes`, the whole store when the state is too old), scans the folder (size and modification
 time) and decides in `plan` – a pure function with the tests of every case – what to carry over; a change on both sides

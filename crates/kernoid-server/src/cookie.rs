@@ -91,6 +91,14 @@ fn own_origin(origin: &str, instance: &InstanceInfo, secure: bool) -> bool {
     scheme_fits && instance.domains.iter().any(|domain| domain.eq_ignore_ascii_case(host))
 }
 
+/// The session of a change made with the cookie from a page of the instance: with the CSRF header and an `Origin` of
+/// the instance, as [`session_token`] takes it – for those who only see the headers (the relay's founders).
+pub(crate) fn posted_session(headers: &HeaderMap, instance: &InstanceInfo, secure: bool) -> Option<String> {
+    let token = from_cookie(headers)?;
+    let origin = headers.get(header::ORIGIN).and_then(|origin| origin.to_str().ok())?;
+    (headers.get(CSRF_HEADER).is_some() && own_origin(origin, instance, secure)).then_some(token)
+}
+
 /// Whether a request that authenticates with the cookie comes from a page of the instance: WebSockets carry the
 /// cookie without any header a page could be kept from sending, so their `Origin` decides (RFC 6455, 10.2).
 #[cfg(feature = "data")]
