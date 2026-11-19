@@ -4,7 +4,8 @@
 # PostgreSQL of DATABASE_URL (a role that may create databases), and checks what each serves:
 #
 # - identity alone: no object storage (`[blob] kind = "database"`), no JMAP, CalDAV or WebDAV – but logging in and a
-#   picture of the account, kept in PostgreSQL.
+#   picture of the account, kept in PostgreSQL;
+# - a relay alone, open: the relay's routes, nothing of mail, calendars or files.
 #
 #   scripts/profile-check.sh [BINARY]
 #
@@ -92,7 +93,7 @@ done
 curl -fsS "http://127.0.0.1:$port/readyz" >/dev/null || fail "kernoid did not get ready"
 
 services=$(curl -fsS -H "Host: $host:$port" "http://127.0.0.1:$port/v1/services")
-[ "$services" = '{"mail":false,"calendars":false,"files":false}' ] || fail "services: $services"
+[ "$services" = '{"mail":false,"calendars":false,"files":false,"relay":false}' ] || fail "services: $services"
 expect 404 GET /jmap/session
 expect 404 PROPFIND /dav/
 expect 404 PROPFIND /webdav/
@@ -110,3 +111,21 @@ expect 204 PUT /v1/account/avatar -H "Authorization: Bearer $token" -H 'Content-
 expect 200 GET "/v1/avatars/$account" -H "Authorization: Bearer $token"
 expect 409 PUT "/v1/accounts/$account/services/files" -H "Authorization: Bearer $token" -H "kernoid-tenant: $tenant"
 echo "identity alone works: logins and pictures without object storage, nothing of mail, calendars or files"
+
+# A relay alone, open for the tenant: the same database, other services.
+kill "$server" && wait "$server" 2>/dev/null || true
+server=""
+sed -e 's/^files = false$/files = false\nrelay = true/' -e 's/^kind = "database"$/kind = "memory"/' "$work/config.toml" >"$work/relay.toml"
+printf '\n[relay]\nopen_for_tenant = "%s"\n' "$tenant" >>"$work/relay.toml"
+"$binary" --config "$work/relay.toml" serve >"$work/server.log" 2>&1 &
+server=$!
+for _ in $(seq 1 60); do
+    curl -fsS "http://127.0.0.1:$port/readyz" >/dev/null 2>&1 && break
+    sleep 1
+done
+services=$(curl -fsS -H "Host: $host:$port" "http://127.0.0.1:$port/v1/services")
+[ "$services" = '{"mail":false,"calendars":false,"files":false,"relay":true}' ] || fail "services: $services"
+expect 404 GET /jmap/session
+expect 200 GET "/relay/kernoid/v1/spaces/0192f1e4-0000-7000-8000-0000000000c1/members?after=-1"
+expect 404 GET "/relay/spezado/v1/spaces/0192f1e4-0000-7000-8000-0000000000c1/members?after=-1"
+echo "a relay alone works: its routes, nothing of mail, calendars or files"

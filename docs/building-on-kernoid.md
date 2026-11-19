@@ -86,3 +86,19 @@ schema, owned by the role of `migrate_url`, before the first start). kernoid's p
 `/graphql`, `/oauth/v2`, `/oidc/v1`, `/idp`, `/scim/v2`, `/.well-known/…` – are kernoid's; the program's are others.
 `Session::has_project_role` checks the program's roles. A program that builds kernoid in is AGPL-3.0 as a whole
 ([RFC 0009](https://github.com/kernoid/kernoid/blob/main/rfcs/0009-kernoid-in-other-servers.md), 6).
+
+## Spaces, end to end
+
+kernoid's foundation ([RFC 0010](https://github.com/kernoid/kernoid/blob/main/rfcs/0010-foundation.md)) keeps data that
+only its members read: a **space** is a log of events and originals, encrypted on the devices, merged by union, and
+synchronised through a **relay** that checks signatures and the member list but never sees content. The crates are in
+kernoid's kit, under MIT, for apps of any licence: `kernoid-base`, `-blob`, `-log`, `-crypt`, `-space-store` (a
+device's spaces in SQLite) and `-replica` (a device's replica, synchronising through a relay).
+
+With `services.relay = true` a kernoid is that relay, below `/relay/<program>/v1/` – `<program>` is the scheme of the
+program's signed requests, allowed by `relay.domains`. Spaces are founded by accounts of the installation
+(`Replica::start_sync_for` with the account's token), or by anyone on a relay open for a tenant
+(`relay.open_for_tenant`). A tenant's administrators see its spaces – who founded them, how large they are, never what
+is in them – and remove them: `GET /v1/relay/spaces`, `DELETE /v1/relay/spaces/{space}`, in GraphQL `relaySpaces` and
+`removeRelaySpace`, on the command line `kernoid relay spaces` and `kernoid relay remove`. A relay and nothing else is
+`[services]` with only `relay = true`.

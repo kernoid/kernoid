@@ -81,6 +81,17 @@ enum Command {
     /// Files: drives of a tenant and who may use whose files (RFC 0005).
     #[command(subcommand)]
     Files(FilesCommand),
+    /// The relay: a tenant's end-to-end encrypted spaces (RFC 0010).
+    #[command(subcommand)]
+    Relay(RelayCommand),
+}
+
+#[derive(Debug, Subcommand)]
+enum RelayCommand {
+    /// The tenant's spaces on this relay, newest first.
+    Spaces { tenant: Uuid },
+    /// Remove a space of the tenant with everything it holds.
+    Remove { tenant: Uuid, space: String },
 }
 
 #[derive(Debug, Subcommand)]
@@ -822,6 +833,7 @@ async fn main() -> anyhow::Result<()> {
         Command::Mail(command) => mail(&config, command).await,
         Command::Collections(command) => collections(&config, command).await,
         Command::Files(command) => files(&config, command).await,
+        Command::Relay(command) => relay(&config, command).await,
         Command::Openapi | Command::GraphqlSchema => unreachable!("handled before the configuration"),
     };
     if let Some(traces) = traces {
@@ -869,6 +881,10 @@ async fn serve(config: Config) -> anyhow::Result<()> {
     )
     .with_modules(&known)
     .with_services(config.services);
+    // The relay of the foundation (RFC 0010, 4).
+    if config.services.relay {
+        state = state.with_relay(relay_of(&config, db.clone(), blobs.clone(), Identity::new(events.clone()))?);
+    }
     match DnsResolver::from_system() {
         Ok(dns) => state = state.with_dns(dns),
         Err(error) => tracing::warn!(%error, "no DNS resolver; tenants cannot verify domains themselves"),
@@ -1568,6 +1584,43 @@ async fn files(config: &Config, command: FilesCommand) -> anyhow::Result<()> {
             let grantee = identity.mail_grantee(tenant, &grantee).await?;
             identity.remove_file_access(account, node, grantee, OPERATOR).await?;
             files.touch(account, node).await?;
+        }
+    }
+    Ok(())
+}
+
+/// The relay of this installation, as `[relay]` and the services describe it (RFC 0010, 4).
+fn relay_of(
+    config: &Config,
+    db: kernoid_store::PgPool,
+    blobs: BlobStore,
+    identity: Identity,
+) -> anyhow::Result<kernoid_relay::Relay> {
+    let open_for = match &config.relay.open_for_tenant {
+        Some(tenant) => Some(Uuid::parse_str(tenant).context("relay.open_for_tenant is not a tenant's id")?),
+        None => None,
+    };
+    let founders = Arc::new(kernoid_server::relay::AccountFounders::new(identity));
+    Ok(kernoid_relay::Relay::new(db, blobs, &config.relay.domains, open_for, founders))
+}
+
+async fn relay(config: &Config, command: RelayCommand) -> anyhow::Result<()> {
+    let db = kernoid_store::connect(&config.database).await.context("connecting to PostgreSQL")?;
+    let keys = Arc::new(TenantKeys::with_main_keys(db.clone(), main_keys(config)?));
+    let blobs = BlobStore::open(&config.blob, keys, db.clone()).context("setting up object storage")?;
+    let relay = relay_of(config, db.clone(), blobs, Identity::new(EventStore::new(db)))?;
+    match command {
+        RelayCommand::Spaces { tenant } => {
+            for space in relay.spaces(tenant).await? {
+                let founder = space.founder.map_or_else(|| "-".to_owned(), |id| id.to_string());
+                println!("{}\t{}\t{}\t{} bytes\t{}", space.space, space.domain, founder, space.bytes, space.written_at);
+            }
+        }
+        RelayCommand::Remove { tenant, space } => {
+            if !relay.remove_space(tenant, &space).await? {
+                anyhow::bail!("tenant {tenant} has no space {space}");
+            }
+            println!("removed {space}");
         }
     }
     Ok(())

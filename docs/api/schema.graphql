@@ -927,6 +927,10 @@ type MutationRoot {
 	Sets the tenant's default files quota; null for no limit (needs `tenant.manage`).
 	"""
 	setTenantFilesQuota(bytes: Int): Boolean!
+	"""
+	Removes a space of the tenant with everything it holds (needs `tenant.manage`); false if there is none.
+	"""
+	removeRelaySpace(space: String!): Boolean!
 }
 
 type Passkey {
@@ -1244,6 +1248,10 @@ type QueryRoot {
 	Who may use an account's files or a drive (needs `accounts.manage`).
 	"""
 	fileAccess(account: String!): [FileGrantObject!]!
+	"""
+	The tenant's spaces on this relay, newest first (needs `directory.read`).
+	"""
+	relaySpaces: [RelaySpace!]!
 }
 
 type QueuedRecipientObject {
@@ -1290,6 +1298,21 @@ type RegistrationOptions {
 	kernoid can send the code; without it, registering works only with providers.
 	"""
 	byEmail: Boolean!
+}
+
+"""
+An end-to-end encrypted space on the relay, as its tenant's administrators see it – never its content.
+"""
+type RelaySpace {
+	space: String!
+	"""
+	The program whose space it is: `kernoid`, `aktujo` …
+	"""
+	domain: String!
+	founder: String
+	bytes: Int!
+	createdAt: DateTime!
+	writtenAt: DateTime!
 }
 
 type RoleAssignment {

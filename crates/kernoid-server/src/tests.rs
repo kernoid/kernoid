@@ -61,7 +61,7 @@ async fn services_that_are_off_serve_nothing() {
     use kernoid_config::Services;
     let (status, body) = status_with(Services::NONE, "GET", "/v1/services").await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body, r#"{"mail":false,"calendars":false,"files":false}"#);
+    assert_eq!(body, r#"{"mail":false,"calendars":false,"files":false,"relay":false}"#);
     // Identity alone: no JMAP, no CalDAV, no WebDAV, no autoconfiguration, no administration of mail or files.
     for (method, path) in [
         ("GET", "/jmap/session"),
@@ -80,7 +80,7 @@ async fn services_that_are_off_serve_nothing() {
         assert_ne!(status_with(Services::NONE, "GET", path).await, unrouted(), "{path}");
     }
     // Files without mail: JMAP and WebDAV, but no mail programs' autoconfiguration.
-    let files = Services { mail: false, calendars: false, files: true };
+    let files = Services { files: true, ..Services::NONE };
     assert_ne!(status_with(files, "GET", "/jmap/session").await, unrouted());
     assert_ne!(status_with(files, "PROPFIND", "/webdav/").await, unrouted());
     assert_eq!(status_with(files, "GET", "/mail/config-v1.1.xml").await, unrouted());

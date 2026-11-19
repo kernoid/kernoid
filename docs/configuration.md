@@ -58,6 +58,9 @@ kind = "database"
 | `services.mail` | `true` | mail: the mail store, SMTP, IMAP and POP3, JMAP Mail, Sieve, mail programs' autoconfiguration, the Web Key Directory ([RFC 0008](https://github.com/kernoid/kernoid/blob/main/rfcs/0008-suite-and-building-blocks.md), 4) |
 | `services.calendars` | `true` | calendars and contacts: JMAP, CalDAV, CardDAV, scheduling – in the accounts' mail stores, with or without `services.mail` |
 | `services.files` | `true` | files: file stores, drives, WebDAV, JMAP FileNode, links |
+| `services.relay` | `false` | the relay of end-to-end encrypted spaces ([RFC 0010](https://github.com/kernoid/kernoid/blob/main/rfcs/0010-foundation.md), 4), served by the role `api` below `/relay/<program>/v1/` |
+| `relay.domains` | `["kernoid"]` | the programs whose spaces the relay keeps, by the scheme of their signed requests – add `aktujo` for aktujo's apps |
+| `relay.open_for_tenant` | – | the id of a tenant: anyone may found a space, kept for that tenant – for a relay that is all an installation does. Without it, only accounts of the installation found spaces (with their session or app token in `kernoid-session`), for their tenants |
 | `http.listen` | `0.0.0.0:8080` | address and port to listen on |
 | `http.tls.certificate`, `http.tls.key` | – | PEM files; with them kernoid serves HTTPS itself (TLS 1.2 and 1.3, HTTP/2) |
 | `http.trusted_proxies` | `[]` | addresses or networks whose `Forwarded` / `X-Forwarded-*` headers are believed |
@@ -72,7 +75,7 @@ kind = "database"
 | `database.statement_timeout_ms` | `30000` | longest time one statement may run; `0` for no limit |
 | `database.idle_in_transaction_timeout_ms` | `10000` | longest time a transaction may stay open without a statement; `0` for no limit |
 | `database.schema` | `public` | the schema of kernoid's tables – for a program that builds kernoid in and keeps its own tables in the same database ([Building on kernoid]({{ '/building-on-kernoid/' | relative_url }})); it must exist, owned by the role of `migrate_url` |
-| `blob.kind` | required | `s3`; `database` – objects in PostgreSQL, up to 4 MiB each, only with `services.mail` and `services.files` off (identity alone keeps nothing but pictures of accounts); or `memory` (lost on exit – for tests only) |
+| `blob.kind` | required | `s3`; `database` – objects in PostgreSQL, up to 4 MiB each, only with `services.mail`, `services.files` and `services.relay` off (identity alone keeps nothing but pictures of accounts); or `memory` (lost on exit – for tests only) |
 | `blob.endpoint` | – | S3 endpoint URL; leave out for AWS |
 | `blob.region` | `us-east-1` | |
 | `blob.bucket`, `blob.access_key_id`, `blob.secret_access_key` | required for `s3` | |

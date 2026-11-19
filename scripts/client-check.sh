@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# Runs the tests of the Rust SDK (kit/client) and of kernoid-sync (kit/sync) that need a real kernoid: this
+# Runs the tests of the Rust SDK (kit/client), of kernoid-sync (kit/sync) and of the replica (kit/replica, through the
+# relay – open, for the test's tenant) that need a real kernoid: this
 # checkout's binary, serving a fresh database in the PostgreSQL of DATABASE_URL (a role that may create databases),
 # objects in memory, on http://clients.localhost:$PORT (18380 unless set). An instance, a tenant and the account
 # alice@firma.test with mail and files are made with the CLI; the tests log in with its password. kernoid-sync's vault
@@ -65,6 +66,15 @@ printf '%s\n' "$password" | "$binary" --config "$work/config.toml" account passw
 bob=$(cli account add "$tenant" bob@firma.test --name Bob)
 cli account grant-service "$bob" files >/dev/null
 printf '%s\n' "$password" | "$binary" --config "$work/config.toml" account password "$bob" >/dev/null
+# The relay of the foundation, open: spaces anyone founds belong to the tenant (RFC 0010, 4).
+cat >>"$work/config.toml" <<TOML
+
+[services]
+relay = true
+
+[relay]
+open_for_tenant = "$tenant"
+TOML
 
 "$binary" --config "$work/config.toml" serve >"$work/server.log" 2>&1 &
 server=$!
@@ -78,4 +88,7 @@ export KERNOID_TEST_SERVER="http://$host:$port" KERNOID_TEST_ADDRESS=alice@firma
 export KERNOID_TEST_VAULT_ADDRESS=bob@firma.test KERNOID_TEST_VAULT_PASSWORD="$password"
 (cd "$root/kit/client" && cargo test --locked --test server -- --test-threads 1) || { tail -n 30 "$work/server.log"; fail "the SDK"; }
 (cd "$root/kit/sync" && cargo test --locked --test server -- --test-threads 1) || { tail -n 30 "$work/server.log"; fail "kernoid-sync"; }
-echo "the SDK and kernoid-sync work against kernoid"
+KERNOID_TEST_RELAY="http://127.0.0.1:$port/relay/kernoid" \
+    cargo test --manifest-path "$root/kit/Cargo.toml" --locked -p kernoid-replica --test server \
+    || { tail -n 30 "$work/server.log"; fail "the replica through the relay"; }
+echo "the SDK, kernoid-sync and the replica work against kernoid"

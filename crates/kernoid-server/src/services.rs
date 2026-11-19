@@ -24,11 +24,18 @@ pub(crate) struct ServicesView {
     calendars: bool,
     /// Files: JMAP FileNode, WebDAV, links.
     files: bool,
+    /// The relay of end-to-end encrypted spaces, below `/relay/<program>/v1/`.
+    relay: bool,
 }
 
 /// The services this installation runs; anyone may ask.
 #[utoipa::path(get, path = "/v1/services", tag = "meta", responses((status = 200, body = ServicesView)))]
 pub(crate) async fn list(State(state): State<AppState>) -> Json<ServicesView> {
     let services = state.services;
-    Json(ServicesView { mail: services.mail, calendars: services.calendars, files: services.files })
+    Json(ServicesView {
+        mail: services.mail,
+        calendars: services.calendars,
+        files: services.files,
+        relay: services.relay,
+    })
 }

@@ -9,7 +9,7 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 kernoid becomes the core of a suite of building blocks ([RFC 0008](rfcs/0008-suite-and-building-blocks.md)–0011): an
 installation runs only the services it wants, down to identity alone, and the parts apps use are one kit under MIT.
-Migrations 0052 and 0053 add a table and a function; installations that keep mail, calendars and files change nothing in their configuration.
+Migrations 0052 to 0054 add tables and a function; installations that keep mail, calendars and files change nothing in their configuration.
 
 ### Added
 
@@ -27,6 +27,14 @@ Migrations 0052 and 0053 add a table and a function; installations that keep mai
   program's routes join kernoid's, `Session` says who is logged in. `kernoid-server` has the features `mail`,
   `calendars` and `files` (on by default) – without them, nothing of those is compiled in. `database.schema` puts
   kernoid's tables into a schema of their own (migration 0053 grants its use).
+- **The foundation** ([RFC 0010](rfcs/0010-foundation.md)): aktujo's core – originals by their hash, the event log of a
+  space, the keys of its members, a device's spaces in SQLite, the replica – as `kernoid-base`, `-blob`, `-log`,
+  `-crypt`, `-space-store` and `-replica` in the kit (MIT, on crates.io), for kernoid, aktujo, notenwart and spezado.
+- **The relay** (`[services] relay = true`, migration 0054): kernoid keeps end-to-end encrypted spaces below
+  `/relay/<program>/v1/` – it checks signatures and member lists, never content; envelopes larger than 64 KiB go to
+  object storage. Spaces are founded by accounts (their token in `kernoid-session`) or, on a relay open for a tenant
+  (`relay.open_for_tenant`), by anyone; `relay.domains` names the programs. A tenant's spaces in REST
+  (`/v1/relay/spaces`), GraphQL and the CLI (`kernoid relay`).
 - The claim `urn:kernoid:tenant` – the account's tenant – in ID tokens, JWT access tokens and userinfo answers.
 - RFCs 0008 (the suite: building blocks, services, licences), 0009 (kernoid's identity in other servers), 0010 (the
   foundation of end-to-end encrypted spaces) and 0011 (the app kit).

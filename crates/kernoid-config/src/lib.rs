@@ -23,6 +23,9 @@ pub struct Config {
     /// The parts of kernoid this installation runs (RFC 0008, 4); identity is always there.
     #[serde(default)]
     pub services: Services,
+    /// The relay's settings (RFC 0010, 4), used with `services.relay`.
+    #[serde(default)]
+    pub relay: Relay,
     pub database: Database,
     pub blob: Blob,
     pub encryption: Encryption,
@@ -504,17 +507,20 @@ pub struct Services {
     /// Files: file stores, drives, WebDAV, JMAP FileNode, links.
     #[serde(default = "yes")]
     pub files: bool,
+    /// The relay: hosting end-to-end encrypted spaces of kernoid's foundation (RFC 0010, 4) – off by default.
+    #[serde(default)]
+    pub relay: bool,
 }
 
 impl Default for Services {
     fn default() -> Self {
-        Self { mail: true, calendars: true, files: true }
+        Self { mail: true, calendars: true, files: true, relay: false }
     }
 }
 
 impl Services {
     /// Identity alone.
-    pub const NONE: Self = Self { mail: false, calendars: false, files: false };
+    pub const NONE: Self = Self { mail: false, calendars: false, files: false, relay: false };
 
     /// Whether accounts have mail stores: for mail, or for calendars and contacts.
     pub fn mail_store(&self) -> bool {
@@ -523,7 +529,7 @@ impl Services {
 
     /// Whether any service keeps content in object storage.
     pub fn keeps_content(&self) -> bool {
-        self.mail || self.files
+        self.mail || self.files || self.relay
     }
 
     /// Whether JMAP is served: for mail, calendars or files.
@@ -534,6 +540,31 @@ impl Services {
 
 fn yes() -> bool {
     true
+}
+
+/// The relay (RFC 0010, 4): spaces of kernoid's foundation, end to end encrypted – it sees no content.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Relay {
+    /// Anyone may found a space – for a relay that is all an installation does: the id of the tenant whose storage
+    /// keeps them. Without it (the default), only accounts of the installation, logged in, found spaces – for their
+    /// tenants.
+    #[serde(default)]
+    pub open_for_tenant: Option<String>,
+    /// The programs whose spaces the relay keeps, by the scheme of their signed requests: `kernoid`, and e.g. `aktujo`.
+    /// A program's spaces are reached at `/relay/<scheme>/v1/…`.
+    #[serde(default = "default_relay_domains")]
+    pub domains: Vec<String>,
+}
+
+impl Default for Relay {
+    fn default() -> Self {
+        Self { open_for_tenant: None, domains: default_relay_domains() }
+    }
+}
+
+fn default_relay_domains() -> Vec<String> {
+    vec!["kernoid".into()]
 }
 
 /// Where kernoid keeps content: message bodies, attachments, files.
@@ -674,6 +705,13 @@ impl Config {
         if !self.services.mail && self.imap.is_some() {
             return Err(Error::Conflict("[imap] needs the service mail ([services] mail = true)"));
         }
+        if self.relay.domains.is_empty()
+            || !self.relay.domains.iter().all(|scheme| {
+                scheme.len() <= 32 && scheme.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+            })
+        {
+            return Err(Error::Conflict("relay.domains: names of a-z, 0-9 and -, at most 32, at least one"));
+        }
         if let Some(schema) = &self.database.schema {
             let first = schema.chars().next();
             if !first.is_some_and(|c| c.is_ascii_lowercase() || c == '_')
@@ -685,7 +723,7 @@ impl Config {
         }
         if matches!(self.blob, Blob::Database) && self.services.keeps_content() {
             return Err(Error::Conflict(
-                "[blob] kind = \"database\" is only for installations without mail and files: use object storage",
+                "[blob] kind = \"database\" is only for installations without mail, files and the relay: use object storage",
             ));
         }
         Ok(())

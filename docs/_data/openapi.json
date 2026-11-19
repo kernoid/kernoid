@@ -7802,6 +7802,95 @@
         }
       }
     },
+    "/v1/relay/spaces": {
+      "get": {
+        "tags": [
+          "relay"
+        ],
+        "summary": "The tenant's end-to-end encrypted spaces on this relay, newest first (needs `directory.read`). kernoid sees who\nfounded them and how large they are – never what is in them.",
+        "operationId": "get_v1_relay_spaces",
+        "parameters": [
+          {
+            "name": "kernoid-tenant",
+            "in": "header",
+            "description": "The tenant to act on – for instance administrators; the caller's own tenant if left out.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RelaySpaceView"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/relay/spaces/{space}": {
+      "delete": {
+        "tags": [
+          "relay"
+        ],
+        "summary": "Removes a space of the tenant with everything it holds (needs `tenant.manage`). Its members' devices keep their\ncopies.",
+        "operationId": "delete_v1_relay_spaces_space",
+        "parameters": [
+          {
+            "name": "kernoid-tenant",
+            "in": "header",
+            "description": "The tenant to act on – for instance administrators; the caller's own tenant if left out.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "space",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {},
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/roles": {
       "get": {
         "tags": [
@@ -12916,6 +13005,45 @@
           }
         }
       },
+      "RelaySpaceView": {
+        "type": "object",
+        "required": [
+          "space",
+          "domain",
+          "bytes",
+          "created_at",
+          "written_at"
+        ],
+        "properties": {
+          "bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "What its envelopes take, in bytes – encrypted."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "domain": {
+            "type": "string",
+            "description": "The program whose space it is: `kernoid`, `aktujo` …"
+          },
+          "founder": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The account that founded it."
+          },
+          "space": {
+            "type": "string"
+          },
+          "written_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "Retention": {
         "type": "object",
         "properties": {
@@ -13178,7 +13306,8 @@
         "required": [
           "mail",
           "calendars",
-          "files"
+          "files",
+          "relay"
         ],
         "properties": {
           "calendars": {
@@ -13192,6 +13321,10 @@
           "mail": {
             "type": "boolean",
             "description": "Mail: JMAP Mail, SMTP, IMAP."
+          },
+          "relay": {
+            "type": "boolean",
+            "description": "The relay of end-to-end encrypted spaces, below `/relay/<program>/v1/`."
           }
         }
       },

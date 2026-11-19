@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT canonical FROM relay_requests WHERE space = $1 AND received_at >= now() - make_interval(secs => $2)\n         ORDER BY received_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "canonical",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "relay_requests",
+            "name": "canonical"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Float8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "5f513285ee704acf597e4c876f823f448bfb9b0fdfcc53fbc3b1bc8b5a5d479f"
+}

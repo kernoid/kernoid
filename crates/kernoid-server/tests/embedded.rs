@@ -76,7 +76,10 @@ async fn a_program_builds_in_identity_in_a_schema_of_its_own(pool: PgPool) {
     // kernoid's routes: only identity's.
     let request = |method: &str, path: &str| Request::builder().method(method).uri(path).header("host", HOST);
     let (status, body) = send(&app, request("GET", "/v1/services").body(Body::empty()).unwrap()).await;
-    assert_eq!((status, body.as_str()), (StatusCode::OK, r#"{"mail":false,"calendars":false,"files":false}"#));
+    assert_eq!(
+        (status, body.as_str()),
+        (StatusCode::OK, r#"{"mail":false,"calendars":false,"files":false,"relay":false}"#)
+    );
     assert_eq!(send(&app, request("GET", "/jmap/session").body(Body::empty()).unwrap()).await.0, StatusCode::NOT_FOUND);
 
     // The program's route: nobody without a login, Ada with hers.

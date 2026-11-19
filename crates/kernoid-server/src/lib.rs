@@ -44,6 +44,8 @@ mod module_sessions;
 mod oidc;
 mod problem;
 mod registration;
+#[cfg(feature = "relay")]
+pub mod relay;
 mod scim;
 mod services;
 mod sessions;
@@ -89,7 +91,7 @@ const MAIL_BODY_LIMIT: usize = 72 * 1024 * 1024;
 /// Longest time for one request.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 /// Longest time for an upload or a write of a file – until the server answers; downloads stream after it.
-#[cfg(feature = "data")]
+#[cfg(any(feature = "data", feature = "relay"))]
 const TRANSFER_TIMEOUT: Duration = Duration::from_secs(6 * 60 * 60);
 /// How long running requests may take to finish after shutdown began.
 const SHUTDOWN_GRACE: Duration = Duration::from_secs(30);
@@ -101,6 +103,7 @@ pub fn compiled_services(services: Services) -> Services {
         mail: services.mail && cfg!(feature = "mail"),
         calendars: services.calendars && cfg!(feature = "calendars"),
         files: services.files && cfg!(feature = "files"),
+        relay: services.relay && cfg!(feature = "relay"),
     }
 }
 
@@ -133,6 +136,9 @@ pub struct AppState {
     pub imap: bool,
     /// The services of the installation (RFC 0008, 4): a service that is off serves no routes.
     pub services: Services,
+    /// The relay (RFC 0010, 4), with the service `relay`.
+    #[cfg(feature = "relay")]
+    pub relay: Option<kernoid_relay::Relay>,
 }
 
 impl AppState {
@@ -155,7 +161,16 @@ impl AppState {
             mail_host: None,
             imap: false,
             services: Services::default(),
+            #[cfg(feature = "relay")]
+            relay: None,
         }
+    }
+
+    /// Serves the relay (with the service `relay`).
+    #[cfg(feature = "relay")]
+    pub fn with_relay(mut self, relay: kernoid_relay::Relay) -> Self {
+        self.relay = Some(relay);
+        self
     }
 
     /// Serves only `services` (RFC 0008, 4).
@@ -430,7 +445,9 @@ fn rest_of(services: Services) -> OpenApiRouter<AppState> {
         }
         rest
     };
-    #[cfg(not(feature = "data"))]
+    #[cfg(feature = "relay")]
+    let rest = if services.relay { rest.merge(relay::rest()) } else { rest };
+    #[cfg(not(any(feature = "data", feature = "relay")))]
     let _ = services;
     rest
 }
@@ -438,7 +455,8 @@ fn rest_of(services: Services) -> OpenApiRouter<AppState> {
 /// The OpenAPI description of the REST API, as `/openapi.json` serves it.
 /// Every service's, whatever an installation runs – the description of kernoid's API.
 pub fn openapi() -> utoipa::openapi::OpenApi {
-    let mut openapi = rest_of(Services::default()).merge(rest_transfers()).split_for_parts().1;
+    let mut openapi =
+        rest_of(Services { relay: true, ..Services::default() }).merge(rest_transfers()).split_for_parts().1;
     unique_operation_ids(&mut openapi);
     openapi
 }
@@ -486,6 +504,8 @@ pub fn graphql_schema() -> String {
 
 pub fn router(state: AppState, modules: Router, http: &Http) -> Router {
     let services = state.services;
+    #[cfg(feature = "relay")]
+    let state_relay = state.relay.clone();
     let (rest, mut openapi) = rest_of(services).with_state(state.clone()).split_for_parts();
     let (rest_transfers, transfers_openapi) = rest_transfers().split_for_parts();
     if services.files {
@@ -544,7 +564,8 @@ pub fn router(state: AppState, modules: Router, http: &Http) -> Router {
         let _ = rest_transfers;
         (Router::new(), Router::new(), Router::new())
     };
-    rest.merge(protocol)
+    let app = rest
+        .merge(protocol)
         .route("/openapi.json", axum::routing::get(move || std::future::ready(Json(openapi.as_ref().clone()))))
         .route("/graphql", post(graphql::handler).with_state((state, graphql::schema())))
         .nest_service("/login", login_ui::routes(http.login_ui.as_deref()))
@@ -555,8 +576,17 @@ pub fn router(state: AppState, modules: Router, http: &Http) -> Router {
         .merge(mail)
         .merge(dav)
         .layer(TimeoutLayer::with_status_code(StatusCode::REQUEST_TIMEOUT, REQUEST_TIMEOUT))
-        .merge(transfers)
-        .fallback(problem::not_found)
+        .merge(transfers);
+    // The relay takes envelopes of up to 64 MiB and may take long, like other transfers.
+    #[cfg(feature = "relay")]
+    let app = match (&state_relay, services.relay) {
+        (Some(relay), true) => app.merge(
+            kernoid_relay::router(relay.clone())
+                .layer(TimeoutLayer::with_status_code(StatusCode::REQUEST_TIMEOUT, TRANSFER_TIMEOUT)),
+        ),
+        _ => app,
+    };
+    app.fallback(problem::not_found)
         .layer(axum::middleware::from_fn(metrics::layer))
         .layer(axum::middleware::from_fn_with_state(listener, forwarded::layer))
         .layer(CatchPanicLayer::custom(problem::panicked))

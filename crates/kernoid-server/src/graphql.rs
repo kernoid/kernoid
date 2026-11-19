@@ -28,6 +28,8 @@ mod files;
 mod logins;
 #[cfg(feature = "data")]
 mod mail;
+#[cfg(feature = "relay")]
+mod relay;
 
 pub type ApiSchema = Schema<QueryRoot, MutationRoot, EmptySubscription>;
 
@@ -40,6 +42,7 @@ pub struct QueryRoot(
     logins::LoginsQuery,
     #[cfg(feature = "data")] collections::CollectionsQuery,
     #[cfg(feature = "data")] files::FilesQuery,
+    #[cfg(feature = "relay")] relay::RelayQuery,
 );
 
 #[derive(async_graphql::MergedObject, Default)]
@@ -50,6 +53,7 @@ pub struct MutationRoot(
     logins::LoginsMutation,
     #[cfg(feature = "data")] collections::CollectionsMutation,
     #[cfg(feature = "data")] files::FilesMutation,
+    #[cfg(feature = "relay")] relay::RelayMutation,
 );
 
 pub fn schema() -> ApiSchema {

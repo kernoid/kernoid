@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO accounts (id, tenant_id, display_name, primary_address) VALUES ($1, $2, 'Ada', 'ada@firma.test')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ee882d6cfcf840fdd44923961dc573be0cdf31fc8a1122a78580f33df313bcb8"
+}

@@ -2,7 +2,8 @@
 # RFC 0010 – The foundation: spaces, end to end
 
 - **Status:** draft, 2026-11-19; the direction decided by the maintainer the same day (RFC 0008, 1), the mechanism a
-  proposal. Implemented with 0.5.0 as far as section 7 says.
+  proposal. Implemented with 0.5.0 as section 7 says: the six crates in `kit/`, `kernoid-relay` and the service
+  `relay`.
 - **Scope:** the crates that end-to-end encrypted data of any program stands on – originals by their hash, a log of
   events per space, keys of the members, storage on a device, sync, and the relay – taken over from aktujo; and how
   kernoid hosts spaces.
@@ -46,19 +47,27 @@ relay keeps; originals are stored by hash, in envelopes. kernoid adds no kinds o
 
 ## 4. kernoid as a relay
 
-The role **`relay`** of the service `relay` (RFC 0008, 4) serves the relay protocol at `/relay/v1/…`:
+With the service `relay` (RFC 0008, 4) the role `api` serves the relay protocol – aktujo's, unchanged – below
+`/relay/<scheme>/v1/spaces/{space}/…`, `<scheme>` being the program's domain as its signed requests name it
+(`kernoid`, `aktujo` …). `relay.domains` says which programs' spaces an installation keeps (`kernoid` by default); a
+space is its program's – under another scheme it is not there.
 
 - **Storage:** member lists, envelopes and their order in PostgreSQL – through sqlx's checked macros, in tables of
-  kernoid's one history (`relay_spaces`, `relay_members`, `relay_envelopes`); originals and envelopes larger than
-  64 KiB through `BlobStore` (sealed with the tenant's key, as all content – a second layer, the first is the space's).
-- **Who may found a space:** an account of a tenant with the service `relay`, logged in with a bearer token or a
-  session (`relay.open = false`, the default); or anyone (`relay.open = true`, for a relay that is all an installation
-  does – then spaces belong to the instance). A space counts against the quota of whoever founded it (OPEN: quotas of
-  the relay, section 8).
+  kernoid's one history (`relay_spaces`, `relay_records`, `relay_envelopes`, `relay_requests`, migration 0054);
+  envelopes larger than 64 KiB through `BlobStore` (sealed with the tenant's key, as all content – a second layer, the
+  first is the space's), garbage once their space is removed. One writer per space at a time (`FOR UPDATE`).
+- **Who may found a space:** an account of the installation, with its session or an access token of kernoid's apps in
+  the header `kernoid-session` (`kernoid_replica::Replica::start_sync_for`) – the space is its tenant's; or anyone, on a
+  relay open for a tenant (`relay.open_for_tenant`, for a relay that is all an installation does) – the space is that
+  tenant's. A space counts against its tenant (OPEN: quotas of the relay, section 8).
 - **Who may write and read:** members, by signed requests – the relay checks signatures against the ordered list, as
   aktujo's does; it never sees a key of a space.
 - **Limits:** a request at most 64 MiB (aktujo's limit); larger originals in parts (OPEN, aktujo RFC 0001).
-- **Administration:** a tenant's spaces (identity, founder, size, last write) and removing one – REST, GraphQL, CLI.
+- **Administration:** a tenant's spaces (identity, program, founder, size, last write) and removing one – REST
+  (`/v1/relay/spaces`), GraphQL (`relaySpaces`, `removeRelaySpace`), CLI (`kernoid relay`).
+
+aktujo's own relay in SQLite, for a person who runs one on their computer, stays aktujo's program (aktujo RFC 0004);
+kernoid's is the one for servers.
 
 ## 5. Files and vaults
 
@@ -78,8 +87,9 @@ the tree of keys of aktujo RFC 0009 – one change of the format rather than two
 
 ## 7. 0.5.0
 
-1. The six MIT crates in `kit/`, with aktujo's tests (two devices found a space, write offline, sync through a relay,
-   add and remove a member, recover – against the relay in memory and against `kernoid-relay`).
+1. The six MIT crates in `kit/`, with aktujo's tests; two devices found a space, write offline, sync through
+   `kernoid-relay`, add and remove a member, recover – against a real kernoid (`kit/replica/tests/server.rs`, run by
+   `scripts/client-check.sh`).
 2. `kernoid-relay` with section 4, the role and service `relay`, its administration, and the replica's tests against a
    real kernoid in CI.
 3. Published on crates.io with the rest of the kit.

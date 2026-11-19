@@ -136,11 +136,16 @@ pub fn parse_invitation(text: &str) -> Result<Invitation, SyncError> {
     })
 }
 
+/// The header with the token of the account that founds a space at a kernoid that keeps spaces only for its accounts.
+pub const FOUNDER_HEADER: &str = "kernoid-session";
+
 /// Requests to a relay, signed by a member.
 struct Client<'a> {
     agent: ureq::Agent,
     base: String,
     keys: &'a MemberKeys,
+    /// The token of the account founding a space, sent in [`FOUNDER_HEADER`].
+    founder: Option<&'a str>,
 }
 
 impl<'a> Client<'a> {
@@ -150,7 +155,13 @@ impl<'a> Client<'a> {
             .timeout_global(Some(Duration::from_secs(120)))
             .build()
             .into();
-        Client { agent, base: base.trim_end_matches('/').to_owned(), keys }
+        Client { agent, base: base.trim_end_matches('/').to_owned(), keys, founder: None }
+    }
+
+    /// The same, founding a space for the account of `token`.
+    fn founding(mut self, token: Option<&'a str>) -> Self {
+        self.founder = token;
+        self
     }
 
     /// The path as the relay receives it: the base's own path, if any, and the request's.
@@ -172,13 +183,15 @@ impl<'a> Client<'a> {
 
     fn post(&self, path: &str, body: Vec<u8>) -> Result<(u16, Vec<u8>), SyncError> {
         let signature = request_signature(self.keys, "POST", &self.signed_path(path), now_s());
-        let response = self
+        let mut request = self
             .agent
             .post(format!("{}{path}", self.base))
             .header("Authorization", signature)
-            .header("Content-Type", "application/json")
-            .send(body)
-            .map_err(|e| relay_error(format!("{}: {e}", self.base)))?;
+            .header("Content-Type", "application/json");
+        if let Some(token) = self.founder {
+            request = request.header(FOUNDER_HEADER, token);
+        }
+        let response = request.send(body).map_err(|e| relay_error(format!("{}: {e}", self.base)))?;
         Self::read(response)
     }
 
@@ -247,7 +260,7 @@ fn current_key(list: &MemberList, keys: &MemberKeys) -> Result<SpaceKey, SyncErr
 }
 
 /// What one device holds: its spaces, their originals and its clock – and how it synchronises them. The store is
-/// SQLite ([`Store`]) on a device, or any other [`Backend`] – PostgreSQL on a server (`kernoid_space_store::PgStore`).
+/// SQLite ([`Store`]) on a device, or any other [`Backend`].
 pub struct Replica<S: Backend = Store> {
     domain: Domain,
     device: DeviceId,
@@ -394,6 +407,18 @@ impl<S: Backend> Replica<S> {
     /// sends everything. Returns the recovery code, which the person keeps on paper: without it and without a
     /// device, the space is lost.
     pub fn start_sync(&mut self, space: &SpaceId, relay: &str, name: Option<&str>) -> Result<RecoveryCode, SyncError> {
+        self.start_sync_for(space, relay, name, None)
+    }
+
+    /// The same at a relay that keeps spaces only for its accounts – kernoid's, unless open (RFC 0010, 4): `account`
+    /// is the token of the account the space is founded for (a session, or an access token of kernoid's apps).
+    pub fn start_sync_for(
+        &mut self,
+        space: &SpaceId,
+        relay: &str,
+        name: Option<&str>,
+        account: Option<&str>,
+    ) -> Result<RecoveryCode, SyncError> {
         if self.state(space)?.is_some() {
             return Err(state_error("this space is synchronised already"));
         }
@@ -401,7 +426,7 @@ impl<S: Backend> Replica<S> {
         let recovery = RecoveryCode::generate();
         let me = self.me(&keys, name);
         let (record, _) = MemberRecord::found(space, &keys, vec![me, Member::recovery(&recovery.keys(self.domain))]);
-        if !Client::new(relay, &keys).record(space, &record)? {
+        if !Client::new(relay, &keys).founding(account).record(space, &record)? {
             return Err(state_error("the relay holds this space already"));
         }
         self.save_state(space, &Self::new_state(relay, &keys, true))?;

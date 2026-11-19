@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE relay_spaces SET written_at = now() WHERE space = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6f8a42f2303ca41b2be6baf49284fb7bfc04591a977699e3594fcc0378f375c9"
+}
