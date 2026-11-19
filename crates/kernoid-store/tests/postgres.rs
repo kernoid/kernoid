@@ -87,6 +87,7 @@ async fn connections_carry_the_limits() {
         max_connections: 1,
         statement_timeout_ms: 1234,
         idle_in_transaction_timeout_ms: 5678,
+        schema: None,
     })
     .await
     .unwrap();

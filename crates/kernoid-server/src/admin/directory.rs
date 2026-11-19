@@ -119,6 +119,7 @@ pub(crate) async fn rename_group(
     respond(result, no_content)
 }
 
+#[cfg(feature = "data")]
 /// Lets the group's members send from its addresses, or stops it (needs `groups.manage`).
 #[utoipa::path(put, path = "/v1/groups/{id}/send-as", tag = "groups", params(TenantHeader), request_body = super::tenant::Switch,
     responses((status = 204), (status = 404, body = Problem)))]

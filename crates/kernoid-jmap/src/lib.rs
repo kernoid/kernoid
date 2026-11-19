@@ -372,7 +372,8 @@ impl Jmap {
                     }
                 }
                 if calendars {
-                    for kind in ["Calendar", "CalendarEvent", "CalendarEventNotification", "AddressBook", "ContactCard"] {
+                    for kind in ["Calendar", "CalendarEvent", "CalendarEventNotification", "AddressBook", "ContactCard"]
+                    {
                         types.insert(kind.into(), state.clone());
                     }
                 }

@@ -71,6 +71,7 @@ kind = "database"
 | `database.max_connections` | `10` | |
 | `database.statement_timeout_ms` | `30000` | longest time one statement may run; `0` for no limit |
 | `database.idle_in_transaction_timeout_ms` | `10000` | longest time a transaction may stay open without a statement; `0` for no limit |
+| `database.schema` | `public` | the schema of kernoid's tables – for a program that builds kernoid in and keeps its own tables in the same database ([Building on kernoid]({{ '/building-on-kernoid/' | relative_url }})); it must exist, owned by the role of `migrate_url` |
 | `blob.kind` | required | `s3`; `database` – objects in PostgreSQL, up to 4 MiB each, only with `services.mail` and `services.files` off (identity alone keeps nothing but pictures of accounts); or `memory` (lost on exit – for tests only) |
 | `blob.endpoint` | – | S3 endpoint URL; leave out for AWS |
 | `blob.region` | `us-east-1` | |

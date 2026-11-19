@@ -37,6 +37,9 @@ pub const ROLES_SCOPE: &str = "urn:kernoid:project:roles";
 /// The claim with the project roles: `{"<role key>": {"<tenant id>": "<tenant name>"}}`, shaped like ZITADEL's
 /// `urn:zitadel:iam:org:project:roles`.
 pub const ROLES_CLAIM: &str = "urn:kernoid:project:roles";
+/// The claim with the account's tenant (its id), in every ID token, JWT access token and userinfo answer – for the
+/// programs that log in with kernoid (RFC 0009, 2).
+pub const TENANT_CLAIM: &str = kernoid_auth::relying::KERNOID_TENANT_CLAIM;
 /// Restricts a login to one tenant: `urn:kernoid:tenant:id:<tenant id>`.
 pub const TENANT_SCOPE: &str = "urn:kernoid:tenant:id:";
 const MAX_PARAMETER: usize = 512;
@@ -232,7 +235,7 @@ pub fn discovery(issuer: &str, apps_client: Option<Uuid>) -> Value {
         "id_token_signing_alg_values_supported": [crate::keys::ALGORITHM],
         "scopes_supported": SCOPES,
         "claims_supported": ["sub", "iss", "aud", "exp", "iat", "auth_time", "nonce", "sid", "amr", "azp",
-                             "name", "preferred_username", "email", "email_verified", ROLES_CLAIM],
+                             "name", "preferred_username", "email", "email_verified", ROLES_CLAIM, TENANT_CLAIM],
         "token_endpoint_auth_methods_supported": ["client_secret_basic", "client_secret_post", "none"],
         "revocation_endpoint_auth_methods_supported": ["client_secret_basic", "client_secret_post", "none"],
         "introspection_endpoint_auth_methods_supported": ["client_secret_basic", "client_secret_post"],
@@ -478,6 +481,14 @@ impl Oidc {
     }
 
     /// The project roles for tokens and userinfo – if the project asserts them or the scope asks for them.
+    /// The tenant an account belongs to.
+    async fn account_tenant(&self, account: Uuid) -> Result<Uuid> {
+        sqlx::query_scalar!("SELECT tenant_id FROM accounts WHERE id = $1", account)
+            .fetch_one(self.pool())
+            .await
+            .map_err(store)
+    }
+
     async fn role_claim(&self, application: Uuid, account: Uuid, scopes: &[String]) -> Result<Option<Value>> {
         let application = self.application(application).await?;
         let Some(project) = application.project else { return Ok(None) };
@@ -775,6 +786,7 @@ impl Oidc {
         if let Some(session) = grant.session.filter(|_| !grant.offline) {
             claims["sid"] = Value::String(session.to_string());
         }
+        claims[TENANT_CLAIM] = Value::String(self.account_tenant(grant.account).await?.to_string());
         if let Some(roles) = self.role_claim(client.id, grant.account, &grant.scopes).await? {
             claims[ROLES_CLAIM] = roles;
         }
@@ -809,6 +821,7 @@ impl Oidc {
         if let Some(nonce) = &grant.nonce {
             claims["nonce"] = Value::String(nonce.clone());
         }
+        claims[TENANT_CLAIM] = Value::String(self.account_tenant(grant.account).await?.to_string());
         if let Some(roles) = self.role_claim(client, grant.account, &grant.scopes).await? {
             claims[ROLES_CLAIM] = roles;
         }
@@ -1042,7 +1055,7 @@ impl Oidc {
             r#"SELECT a.id, a.display_name, coalesce(a.primary_address, a.username, a.email, '') AS "primary_address!",
                       coalesce(a.email, a.primary_address) AS email,
                       CASE WHEN a.email IS NOT NULL THEN a.email_verified ELSE a.primary_address IS NOT NULL END AS "email_verified!",
-                      k.scopes, k.application_id
+                      k.scopes, k.application_id, a.tenant_id
                FROM access_tokens k
                JOIN accounts a ON a.id = k.account_id
                JOIN tenants t ON t.id = a.tenant_id
@@ -1058,6 +1071,7 @@ impl Oidc {
         .ok_or(OidcError::InvalidToken)?;
         let mut claims = Claims::new();
         claims.insert("sub".into(), Value::String(row.id.to_string()));
+        claims.insert(TENANT_CLAIM.into(), Value::String(row.tenant_id.to_string()));
         if row.scopes.iter().any(|scope| scope == "profile") {
             claims.insert("name".into(), Value::String(row.display_name));
             claims.insert("preferred_username".into(), Value::String(row.primary_address.clone()));

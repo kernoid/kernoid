@@ -21,9 +21,12 @@ use uuid::Uuid;
 use crate::{AppState, Client, sessions};
 
 mod admin;
+#[cfg(feature = "data")]
 mod collections;
+#[cfg(feature = "data")]
 mod files;
 mod logins;
+#[cfg(feature = "data")]
 mod mail;
 
 pub type ApiSchema = Schema<QueryRoot, MutationRoot, EmptySubscription>;
@@ -33,20 +36,20 @@ pub type ApiSchema = Schema<QueryRoot, MutationRoot, EmptySubscription>;
 pub struct QueryRoot(
     Query,
     admin::AdminQuery,
-    mail::MailQuery,
+    #[cfg(feature = "data")] mail::MailQuery,
     logins::LoginsQuery,
-    collections::CollectionsQuery,
-    files::FilesQuery,
+    #[cfg(feature = "data")] collections::CollectionsQuery,
+    #[cfg(feature = "data")] files::FilesQuery,
 );
 
 #[derive(async_graphql::MergedObject, Default)]
 pub struct MutationRoot(
     Mutation,
     admin::AdminMutation,
-    mail::MailMutation,
+    #[cfg(feature = "data")] mail::MailMutation,
     logins::LoginsMutation,
-    collections::CollectionsMutation,
-    files::FilesMutation,
+    #[cfg(feature = "data")] collections::CollectionsMutation,
+    #[cfg(feature = "data")] files::FilesMutation,
 );
 
 pub fn schema() -> ApiSchema {

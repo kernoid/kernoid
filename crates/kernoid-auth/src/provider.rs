@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! kernoid as the client of another OpenID provider (OpenID Connect Core 1.0, Discovery 1.0): what logging in with an
-//! external identity provider needs – its discovery document, the code exchange with PKCE, and the ID token verified
-//! against its published keys. Signatures are checked by aws-lc-rs; kernoid parses JWKs and compares claims, nothing
-//! more.
+//! The client of an OpenID provider (OpenID Connect Core 1.0, Discovery 1.0): what logging in with one needs – its
+//! discovery document, the code exchange with PKCE, and tokens verified against its published keys. kernoid uses it
+//! for the external providers of its tenants (`kernoid_oidc::external`), other programs to log in with their kernoid
+//! (`crate::relying`). Signatures are checked by aws-lc-rs; it parses JWKs and compares claims, nothing more.
 
 use aws_lc_rs::signature::{
     self, ECDSA_P256_SHA256_FIXED, ECDSA_P384_SHA384_FIXED, RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_2048_8192_SHA384,
@@ -37,6 +37,9 @@ pub struct ProviderMetadata {
     pub authorization_endpoint: String,
     pub token_endpoint: String,
     pub jwks_uri: String,
+    /// Where a login ends at the provider (OpenID Connect RP-Initiated Logout 1.0), if it says.
+    #[serde(default)]
+    pub end_session_endpoint: Option<String>,
 }
 
 /// Reads an answer of at most `MAX_BODY` bytes as JSON.
@@ -78,6 +81,9 @@ pub async fn discover(client: &Client, issuer: &str, allow_private: bool) -> Res
     for url in [&metadata.authorization_endpoint, &metadata.token_endpoint, &metadata.jwks_uri] {
         endpoint(url, allow_private)?;
     }
+    if let Some(url) = &metadata.end_session_endpoint {
+        endpoint(url, allow_private)?;
+    }
     Ok(metadata)
 }
 
@@ -101,6 +107,11 @@ pub struct TokenSet {
     pub id_token: String,
     #[serde(default)]
     pub access_token: Option<String>,
+    #[serde(default)]
+    pub refresh_token: Option<String>,
+    /// Seconds the access token lasts.
+    #[serde(default)]
+    pub expires_in: Option<u64>,
 }
 
 /// Exchanges an authorization code (with the PKCE verifier) at the provider's token endpoint; kernoid authenticates
@@ -154,23 +165,7 @@ pub struct Expected<'a> {
 /// audience, authorized party, expiry, issue time and nonce. Returns its claims.
 pub fn verify_id_token(token: &str, keys: &[Value], expected: Expected<'_>) -> Result<Value> {
     let invalid = |why: &str| ExternalError::Invalid(format!("the ID token {why}"));
-    let parts: Vec<&str> = token.split('.').collect();
-    let [header, payload, signature] = parts.as_slice() else { return Err(invalid("is not a JWS")) };
-    let decode = |part: &str| URL_SAFE_NO_PAD.decode(part).map_err(|_| invalid("is not base64url"));
-    let head: Value = serde_json::from_slice(&decode(header)?).map_err(|_| invalid("has no JSON header"))?;
-    let algorithm = head["alg"].as_str().unwrap_or_default();
-    let kid = head["kid"].as_str();
-    let signature = decode(signature)?;
-    let message = format!("{header}.{payload}");
-    let verified = keys
-        .iter()
-        .filter(|key| kid.is_none() || key["kid"].as_str() == kid)
-        .filter(|key| key["use"].as_str().is_none_or(|usage| usage == "sig"))
-        .any(|key| verify_with(key, algorithm, message.as_bytes(), &signature));
-    if !verified {
-        return Err(invalid(&format!("has no valid signature ({algorithm})")));
-    }
-    let claims: Value = serde_json::from_slice(&decode(payload)?).map_err(|_| invalid("has no JSON claims"))?;
+    let (_, claims) = verify_signature(token, keys).map_err(|why| invalid(&why))?;
     if claims["iss"].as_str().map(|iss| iss.trim_end_matches('/')) != Some(expected.issuer.trim_end_matches('/')) {
         return Err(invalid("comes from another issuer"));
     }
@@ -198,6 +193,37 @@ pub fn verify_id_token(token: &str, keys: &[Value], expected: Expected<'_>) -> R
         return Err(invalid("has no subject"));
     }
     Ok(claims)
+}
+
+/// The header and claims of a JWS whose signature one of `keys` verifies – by `kid`, or any fitting key without one;
+/// why not, else. It checks nothing of the claims.
+pub fn verify_signature(token: &str, keys: &[Value]) -> std::result::Result<(Value, Value), String> {
+    let parts: Vec<&str> = token.split('.').collect();
+    let [header, payload, signature] = parts.as_slice() else { return Err("is not a JWS".into()) };
+    let decode = |part: &str| URL_SAFE_NO_PAD.decode(part).map_err(|_| "is not base64url".to_owned());
+    let head: Value = serde_json::from_slice(&decode(header)?).map_err(|_| "has no JSON header".to_owned())?;
+    let algorithm = head["alg"].as_str().unwrap_or_default();
+    let kid = head["kid"].as_str();
+    let signature = decode(signature)?;
+    let message = format!("{header}.{payload}");
+    let verified = keys
+        .iter()
+        .filter(|key| kid.is_none() || key["kid"].as_str() == kid)
+        .filter(|key| key["use"].as_str().is_none_or(|usage| usage == "sig"))
+        .any(|key| verify_with(key, algorithm, message.as_bytes(), &signature));
+    if !verified {
+        return Err(format!("has no valid signature ({algorithm})"));
+    }
+    let claims: Value = serde_json::from_slice(&decode(payload)?).map_err(|_| "has no JSON claims".to_owned())?;
+    Ok((head, claims))
+}
+
+/// Whether a JWS names a key `keys` does not have – then the provider may have a new one.
+pub fn names_unknown_key(token: &str, keys: &[Value]) -> bool {
+    let Some(header) = token.split('.').next() else { return false };
+    let Ok(bytes) = URL_SAFE_NO_PAD.decode(header) else { return false };
+    let Ok(head) = serde_json::from_slice::<Value>(&bytes) else { return false };
+    head["kid"].as_str().is_some_and(|kid| !keys.iter().any(|key| key["kid"].as_str() == Some(kid)))
 }
 
 /// Checks a signature with a JWK – RSA (RS256/384/512, PS256) or EC (ES256 on P-256, ES384 on P-384).

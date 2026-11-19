@@ -42,7 +42,15 @@ pub async fn connect(config: &Database) -> Result<PgPool, sqlx::Error> {
         ("statement_timeout", config.statement_timeout_ms.to_string()),
         ("idle_in_transaction_session_timeout", config.idle_in_transaction_timeout_ms.to_string()),
     ]);
-    PgPoolOptions::new().max_connections(config.max_connections).connect_with(options).await
+    PgPoolOptions::new().max_connections(config.max_connections).connect_with(in_schema(options, config)).await
+}
+
+/// In kernoid's own schema, where a program that builds kernoid in gives it one (`database.schema`, RFC 0009, 4).
+fn in_schema(options: PgConnectOptions, config: &Database) -> PgConnectOptions {
+    match &config.schema {
+        Some(schema) => options.options([("search_path", schema.as_str())]),
+        None => options,
+    }
 }
 
 /// Brings the schema up to date as the owner (`migrate_url`, else `url`) and grants the runtime role (the user of
@@ -58,6 +66,10 @@ pub async fn migrate(config: &Database) -> Result<bool, MigrateError> {
         sqlx::query!(r#"SELECT 1 AS "granted!" FROM kernoid_grant_runtime($1)"#, runtime.get_username() as &str)
             .fetch_one(&owner)
             .await?;
+        // The runtime role may use kernoid's schema – the public one, or a program's own (`database.schema`).
+        sqlx::query!(r#"SELECT 1 AS "granted!" FROM kernoid_grant_schema($1)"#, runtime.get_username() as &str)
+            .fetch_one(&owner)
+            .await?;
     }
     owner.close().await;
     Ok(separated)
@@ -68,7 +80,10 @@ pub async fn connect_owner(config: &Database) -> Result<PgPool, sqlx::Error> {
     let owner_url = config.migrate_url.as_ref().unwrap_or(&config.url);
     PgPoolOptions::new()
         .max_connections(1)
-        .connect_with(PgConnectOptions::from_str(owner_url.expose())?.application_name("kernoid-owner"))
+        .connect_with(in_schema(
+            PgConnectOptions::from_str(owner_url.expose())?.application_name("kernoid-owner"),
+            config,
+        ))
         .await
 }
 

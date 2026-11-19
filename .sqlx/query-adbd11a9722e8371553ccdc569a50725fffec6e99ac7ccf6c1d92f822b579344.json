@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "CREATE TABLE scores (id int PRIMARY KEY)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "adbd11a9722e8371553ccdc569a50725fffec6e99ac7ccf6c1d92f822b579344"
+}

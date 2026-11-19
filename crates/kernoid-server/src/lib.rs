@@ -7,24 +7,36 @@
 pub mod acme;
 pub mod admin;
 mod app_passwords;
+#[cfg(feature = "data")]
 mod autoconfig;
 mod avatars;
 pub mod certificate_files;
 mod consents;
 mod cookie;
 mod cors;
+#[cfg(feature = "data")]
 mod dav;
+pub mod embedded;
 mod federation;
+#[cfg(feature = "data")]
 pub mod file_links;
+#[cfg(feature = "data")]
 mod files_admin;
 mod forwarded;
 mod graphql;
+#[cfg(feature = "data")]
 mod groupware_admin;
 mod instance;
+#[cfg(feature = "data")]
 mod jmap;
+#[cfg(feature = "data")]
 mod jmap_ws;
+pub mod jobs;
 mod login_ui;
+#[cfg(feature = "data")]
 mod mail_admin;
+pub mod mail_dns;
+#[cfg(feature = "data")]
 mod mail_settings;
 pub mod metrics;
 mod mfa;
@@ -35,7 +47,9 @@ mod registration;
 mod scim;
 mod services;
 mod sessions;
+#[cfg(feature = "data")]
 mod webdav;
+#[cfg(feature = "data")]
 pub mod wkd;
 
 pub use forwarded::Client;
@@ -70,13 +84,25 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 const BODY_LIMIT: usize = 2 * 1024 * 1024;
 /// Largest JMAP request or upload: a message of the default `mail.max_message_size` and its encoding – or more, where
 /// files (`files.max_file_size`) or messages may be larger.
+#[cfg(feature = "data")]
 const MAIL_BODY_LIMIT: usize = 72 * 1024 * 1024;
 /// Longest time for one request.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 /// Longest time for an upload or a write of a file – until the server answers; downloads stream after it.
+#[cfg(feature = "data")]
 const TRANSFER_TIMEOUT: Duration = Duration::from_secs(6 * 60 * 60);
 /// How long running requests may take to finish after shutdown began.
 const SHUTDOWN_GRACE: Duration = Duration::from_secs(30);
+
+/// What `services` asks for, as far as this build has it: kernoid-server's Cargo features `mail`, `calendars` and
+/// `files` (all on by default) decide what is compiled in (RFC 0009, 3).
+pub fn compiled_services(services: Services) -> Services {
+    Services {
+        mail: services.mail && cfg!(feature = "mail"),
+        calendars: services.calendars && cfg!(feature = "calendars"),
+        files: services.files && cfg!(feature = "files"),
+    }
+}
 
 /// What request handlers share.
 #[derive(Debug, Clone)]
@@ -90,11 +116,14 @@ pub struct AppState {
     /// For verifying tenants' domains; without it, only instance administrators can mark domains verified.
     pub dns: Option<DnsResolver>,
     /// The DNS check of mail domains; without `[smtp]`, there is none.
-    pub mail_dns: Option<Arc<kernoid_smtp::dns_check::Checker>>,
+    pub mail_dns: Option<Arc<dyn mail_dns::MailDns>>,
     /// JMAP, and the changes it pushes; without them, no mail over HTTP.
+    #[cfg(feature = "data")]
     pub jmap: Option<kernoid_jmap::Jmap>,
     /// CalDAV and CardDAV; absent where kernoid handles no mail.
+    #[cfg(feature = "data")]
     pub dav: Option<kernoid_dav::Dav>,
+    #[cfg(feature = "data")]
     pub mail_events: Option<kernoid_mail::MailEvents>,
     /// The sender of kernoid's own messages (`mail.notification_from`).
     pub notification_from: Option<String>,
@@ -116,8 +145,11 @@ impl AppState {
             modules: Arc::from([]),
             dns: None,
             mail_dns: None,
+            #[cfg(feature = "data")]
             jmap: None,
+            #[cfg(feature = "data")]
             dav: None,
+            #[cfg(feature = "data")]
             mail_events: None,
             notification_from: None,
             mail_host: None,
@@ -142,11 +174,13 @@ impl AppState {
         self
     }
 
+    #[cfg(feature = "data")]
     pub fn with_dav(mut self, dav: kernoid_dav::Dav) -> Self {
         self.dav = Some(dav);
         self
     }
 
+    #[cfg(feature = "data")]
     pub fn with_jmap(mut self, jmap: kernoid_jmap::Jmap, events: kernoid_mail::MailEvents) -> Self {
         self.jmap = Some(jmap);
         self.mail_events = Some(events);
@@ -159,6 +193,14 @@ impl AppState {
         self
     }
 
+    /// Whether kernoid can send its own messages (registration codes): a sender, and the queue of the mail store.
+    pub fn sends_mail(&self) -> bool {
+        #[cfg(feature = "data")]
+        return self.notification_from.is_some() && self.jmap.is_some();
+        #[cfg(not(feature = "data"))]
+        false
+    }
+
     /// Tells mail programs to connect to `host` (autoconfiguration), for IMAP too if `imap`.
     pub fn with_mail_host(mut self, host: String, imap: bool) -> Self {
         self.mail_host = Some(host);
@@ -166,7 +208,7 @@ impl AppState {
         self
     }
 
-    pub fn with_mail_dns(mut self, checker: kernoid_smtp::dns_check::Checker) -> Self {
+    pub fn with_mail_dns(mut self, checker: impl mail_dns::MailDns + 'static) -> Self {
         self.mail_dns = Some(Arc::new(checker));
         self
     }
@@ -318,6 +360,7 @@ fn rest() -> OpenApiRouter<AppState> {
 }
 
 /// The REST routes of the service `mail` (RFC 0008, 4).
+#[cfg(feature = "data")]
 fn rest_mail() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
         .routes(routes!(mail_settings::get, mail_settings::set))
@@ -342,6 +385,7 @@ fn rest_mail() -> OpenApiRouter<AppState> {
 }
 
 /// The REST routes of the service `calendars`.
+#[cfg(feature = "data")]
 fn rest_calendars() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
         .routes(routes!(admin::collections::list))
@@ -354,6 +398,7 @@ fn rest_calendars() -> OpenApiRouter<AppState> {
 }
 
 /// The REST routes of the service `files`.
+#[cfg(feature = "data")]
 fn rest_files() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
         .routes(routes!(admin::files::overview))
@@ -370,16 +415,23 @@ fn rest_files() -> OpenApiRouter<AppState> {
 
 /// The REST routes of `services`.
 fn rest_of(services: Services) -> OpenApiRouter<AppState> {
-    let mut rest = rest();
-    if services.mail {
-        rest = rest.merge(rest_mail());
-    }
-    if services.calendars {
-        rest = rest.merge(rest_calendars());
-    }
-    if services.files {
-        rest = rest.merge(rest_files());
-    }
+    let rest = rest();
+    #[cfg(feature = "data")]
+    let rest = {
+        let mut rest = rest;
+        if services.mail {
+            rest = rest.merge(rest_mail());
+        }
+        if services.calendars {
+            rest = rest.merge(rest_calendars());
+        }
+        if services.files {
+            rest = rest.merge(rest_files());
+        }
+        rest
+    };
+    #[cfg(not(feature = "data"))]
+    let _ = services;
     rest
 }
 
@@ -421,7 +473,10 @@ fn unique_operation_ids(openapi: &mut utoipa::openapi::OpenApi) {
 
 /// REST routes that take files of any size: their own limits, with the other transfers – all of the service `files`.
 fn rest_transfers() -> OpenApiRouter<AppState> {
-    OpenApiRouter::new().routes(routes!(file_links::add))
+    #[cfg(feature = "data")]
+    return OpenApiRouter::new().routes(routes!(file_links::add));
+    #[cfg(not(feature = "data"))]
+    OpenApiRouter::new()
 }
 
 /// The GraphQL schema in SDL.
@@ -482,6 +537,41 @@ pub fn router(state: AppState, modules: Router, http: &Http) -> Router {
         .merge(browser_called)
         .merge(provisioning)
         .with_state(state.clone());
+    #[cfg(feature = "data")]
+    let (mail, dav, transfers) = data_routes(&state, services, rest_transfers);
+    #[cfg(not(feature = "data"))]
+    let (mail, dav, transfers) = {
+        let _ = rest_transfers;
+        (Router::new(), Router::new(), Router::new())
+    };
+    rest.merge(protocol)
+        .route("/openapi.json", axum::routing::get(move || std::future::ready(Json(openapi.as_ref().clone()))))
+        .route("/graphql", post(graphql::handler).with_state((state, graphql::schema())))
+        .nest_service("/login", login_ui::routes(http.login_ui.as_deref()))
+        .nest_service("/app", login_ui::app_routes(http.web_app.as_deref()))
+        .route("/", axum::routing::get(|| async { axum::response::Redirect::to("/app/") }))
+        .merge(modules)
+        .layer(RequestBodyLimitLayer::new(BODY_LIMIT))
+        .merge(mail)
+        .merge(dav)
+        .layer(TimeoutLayer::with_status_code(StatusCode::REQUEST_TIMEOUT, REQUEST_TIMEOUT))
+        .merge(transfers)
+        .fallback(problem::not_found)
+        .layer(axum::middleware::from_fn(metrics::layer))
+        .layer(axum::middleware::from_fn_with_state(listener, forwarded::layer))
+        .layer(CatchPanicLayer::custom(problem::panicked))
+        .layer(PropagateRequestIdLayer::x_request_id())
+        .layer(TraceLayer::new_for_http().make_span_with(|request: &axum::http::Request<_>| {
+            let id = request.headers().get("x-request-id").and_then(|v| v.to_str().ok()).unwrap_or("");
+            tracing::info_span!("request", method = %request.method(), path = %request.uri().path(), request_id = id)
+        }))
+        .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
+}
+
+/// The routes of mail, calendars and files: JMAP and what goes with it, transfers, CalDAV and CardDAV – each only for
+/// the services that are on.
+#[cfg(feature = "data")]
+fn data_routes(state: &AppState, services: Services, rest_transfers: Router<AppState>) -> (Router, Router, Router) {
     // JMAP (jmap.rs): mail programs in the browser call it from any origin with their own credentials; requests are
     // larger than the rest of the API takes.
     let mail_cors = CorsLayer::new()
@@ -551,28 +641,7 @@ pub fn router(state: AppState, modules: Router, http: &Http) -> Router {
         .layer(axum::extract::DefaultBodyLimit::max(dav::DAV_BODY_LIMIT))
         .layer(RequestBodyLimitLayer::new(dav::DAV_BODY_LIMIT))
         .with_state(state.clone());
-    rest.merge(protocol)
-        .route("/openapi.json", axum::routing::get(move || std::future::ready(Json(openapi.as_ref().clone()))))
-        .route("/graphql", post(graphql::handler).with_state((state, graphql::schema())))
-        .nest_service("/login", login_ui::routes(http.login_ui.as_deref()))
-        .nest_service("/app", login_ui::app_routes(http.web_app.as_deref()))
-        .route("/", axum::routing::get(|| async { axum::response::Redirect::to("/app/") }))
-        .merge(modules)
-        .layer(RequestBodyLimitLayer::new(BODY_LIMIT))
-        .merge(mail)
-        .merge(dav)
-        .layer(TimeoutLayer::with_status_code(StatusCode::REQUEST_TIMEOUT, REQUEST_TIMEOUT))
-        .merge(transfers)
-        .fallback(problem::not_found)
-        .layer(axum::middleware::from_fn(metrics::layer))
-        .layer(axum::middleware::from_fn_with_state(listener, forwarded::layer))
-        .layer(CatchPanicLayer::custom(problem::panicked))
-        .layer(PropagateRequestIdLayer::x_request_id())
-        .layer(TraceLayer::new_for_http().make_span_with(|request: &axum::http::Request<_>| {
-            let id = request.headers().get("x-request-id").and_then(|v| v.to_str().ok()).unwrap_or("");
-            tracing::info_span!("request", method = %request.method(), path = %request.uri().path(), request_id = id)
-        }))
-        .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
+    (mail, dav, transfers)
 }
 
 #[derive(Debug, thiserror::Error)]

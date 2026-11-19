@@ -148,12 +148,14 @@ async fn code_flow_from_authorize_to_userinfo(pool: PgPool) {
     assert_eq!(claims["nonce"], "n-0S6_WzA2Mj");
     assert_eq!(claims["amr"], json!(["pwd"]));
     assert!(claims["exp"].as_i64().unwrap() > claims["iat"].as_i64().unwrap());
+    // The tenant, for programs that log in with kernoid (RFC 0009, 2).
+    assert_eq!(claims["urn:kernoid:tenant"], alice.tenant.to_string());
 
     let info = setup.oidc.userinfo(&setup.instance, &tokens.access_token).await.unwrap();
     assert_eq!(
         Value::Object(info),
-        json!({ "sub": alice.id.to_string(), "name": "Alice", "preferred_username": "alice@firma.de",
-                "email": "alice@firma.de", "email_verified": true })
+        json!({ "sub": alice.id.to_string(), "urn:kernoid:tenant": alice.tenant.to_string(), "name": "Alice",
+                "preferred_username": "alice@firma.de", "email": "alice@firma.de", "email_verified": true })
     );
 
     // Logging out ends what the session handed out.
@@ -167,7 +169,7 @@ async fn scopes_limit_the_claims(pool: PgPool) {
     let code = code(&setup, "openid unknown-scope").await;
     let tokens = setup.oidc.token(&setup.instance, &token_request(&setup, &code)).await.unwrap();
     let info = setup.oidc.userinfo(&setup.instance, &tokens.access_token).await.unwrap();
-    assert_eq!(info.keys().collect::<Vec<_>>(), ["sub"]);
+    assert_eq!(info.keys().collect::<Vec<_>>(), ["sub", "urn:kernoid:tenant"]);
 }
 
 #[sqlx::test(migrator = "kernoid_store::MIGRATOR")]

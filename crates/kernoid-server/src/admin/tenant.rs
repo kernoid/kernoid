@@ -416,6 +416,7 @@ pub(crate) async fn verify_domain(
     respond(result, no_content)
 }
 
+#[cfg(feature = "data")]
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub(crate) struct DkimRotation {
     /// `rsa` (the default) or `ed25519`.
@@ -423,17 +424,27 @@ pub(crate) struct DkimRotation {
     algorithm: Option<String>,
 }
 
+#[cfg(feature = "data")]
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub(crate) struct DkimRotationView {
     /// The new key's selector: its record belongs at `<selector>._domainkey.<domain>`; `mail-dns` shows it.
     selector: String,
 }
 
-fn dkim_problem(error: kernoid_smtp::dkim::DkimError) -> Response {
+#[cfg(feature = "data")]
+fn dkim_problem(error: crate::mail_dns::DkimFailure) -> Response {
     tracing::warn!(%error, "changing a DKIM key failed");
-    Problem::new(StatusCode::INTERNAL_SERVER_ERROR).detail("the key could not be made").into_response()
+    match error {
+        crate::mail_dns::DkimFailure::UnknownAlgorithm => {
+            crate::sessions::problem(IdentityError::Refused(error.to_string()))
+        }
+        crate::mail_dns::DkimFailure::Failed(_) => {
+            Problem::new(StatusCode::INTERNAL_SERVER_ERROR).detail("the key could not be made").into_response()
+        }
+    }
 }
 
+#[cfg(feature = "data")]
 /// Starts a change of a verified mail domain's DKIM key (needs `domains.manage`): a new key, signing once DNS shows
 /// its record; the key it replaces then stops signing. If a new key is waiting already, its selector.
 #[utoipa::path(post, path = "/v1/tenant/domains/{domain}/dkim-rotate", tag = "tenant", params(TenantHeader),
@@ -454,8 +465,6 @@ pub(crate) async fn rotate_dkim(
         let Some(checker) = &state.mail_dns else {
             return Err(IdentityError::Refused("this installation does not handle mail".into()));
         };
-        let algorithm = kernoid_smtp::dkim::Algorithm::parse(&algorithm)
-            .ok_or_else(|| IdentityError::Refused("the algorithm is rsa or ed25519".into()))?;
         Ok((checker.clone(), domain, algorithm))
     }
     .await;
@@ -463,7 +472,7 @@ pub(crate) async fn rotate_dkim(
         Ok(checked) => checked,
         Err(error) => return crate::sessions::problem(error),
     };
-    match checker.rotate_dkim(domain.as_str(), algorithm).await {
+    match checker.rotate_dkim(domain.as_str(), &algorithm).await {
         Ok(selector) => Json(DkimRotationView { selector }).into_response(),
         Err(error) => dkim_problem(error),
     }
@@ -491,6 +500,7 @@ pub(crate) struct TenantHeader {
     tenant: Option<String>,
 }
 
+#[cfg(feature = "data")]
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub(crate) struct RecordCheckView {
     /// `MX`, `SPF`, `DKIM` or `DMARC`.
@@ -507,12 +517,14 @@ pub(crate) struct RecordCheckView {
     status: String,
 }
 
+#[cfg(feature = "data")]
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub(crate) struct MailDnsView {
     domain: String,
     records: Vec<RecordCheckView>,
 }
 
+#[cfg(feature = "data")]
 /// The tenant's verified domains as mail domains of kernoid: the DNS records to publish (MX, SPF, DKIM, DMARC) and
 /// whether they are published (needs `directory.read`; reads DNS, changes nothing).
 #[utoipa::path(get, path = "/v1/tenant/mail-dns", tag = "tenant", params(TenantHeader), responses(
@@ -534,12 +546,12 @@ pub(crate) async fn mail_dns(State(state): State<AppState>, AdminSession(admin):
             .await
             .into_iter()
             .map(|check| RecordCheckView {
-                kind: check.kind.into(),
+                kind: check.kind,
                 name: check.name,
-                record_type: check.record_type.into(),
+                record_type: check.record_type,
                 expected: check.expected,
                 found: check.found,
-                status: check.status.as_str().into(),
+                status: check.status,
             })
             .collect();
         views.push(MailDnsView { domain: domain.domain, records });

@@ -1,0 +1,45 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# kernoid-auth (RFC 0009, 2): logging in with kernoid – or any OpenID provider – for the servers of other programs, and
+# the client of OpenID providers kernoid itself uses for its tenants' providers. AGPL: only servers use it.
+[package]
+name = "kernoid-auth"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+# On crates.io, so that the servers of other programs can depend on it (RFC 0009, 2).
+publish = true
+homepage = "https://kernoid.dev"
+readme = "README.md"
+keywords = ["kernoid", "openid-connect", "oidc", "login", "axum"]
+categories = ["authentication", "web-programming"]
+description = "Logging in with kernoid, or any OpenID provider, for the servers of other programs"
+
+[lints]
+workspace = true
+
+[features]
+default = ["axum"]
+# Extractors and routes for axum.
+axum = ["dep:axum"]
+
+[dependencies]
+aws-lc-rs = { version = "1.18.2", features = ["ring-io"] }
+axum = { version = "0.8.9", optional = true }
+base64 = "0.22.1"
+getrandom = "0.4.3"
+jiff = { version = "1.0.1", features = ["serde"] }
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls", "json", "form", "http2"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+sha2 = "0.11.1"
+thiserror = "2.0.21"
+tokio = { version = "1.54.1", features = ["rt", "net", "sync"] }
+tracing = "0.1.44"
+url = "2.5.8"
+
+[dev-dependencies]
+axum = { version = "0.8.9", features = ["form"] }
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "net"] }
+tower = { version = "0.5.3", features = ["util"] }

@@ -78,7 +78,7 @@ impl LoginsQuery {
             open: options.open,
             domains: options.domains,
             usernames: options.usernames,
-            by_email: state.notification_from.is_some() && state.jmap.is_some(),
+            by_email: state.sends_mail(),
         })
     }
 

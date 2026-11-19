@@ -2,7 +2,8 @@
 # RFC 0009 – kernoid in other servers
 
 - **Status:** draft, 2026-11-19; the direction decided by the maintainer the same day (RFC 0008, 1), the mechanism a
-  proposal. Implemented with 0.5.0.
+  proposal. Implemented with 0.5.0: `kernoid-auth` (section 2), `kernoid_server::embedded` with the features of
+  section 3, `database.schema` (section 4), the claim `urn:kernoid:tenant`.
 - **Scope:** how a server of another program – aktujo, notenwart, spezado, or anyone's – gets accounts, logins and
   administration from kernoid instead of building its own: beside a kernoid, or with kernoid's identity built in.
 
@@ -31,16 +32,19 @@ Connect, written against the standard so that it works with any provider; kernoi
 
 - discovery, the authorization code flow with PKCE and `state`/`nonce`, the callback, refresh;
 - ID tokens and JWT access tokens checked against the provider's keys (JWKS, cached, fetched again for an unknown key);
-- `Principal { subject, tenant, roles, name, email }` from the claims – the tenant and project roles from kernoid's
+- `Principal { subject, tenant, roles, name, email, session }` from the claims – the tenant from kernoid's
+  `urn:kernoid:tenant` (in every ID token, JWT access token and userinfo answer since 0.5), the roles from
   `urn:kernoid:project:roles` (RFC 0001), roles of another provider through a claim the program names;
 - the program's own **sessions** after the login: an HttpOnly cookie for its web app (with the same protection
   against cross-site requests as kernoid's, `kernoid-csrf` and the origin), bearer tokens for its apps; stored behind a
-  trait, with an implementation in PostgreSQL;
+  trait (`Sessions`), in the process (`MemorySessions`) or in the program's own database – **OPEN:** an
+  implementation in PostgreSQL the crate brings;
 - **back-channel logout** (an endpoint that ends the sessions of a `sid` or `sub`) and front-channel logout;
 - an axum extractor that gives a handler the `Principal`, or answers `401`.
 
 Outbound requests go only to HTTPS and public addresses, as kernoid's do (RFC 0001, 7.7) – except a provider the
-operator marks as local (development).
+operator marks as local (`allow_private`, development). It is the same code kernoid uses for the identity providers of
+its tenants (`kernoid_oidc::external` and `outbound` are `kernoid-auth`'s), and it is on crates.io.
 
 ## 3. Built in: kernoid's identity as a library
 
@@ -52,13 +56,16 @@ account's settings and the administration – and nothing of mail, calendars, fi
 A program builds it in like this (sketch):
 
 ```rust
-let kernoid = kernoid_server::Embedded::start(config).await?;   // migrates, starts its jobs
-let router = Router::new()
-    .nest("/music", music_routes())                              // the program's own
-    .merge(kernoid.router());                                    // /login, /v1/…, /oauth/v2/…, /.well-known/…
+let kernoid = kernoid_server::embedded::Embedded::start(config, shutdown).await?;   // migrates, starts its jobs
+let program = Router::new().nest("/music", music_routes()).with_state(kernoid.state().clone());
+let app = kernoid.router(program);   // kernoid's routes and the program's, behind kernoid's layers
 // in the program's handlers:
-async fn list(session: kernoid_server::Session, …) { session.account(); session.has_role(PROJECT, "librarian"); }
+async fn list(session: kernoid_server::embedded::Session) { session.has_project_role(PROJECT, "librarian").await }
 ```
+
+The program's routes go through kernoid's layers – the client as trusted proxies give it, which finds the instance;
+request ids, tracing, limits. A program takes `kernoid-server` by git, at a release's tag (**OPEN:** the server's
+crates on crates.io).
 
 - **Configuration** is kernoid's (`kernoid_config::Config`, its tables `[http]`, `[database]`, `[blob]`, `[oidc]` …),
   as part of the program's or in a file of its own.

@@ -8,6 +8,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+#[cfg(feature = "data")]
 use jiff::Timestamp;
 use kernoid_identity::{IdentityError, registration::NewRegistration};
 use serde::{Deserialize, Serialize};
@@ -35,7 +36,7 @@ pub(crate) async fn options(State(state): State<AppState>, CurrentInstance(insta
             open: options.open,
             domains: options.domains,
             usernames: options.usernames,
-            by_email: state.notification_from.is_some() && state.jmap.is_some(),
+            by_email: state.sends_mail(),
         })
         .into_response(),
         Err(error) => sessions::problem(error),
@@ -60,6 +61,7 @@ pub(crate) struct RegistrationStarted {
     id: String,
 }
 
+#[cfg(feature = "data")]
 /// The message with the code.
 fn code_message(from: &str, to: &str, code: &str) -> Vec<u8> {
     let date =
@@ -111,24 +113,32 @@ pub(crate) async fn begin(
     new: NewRegistration<'_>,
     client: Option<std::net::IpAddr>,
 ) -> Result<Uuid, IdentityError> {
-    let (Some(from), Some(jmap)) = (state.notification_from.clone(), state.jmap.clone()) else {
-        return Err(IdentityError::Refused("registering by email is not possible here".into()));
-    };
-    let started = state.identity.start_registration(instance, new, client).await?;
-    let recipients = [started.email.clone()];
-    let outgoing = kernoid_mail::Outgoing {
-        tenant: started.tenant,
-        account: None,
-        from: &from,
-        recipients: &recipients,
-        raw: code_message(&from, &started.email, &started.code).into(),
-        lifetime: jiff::SignedDuration::from_hours(24),
-    };
-    if let Err(error) = jmap.mail().enqueue(outgoing).await {
-        tracing::error!(%error, "queueing a registration code");
-        return Err(IdentityError::Refused("the code could not be sent; try again later".into()));
+    #[cfg(not(feature = "data"))]
+    {
+        let _ = (state, instance, new, client);
+        Err(IdentityError::Refused("registering by email is not possible here".into()))
     }
-    Ok(started.id)
+    #[cfg(feature = "data")]
+    {
+        let (Some(from), Some(jmap)) = (state.notification_from.clone(), state.jmap.clone()) else {
+            return Err(IdentityError::Refused("registering by email is not possible here".into()));
+        };
+        let started = state.identity.start_registration(instance, new, client).await?;
+        let recipients = [started.email.clone()];
+        let outgoing = kernoid_mail::Outgoing {
+            tenant: started.tenant,
+            account: None,
+            from: &from,
+            recipients: &recipients,
+            raw: code_message(&from, &started.email, &started.code).into(),
+            lifetime: jiff::SignedDuration::from_hours(24),
+        };
+        if let Err(error) = jmap.mail().enqueue(outgoing).await {
+            tracing::error!(%error, "queueing a registration code");
+            return Err(IdentityError::Refused("the code could not be sent; try again later".into()));
+        }
+        Ok(started.id)
+    }
 }
 
 #[derive(Debug, Deserialize, utoipa::ToSchema)]

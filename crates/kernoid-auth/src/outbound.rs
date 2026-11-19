@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Requests kernoid makes to identity providers. Their addresses come from tenant administrators, so unless the
-//! installation allows it (`outbound.allow_private_networks`) only HTTPS to public addresses goes out – checked for the
+//! Requests to identity providers – kernoid's to those of its tenants, a program's to its kernoid. Their addresses come
+//! from administrators, so unless the installation allows it (`outbound.allow_private_networks`) only HTTPS to public
+//! addresses goes out – checked for the
 //! URL, for every address DNS gives (so that a name cannot point inside), and for every redirect. Without this, an
 //! administrator could make kernoid read services inside the installation's network (server-side request forgery,
 //! see the OWASP SSRF Prevention Cheat Sheet).
@@ -21,7 +22,7 @@ use url::Url;
 /// How long one request to an identity provider may take.
 const TIMEOUT: Duration = Duration::from_secs(10);
 /// Largest answer read from an identity provider.
-pub(crate) const MAX_BODY: usize = 512 * 1024;
+pub const MAX_BODY: usize = 512 * 1024;
 
 /// Whether an address is reachable on the public internet – not private, loopback, link-local, shared, reserved,
 /// documentation or multicast.

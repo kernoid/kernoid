@@ -93,6 +93,7 @@ fn own_origin(origin: &str, instance: &InstanceInfo, secure: bool) -> bool {
 
 /// Whether a request that authenticates with the cookie comes from a page of the instance: WebSockets carry the
 /// cookie without any header a page could be kept from sending, so their `Origin` decides (RFC 6455, 10.2).
+#[cfg(feature = "data")]
 pub(crate) fn from_own_page(state: &AppState, headers: &HeaderMap, instance: &InstanceInfo) -> bool {
     headers
         .get(header::ORIGIN)

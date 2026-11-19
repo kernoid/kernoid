@@ -483,6 +483,10 @@ pub struct Database {
     /// transactions hold back readers of all events.
     #[serde(default = "default_idle_in_transaction_timeout_ms")]
     pub idle_in_transaction_timeout_ms: u32,
+    /// The schema kernoid's tables live in – for a program that builds kernoid in and keeps its own tables in the
+    /// same database (RFC 0009, 4). It must exist, owned by the role of `migrate_url`; `public` if left out.
+    #[serde(default)]
+    pub schema: Option<String>,
 }
 
 /// The services of an installation (RFC 0008, 4). A service that is off serves no routes, runs no jobs and is not
@@ -669,6 +673,15 @@ impl Config {
         }
         if !self.services.mail && self.imap.is_some() {
             return Err(Error::Conflict("[imap] needs the service mail ([services] mail = true)"));
+        }
+        if let Some(schema) = &self.database.schema {
+            let first = schema.chars().next();
+            if !first.is_some_and(|c| c.is_ascii_lowercase() || c == '_')
+                || !schema.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+                || schema.len() > 63
+            {
+                return Err(Error::Conflict("database.schema: lower-case letters, digits and _, at most 63"));
+            }
         }
         if matches!(self.blob, Blob::Database) && self.services.keeps_content() {
             return Err(Error::Conflict(

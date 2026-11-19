@@ -7,12 +7,15 @@
 pub(crate) mod accounts;
 pub(crate) mod applications;
 pub(crate) mod audit;
+#[cfg(feature = "data")]
 pub(crate) mod collections;
 pub(crate) mod directory;
+#[cfg(feature = "data")]
 pub(crate) mod files;
 pub(crate) mod identity_providers;
 pub(crate) mod instance;
 pub(crate) mod logins;
+#[cfg(feature = "data")]
 pub(crate) mod mail;
 pub(crate) mod projects;
 pub(crate) mod provisioning;

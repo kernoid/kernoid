@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT a.id, a.display_name, coalesce(a.primary_address, a.username, a.email, '') AS \"primary_address!\",\n                      coalesce(a.email, a.primary_address) AS email,\n                      CASE WHEN a.email IS NOT NULL THEN a.email_verified ELSE a.primary_address IS NOT NULL END AS \"email_verified!\",\n                      k.scopes, k.application_id\n               FROM access_tokens k\n               JOIN accounts a ON a.id = k.account_id\n               JOIN tenants t ON t.id = a.tenant_id\n               LEFT JOIN sessions s ON s.id = k.session_id\n               WHERE k.token_hash = $1 AND k.instance_id = $2 AND k.expires_at > now() AND a.active AND t.active\n                 AND (k.session_id IS NULL OR (s.terminated_at IS NULL AND s.expires_at > now()))",
+  "query": "SELECT a.id, a.display_name, coalesce(a.primary_address, a.username, a.email, '') AS \"primary_address!\",\n                      coalesce(a.email, a.primary_address) AS email,\n                      CASE WHEN a.email IS NOT NULL THEN a.email_verified ELSE a.primary_address IS NOT NULL END AS \"email_verified!\",\n                      k.scopes, k.application_id, a.tenant_id\n               FROM access_tokens k\n               JOIN accounts a ON a.id = k.account_id\n               JOIN tenants t ON t.id = a.tenant_id\n               LEFT JOIN sessions s ON s.id = k.session_id\n               WHERE k.token_hash = $1 AND k.instance_id = $2 AND k.expires_at > now() AND a.active AND t.active\n                 AND (k.session_id IS NULL OR (s.terminated_at IS NULL AND s.expires_at > now()))",
   "describe": {
     "columns": [
       {
@@ -64,6 +64,17 @@
             "name": "application_id"
           }
         }
+      },
+      {
+        "ordinal": 7,
+        "name": "tenant_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "accounts",
+            "name": "tenant_id"
+          }
+        }
       }
     ],
     "parameters": {
@@ -79,8 +90,9 @@
       null,
       null,
       false,
+      false,
       false
     ]
   },
-  "hash": "e663b0e5d844138871499e46dca1875d443548d421ebc1ccfd2de3b337f972f5"
+  "hash": "390d3e28385483a6dfcc39e21d6cf873cdddeee5259cd2bf0865d0ed3e70e6e0"
 }

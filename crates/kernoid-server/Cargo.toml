@@ -11,6 +11,16 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+default = ["mail", "calendars", "files"]
+# The services of RFC 0008, 4. Built without them, kernoid-server is identity alone – for programs that build it in
+# (RFC 0009, 3); the binary takes them all.
+mail = ["data"]
+calendars = ["data"]
+files = ["data"]
+# What the three need: the stores of mail, calendars and files, and JMAP and WebDAV, which serve them together.
+data = ["dep:kernoid-dav", "dep:kernoid-files", "dep:kernoid-groupware", "dep:kernoid-jmap", "dep:kernoid-mail", "dep:kernoid-smtp", "dep:mail-builder"]
+
 [dependencies]
 async-graphql = "7.2.1"
 async-graphql-axum = "7.2.1"
@@ -25,17 +35,18 @@ instant-acme = { version = "0.8.5", default-features = false, features = ["aws-l
 ipnet = "2.12.2"
 kernoid-e2e = { version = "0.4.0", path = "../../kit/e2e" }
 kernoid-config = { version = "0.4.0", path = "../kernoid-config" }
+kernoid-events = { version = "0.4.0", path = "../kernoid-events" }
 kernoid-identity = { version = "0.4.0", path = "../kernoid-identity" }
-kernoid-dav = { version = "0.4.0", path = "../kernoid-dav" }
-kernoid-files = { version = "0.4.0", path = "../kernoid-files" }
-kernoid-groupware = { version = "0.4.0", path = "../kernoid-groupware" }
-kernoid-jmap = { version = "0.4.0", path = "../kernoid-jmap" }
-kernoid-mail = { version = "0.4.0", path = "../kernoid-mail" }
+kernoid-dav = { version = "0.4.0", path = "../kernoid-dav", optional = true }
+kernoid-files = { version = "0.4.0", path = "../kernoid-files", optional = true }
+kernoid-groupware = { version = "0.4.0", path = "../kernoid-groupware", optional = true }
+kernoid-jmap = { version = "0.4.0", path = "../kernoid-jmap", optional = true }
+kernoid-mail = { version = "0.4.0", path = "../kernoid-mail", optional = true }
 kernoid-module = { version = "0.4.0", path = "../kernoid-module" }
 kernoid-oidc = { version = "0.4.0", path = "../kernoid-oidc" }
-kernoid-smtp = { version = "0.4.0", path = "../kernoid-smtp" }
+kernoid-smtp = { version = "0.4.0", path = "../kernoid-smtp", optional = true }
 kernoid-store = { version = "0.4.0", path = "../kernoid-store" }
-mail-builder = "2.0.0"
+mail-builder = { version = "2.0.0", optional = true }
 metrics = "0.24.6"
 percent-encoding = "2.3.2"
 metrics-exporter-prometheus = { version = "0.18.3", default-features = false }
@@ -47,6 +58,7 @@ serde_json = "1.0.154"
 sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres", "macros", "sqlx-toml"] }
 thiserror = "2.0.21"
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "signal", "net", "sync"] }
+tokio-util = "0.7.20"
 rust-embed = { version = "=8.13.0", features = ["mime-guess"] }
 tower-http = { version = "0.6.11", features = ["request-id", "trace", "propagate-header", "timeout", "limit", "catch-panic", "util", "fs", "cors"] }
 tracing = "0.1.44"

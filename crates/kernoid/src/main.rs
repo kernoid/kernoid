@@ -13,7 +13,7 @@ use kernoid_identity::{
 };
 use kernoid_module::{Context as ModuleContext, Module, Registry};
 use kernoid_oidc::{Oidc, application::Kind as AppKind};
-use kernoid_server::AppState;
+use kernoid_server::{AppState, jobs};
 use kernoid_store::{BlobStore, MainKeys, TenantKeys, crypto::Key};
 use metrics_exporter_prometheus::PrometheusBuilder;
 use opentelemetry::trace::TracerProvider as _;
@@ -1141,13 +1141,13 @@ async fn serve(config: Config) -> anyhow::Result<()> {
         });
     }
     if config.has_role(Role::Worker) {
-        tasks.spawn(clean_up(Identity::new(events.clone()), oidc.clone(), shutdown.clone()));
-        tasks.spawn(logout_notifications(oidc.clone(), shutdown.clone()));
+        tasks.spawn(done(jobs::clean_up(Identity::new(events.clone()), oidc.clone(), shutdown.clone())));
+        tasks.spawn(done(jobs::logout_notifications(oidc.clone(), shutdown.clone())));
         if config.oidc.key_rotation_days > 0 {
-            tasks.spawn(rotate_keys(oidc.clone(), db.clone(), config.oidc.clone(), shutdown.clone()));
+            tasks.spawn(done(jobs::rotate_keys(oidc.clone(), db.clone(), config.oidc.clone(), shutdown.clone())));
         }
         if let Some(orderer) = orderer {
-            tasks.spawn(order_certificates(orderer, shutdown.clone()));
+            tasks.spawn(done(jobs::order_certificates(orderer, shutdown.clone())));
         }
         match &config.smtp {
             Some(smtp) => {
@@ -1208,6 +1208,12 @@ async fn serve(config: Config) -> anyhow::Result<()> {
     failure.map_or(Ok(()), Err)
 }
 
+/// A job that does not fail, among those that can.
+async fn done(job: impl std::future::Future<Output = ()>) -> anyhow::Result<()> {
+    job.await;
+    Ok(())
+}
+
 fn main_keys(config: &Config) -> anyhow::Result<MainKeys> {
     let current = Key::from_hex(config.encryption.main_key.expose()).context("encryption.main_key")?;
     let previous = config
@@ -1248,119 +1254,6 @@ async fn keys(config: &Config, command: KeysCommand) -> anyhow::Result<()> {
 
 /// Logs to stdout as text or JSON; with `log.otlp_endpoint`, traces also go to an OpenTelemetry collector. The
 /// returned provider must be shut down at exit, so that the last traces are sent.
-/// How often the worker removes old sessions and failure counts.
-const CLEAN_UP_EVERY: std::time::Duration = std::time::Duration::from_secs(10 * 60);
-
-/// Removes ended and expired sessions and old failure counts until shutdown; with several workers, each does it –
-/// the deletes do not get in each other's way.
-async fn clean_up(identity: Identity, oidc: Oidc, shutdown: CancellationToken) -> anyhow::Result<()> {
-    loop {
-        if let Err(error) = identity.prune_registrations().await {
-            tracing::warn!(%error, "removing expired registrations failed; trying again later");
-        }
-        if let Err(error) = identity.clean_up_file_link_access().await {
-            tracing::warn!(%error, "removing expired link access failed; trying again later");
-        }
-        match identity.clean_up().await {
-            Ok(cleaned) if cleaned.sessions > 0 || cleaned.failure_counts > 0 => {
-                tracing::info!(sessions = cleaned.sessions, failure_counts = cleaned.failure_counts, "cleaned up");
-            }
-            Ok(_) => {}
-            Err(error) => tracing::warn!(%error, "clean-up failed; trying again later"),
-        }
-        match oidc.clean_up().await {
-            Ok(cleaned)
-                if cleaned.auth_requests
-                    + cleaned.codes
-                    + cleaned.access_tokens
-                    + cleaned.refresh_tokens
-                    + cleaned.idp_logins
-                    + cleaned.logout_notifications
-                    > 0 =>
-            {
-                tracing::info!(
-                    auth_requests = cleaned.auth_requests,
-                    idp_logins = cleaned.idp_logins,
-                    codes = cleaned.codes,
-                    access_tokens = cleaned.access_tokens,
-                    refresh_tokens = cleaned.refresh_tokens,
-                    logout_notifications = cleaned.logout_notifications,
-                    "cleaned up"
-                )
-            }
-            Ok(_) => {}
-            Err(error) => tracing::warn!(%error, "clean-up failed; trying again later"),
-        }
-        tokio::select! {
-            () = shutdown.cancelled() => return Ok(()),
-            () = tokio::time::sleep(CLEAN_UP_EVERY) => {}
-        }
-    }
-}
-
-/// How often the worker looks for ended sessions to tell applications about.
-const LOGOUT_EVERY: std::time::Duration = std::time::Duration::from_secs(5);
-
-/// Back-channel logout: queues and delivers logout tokens until shutdown; several workers share the work.
-async fn logout_notifications(oidc: Oidc, shutdown: CancellationToken) -> anyhow::Result<()> {
-    loop {
-        match oidc.deliver_logout_notifications().await {
-            Ok(done) if done.delivered + done.failed > 0 => {
-                tracing::info!(delivered = done.delivered, failed = done.failed, "back-channel logout");
-            }
-            Ok(_) => {}
-            Err(error) => tracing::warn!(%error, "back-channel logout failed; trying again later"),
-        }
-        tokio::select! {
-            () = shutdown.cancelled() => return Ok(()),
-            () = tokio::time::sleep(LOGOUT_EVERY) => {}
-        }
-    }
-}
-
-/// How often the worker checks whether signing keys are due for rotation.
-const ROTATE_EVERY: std::time::Duration = std::time::Duration::from_secs(60 * 60);
-
-async fn rotate_keys(
-    oidc: Oidc,
-    db: kernoid_store::PgPool,
-    config: kernoid_config::Oidc,
-    shutdown: CancellationToken,
-) -> anyhow::Result<()> {
-    let day = std::time::Duration::from_secs(24 * 60 * 60);
-    let rotation = day * config.key_rotation_days;
-    let publish = std::time::Duration::from_secs(60 * 60) * config.key_publish_hours;
-    let keep = day * config.retired_key_days;
-    loop {
-        // Several workers: one rotates, the others skip this round.
-        match kernoid_store::lock::Lock::try_take(&db, "signing key rotation").await {
-            Ok(Some(lock)) => {
-                match oidc.rotate_signing_keys(rotation, publish, keep).await {
-                    Ok(done) if done.added + done.activated + done.removed > 0 => {
-                        tracing::info!(
-                            added = done.added,
-                            activated = done.activated,
-                            removed = done.removed,
-                            "signing keys"
-                        );
-                    }
-                    Ok(_) => {}
-                    Err(error) => tracing::warn!(%error, "key rotation failed; trying again later"),
-                }
-                if let Err(error) = lock.release().await {
-                    tracing::warn!(%error, "releasing the key rotation lock");
-                }
-            }
-            Ok(None) => {}
-            Err(error) => tracing::warn!(%error, "key rotation lock unavailable; trying again later"),
-        }
-        tokio::select! {
-            () = shutdown.cancelled() => return Ok(()),
-            () = tokio::time::sleep(ROTATE_EVERY) => {}
-        }
-    }
-}
-
 /// How often the worker looks for verified domains without DKIM keys and for published records of waiting keys.
 const DKIM_EVERY: std::time::Duration = std::time::Duration::from_secs(5 * 60);
 
@@ -1876,24 +1769,6 @@ fn read_input(file: &std::path::Path) -> anyhow::Result<Vec<u8>> {
 }
 
 /// How often the worker looks for certificates to order or renew.
-const ACME_EVERY: std::time::Duration = std::time::Duration::from_secs(60 * 60);
-
-async fn order_certificates(orderer: kernoid_server::acme::Orderer, shutdown: CancellationToken) -> anyhow::Result<()> {
-    loop {
-        match orderer.renew().await {
-            Ok(done) if done.issued + done.failed > 0 => {
-                tracing::info!(issued = done.issued, failed = done.failed, "certificates");
-            }
-            Ok(_) => {}
-            Err(error) => tracing::warn!(%error, "ordering certificates failed; trying again later"),
-        }
-        tokio::select! {
-            () = shutdown.cancelled() => return Ok(()),
-            () = tokio::time::sleep(ACME_EVERY) => {}
-        }
-    }
-}
-
 async fn acme_status(config: &Config) -> anyhow::Result<()> {
     let db = kernoid_store::connect(&config.database).await.context("connecting to PostgreSQL")?;
     for state in kernoid_server::acme::status(&db).await? {

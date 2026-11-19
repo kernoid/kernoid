@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT 1 AS \"granted!\" FROM kernoid_grant_schema($1)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "granted!",
+        "type_info": "Int4",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Name"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "c985e5ac915850f624047c2318b965dd7d6a72fe8a7d1767adc955bd6b52c34b"
+}

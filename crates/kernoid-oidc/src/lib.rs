@@ -13,18 +13,20 @@
 
 mod admin;
 pub mod application;
-pub mod external;
+/// kernoid as the client of another OpenID provider – the same code `kernoid-auth` gives other servers.
+pub use kernoid_auth::provider as external;
 pub mod federation;
 mod flow;
 mod jwt;
 pub mod keys;
 pub mod logout;
-pub mod outbound;
+/// Requests to identity providers: HTTPS to public addresses only (from `kernoid-auth`).
+pub use kernoid_auth::outbound;
 pub mod saml;
 
 pub use flow::{
     AuthRequestInfo, AuthorizeRequest, Authorized, Claims, Cleaned, EndSession, EndSessionRequest, OFFLINE_SCOPE,
-    PROMPTS, ROLES_CLAIM, ROLES_SCOPE, TokenRequest, TokenResponse, UI_ERRORS, discovery,
+    PROMPTS, ROLES_CLAIM, ROLES_SCOPE, TENANT_CLAIM, TokenRequest, TokenResponse, UI_ERRORS, discovery,
 };
 
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};

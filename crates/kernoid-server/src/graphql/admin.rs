@@ -701,12 +701,12 @@ impl AdminQuery {
                 .await
                 .into_iter()
                 .map(|check| RecordCheck {
-                    kind: check.kind.into(),
+                    kind: check.kind,
                     name: check.name,
-                    record_type: check.record_type.into(),
+                    record_type: check.record_type,
                     expected: check.expected,
                     found: check.found,
-                    status: check.status.as_str().into(),
+                    status: check.status,
                 })
                 .collect();
             list.push(MailDns { domain: domain.domain, records });
@@ -1115,11 +1115,14 @@ impl AdminMutation {
         let Some(checker) = context.data::<AppState>()?.mail_dns.as_ref() else {
             return Err(error(IdentityError::Refused("this installation does not handle mail".into())));
         };
-        let algorithm = kernoid_smtp::dkim::Algorithm::parse(algorithm.as_deref().unwrap_or("rsa"))
-            .ok_or_else(|| error(IdentityError::Refused("the algorithm is rsa or ed25519".into())))?;
-        checker.rotate_dkim(domain.as_str(), algorithm).await.map_err(|failure| {
-            tracing::warn!(error = %failure, "changing a DKIM key failed");
-            async_graphql::Error::new("the key could not be made")
+        checker.rotate_dkim(domain.as_str(), algorithm.as_deref().unwrap_or("rsa")).await.map_err(|failure| {
+            match failure {
+                crate::mail_dns::DkimFailure::UnknownAlgorithm => error(IdentityError::Refused(failure.to_string())),
+                crate::mail_dns::DkimFailure::Failed(_) => {
+                    tracing::warn!(error = %failure, "changing a DKIM key failed");
+                    async_graphql::Error::new("the key could not be made")
+                }
+            }
         })
     }
 

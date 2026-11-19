@@ -9,7 +9,7 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 kernoid becomes the core of a suite of building blocks ([RFC 0008](rfcs/0008-suite-and-building-blocks.md)–0011): an
 installation runs only the services it wants, down to identity alone, and the parts apps use are one kit under MIT.
-Migration 0052 adds a table; installations that keep mail, calendars and files change nothing in their configuration.
+Migrations 0052 and 0053 add a table and a function; installations that keep mail, calendars and files change nothing in their configuration.
 
 ### Added
 
@@ -19,6 +19,15 @@ Migration 0052 adds a table; installations that keep mail, calendars and files c
   Calendars and contacts may run without mail. `GET /v1/services` says what an installation runs.
 - **Identity alone without object storage:** `[blob] kind = "database"` keeps objects – pictures of accounts – in
   PostgreSQL (`blob_objects`, sealed like every object, up to 4 MiB each), for installations without mail and files.
+- **kernoid-auth** (AGPL, on crates.io): other programs' servers log in with kernoid – or any OpenID provider – with
+  PKCE, keep sessions of their own, check access tokens and take back-channel logout; routes and an extractor for axum
+  ([Building on kernoid](https://kernoid.dev/building-on-kernoid/)). The client of external identity providers kernoid
+  uses for its tenants is the same code now.
+- **kernoid built in:** `kernoid_server::embedded` starts kernoid's identity in another program's process; the
+  program's routes join kernoid's, `Session` says who is logged in. `kernoid-server` has the features `mail`,
+  `calendars` and `files` (on by default) – without them, nothing of those is compiled in. `database.schema` puts
+  kernoid's tables into a schema of their own (migration 0053 grants its use).
+- The claim `urn:kernoid:tenant` – the account's tenant – in ID tokens, JWT access tokens and userinfo answers.
 - RFCs 0008 (the suite: building blocks, services, licences), 0009 (kernoid's identity in other servers), 0010 (the
   foundation of end-to-end encrypted spaces) and 0011 (the app kit).
 
