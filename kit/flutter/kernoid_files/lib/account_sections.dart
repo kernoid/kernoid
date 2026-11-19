@@ -16,6 +16,7 @@ import 'explorer_files.dart';
 import 'file_provider.dart';
 import 'login_item.dart';
 import 'sync_folders.dart';
+import 'l10n/files_text.dart';
 
 /// Folders of this computer kept in step with the account's stores: one per store, chosen here.
 class SyncSection extends StatelessWidget {
@@ -30,20 +31,20 @@ class SyncSection extends StatelessWidget {
   }
 
   String _status(BuildContext context, AppLocalizations l, SyncStatus status) {
-    if (status.running) return l.syncRunning;
+    if (status.running) return l.filesText.syncRunning;
     final lines = <String>[
-      if (status.error != null) l.syncFailed(status.error!),
+      if (status.error != null) l.filesText.syncFailed(status.error!),
       if (status.last case final last?)
-        l.syncDone(
+        l.filesText.syncDone(
           KTime.fromDateTime(last).format(context),
           status.report?.downloaded ?? 0,
           status.report?.uploaded ?? 0,
         )
       else if (status.error == null)
-        l.syncNever,
+        l.filesText.syncNever,
       if (status.report case final r? when r.conflicts.isNotEmpty || r.failed.isNotEmpty)
-        l.syncIssues(r.conflicts.length, r.failed.length),
-      if (status.report case final r? when r.locked > 0) l.syncLocked(r.locked),
+        l.filesText.syncIssues(r.conflicts.length, r.failed.length),
+      if (status.report case final r? when r.locked > 0) l.filesText.syncLocked(r.locked),
     ];
     return lines.join('\n');
   }
@@ -54,9 +55,9 @@ class SyncSection extends StatelessWidget {
     final k = context.k;
     final stores = account.fileStores();
     return KSection(
-      title: l.syncTitle,
+      title: l.filesText.syncTitle,
       icon: LucideIcons.folderSync,
-      description: l.syncHint,
+      description: l.filesText.syncHint,
       child: ListenableBuilder(
         listenable: sync,
         builder: (context, _) => Column(
@@ -92,7 +93,7 @@ class SyncSection extends StatelessWidget {
                     if (sync.folderOf(store.accountId) == null)
                       KButton(
                         key: ValueKey('sync-choose-${store.accountId}'),
-                        label: l.syncChoose,
+                        label: l.filesText.syncChoose,
                         icon: LucideIcons.folderPlus,
                         onPressed: () => _choose(store),
                       )
@@ -100,13 +101,13 @@ class SyncSection extends StatelessWidget {
                       KIconButton(
                         key: ValueKey('sync-now-${store.accountId}'),
                         icon: LucideIcons.refreshCw,
-                        tooltip: l.syncNow,
+                        tooltip: l.filesText.syncNow,
                         onPressed: sync.statusOf(store.accountId).running ? null : sync.syncAll,
                       ),
                       KIconButton(
                         key: ValueKey('sync-stop-${store.accountId}'),
                         icon: LucideIcons.folderX,
-                        tooltip: l.syncStop,
+                        tooltip: l.filesText.syncStop,
                         onPressed: () => sync.remove(store.accountId),
                       ),
                     ],
@@ -143,7 +144,7 @@ class _AtLoginState extends State<_AtLogin> {
     return Row(
       children: [
         Expanded(
-          child: Text(l.syncAtLogin, style: TextStyle(color: context.k.muted, fontSize: 13)),
+          child: Text(l.filesText.syncAtLogin, style: TextStyle(color: context.k.muted, fontSize: 13)),
         ),
         KSwitch(
           key: const ValueKey('sync-at-login'),
@@ -219,23 +220,23 @@ class _DocumentsSectionState extends State<DocumentsSection> {
     final k = context.k;
     final enabled = _enabled;
     return KSection(
-      title: l.documentsTitle,
+      title: l.filesText.documentsTitle,
       icon: LucideIcons.folderOpen,
-      description: l.documentsHint,
+      description: l.filesText.documentsHint,
       trailing: _busy ? const SizedBox.square(dimension: 18, child: KSpinner(stroke: 2)) : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (enabled != null) ...[
             Text(
-              enabled ? l.documentsOn : l.documentsOff,
+              enabled ? l.filesText.documentsOn : l.filesText.documentsOff,
               key: const ValueKey('documents-status'),
               style: KText.small(k),
             ),
             const SizedBox(height: 8),
             KButton(
               key: const ValueKey('documents-switch'),
-              label: enabled ? l.documentsDisable : l.documentsEnable,
+              label: enabled ? l.filesText.documentsDisable : l.filesText.documentsEnable,
               icon: enabled ? LucideIcons.folderX : LucideIcons.folderPlus,
               tone: enabled ? KTone.normal : KTone.primary,
               onPressed: _busy ? null : () => _switch(!enabled),
@@ -291,9 +292,9 @@ class _ExplorerSectionState extends State<ExplorerSection> {
     final l = AppLocalizations.of(context);
     final k = context.k;
     return KSection(
-      title: l.explorerTitle,
+      title: l.filesText.explorerTitle,
       icon: LucideIcons.hardDrive,
-      description: l.explorerHint,
+      description: l.filesText.explorerHint,
       child: ListenableBuilder(
         listenable: widget.explorer,
         builder: (context, _) {
@@ -302,11 +303,11 @@ class _ExplorerSectionState extends State<ExplorerSection> {
           final signedOut = status?.signedOut ?? false;
           final error = _error ?? explorer.error;
           final lines = <String>[
-            if (explorer.busy || _signingIn) l.explorerStarting,
-            if (signedOut) l.explorerSignedOut,
-            if (error != null) l.explorerFailed(error),
+            if (explorer.busy || _signingIn) l.filesText.explorerStarting,
+            if (signedOut) l.filesText.explorerSignedOut,
+            if (error != null) l.filesText.explorerFailed(error),
             if (DateTime.tryParse(status?.lastRound ?? '') case final last?)
-              l.explorerLast(KTime.fromDateTime(last.toLocal()).format(context)),
+              l.filesText.explorerLast(KTime.fromDateTime(last.toLocal()).format(context)),
             ...?status?.problems.take(5),
           ];
           return Column(
@@ -323,14 +324,14 @@ class _ExplorerSectionState extends State<ExplorerSection> {
               if (explorer.configured && !signedOut)
                 KButton(
                   key: const ValueKey('explorer-remove'),
-                  label: l.explorerRemove,
+                  label: l.filesText.explorerRemove,
                   icon: LucideIcons.folderX,
                   onPressed: explorer.busy ? null : explorer.remove,
                 )
               else
                 KButton(
                   key: const ValueKey('explorer-set-up'),
-                  label: l.explorerSetUp,
+                  label: l.filesText.explorerSetUp,
                   icon: LucideIcons.folderSymlink,
                   onPressed: explorer.busy || _signingIn ? null : _setUp,
                 ),
@@ -384,9 +385,9 @@ class _FileProviderSectionState extends KSettingsState<FileProviderSection> {
         if (_shown.contains(store.accountId)) store.name,
     ];
     return KSection(
-      title: Platform.isIOS ? l.fileProviderTitleIos : l.fileProviderTitle,
+      title: Platform.isIOS ? l.filesText.fileProviderTitleIos : l.filesText.fileProviderTitle,
       icon: LucideIcons.hardDrive,
-      description: l.fileProviderHint,
+      description: l.filesText.fileProviderHint,
       child: !loaded
           ? const KProgressBar()
           : Column(
@@ -394,7 +395,7 @@ class _FileProviderSectionState extends KSettingsState<FileProviderSection> {
               children: [
                 if (_shown.isNotEmpty) ...[
                   Text(
-                    l.fileProviderShown(names.join(', ')),
+                    l.filesText.fileProviderShown(names.join(', ')),
                     key: const ValueKey('file-provider-shown'),
                     style: TextStyle(color: k.muted, fontSize: 13),
                   ),
@@ -407,7 +408,7 @@ class _FileProviderSectionState extends KSettingsState<FileProviderSection> {
                     if (_shown.isEmpty)
                       KButton(
                         key: const ValueKey('file-provider-on'),
-                        label: l.fileProviderOn,
+                        label: l.filesText.fileProviderOn,
                         icon: LucideIcons.logIn,
                         tone: KTone.primary,
                         onPressed: busy ? null : _turnOn,
@@ -415,13 +416,13 @@ class _FileProviderSectionState extends KSettingsState<FileProviderSection> {
                     else ...[
                       KButton(
                         key: const ValueKey('file-provider-update'),
-                        label: l.fileProviderUpdate,
+                        label: l.filesText.fileProviderUpdate,
                         icon: LucideIcons.refreshCw,
                         onPressed: busy ? null : _update,
                       ),
                       KButton(
                         key: const ValueKey('file-provider-off'),
-                        label: l.fileProviderOff,
+                        label: l.filesText.fileProviderOff,
                         icon: LucideIcons.power,
                         tone: KTone.quiet,
                         onPressed: busy ? null : _turnOff,

@@ -12,6 +12,7 @@ import 'package:kernoid_shell/app/format.dart';
 import 'package:kernoid_mail/compose.dart';
 
 import 'contact_form.dart';
+import 'l10n/contacts_text.dart';
 
 /// The contacts of every address book the account reaches, with search; contacts are made, changed and deleted, and a
 /// contact's addresses start an email.
@@ -69,14 +70,14 @@ class _ContactsPageState extends State<ContactsPage> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          KTopBar(title: l.contacts),
+          KTopBar(title: l.contactsText.contacts),
           Container(
             color: context.k.panel,
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
             child: KTextField(
               key: const ValueKey('contacts-search'),
               controller: _search,
-              hint: l.searchContacts,
+              hint: l.contactsText.searchContacts,
               icon: LucideIcons.search,
               onChanged: _searchChanged,
               fill: context.k.raised,
@@ -89,7 +90,7 @@ class _ContactsPageState extends State<ContactsPage> {
       body: _body(l),
       floating: KFloatingButton(
         key: const ValueKey('new-contact'),
-        tooltip: l.newContact,
+        tooltip: l.contactsText.newContact,
         onPressed: () => _show(ContactFormPage(account: widget.account), dialog: true),
         icon: LucideIcons.userPlus,
       ),
@@ -106,7 +107,7 @@ class _ContactsPageState extends State<ContactsPage> {
     if (_error != null) return ErrorView(error: _error!, onRetry: _load);
     final contacts = _contacts;
     if (contacts == null) return const Center(child: KSpinner());
-    if (contacts.isEmpty) return EmptyView(l.noContacts, icon: LucideIcons.userSearch);
+    if (contacts.isEmpty) return EmptyView(l.contactsText.noContacts, icon: LucideIcons.userSearch);
     return KRefresh(
       onRefresh: _load,
       child: ListView.builder(
@@ -157,7 +158,7 @@ class ContactPage extends StatelessWidget {
       final sure = await showKDialog<bool>(
         context,
         builder: (context) => KDialog(
-          content: Text(l.deleteContactConfirm),
+          content: Text(l.contactsText.deleteContactConfirm),
           actions: [
             KButton(tone: KTone.quiet, onPressed: () => Navigator.of(context).pop(false), label: l.cancel),
             KButton(
@@ -204,10 +205,10 @@ class ContactPage extends StatelessWidget {
             KListRow(
               leading: const Icon(LucideIcons.mail),
               title: Text(email.value),
-              subtitle: Text(_labelled(l, l.emails, email.labels)),
+              subtitle: Text(_labelled(l, l.contactsText.emails, email.labels)),
               trailing: KIconButton(
                 key: ValueKey('write-to-${email.value}'),
-                tooltip: l.writeEmail,
+                tooltip: l.contactsText.writeEmail,
                 icon: LucideIcons.send,
                 onPressed: () => writeMessage(context, account, to: email.value),
               ),
@@ -216,7 +217,7 @@ class ContactPage extends StatelessWidget {
             KListRow(
               leading: const Icon(LucideIcons.phone),
               title: Text(phone.value),
-              subtitle: Text(_labelled(l, l.phones, phone.labels)),
+              subtitle: Text(_labelled(l, l.contactsText.phones, phone.labels)),
               trailing: KIconButton(
                 tooltip: l.copy,
                 icon: LucideIcons.copy,
@@ -228,7 +229,7 @@ class ContactPage extends StatelessWidget {
             ),
           if (c.notes.isNotEmpty) ...[
             const SizedBox(height: 16),
-            Text(l.notes, style: KText.heading(context.k).copyWith(fontSize: 14)),
+            Text(l.contactsText.notes, style: KText.heading(context.k).copyWith(fontSize: 14)),
             for (final note in c.notes) Padding(padding: const EdgeInsets.only(top: 4), child: KSelectable.text(note)),
           ],
         ],

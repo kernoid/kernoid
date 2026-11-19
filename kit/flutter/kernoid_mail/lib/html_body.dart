@@ -7,6 +7,8 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:kernoid_l10n/l10n/app_localizations.dart';
 import 'package:kernoid_ui/ui.dart';
 
+import 'l10n/mail_text.dart';
+
 /// The HTML of an email, drawn as Flutter widgets: nothing in it runs, and nothing is loaded from the internet until
 /// the user asks for its images. Files and assets of the device are never shown; a link opens only after the user saw
 /// where it goes.
@@ -43,7 +45,7 @@ class _HtmlBodyState extends State<HtmlBody> {
     final open = await showKDialog<bool>(
       context,
       builder: (context) => KDialog(
-        title: l.openLink,
+        title: l.mailText.openLink,
         // The address itself: the text of a link may say anything.
         content: KSelectable.text(uri.toString()),
         actions: [
@@ -72,12 +74,12 @@ class _HtmlBodyState extends State<HtmlBody> {
             margin: const EdgeInsets.only(bottom: 12),
             child: KListRow(
               leading: const Icon(LucideIcons.imageOff),
-              title: Text(l.imagesBlocked),
+              title: Text(l.mailText.imagesBlocked),
               trailing: KButton(
                 tone: KTone.quiet,
                 key: const ValueKey('load-images'),
                 onPressed: () => setState(() => _remote = true),
-                label: l.loadImages,
+                label: l.mailText.loadImages,
               ),
             ),
           ),

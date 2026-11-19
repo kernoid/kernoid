@@ -32,6 +32,12 @@ In `kit/flutter/`, each a Dart package under MIT:
 belong to one app bundle – the File Provider extension, the DocumentsProvider, Windows' cloud files registration, icons,
 entitlements –, the integration tests, the release workflow and the app's changelog.
 
+**Strings:** `kernoid_l10n` keeps those the shell, the design system and several features share; each feature package
+has its own (`lib/l10n/<feature>_*.arb`, `flutter gen-l10n` there, a class `<Feature>Localizations`), reached from
+the shared ones as `l.mailText.…`, `l.filesText.…` – no delegate needed. A program's feature with strings of its
+own gives the shell their delegates (`KFeature.localizationsDelegates`) and looks them up as usual (implemented in
+0.5.0).
+
 ## 3. Features
 
 `kernoid_shell` knows no mail, calendar or file: an app hands it a list of **features**:
@@ -96,4 +102,3 @@ with the system; the apps of programs built on kernoid show files inside the app
 ## 8. Open
 
 - **OPEN:** several bridges in one native library (section 4).
-- **OPEN:** strings per feature package instead of one `kernoid_l10n`, once programs bring many strings of their own.

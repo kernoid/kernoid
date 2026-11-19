@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: MIT
+# The strings of this package alone; those every package shares are in kernoid_l10n (RFC 0011, 8).
+arb-dir: lib/l10n
+template-arb-file: files_en.arb
+output-localization-file: files_localizations.dart
+output-class: FilesLocalizations
+output-dir: lib/l10n
+nullable-getter: false

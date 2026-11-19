@@ -7,6 +7,8 @@ import 'package:kernoid_l10n/l10n/app_localizations.dart';
 import 'package:kernoid_bridge/kernoid_bridge.dart';
 import 'package:kernoid_ui/ui.dart';
 
+import 'l10n/calendar_text.dart';
+
 /// Making or changing an event: title, calendar, when (or all day), where, who is invited, how it repeats, a
 /// description. A recurring event is changed as a whole, or – with `recurrenceId` – one of its instances alone, in what
 /// an instance may differ in. Pops `true` once saved.
@@ -116,7 +118,7 @@ class _EventFormPageState extends State<EventFormPage> {
     final start = _allDay ? DateTime(_start.year, _start.month, _start.day) : _start;
     final end = _allDay ? DateTime(_end.year, _end.month, _end.day) : _end;
     if (end.isBefore(start)) {
-      setState(() => _error = l.endBeforeStart);
+      setState(() => _error = l.calendarText.endBeforeStart);
       return;
     }
     final [account, calendar] = _calendar.split('/');
@@ -188,10 +190,10 @@ class _EventFormPageState extends State<EventFormPage> {
     return KScaffold(
       topBar: KTopBar(
         title: widget.eventId == null
-            ? l.newEvent
+            ? l.calendarText.newEvent
             : one
-            ? l.editThisEvent
-            : l.editEvent,
+            ? l.calendarText.editThisEvent
+            : l.calendarText.editEvent,
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 8),
@@ -213,55 +215,62 @@ class _EventFormPageState extends State<EventFormPage> {
               key: const ValueKey('event-title'),
               controller: _title,
               autofocus: widget.eventId == null,
-              label: l.title,
+              label: l.calendarText.title,
               validator: (v) => (v ?? '').trim().isEmpty ? l.required : null,
             ),
             const SizedBox(height: 8),
             if (widget.calendars.length > 1)
               KSelect<String>(
                 value: _calendar,
-                label: l.calendarField,
+                label: l.calendarText.calendarField,
                 options: [
                   for (final c in widget.calendars)
-                    ('${c.accountId}/${c.id}', c.sharedBy == null ? c.name : '${c.name} (${l.sharedBy(c.sharedBy!)})'),
+                    (
+                      '${c.accountId}/${c.id}',
+                      c.sharedBy == null ? c.name : '${c.name} (${l.calendarText.sharedBy(c.sharedBy!)})',
+                    ),
                 ],
                 onChanged: widget.eventId == null ? (v) => setState(() => _calendar = v) : null,
               ),
             KToggleRow(
               key: const ValueKey('all-day'),
-              title: Text(l.allDay),
+              title: Text(l.calendarText.allDay),
               value: _allDay,
               onChanged: (v) => setState(() => _allDay = v),
             ),
-            when(l.starts, true),
-            when(l.ends, false),
+            when(l.calendarText.starts, true),
+            when(l.calendarText.ends, false),
             if (!one)
               KSelect<String?>(
                 key: const ValueKey('event-repeat'),
                 value: _repeat,
-                label: l.repeat,
+                label: l.calendarText.repeat,
                 options: [
                   for (final (value, label) in [
-                    (null, l.repeatNone),
-                    ('daily', l.repeatDaily),
-                    ('weekly', l.repeatWeekly),
-                    ('monthly', l.repeatMonthly),
-                    ('yearly', l.repeatYearly),
+                    (null, l.calendarText.repeatNone),
+                    ('daily', l.calendarText.repeatDaily),
+                    ('weekly', l.calendarText.repeatWeekly),
+                    ('monthly', l.calendarText.repeatMonthly),
+                    ('yearly', l.calendarText.repeatYearly),
                   ])
                     (value, label),
                 ],
                 onChanged: (v) => setState(() => _repeat = v),
               ),
             const SizedBox(height: 8),
-            KTextFormField(key: const ValueKey('event-location'), controller: _location, label: l.location),
+            KTextFormField(
+              key: const ValueKey('event-location'),
+              controller: _location,
+              label: l.calendarText.location,
+            ),
             if (!one) ...[
               const SizedBox(height: 8),
               KTextFormField(
                 key: const ValueKey('event-invite'),
                 controller: _invite,
                 keyboardType: TextInputType.emailAddress,
-                label: l.invite,
-                helper: l.inviteHint,
+                label: l.calendarText.invite,
+                helper: l.calendarText.inviteHint,
               ),
             ],
             const SizedBox(height: 8),
@@ -270,14 +279,14 @@ class _EventFormPageState extends State<EventFormPage> {
               controller: _description,
               minLines: 3,
               maxLines: 8,
-              label: l.description,
+              label: l.calendarText.description,
             ),
             if (one) ...[
               const SizedBox(height: 8),
-              Text(l.instanceEditsOne, style: KText.small(context.k)),
+              Text(l.calendarText.instanceEditsOne, style: KText.small(context.k)),
             ] else if (widget.eventId != null && widget.draft.repeat != null) ...[
               const SizedBox(height: 8),
-              Text(l.recurringEditsAll, style: KText.small(context.k)),
+              Text(l.calendarText.recurringEditsAll, style: KText.small(context.k)),
             ],
             if (_error != null) ...[
               const SizedBox(height: 12),

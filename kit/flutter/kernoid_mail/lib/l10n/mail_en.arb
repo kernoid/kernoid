@@ -1,0 +1,153 @@
+{
+  "@@locale": "en",
+  "mail": "Mail",
+  "noMessages": "No messages",
+  "selectMessage": "Select a message",
+  "from": "From",
+  "to": "To",
+  "cc": "Cc",
+  "subject": "Subject",
+  "message": "Message",
+  "write": "Write",
+  "send": "Send",
+  "messageSent": "Message sent",
+  "attachments": "Attachments",
+  "loadMore": "Load more",
+  "encryptedMessage": "Encrypted message",
+  "unlockToRead": "Unlock your key to read it",
+  "lockedEmail": "This message is end-to-end encrypted. Unlock your key to read it.",
+  "willEncrypt": "Will be sent end-to-end encrypted and signed.",
+  "wontEncrypt": "Not end-to-end encrypted: {reason}",
+  "@wontEncrypt": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "sentEncrypted": "Sent end-to-end encrypted",
+  "bcc": "Bcc",
+  "reply": "Reply",
+  "replyAll": "Reply all",
+  "forward": "Forward",
+  "attachFile": "Attach a file",
+  "quoteWrote": "On {date}, {who} wrote:",
+  "@quoteWrote": {
+    "description": "Above a quoted reply; {date} and {who} are filled in by the app, not by Flutter.",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      },
+      "who": {
+        "type": "String"
+      }
+    }
+  },
+  "quoteForwarded": "---------- Forwarded message ----------",
+  "quoteDateFormat": "%a, %d %b %Y %H:%M",
+  "@quoteDateFormat": {
+    "description": "How the date above a quote is written: a format of Rust's chrono (strftime)."
+  },
+  "date": "Date",
+  "loadImages": "Load images",
+  "imagesBlocked": "Images from the internet are not loaded until you ask for them.",
+  "openLink": "Open this link?",
+  "asText": "As text",
+  "asHtml": "Formatted",
+  "mailboxes": "Folders",
+  "searchMail": "Search mail",
+  "searchResults": "Search results",
+  "myMailbox": "My mailbox",
+  "chooseAll": "Choose all",
+  "markRead": "Read or unread",
+  "flag": "Flag",
+  "moveTo": "Move to",
+  "chosen": "{count, plural, =1{1 chosen} other{{count} chosen}}",
+  "@chosen": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "deleteForGood": "{count, plural, =1{Delete this email for good?} other{Delete these {count} emails for good?}}",
+  "@deleteForGood": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "newSubfolder": "New folder in it",
+  "moveFolder": "Move",
+  "emptyFolder": "Empty",
+  "deleteFolder": "Delete folder",
+  "topLevel": "At the top",
+  "folders": "Folders",
+  "moveFolderTo": "Move “{name}” to",
+  "@moveFolderTo": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "emptyFolderConfirm": "Delete every email in “{name}” for good?",
+  "@emptyFolderConfirm": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "deleteFolderConfirm": "Delete the folder “{name}”?",
+  "@deleteFolderConfirm": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "deleteFolderWithEmails": "Delete the folder “{name}” and the {count, plural, =1{email} other{{count} emails}} only in it, for good?",
+  "@deleteFolderWithEmails": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "vacation": "Vacation response",
+  "vacationHint": "Answers mail while you are away – each sender once a week, not mailing lists or automatic mail.",
+  "fromOptional": "From (optional)",
+  "untilOptional": "Until (optional)",
+  "vacationSubjectHint": "Auto: and the subject of the mail answered",
+  "text": "Text",
+  "notSet": "Not set",
+  "mailSettings": "Writing and the Trash",
+  "sendFrom": "Send from",
+  "myAddress": "My address",
+  "undoSend": "Undo sending",
+  "off": "Off",
+  "seconds": "{count} seconds",
+  "@seconds": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "keepTrash": "Keep emails in the Trash",
+  "asTenantDays": "As the organisation sets it ({days} days)",
+  "@asTenantDays": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "asTenantForever": "As the organisation sets it (until deleted)",
+  "ownDays": "My own: days"
+}

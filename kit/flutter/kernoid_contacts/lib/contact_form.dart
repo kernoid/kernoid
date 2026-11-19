@@ -7,6 +7,8 @@ import 'package:kernoid_l10n/l10n/app_localizations.dart';
 import 'package:kernoid_bridge/kernoid_bridge.dart';
 import 'package:kernoid_ui/ui.dart';
 
+import 'l10n/contacts_text.dart';
+
 /// Making or changing a contact: name, organisation, addresses and numbers – each with its labels (work, private, and
 /// for a number what it is) –, a note. Pops `true` once saved.
 class ContactFormPage extends StatefulWidget {
@@ -80,7 +82,7 @@ class _ContactFormPageState extends State<ContactFormPage> {
     final l = AppLocalizations.of(context);
     return KScaffold(
       topBar: KTopBar(
-        title: widget.contact == null ? l.newContact : l.editContact,
+        title: widget.contact == null ? l.contactsText.newContact : l.contactsText.editContact,
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 8),
@@ -109,25 +111,25 @@ class _ContactFormPageState extends State<ContactFormPage> {
             KTextFormField(
               key: const ValueKey('contact-organization'),
               controller: _organization,
-              label: l.organization,
+              label: l.contactsText.organization,
             ),
             const SizedBox(height: 8),
             _LabelledFields(
               kind: 'email',
-              title: l.emailsField,
-              add: l.addEmail,
+              title: l.contactsText.emailsField,
+              add: l.contactsText.addEmail,
               rows: _emails,
               allowed: Kernoid.emailLabels(),
               keyboard: TextInputType.emailAddress,
               icon: LucideIcons.mail,
-              validator: (v) => (v ?? '').trim().isNotEmpty && !v!.contains('@') ? l.emailsField : null,
+              validator: (v) => (v ?? '').trim().isNotEmpty && !v!.contains('@') ? l.contactsText.emailsField : null,
               onChanged: () => setState(() {}),
             ),
             const SizedBox(height: 8),
             _LabelledFields(
               kind: 'phone',
-              title: l.phonesField,
-              add: l.addPhone,
+              title: l.contactsText.phonesField,
+              add: l.contactsText.addPhone,
               rows: _phones,
               allowed: Kernoid.phoneLabels(),
               keyboard: TextInputType.phone,
@@ -140,7 +142,7 @@ class _ContactFormPageState extends State<ContactFormPage> {
               controller: _note,
               minLines: 2,
               maxLines: 6,
-              label: l.note,
+              label: l.contactsText.note,
             ),
             if (_error != null) ...[
               const SizedBox(height: 12),
@@ -165,15 +167,15 @@ class _Row {
 
 /// What a label is called in the user's language.
 String labelName(AppLocalizations l, String label) => switch (label) {
-  'work' => l.labelWork,
-  'private' => l.labelPrivate,
-  'mobile' => l.labelMobile,
-  'voice' => l.labelVoice,
-  'text' => l.labelText,
-  'video' => l.labelVideo,
-  'fax' => l.labelFax,
-  'pager' => l.labelPager,
-  'textphone' => l.labelTextphone,
+  'work' => l.contactsText.labelWork,
+  'private' => l.contactsText.labelPrivate,
+  'mobile' => l.contactsText.labelMobile,
+  'voice' => l.contactsText.labelVoice,
+  'text' => l.contactsText.labelText,
+  'video' => l.contactsText.labelVideo,
+  'fax' => l.contactsText.labelFax,
+  'pager' => l.contactsText.labelPager,
+  'textphone' => l.contactsText.labelTextphone,
   _ => label,
 };
 
@@ -224,7 +226,7 @@ class _LabelledFields extends StatelessWidget {
               ),
               KMenuButton<String>(
                 key: ValueKey('contact-$kind-$i-labels'),
-                tooltip: l.labels,
+                tooltip: l.contactsText.labels,
                 onSelected: (label) {
                   if (!row.labels.remove(label)) row.labels.add(label);
                   onChanged();
@@ -236,7 +238,9 @@ class _LabelledFields extends StatelessWidget {
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
                   child: Text(
-                    row.labels.isEmpty ? l.labels : row.labels.map((label) => labelName(l, label)).join(', '),
+                    row.labels.isEmpty
+                        ? l.contactsText.labels
+                        : row.labels.map((label) => labelName(l, label)).join(', '),
                     style: TextStyle(color: context.k.accent),
                   ),
                 ),

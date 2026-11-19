@@ -28,6 +28,10 @@ abstract class KFeature {
   /// Sections the feature adds to the account page.
   List<Widget> accountSections(BuildContext context, Kernoid account, KFeatureSession session) => const [];
 
+  /// The delegates of the feature's own strings, for a feature that looks them up with `…Localizations.of(context)`
+  /// (RFC 0011, 8). kernoid's features reach theirs through the shared ones (`l.mailText.…`) and need none.
+  List<LocalizationsDelegate<dynamic>> get localizationsDelegates => const [];
+
   /// Before the account signs out: what the feature registered with the system goes with it.
   Future<void> signingOut() async {}
 }

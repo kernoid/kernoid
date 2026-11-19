@@ -65,7 +65,10 @@ jobs:
       - run: cargo test --locked
       - name: The kit against this kernoid
         run: scripts/client-check.sh target/debug/kernoid
-      - name: Small installations – identity alone (RFC 0008, 5)
+      - name: Small installations – identity alone, a relay alone, a built-in identity taken over (RFC 0008, 5; 0009, 7)
+        env:
+          # The runner's pg_dump is older than the server, which it refuses; the container's is the same.
+          PG_DUMP: docker exec ${{ job.services.postgres.id }} pg_dump -U kernoid
         run: scripts/profile-check.sh target/debug/kernoid
       - if: always()
         run: df -h .
@@ -134,7 +137,9 @@ jobs:
         run: |
           cargo install --locked "flutter_rust_bridge_codegen@$FRB_VERSION" "cargo-expand@$CARGO_EXPAND_VERSION"
           (cd kit/flutter/kernoid_bridge && flutter pub get && flutter_rust_bridge_codegen generate && (cd rust && cargo fmt))
-          (cd kit/flutter/kernoid_l10n && flutter pub get && flutter gen-l10n)
+          for package in kernoid_l10n kernoid_mail kernoid_calendar kernoid_contacts kernoid_files; do
+            (cd "kit/flutter/$package" && flutter pub get && flutter gen-l10n)
+          done
           git diff --exit-code kit/flutter
       - name: Every package analysed and tested
         working-directory: kit/flutter

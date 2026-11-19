@@ -21,6 +21,7 @@ import 'file_dialogs.dart';
 import 'package:kernoid_shell/pages/home.dart';
 
 import 'viewer.dart';
+import 'l10n/files_text.dart';
 
 /// Files inside the app, as the web app has them: the stores the account reaches – its own, the tenant's drives,
 /// what others share –, their directories, searching names and contents, uploading (also by dropping files onto the
@@ -202,7 +203,7 @@ class _FilesPageState extends State<FilesPage> {
 
   Future<void> _newFolder() async {
     final l = AppLocalizations.of(context);
-    final name = await askText(context, title: l.newFolder, confirm: l.create, label: l.newFolderName);
+    final name = await askText(context, title: l.newFolder, confirm: l.create, label: l.filesText.newFolderName);
     if (name == null) return;
     final store = _store!;
     final (vault, parent) = (_vaultHere, _path.lastOrNull?.id);
@@ -225,7 +226,12 @@ class _FilesPageState extends State<FilesPage> {
       if (!(_e2e?.unlocked ?? false)) return;
     }
     if (!mounted) return;
-    final name = await askText(context, title: l.newVault, confirm: l.create, label: l.newVaultName);
+    final name = await askText(
+      context,
+      title: l.filesText.newVault,
+      confirm: l.create,
+      label: l.filesText.newVaultName,
+    );
     if (name == null) return;
     final store = _store!;
     await _run(
@@ -281,7 +287,13 @@ class _FilesPageState extends State<FilesPage> {
 
   Future<void> _rename(FileNode node) async {
     final l = AppLocalizations.of(context);
-    final name = await askText(context, title: l.rename, confirm: l.rename, initial: node.name, label: l.newName);
+    final name = await askText(
+      context,
+      title: l.rename,
+      confirm: l.rename,
+      initial: node.name,
+      label: l.filesText.newName,
+    );
     if (name == null || name == node.name) return;
     final store = _store!;
     final vault = node.vault;
@@ -299,8 +311,8 @@ class _FilesPageState extends State<FilesPage> {
     if (trash == null || _inTrash || node.role != null) {
       final sure = await confirmAction(
         context,
-        text: l.deleteFileConfirm(node.role == 'trash' ? l.trash : node.name),
-        confirm: l.deleteFileForGood,
+        text: l.filesText.deleteFileConfirm(node.role == 'trash' ? l.trash : node.name),
+        confirm: l.filesText.deleteFileForGood,
         danger: true,
       );
       if (!sure) return;
@@ -340,7 +352,7 @@ class _FilesPageState extends State<FilesPage> {
     // Nothing moves into, out of or between vaults – but into the trash, which deleting needs.
     if (node.vault != directory?.vault && directory?.id != _trash?.id) {
       final l = AppLocalizations.of(context);
-      KToast.of(context).show(l.vaultMoveNo);
+      KToast.of(context).show(l.filesText.vaultMoveNo);
       return;
     }
     final store = _store!;
@@ -428,13 +440,13 @@ class _FilesPageState extends State<FilesPage> {
         if (!node.isDirectory && open) ('open', LucideIcons.eye, l.open, false),
         if (!node.isDirectory && open) ('save', LucideIcons.download, l.save, false),
         if (node.isDirectory && rights.share && node.role == null && (plain || node.isVault) && open)
-          ('share', LucideIcons.share2, l.share, false),
-        if (_links && rights.share && node.role == null && plain) ('link', LucideIcons.link, l.link, false),
-        if (!node.isDirectory && plain) ('versions', LucideIcons.history, l.versions, false),
-        if (node.role == null && plain) ('copy', LucideIcons.copy, l.copyOrMove, false),
+          ('share', LucideIcons.share2, l.filesText.share, false),
+        if (_links && rights.share && node.role == null && plain) ('link', LucideIcons.link, l.filesText.link, false),
+        if (!node.isDirectory && plain) ('versions', LucideIcons.history, l.filesText.versions, false),
+        if (node.role == null && plain) ('copy', LucideIcons.copy, l.filesText.copyOrMove, false),
         if (rights.rename && node.role == null && open) ('rename', LucideIcons.pencil, l.rename, false),
         if (rights.delete && node.role == null)
-          ('delete', LucideIcons.trash2, deleteForGood ? l.deleteFileForGood : l.delete, true),
+          ('delete', LucideIcons.trash2, deleteForGood ? l.filesText.deleteFileForGood : l.delete, true),
       ],
     );
     if (!mounted) return;
@@ -463,7 +475,7 @@ class _FilesPageState extends State<FilesPage> {
     final l = AppLocalizations.of(context);
     final k = context.k;
     final store = _store;
-    if (store == null) return EmptyView(l.folderEmpty, icon: LucideIcons.folderX);
+    if (store == null) return EmptyView(l.filesText.folderEmpty, icon: LucideIcons.folderX);
     final wide = MediaQuery.sizeOf(context).width >= wideLayout;
     final here = _here;
     final actions = [
@@ -478,13 +490,13 @@ class _FilesPageState extends State<FilesPage> {
           KIconButton(
             key: const ValueKey('new-vault'),
             icon: LucideIcons.folderLock,
-            tooltip: l.newVaultHint,
+            tooltip: l.filesText.newVaultHint,
             onPressed: _busy ? null : _newVault,
           ),
         KIconButton(
           key: const ValueKey('upload'),
           icon: LucideIcons.upload,
-          tooltip: l.upload,
+          tooltip: l.filesText.upload,
           onPressed: _busy ? null : _upload,
         ),
         // Narrow windows keep the bar short; folders can still be dropped there.
@@ -492,11 +504,11 @@ class _FilesPageState extends State<FilesPage> {
           KIconButton(
             key: const ValueKey('upload-folder'),
             icon: LucideIcons.folderUp,
-            tooltip: l.uploadFolder,
+            tooltip: l.filesText.uploadFolder,
             onPressed: _busy ? null : _uploadFolder,
           ),
       ],
-      KIconButton(icon: LucideIcons.refreshCw, tooltip: l.refresh, onPressed: _load),
+      KIconButton(icon: LucideIcons.refreshCw, tooltip: l.filesText.refresh, onPressed: _load),
     ];
     final main = Column(
       children: [
@@ -513,11 +525,11 @@ class _FilesPageState extends State<FilesPage> {
           fieldKey: const ValueKey('files-search'),
           controller: _search,
           onSubmitted: _runSearch,
-          hint: l.searchFiles,
+          hint: l.filesText.searchFiles,
         ),
         if (_uploads.isNotEmpty) _Uploads(uploads: _uploads),
         if (!(_e2e?.unlocked ?? false) && (_vaultHere != null || (_nodes ?? const []).any((n) => n.locked)))
-          _LockedNote(text: l.vaultLocked, action: l.unlock, onPressed: _unlock),
+          _LockedNote(text: l.filesText.vaultLocked, action: l.unlock, onPressed: _unlock),
         Expanded(
           child: DropTarget(
             enable: here.add && !_inTrash && _query.isEmpty,
@@ -527,7 +539,7 @@ class _FilesPageState extends State<FilesPage> {
             child: Stack(
               children: [
                 Positioned.fill(child: _list(l, k)),
-                if (_dropping) Positioned.fill(child: _DropHint(text: l.dropToUpload)),
+                if (_dropping) Positioned.fill(child: _DropHint(text: l.filesText.dropToUpload)),
               ],
             ),
           ),
@@ -543,7 +555,7 @@ class _FilesPageState extends State<FilesPage> {
             alignment: Alignment.centerLeft,
             child: KMenuButton<FileStore>(
               key: const ValueKey('store-menu'),
-              tooltip: l.files,
+              tooltip: l.filesText.files,
               onSelected: (s) => _open(s, const []),
               items: () => [for (final s in _stores) KMenuItem(value: s, label: storeName(l, s), icon: _storeIcon(s))],
               child: Row(
@@ -612,7 +624,7 @@ class _FilesPageState extends State<FilesPage> {
     final nodes = _nodes;
     if (nodes == null) return const Center(child: KSpinner());
     if (nodes.isEmpty) {
-      return EmptyView(_inTrash ? l.trashEmptyNote : l.folderEmpty, icon: LucideIcons.folderOpen);
+      return EmptyView(_inTrash ? l.filesText.trashEmptyNote : l.filesText.folderEmpty, icon: LucideIcons.folderOpen);
     }
     return KRefresh(
       onRefresh: _load,
@@ -675,14 +687,16 @@ class _FilesPageState extends State<FilesPage> {
                 n.role == 'trash'
                     ? l.trash
                     : n.locked
-                    ? (n.isVault ? l.lockedVault : (n.isDirectory ? l.lockedFolder : l.lockedFile))
+                    ? (n.isVault
+                          ? l.filesText.lockedVault
+                          : (n.isDirectory ? l.filesText.lockedFolder : l.filesText.lockedFile))
                     : n.name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: KText.label(k),
               ),
             ),
-            if (n.shares.isNotEmpty) ...[const SizedBox(width: 8), KBadge(l.shared, icon: LucideIcons.users)],
+            if (n.shares.isNotEmpty) ...[const SizedBox(width: 8), KBadge(l.filesText.shared, icon: LucideIcons.users)],
           ],
         ),
         subtitle: details.isEmpty ? null : Text(details, style: KText.small(k)),
@@ -690,7 +704,7 @@ class _FilesPageState extends State<FilesPage> {
           builder: (button) => KIconButton(
             key: ValueKey('more-${n.name}'),
             icon: LucideIcons.ellipsis,
-            tooltip: l.more,
+            tooltip: l.filesText.more,
             onPressed: _busy
                 ? null
                 : () {
@@ -765,8 +779,8 @@ class _Stores extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(10, 14, 10, 10),
         children: [
           ...stores.where((s) => s.isPersonal).map(item),
-          if (drives.isNotEmpty) ...[KOverline(l.drives), ...drives.map(item)],
-          if (shared.isNotEmpty) ...[KOverline(l.sharedWithMe), ...shared.map(item)],
+          if (drives.isNotEmpty) ...[KOverline(l.filesText.drives), ...drives.map(item)],
+          if (shared.isNotEmpty) ...[KOverline(l.filesText.sharedWithMe), ...shared.map(item)],
         ],
       ),
     );
@@ -973,7 +987,7 @@ class _Uploads extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(l.uploading, style: KText.small(k)),
+          Text(l.filesText.uploading, style: KText.small(k)),
           for (final u in uploads)
             Padding(
               padding: const EdgeInsets.only(top: 6),

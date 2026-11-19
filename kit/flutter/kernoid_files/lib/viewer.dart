@@ -16,6 +16,8 @@ import 'pdf_view.dart';
 
 import 'package:kernoid_shell/widgets/states.dart';
 
+import 'l10n/files_text.dart';
+
 /// How the viewer shows a file: in the app – text, images, PDF –, or handed to another app of the system (audio,
 /// video and the rest; the apps bring no player of their own, docs/plan.md, 7).
 enum ViewKind { text, image, pdf, other }
@@ -95,7 +97,7 @@ Future<void> openElsewhere(
         ),
       );
     } else if (!await launchUrl(Uri.file(path))) {
-      messenger.show(l.noAppFor(name));
+      messenger.show(l.filesText.noAppFor(name));
     }
   } catch (error) {
     messenger.show(l.error(errorText(error)));
@@ -187,7 +189,7 @@ class _ViewerPageState extends State<ViewerPage> {
             builder: (button) => KIconButton(
               key: const ValueKey('open-elsewhere'),
               icon: LucideIcons.externalLink,
-              tooltip: l.openElsewhere,
+              tooltip: l.filesText.openElsewhere,
               onPressed: () => openElsewhere(button, name: widget.name, mediaType: widget.mediaType, fetch: _copy),
             ),
           ),
@@ -217,7 +219,7 @@ class _ViewerPageState extends State<ViewerPage> {
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 color: k.raised,
-                child: Text(l.textCut, style: KText.small(k)),
+                child: Text(l.filesText.textCut, style: KText.small(k)),
               ),
             Expanded(
               child: SingleChildScrollView(
@@ -235,7 +237,7 @@ class _ViewerPageState extends State<ViewerPage> {
           child: Center(
             child: Image.file(
               File(path),
-              errorBuilder: (_, error, _) => EmptyView(l.cannotShow, icon: LucideIcons.imageOff),
+              errorBuilder: (_, error, _) => EmptyView(l.filesText.cannotShow, icon: LucideIcons.imageOff),
             ),
           ),
         );
@@ -243,10 +245,10 @@ class _ViewerPageState extends State<ViewerPage> {
         return PdfView(
           key: const ValueKey('viewer-pdf'),
           path: path,
-          error: EmptyView(l.cannotShow, icon: LucideIcons.fileX),
+          error: EmptyView(l.filesText.cannotShow, icon: LucideIcons.fileX),
         );
       case ViewKind.other:
-        return EmptyView(l.cannotShow, icon: LucideIcons.fileQuestion);
+        return EmptyView(l.filesText.cannotShow, icon: LucideIcons.fileQuestion);
     }
   }
 }

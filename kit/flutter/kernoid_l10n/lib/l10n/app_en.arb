@@ -9,8 +9,6 @@
   "appPasswordHint": "Make one on your account page.",
   "signIn": "Sign in",
   "required": "Required",
-  "mail": "Mail",
-  "files": "Files",
   "account": "Account",
   "inbox": "Inbox",
   "drafts": "Drafts",
@@ -18,19 +16,8 @@
   "archive": "Archive",
   "junk": "Junk",
   "trash": "Trash",
-  "noMessages": "No messages",
   "noSubject": "(no subject)",
-  "selectMessage": "Select a message",
-  "from": "From",
-  "to": "To",
-  "cc": "Cc",
-  "subject": "Subject",
-  "message": "Message",
-  "write": "Write",
-  "send": "Send",
   "discard": "Discard",
-  "messageSent": "Message sent",
-  "attachments": "Attachments",
   "save": "Save",
   "savedTo": "Saved to {path}",
   "@savedTo": {
@@ -40,10 +27,6 @@
       }
     }
   },
-  "loadMore": "Load more",
-  "myFiles": "My files",
-  "folderEmpty": "This folder is empty",
-  "refresh": "Refresh",
   "signedInAs": "Signed in as",
   "signOut": "Sign out",
   "e2eTitle": "End-to-end encryption",
@@ -75,305 +58,37 @@
   "copy": "Copy",
   "copied": "Copied",
   "done": "Done",
-  "encryptedMessage": "Encrypted message",
-  "unlockToRead": "Unlock your key to read it",
-  "lockedEmail": "This message is end-to-end encrypted. Unlock your key to read it.",
   "e2eEncrypted": "End-to-end encrypted",
   "signatureVerified": "signature checked",
   "signatureUnverified": "signature not checked",
   "notSigned": "not signed",
-  "willEncrypt": "Will be sent end-to-end encrypted and signed.",
-  "wontEncrypt": "Not end-to-end encrypted: {reason}",
-  "@wontEncrypt": {
-    "placeholders": {
-      "reason": {
-        "type": "String"
-      }
-    }
-  },
-  "sentEncrypted": "Sent end-to-end encrypted",
   "cancel": "Cancel",
-  "calendar": "Calendar",
-  "contacts": "Contacts",
   "today": "Today",
-  "earlier": "Earlier",
-  "later": "Later",
-  "allDay": "All day",
-  "noEvents": "No events in these two weeks",
-  "location": "Place",
-  "participants": "Participants",
-  "accept": "Accept",
-  "maybe": "Maybe",
-  "decline": "Decline",
-  "cancelled": "Cancelled",
-  "recurring": "Repeats",
-  "yourAnswer": "Your answer",
-  "statusAccepted": "accepted",
-  "statusTentative": "maybe",
-  "statusDeclined": "declined",
-  "statusNeedsAction": "no answer yet",
-  "answerSent": "Answer sent to the organizer",
-  "searchContacts": "Search contacts",
-  "noContacts": "No contacts",
-  "emails": "Email",
-  "phones": "Phone",
-  "notes": "Notes",
-  "writeEmail": "Write email",
-  "organization": "Organisation",
-  "sharedBy": "shared by {name}",
-  "@sharedBy": {
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
-  "newEvent": "New event",
-  "editEvent": "Change event",
-  "deleteEvent": "Delete event",
-  "deleteEventConfirm": "Delete this event? Everyone invited hears of it.",
-  "deleteRecurringConfirm": "Delete this event with all its repetitions? Everyone invited hears of it.",
-  "title": "Title",
-  "starts": "Starts",
-  "ends": "Ends",
-  "calendarField": "Calendar",
-  "description": "Description",
-  "invite": "Invite",
-  "inviteHint": "Addresses, separated by commas – they get an invitation by email",
-  "repeat": "Repeats",
-  "repeatNone": "Never",
-  "repeatDaily": "Daily",
-  "repeatWeekly": "Weekly",
-  "repeatMonthly": "Monthly",
-  "repeatYearly": "Yearly",
   "saved": "Saved",
   "deleted": "Deleted",
   "delete": "Delete",
   "edit": "Change",
-  "endBeforeStart": "The end is before the start",
-  "recurringEditsAll": "Changes apply to every repetition.",
-  "newContact": "New contact",
-  "editContact": "Change contact",
-  "deleteContactConfirm": "Delete this contact?",
   "name": "Name",
-  "emailsField": "Email addresses",
-  "phonesField": "Phone numbers",
   "onePerLine": "One per line",
-  "note": "Note",
   "signInBrowser": "Sign in with kernoid",
   "signInBrowserHint": "In your browser – with a passkey, a password or a second factor, as your organisation has it.",
   "orAppPassword": "or with an app password",
   "signInAppPassword": "Sign in with the app password",
   "signInCancelled": "Sign-in cancelled",
-  "bcc": "Bcc",
-  "reply": "Reply",
-  "replyAll": "Reply all",
-  "forward": "Forward",
-  "attachFile": "Attach a file",
   "remove": "Remove",
-  "quoteWrote": "On {date}, {who} wrote:",
-  "quoteForwarded": "---------- Forwarded message ----------",
-  "quoteDateFormat": "%a, %d %b %Y %H:%M",
-  "date": "Date",
-  "@quoteWrote": {
-    "description": "Above a quoted reply; {date} and {who} are filled in by the app, not by Flutter.",
-    "placeholders": {
-      "date": {
-        "type": "String"
-      },
-      "who": {
-        "type": "String"
-      }
-    }
-  },
-  "@quoteDateFormat": {
-    "description": "How the date above a quote is written: a format of Rust's chrono (strftime)."
-  },
-  "thisEvent": "This event",
-  "wholeSeries": "The whole series",
-  "changeWhich": "Change only this event or the whole series?",
-  "deleteWhich": "Delete only this event or the whole series? Everyone invited hears of it.",
-  "editThisEvent": "Change this event",
-  "instanceEditsOne": "Only this event of the series changes; who is invited stays as in the series.",
-  "monthView": "Month",
-  "listView": "List",
-  "labelWork": "work",
-  "labelPrivate": "private",
-  "labelMobile": "mobile",
-  "labelVoice": "voice",
-  "labelText": "text",
-  "labelVideo": "video",
-  "labelFax": "fax",
-  "labelPager": "pager",
-  "labelTextphone": "textphone",
-  "labels": "Labels",
-  "addEmail": "Add an address",
-  "addPhone": "Add a number",
-  "loadImages": "Load images",
-  "imagesBlocked": "Images from the internet are not loaded until you ask for them.",
-  "openLink": "Open this link?",
   "open": "Open",
-  "asText": "As text",
-  "asHtml": "Formatted",
-  "mailboxes": "Folders",
-  "searchMail": "Search mail",
-  "searchResults": "Search results",
-  "myMailbox": "My mailbox",
   "nothingFound": "Nothing found",
-  "chooseAll": "Choose all",
-  "markRead": "Read or unread",
-  "flag": "Flag",
-  "moveTo": "Move to",
-  "chosen": "{count, plural, =1{1 chosen} other{{count} chosen}}",
-  "@chosen": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
-  "deleteForGood": "{count, plural, =1{Delete this email for good?} other{Delete these {count} emails for good?}}",
-  "@deleteForGood": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
-  "newSubfolder": "New folder in it",
   "rename": "Rename",
-  "moveFolder": "Move",
-  "emptyFolder": "Empty",
-  "deleteFolder": "Delete folder",
   "newFolder": "New folder",
   "create": "Create",
-  "topLevel": "At the top",
-  "folders": "Folders",
-  "moveFolderTo": "Move “{name}” to",
-  "@moveFolderTo": {
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
-  "emptyFolderConfirm": "Delete every email in “{name}” for good?",
-  "@emptyFolderConfirm": {
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
-  "deleteFolderConfirm": "Delete the folder “{name}”?",
-  "@deleteFolderConfirm": {
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
-  "deleteFolderWithEmails": "Delete the folder “{name}” and the {count, plural, =1{email} other{{count} emails}} only in it, for good?",
-  "@deleteFolderWithEmails": {
-    "placeholders": {
-      "name": {
-        "type": "String"
-      },
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "appPasswordWrong": "The address or the app password is wrong.",
-  "drives": "Drives",
-  "sharedWithMe": "Shared with me",
-  "upload": "Upload",
-  "uploading": "Uploading …",
-  "searchFiles": "Search names and contents",
-  "share": "Share",
-  "shareTitle": "Share “{name}”",
-  "@shareTitle": {
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
-  "findPeople": "Find people and groups",
-  "levelRead": "Can view",
-  "levelEdit": "Can edit",
-  "levelFull": "Can edit and share",
-  "notShared": "Shared with nobody yet.",
-  "shared": "Shared",
-  "link": "Link",
-  "linksTitle": "Links to “{name}”",
-  "@linksTitle": {
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
-  "linkView": "View",
-  "linkAdd": "View and add",
-  "linkDrop": "Only add",
-  "expires": "Expires",
-  "never": "Never",
-  "inDays": "In {days} days",
-  "@inDays": {
-    "placeholders": {
-      "days": {
-        "type": "int"
-      }
-    }
-  },
-  "expiresOn": "Expires {date}",
-  "@expiresOn": {
-    "placeholders": {
-      "date": {
-        "type": "String"
-      }
-    }
-  },
-  "withPassword": "With password",
-  "passwordOptional": "Password (optional)",
-  "createLink": "Make a link",
-  "linkMade": "The link – it is shown only now:",
-  "noLinks": "No links yet.",
-  "versions": "Versions",
-  "currentVersion": "Current",
-  "restore": "Restore",
-  "restoreConfirm": "Make this version the file's content again? The current one stays as a version.",
-  "copyOrMove": "Copy or move",
-  "copyHere": "Copy here",
-  "moveHere": "Move here",
-  "deleteFileConfirm": "Delete “{name}” for good?",
-  "@deleteFileConfirm": {
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
-  "trashEmptyNote": "The trash is empty",
-  "more": "More",
-  "newFolderName": "Name of the new folder",
-  "newName": "New name",
   "drive": "Drive",
-  "deleteFileForGood": "Delete for good",
   "appearance": "Appearance",
   "appearanceHint": "Kept on this device.",
   "themeSystem": "As the system",
   "themeLight": "Light",
   "themeDark": "Dark",
-  "vacation": "Vacation response",
-  "vacationHint": "Answers mail while you are away – each sender once a week, not mailing lists or automatic mail.",
   "vacationOn": "Answer mail",
-  "fromOptional": "From (optional)",
-  "untilOptional": "Until (optional)",
-  "vacationSubjectHint": "Auto: and the subject of the mail answered",
-  "text": "Text",
-  "notSet": "Not set",
   "security": "Sign-in and security",
   "securityHint": "Your password, two-factor sign-in, passkeys, app passwords and sessions – and your name, picture, language and mail settings – are changed in the web app, where you sign in with your password.",
   "openWebApp": "Open in the browser",
@@ -394,155 +109,8 @@
   },
   "languageNamede": "Deutsch",
   "languageNameen": "English",
-  "mailSettings": "Writing and the Trash",
-  "sendFrom": "Send from",
-  "myAddress": "My address",
-  "undoSend": "Undo sending",
-  "off": "Off",
-  "seconds": "{count} seconds",
-  "@seconds": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
-  "keepTrash": "Keep emails in the Trash",
-  "asTenantDays": "As the organisation sets it ({days} days)",
-  "@asTenantDays": {
-    "placeholders": {
-      "days": {
-        "type": "int"
-      }
-    }
-  },
-  "asTenantForever": "As the organisation sets it (until deleted)",
-  "ownDays": "My own: days",
   "securityHintApp": "Your password, two-factor sign-in, passkeys, app passwords and sessions are changed in the web app, where you sign in with your password.",
   "asTenant": "As the organisation",
-  "openElsewhere": "Open in another app",
-  "noAppFor": "No app on this device opens {name}.",
-  "@noAppFor": {
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
-  "textCut": "Only the first megabyte is shown – save the file to see all of it.",
-  "cannotShow": "This file cannot be shown here.",
-  "dropToUpload": "Drop to upload here",
-  "uploadFolder": "Upload a folder",
-  "newVault": "New vault",
-  "newVaultName": "Name of the vault",
-  "newVaultHint": "New vault – only those it is shared with can read what is in it",
-  "vaultLocked": "Unlock your key to read what is in vaults.",
-  "lockedVault": "Locked vault",
-  "lockedFolder": "Encrypted folder",
-  "lockedFile": "Encrypted file",
-  "vaultMoveNo": "Nothing moves into or out of a vault – only into the trash.",
-  "vaultKeysWaiting": "These can open the vault once they have a key of their own and you share it again: {names}",
-  "@vaultKeysWaiting": {
-    "placeholders": {
-      "names": {
-        "type": "String"
-      }
-    }
-  },
-  "syncTitle": "Folders on this computer",
-  "syncHint": "A folder of this computer kept in step with a store: what changes on one side reaches the other every few minutes while the app is open. Changed on both sides, both versions are kept.",
-  "syncChoose": "Choose a folder",
-  "syncNow": "Sync now",
-  "syncStop": "Stop syncing",
-  "syncRunning": "Syncing …",
-  "syncNever": "Not synced yet",
-  "syncDone": "Synced {time}: {down} down, {up} up",
-  "@syncDone": {
-    "placeholders": {
-      "time": {
-        "type": "String"
-      },
-      "down": {
-        "type": "int"
-      },
-      "up": {
-        "type": "int"
-      }
-    }
-  },
-  "syncIssues": "{conflicts} changed on both sides (kept as copies), {failed} not done – tried again",
-  "@syncIssues": {
-    "placeholders": {
-      "conflicts": {
-        "type": "int"
-      },
-      "failed": {
-        "type": "int"
-      }
-    }
-  },
-  "documentsTitle": "Files app",
-  "documentsHint": "Your stores in Android's Files app and wherever an app lets you pick a file. It signs in on its own, once – the browser opens for it.",
-  "documentsOn": "Your stores are shown in the Files app.",
-  "documentsOff": "Not shown in the Files app.",
-  "documentsEnable": "Show in Files",
-  "documentsDisable": "Remove from Files",
-  "syncFailed": "Not synced: {error}",
-  "@syncFailed": {
-    "placeholders": {
-      "error": {
-        "type": "String"
-      }
-    }
-  },
-  "syncLocked": "{count} vaults left as they are – unlock your key to sync them",
-  "@syncLocked": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
-  "syncAtLogin": "Start with the computer, so that the folders are kept in step without opening the app",
-  "trayOpen": "Open kernoid",
-  "traySync": "Sync folders now",
-  "trayQuit": "Quit kernoid",
-  "explorerTitle": "Files in Explorer",
-  "explorerHint": "Your stores as folders in Explorer: files show at once and are downloaded when they are opened, and what you change there reaches kernoid within a minute while the app is open. Explorer gets a login of its own – kernoid's login page opens once more for it.",
-  "explorerSetUp": "Show in Explorer",
-  "explorerRemove": "Remove from Explorer",
-  "explorerStarting": "Starting …",
-  "explorerLast": "Last compared {time}",
-  "@explorerLast": {
-    "placeholders": {
-      "time": {
-        "type": "String"
-      }
-    }
-  },
-  "explorerSignedOut": "The login for Explorer has ended – show the files again to sign in anew.",
-  "explorerFailed": "Not shown in Explorer: {error}",
-  "@explorerFailed": {
-    "placeholders": {
-      "error": {
-        "type": "String"
-      }
-    }
-  },
-  "fileProviderTitle": "Files in Finder",
-  "fileProviderTitleIos": "Files in the Files app",
-  "fileProviderHint": "Your stores as places of the system's file manager: files appear before they are downloaded and open when you need them. It has a login of its own – you sign in once more in the browser. Vaults stay locked there.",
-  "fileProviderOn": "Turn on",
-  "fileProviderUpdate": "Update the stores",
-  "fileProviderOff": "Turn off",
-  "fileProviderShown": "Shown: {stores}",
-  "@fileProviderShown": {
-    "placeholders": {
-      "stores": {
-        "type": "String"
-      }
-    }
-  },
   "back": "Back",
   "close": "Close",
   "clear": "Clear",

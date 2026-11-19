@@ -6,6 +6,8 @@ import 'package:kernoid_shell/pages/account.dart';
 import 'package:kernoid_ui/ui.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import 'l10n/mail_text.dart';
+
 /// Which address new emails come from, how long one can take them back, how long the Trash keeps them.
 class MailSettingsSection extends StatefulWidget {
   const MailSettingsSection({super.key, required this.account});
@@ -58,7 +60,7 @@ class _MailSettingsSectionState extends KSettingsState<MailSettingsSection> {
       ),
     );
     return KSection(
-      title: l.mailSettings,
+      title: l.mailText.mailSettings,
       icon: LucideIcons.mailCheck,
       child: s == null
           ? const KProgressBar()
@@ -66,29 +68,29 @@ class _MailSettingsSectionState extends KSettingsState<MailSettingsSection> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 row(
-                  l.sendFrom,
+                  l.mailText.sendFrom,
                   KSelect<String>(
                     key: const ValueKey('send-from'),
                     value: _from,
                     expand: true,
                     options: [
-                      ('', l.myAddress),
+                      ('', l.mailText.myAddress),
                       for (final address in {...s.senders, if (_from.isNotEmpty) _from}) (address, address),
                     ],
                     onChanged: (v) => setState(() => _from = v),
                   ),
                 ),
                 row(
-                  l.undoSend,
+                  l.mailText.undoSend,
                   KSelect<int>(
                     key: const ValueKey('undo-send'),
                     value: _undo,
-                    options: [for (final n in undoChoices) (n, n == 0 ? l.off : l.seconds(n))],
+                    options: [for (final n in undoChoices) (n, n == 0 ? l.mailText.off : l.mailText.seconds(n))],
                     onChanged: (v) => setState(() => _undo = v),
                     expand: false,
                   ),
                 ),
-                KOverline(l.keepTrash, padding: const EdgeInsets.only(top: 6, bottom: 4)),
+                KOverline(l.mailText.keepTrash, padding: const EdgeInsets.only(top: 6, bottom: 4)),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -99,8 +101,8 @@ class _MailSettingsSectionState extends KSettingsState<MailSettingsSection> {
                       onChanged: (v) => setState(() => _own = v),
                       child: Text(
                         s.tenantTrashRetentionDays == null
-                            ? l.asTenantForever
-                            : l.asTenantDays(s.tenantTrashRetentionDays!),
+                            ? l.mailText.asTenantForever
+                            : l.mailText.asTenantDays(s.tenantTrashRetentionDays!),
                         style: KText.body(k),
                       ),
                     ),
@@ -112,7 +114,7 @@ class _MailSettingsSectionState extends KSettingsState<MailSettingsSection> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(l.ownDays, style: KText.body(k)),
+                          Text(l.mailText.ownDays, style: KText.body(k)),
                           const SizedBox(width: 12),
                           SizedBox(
                             width: 80,
@@ -291,7 +293,7 @@ class _VacationSectionState extends State<VacationSection> {
                 alignment: Alignment.centerLeft,
                 child: KButton(
                   key: key,
-                  label: value == null ? l.notSet : longDate(context, value.toUtc().toIso8601String()),
+                  label: value == null ? l.mailText.notSet : longDate(context, value.toUtc().toIso8601String()),
                   icon: LucideIcons.calendar,
                   tone: KTone.quiet,
                   onPressed: () async {
@@ -306,9 +308,9 @@ class _VacationSectionState extends State<VacationSection> {
           ],
         );
     return KSection(
-      title: l.vacation,
+      title: l.mailText.vacation,
       icon: LucideIcons.plane,
-      description: l.vacationHint,
+      description: l.mailText.vacationHint,
       trailing: KSwitch(
         key: const ValueKey('vacation-on'),
         value: _on,
@@ -320,14 +322,26 @@ class _VacationSectionState extends State<VacationSection> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 if (_vacation != null) ...[
-                  when(l.fromOptional, _from, (t) => _from = t, end: false, key: const ValueKey('vacation-from')),
-                  when(l.untilOptional, _until, (t) => _until = t, end: true, key: const ValueKey('vacation-until')),
+                  when(
+                    l.mailText.fromOptional,
+                    _from,
+                    (t) => _from = t,
+                    end: false,
+                    key: const ValueKey('vacation-from'),
+                  ),
+                  when(
+                    l.mailText.untilOptional,
+                    _until,
+                    (t) => _until = t,
+                    end: true,
+                    key: const ValueKey('vacation-until'),
+                  ),
                   const SizedBox(height: 8),
                   KTextField(
                     key: const ValueKey('vacation-subject'),
                     controller: _subject,
-                    label: l.subject,
-                    hint: l.vacationSubjectHint,
+                    label: l.mailText.subject,
+                    hint: l.mailText.vacationSubjectHint,
                   ),
                   const SizedBox(height: 10),
                   KTextField(
@@ -335,7 +349,7 @@ class _VacationSectionState extends State<VacationSection> {
                     controller: _text,
                     minLines: 3,
                     maxLines: 8,
-                    label: l.text,
+                    label: l.mailText.text,
                   ),
                   const SizedBox(height: 12),
                 ],

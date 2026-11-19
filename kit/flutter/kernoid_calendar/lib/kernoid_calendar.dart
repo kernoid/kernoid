@@ -9,6 +9,7 @@ import 'package:kernoid_shell/kernoid_shell.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'calendar.dart';
+import 'l10n/calendar_text.dart';
 
 /// Calendars, where the server offers them.
 class CalendarFeature extends KFeature {
@@ -21,7 +22,7 @@ class CalendarFeature extends KFeature {
   IconData get icon => LucideIcons.calendar;
 
   @override
-  String label(AppLocalizations l) => l.calendar;
+  String label(AppLocalizations l) => l.calendarText.calendar;
 
   @override
   bool offeredBy(Kernoid account) => account.offers(capability: KCapability.calendars);

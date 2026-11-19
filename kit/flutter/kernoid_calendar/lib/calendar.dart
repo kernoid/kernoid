@@ -10,6 +10,7 @@ import 'package:kernoid_ui/ui.dart';
 import 'package:kernoid_shell/widgets/states.dart';
 
 import 'event_form.dart';
+import 'l10n/calendar_text.dart';
 
 /// The calendars the account reaches, two weeks at a time as a list of days or a month at a time as a grid; events are
 /// made, changed and deleted – one instance of a recurring event alone or the whole series –, and an invitation is
@@ -131,13 +132,13 @@ class _CalendarPageState extends State<CalendarPage> {
         actions: [
           KIconButton(
             key: const ValueKey('calendar-view'),
-            tooltip: month == null ? l.monthView : l.listView,
+            tooltip: month == null ? l.calendarText.monthView : l.calendarText.listView,
             onPressed: _toggleMonth,
             icon: month == null ? LucideIcons.calendarDays : LucideIcons.list,
           ),
-          KIconButton(tooltip: l.earlier, onPressed: () => _move(-1), icon: LucideIcons.chevronLeft),
+          KIconButton(tooltip: l.calendarText.earlier, onPressed: () => _move(-1), icon: LucideIcons.chevronLeft),
           KButton(tone: KTone.quiet, onPressed: () => _move(0), label: l.today),
-          KIconButton(tooltip: l.later, onPressed: () => _move(1), icon: LucideIcons.chevronRight),
+          KIconButton(tooltip: l.calendarText.later, onPressed: () => _move(1), icon: LucideIcons.chevronRight),
         ],
       ),
       body: _body(l, locale),
@@ -145,7 +146,7 @@ class _CalendarPageState extends State<CalendarPage> {
           ? null
           : KFloatingButton(
               key: const ValueKey('new-event'),
-              tooltip: l.newEvent,
+              tooltip: l.calendarText.newEvent,
               onPressed: _new,
               icon: LucideIcons.plus,
             ),
@@ -180,7 +181,7 @@ class _CalendarPageState extends State<CalendarPage> {
     if (events == null) return const Center(child: KSpinner());
     final month = _month;
     if (month != null) return _grid(l, locale, month, events);
-    if (events.isEmpty) return EmptyView(l.noEvents, icon: LucideIcons.calendarCheck);
+    if (events.isEmpty) return EmptyView(l.calendarText.noEvents, icon: LucideIcons.calendarCheck);
     final days = _byDay(events, _from, _from.add(const Duration(days: _span)));
     final today = _day(DateTime.now());
     final entries = days.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
@@ -288,7 +289,10 @@ class _CalendarPageState extends State<CalendarPage> {
               ),
             ),
             if (chosen.isEmpty)
-              Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), child: Text(l.noEvents)),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Text(l.calendarText.noEvents),
+              ),
             for (final e in chosen) _EventTile(event: e, color: _color(e), onTap: () => _open(e)),
           ],
         );
@@ -357,7 +361,7 @@ Color? _parseColor(String? css) {
 
 /// `09:00 – 10:30`, or "All day".
 String _times(AppLocalizations l, String locale, Event e) {
-  if (e.allDay) return l.allDay;
+  if (e.allDay) return l.calendarText.allDay;
   final start = _local(e.start);
   final end = _local(e.end);
   if (start == null) return '';
@@ -493,7 +497,7 @@ class _EventTile extends StatelessWidget {
         event.title.isEmpty ? l.noSubject : event.title,
         style: event.cancelled ? const TextStyle(decoration: TextDecoration.lineThrough) : null,
       ),
-      subtitle: Text(event.cancelled ? '${l.cancelled} · $details' : details),
+      subtitle: Text(event.cancelled ? '${l.calendarText.cancelled} · $details' : details),
       trailing: event.invitationKey != null && (event.myStatus ?? 'needs-action') == 'needs-action'
           ? Icon(LucideIcons.mailWarning, color: context.k.accent)
           : null,
@@ -503,10 +507,10 @@ class _EventTile extends StatelessWidget {
 }
 
 String _statusText(AppLocalizations l, String? status) => switch (status) {
-  'accepted' => l.statusAccepted,
-  'tentative' => l.statusTentative,
-  'declined' => l.statusDeclined,
-  _ => l.statusNeedsAction,
+  'accepted' => l.calendarText.statusAccepted,
+  'tentative' => l.calendarText.statusTentative,
+  'declined' => l.calendarText.statusDeclined,
+  _ => l.calendarText.statusNeedsAction,
 };
 
 /// One event: when, where, who, the description – and the answer to an invitation. Pops `true` once answered.
@@ -543,7 +547,7 @@ class _EventPageState extends State<EventPage> {
       );
       _answered = true;
       if (mounted) setState(() => _status = status);
-      messenger.show(l.answerSent);
+      messenger.show(l.calendarText.answerSent);
     } catch (error) {
       messenger.show(l.error(errorText(error)));
     } finally {
@@ -565,13 +569,13 @@ class _EventPageState extends State<EventPage> {
             tone: KTone.quiet,
             key: const ValueKey('whole-series'),
             onPressed: () => Navigator.of(context).pop(false),
-            label: l.wholeSeries,
+            label: l.calendarText.wholeSeries,
           ),
           KButton(
             tone: KTone.primary,
             key: const ValueKey('this-event'),
             onPressed: () => Navigator.of(context).pop(true),
-            label: l.thisEvent,
+            label: l.calendarText.thisEvent,
           ),
         ],
       ),
@@ -582,7 +586,7 @@ class _EventPageState extends State<EventPage> {
     final e = widget.event;
     final messenger = KToast.of(context);
     final l = AppLocalizations.of(context);
-    final one = e.recurrenceId == null ? false : await _which(l.changeWhich);
+    final one = e.recurrenceId == null ? false : await _which(l.calendarText.changeWhich);
     if (one == null || !mounted) return;
     try {
       final draft = one
@@ -619,12 +623,12 @@ class _EventPageState extends State<EventPage> {
     final messenger = KToast.of(context);
     final bool? one;
     if (e.recurrenceId != null) {
-      one = await _which(l.deleteWhich);
+      one = await _which(l.calendarText.deleteWhich);
     } else {
       final sure = await showKDialog<bool>(
         context,
         builder: (context) => KDialog(
-          content: Text(e.recurring ? l.deleteRecurringConfirm : l.deleteEventConfirm),
+          content: Text(e.recurring ? l.calendarText.deleteRecurringConfirm : l.calendarText.deleteEventConfirm),
           actions: [
             KButton(tone: KTone.quiet, onPressed: () => Navigator.of(context).pop(false), label: l.cancel),
             KButton(
@@ -676,7 +680,7 @@ class _EventPageState extends State<EventPage> {
               ),
               KIconButton(
                 key: const ValueKey('delete-event'),
-                tooltip: l.deleteEvent,
+                tooltip: l.calendarText.deleteEvent,
                 onPressed: _delete,
                 icon: LucideIcons.trash2,
               ),
@@ -689,18 +693,18 @@ class _EventPageState extends State<EventPage> {
             if (e.cancelled)
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
-                child: Text(l.cancelled, style: TextStyle(color: context.k.error)),
+                child: Text(l.calendarText.cancelled, style: TextStyle(color: context.k.error)),
               ),
             KListRow(
               leading: Icon(LucideIcons.clock, color: widget.color),
               title: Text(start == null ? '' : DateFormat.yMMMMEEEEd(locale).format(start)),
-              subtitle: Text([_times(l, locale, e), if (e.recurring) l.recurring].join(' · ')),
+              subtitle: Text([_times(l, locale, e), if (e.recurring) l.calendarText.recurring].join(' · ')),
             ),
             if (e.location != null) KListRow(leading: const Icon(LucideIcons.mapPin), title: Text(e.location!)),
             if (e.description != null) ...[const SizedBox(height: 8), KSelectable.text(e.description!)],
             if (e.participants.isNotEmpty) ...[
               const SizedBox(height: 16),
-              Text(l.participants, style: KText.heading(context.k).copyWith(fontSize: 14)),
+              Text(l.calendarText.participants, style: KText.heading(context.k).copyWith(fontSize: 14)),
               for (final p in e.participants)
                 KListRow(
                   leading: const Icon(LucideIcons.user),
@@ -713,7 +717,7 @@ class _EventPageState extends State<EventPage> {
             if (e.invitationKey != null && !e.cancelled) ...[
               const SizedBox(height: 16),
               Text(
-                '${l.yourAnswer}: ${_statusText(l, _status)}',
+                '${l.calendarText.yourAnswer}: ${_statusText(l, _status)}',
                 style: KText.heading(context.k).copyWith(fontSize: 14),
               ),
               const SizedBox(height: 8),
@@ -721,9 +725,9 @@ class _EventPageState extends State<EventPage> {
                 spacing: 8,
                 children: [
                   for (final (status, label) in [
-                    ('accepted', l.accept),
-                    ('tentative', l.maybe),
-                    ('declined', l.decline),
+                    ('accepted', l.calendarText.accept),
+                    ('tentative', l.calendarText.maybe),
+                    ('declined', l.calendarText.decline),
                   ])
                     KChip(
                       key: ValueKey('answer-$status'),

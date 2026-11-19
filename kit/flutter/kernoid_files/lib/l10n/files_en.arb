@@ -1,0 +1,205 @@
+{
+  "@@locale": "en",
+  "files": "Files",
+  "myFiles": "My files",
+  "folderEmpty": "This folder is empty",
+  "refresh": "Refresh",
+  "drives": "Drives",
+  "sharedWithMe": "Shared with me",
+  "upload": "Upload",
+  "uploading": "Uploading …",
+  "searchFiles": "Search names and contents",
+  "share": "Share",
+  "shareTitle": "Share “{name}”",
+  "@shareTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "findPeople": "Find people and groups",
+  "levelRead": "Can view",
+  "levelEdit": "Can edit",
+  "levelFull": "Can edit and share",
+  "notShared": "Shared with nobody yet.",
+  "shared": "Shared",
+  "link": "Link",
+  "linksTitle": "Links to “{name}”",
+  "@linksTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "linkView": "View",
+  "linkAdd": "View and add",
+  "linkDrop": "Only add",
+  "expires": "Expires",
+  "never": "Never",
+  "inDays": "In {days} days",
+  "@inDays": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "expiresOn": "Expires {date}",
+  "@expiresOn": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "withPassword": "With password",
+  "passwordOptional": "Password (optional)",
+  "createLink": "Make a link",
+  "linkMade": "The link – it is shown only now:",
+  "noLinks": "No links yet.",
+  "versions": "Versions",
+  "currentVersion": "Current",
+  "restore": "Restore",
+  "restoreConfirm": "Make this version the file's content again? The current one stays as a version.",
+  "copyOrMove": "Copy or move",
+  "copyHere": "Copy here",
+  "moveHere": "Move here",
+  "deleteFileConfirm": "Delete “{name}” for good?",
+  "@deleteFileConfirm": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "trashEmptyNote": "The trash is empty",
+  "more": "More",
+  "newFolderName": "Name of the new folder",
+  "newName": "New name",
+  "deleteFileForGood": "Delete for good",
+  "openElsewhere": "Open in another app",
+  "noAppFor": "No app on this device opens {name}.",
+  "@noAppFor": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "textCut": "Only the first megabyte is shown – save the file to see all of it.",
+  "cannotShow": "This file cannot be shown here.",
+  "dropToUpload": "Drop to upload here",
+  "uploadFolder": "Upload a folder",
+  "newVault": "New vault",
+  "newVaultName": "Name of the vault",
+  "newVaultHint": "New vault – only those it is shared with can read what is in it",
+  "vaultLocked": "Unlock your key to read what is in vaults.",
+  "lockedVault": "Locked vault",
+  "lockedFolder": "Encrypted folder",
+  "lockedFile": "Encrypted file",
+  "vaultMoveNo": "Nothing moves into or out of a vault – only into the trash.",
+  "vaultKeysWaiting": "These can open the vault once they have a key of their own and you share it again: {names}",
+  "@vaultKeysWaiting": {
+    "placeholders": {
+      "names": {
+        "type": "String"
+      }
+    }
+  },
+  "syncTitle": "Folders on this computer",
+  "syncHint": "A folder of this computer kept in step with a store: what changes on one side reaches the other every few minutes while the app is open. Changed on both sides, both versions are kept.",
+  "syncChoose": "Choose a folder",
+  "syncNow": "Sync now",
+  "syncStop": "Stop syncing",
+  "syncRunning": "Syncing …",
+  "syncNever": "Not synced yet",
+  "syncDone": "Synced {time}: {down} down, {up} up",
+  "@syncDone": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      },
+      "down": {
+        "type": "int"
+      },
+      "up": {
+        "type": "int"
+      }
+    }
+  },
+  "syncIssues": "{conflicts} changed on both sides (kept as copies), {failed} not done – tried again",
+  "@syncIssues": {
+    "placeholders": {
+      "conflicts": {
+        "type": "int"
+      },
+      "failed": {
+        "type": "int"
+      }
+    }
+  },
+  "documentsTitle": "Files app",
+  "documentsHint": "Your stores in Android's Files app and wherever an app lets you pick a file. It signs in on its own, once – the browser opens for it.",
+  "documentsOn": "Your stores are shown in the Files app.",
+  "documentsOff": "Not shown in the Files app.",
+  "documentsEnable": "Show in Files",
+  "documentsDisable": "Remove from Files",
+  "syncFailed": "Not synced: {error}",
+  "@syncFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "syncLocked": "{count} vaults left as they are – unlock your key to sync them",
+  "@syncLocked": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "syncAtLogin": "Start with the computer, so that the folders are kept in step without opening the app",
+  "trayOpen": "Open kernoid",
+  "traySync": "Sync folders now",
+  "trayQuit": "Quit kernoid",
+  "explorerTitle": "Files in Explorer",
+  "explorerHint": "Your stores as folders in Explorer: files show at once and are downloaded when they are opened, and what you change there reaches kernoid within a minute while the app is open. Explorer gets a login of its own – kernoid's login page opens once more for it.",
+  "explorerSetUp": "Show in Explorer",
+  "explorerRemove": "Remove from Explorer",
+  "explorerStarting": "Starting …",
+  "explorerLast": "Last compared {time}",
+  "@explorerLast": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "explorerSignedOut": "The login for Explorer has ended – show the files again to sign in anew.",
+  "explorerFailed": "Not shown in Explorer: {error}",
+  "@explorerFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "fileProviderTitle": "Files in Finder",
+  "fileProviderTitleIos": "Files in the Files app",
+  "fileProviderHint": "Your stores as places of the system's file manager: files appear before they are downloaded and open when you need them. It has a login of its own – you sign in once more in the browser. Vaults stay locked there.",
+  "fileProviderOn": "Turn on",
+  "fileProviderUpdate": "Update the stores",
+  "fileProviderOff": "Turn off",
+  "fileProviderShown": "Shown: {stores}",
+  "@fileProviderShown": {
+    "placeholders": {
+      "stores": {
+        "type": "String"
+      }
+    }
+  }
+}

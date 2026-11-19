@@ -5,7 +5,7 @@ The Flutter packages kernoid's apps are made of ([RFC 0011](../../rfcs/0011-app-
 
 | Package | Holds |
 |---|---|
-| `kernoid_l10n` | the strings, English and German (`lib/l10n/*.arb`; `flutter gen-l10n` here) |
+| `kernoid_l10n` | the strings the packages share, English and German (`lib/l10n/*.arb`; `flutter gen-l10n` here) – each feature package has its own beside them (`lib/l10n/`, `l.mailText.…`) |
 | `kernoid_ui` | the design system on Flutter's widgets layer – no Material, no Cupertino – with IBM Plex and Lucide |
 | `kernoid_bridge` | the Rust side: the crate in `rust/` on the kit's SDK (by path), the Dart code `flutter_rust_bridge_codegen generate` makes from it, cargokit |
 | `kernoid_shell` | the frame: logging in, the home with the features the server offers, the account; `KFeature`, `runKernoidApp` |

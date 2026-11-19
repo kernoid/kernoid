@@ -10,6 +10,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'account_sections.dart';
 import 'mail.dart';
+import 'l10n/mail_text.dart';
 
 export 'compose.dart' show ComposePage;
 
@@ -24,7 +25,7 @@ class MailFeature extends KFeature {
   IconData get icon => LucideIcons.mail;
 
   @override
-  String label(AppLocalizations l) => l.mail;
+  String label(AppLocalizations l) => l.mailText.mail;
 
   @override
   bool offeredBy(Kernoid account) => account.offers(capability: KCapability.mail);

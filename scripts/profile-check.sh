@@ -5,12 +5,15 @@
 #
 # - identity alone: no object storage (`[blob] kind = "database"`), no JMAP, CalDAV or WebDAV – but logging in and a
 #   picture of the account, kept in PostgreSQL;
-# - a relay alone, open: the relay's routes, nothing of mail, calendars or files.
+# - a relay alone, open: the relay's routes, nothing of mail, calendars or files;
+# - a built-in identity taken over (RFC 0009, 7): kernoid's schema in a program's database, dumped and restored into a
+#   database of its own, served at another host – the accounts and their passwords are there.
 #
 #   scripts/profile-check.sh [BINARY]
 #
 # BINARY defaults to target/debug/kernoid (`cargo build --bin kernoid`). Needs curl, and psql – or PSQL, a command that
-# runs psql against that server (`PSQL="docker exec -i kernoid-pg psql -U kernoid -d kernoid"`).
+# runs psql against that server (`PSQL="docker exec -i kernoid-pg psql -U kernoid -d kernoid"`), and pg_dump – or
+# PG_DUMP (`PG_DUMP="docker exec kernoid-pg pg_dump -U kernoid"`); both are given `-d <database>` where they need one.
 set -euo pipefail
 
 root=$(git rev-parse --show-toplevel)
@@ -27,12 +30,28 @@ server=""
 cleanup() {
     [ -n "$server" ] && kill "$server" 2>/dev/null && wait "$server" 2>/dev/null
     sql "DROP DATABASE IF EXISTS $name" >/dev/null 2>&1 || true
+    sql "DROP DATABASE IF EXISTS ${name}_program" >/dev/null 2>&1 || true
+    sql "DROP DATABASE IF EXISTS ${name}_own" >/dev/null 2>&1 || true
     rm -rf "$work"
 }
 trap cleanup EXIT
 fail() { printf 'FAILED: %s\n' "$*" >&2; [ -f "$work/server.log" ] && tail -n 30 "$work/server.log" >&2; exit 1; }
 sql() {
     if [ -n "${PSQL:-}" ]; then $PSQL -qc "$1"; else psql "$admin" -qc "$1"; fi
+}
+# psql in database $1, reading statements from stdin.
+sql_in() {
+    if [ -n "${PSQL:-}" ]; then $PSQL -q -v ON_ERROR_STOP=1 -d "$1"; else psql "${admin%/*}/$1" -q -v ON_ERROR_STOP=1; fi
+}
+dump() {
+    if [ -n "${PG_DUMP:-}" ]; then $PG_DUMP -d "$1" "${@:2}"; else pg_dump "${admin%/*}/$1" "${@:2}"; fi
+}
+ready() {
+    for _ in $(seq 1 60); do
+        curl -fsS "http://127.0.0.1:$port/readyz" >/dev/null 2>&1 && return 0
+        sleep 1
+    done
+    fail "kernoid did not get ready"
 }
 # The status of a request to kernoid, by the instance's host name.
 status() {
@@ -129,3 +148,68 @@ expect 404 GET /jmap/session
 expect 200 GET "/relay/kernoid/v1/spaces/0192f1e4-0000-7000-8000-0000000000c1/members?after=-1"
 expect 404 GET "/relay/spezado/v1/spaces/0192f1e4-0000-7000-8000-0000000000c1/members?after=-1"
 echo "a relay alone works: its routes, nothing of mail, calendars or files"
+
+# A built-in identity taken over: what a program that builds kernoid in keeps in its database (`database.schema`),
+# moved into a kernoid of its own at another host.
+kill "$server" && wait "$server" 2>/dev/null || true
+server=""
+program="${name}_program"
+own="${name}_own"
+sql "CREATE DATABASE $program" >/dev/null
+echo "CREATE SCHEMA kernoid" | sql_in "$program"
+main_key=$(sed -n 's/^main_key = "\(.*\)"$/\1/p' "$work/config.toml")
+built_in() {
+    cat <<TOML
+roles = ["api", "worker"]
+
+[services]
+mail = false
+calendars = false
+files = false
+
+[http]
+listen = "127.0.0.1:$port"
+public_scheme = "http"
+public_port = $port
+
+[database]
+url = "${admin%/*}/$1"
+migrate_url = "${admin%/*}/$1"
+schema = "kernoid"
+
+[blob]
+kind = "database"
+
+[encryption]
+main_key = "$main_key"
+TOML
+}
+built_in "$program" >"$work/program.toml"
+"$binary" --config "$work/program.toml" migrate >/dev/null
+pcli() { "$binary" --config "$work/program.toml" "$@" | tail -n 1; }
+p_instance=$(pcli instance add --name Program --domain "program.$host")
+p_tenant=$(pcli tenant add "$p_instance" --name Firma)
+pcli tenant add-domain "$p_tenant" program.test >/dev/null
+pcli tenant verify-domain "$p_tenant" program.test --trust >/dev/null
+p_account=$(pcli account add "$p_tenant" bob@program.test --name Bob)
+printf '%s\n' "$password" | "$binary" --config "$work/program.toml" account password "$p_account" >/dev/null
+
+# The steps of docs/building-on-kernoid.md: dump kernoid's schema, restore it, migrate, give the instance its new host.
+sql "CREATE DATABASE $own" >/dev/null
+dump "$program" --schema=kernoid --no-owner --no-privileges | sql_in "$own" >/dev/null
+built_in "$own" >"$work/own.toml"
+"$binary" --config "$work/own.toml" migrate >/dev/null
+"$binary" --config "$work/own.toml" instance add-domain "$p_instance" "$host" >/dev/null
+"$binary" --config "$work/own.toml" instance set-primary "$p_instance" "$host" >/dev/null
+"$binary" --config "$work/own.toml" serve >"$work/server.log" 2>&1 &
+server=$!
+ready
+token=$(curl -fsS -H "Host: $host:$port" -H 'Content-Type: application/json' \
+    -d "{\"address\":\"bob@program.test\",\"password\":\"$password\"}" "http://127.0.0.1:$port/v1/sessions" \
+    | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
+[ -n "$token" ] || fail "no session after the takeover"
+issuer=$(curl -fsS -H "Host: $host:$port" "http://127.0.0.1:$port/.well-known/openid-configuration" \
+    | sed -n 's/.*"issuer":"\([^"]*\)".*/\1/p')
+[ "$issuer" = "http://$host:$port" ] || fail "issuer after the takeover: $issuer"
+echo "a built-in identity is taken over: its accounts log in at the kernoid of its own"
+

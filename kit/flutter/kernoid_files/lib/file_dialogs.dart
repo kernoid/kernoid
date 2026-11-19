@@ -9,6 +9,8 @@ import 'package:kernoid_l10n/l10n/app_localizations.dart';
 import 'package:kernoid_bridge/kernoid_bridge.dart';
 import 'package:kernoid_ui/ui.dart';
 
+import 'l10n/files_text.dart';
+
 /// A dialog of the files page: a title, its content scrolling, buttons at its foot.
 class _FileDialog extends StatelessWidget {
   const _FileDialog({required this.title, required this.child, required this.actions});
@@ -24,9 +26,9 @@ class _FileDialog extends StatelessWidget {
 }
 
 String levelName(AppLocalizations l, String level) => switch (level) {
-  'full' => l.levelFull,
-  'edit' => l.levelEdit,
-  _ => l.levelRead,
+  'full' => l.filesText.levelFull,
+  'edit' => l.filesText.levelEdit,
+  _ => l.filesText.levelRead,
 };
 
 /// With whom a directory is shared and how far: people and groups found by name, each with a level; saved at once
@@ -110,7 +112,9 @@ class _ShareDialogState extends State<_ShareDialog> {
           final l = AppLocalizations.of(context);
           await showNote(
             context,
-            text: l.vaultKeysWaiting(waiting.map((p) => p.name.isEmpty ? (p.email ?? p.id) : p.name).join(', ')),
+            text: l.filesText.vaultKeysWaiting(
+              waiting.map((p) => p.name.isEmpty ? (p.email ?? p.id) : p.name).join(', '),
+            ),
             close: l.done,
           );
         }
@@ -131,7 +135,7 @@ class _ShareDialogState extends State<_ShareDialog> {
     final l = AppLocalizations.of(context);
     final k = context.k;
     return _FileDialog(
-      title: l.shareTitle(widget.directory.name),
+      title: l.filesText.shareTitle(widget.directory.name),
       actions: [
         KButton(label: l.cancel, tone: KTone.quiet, onPressed: () => Navigator.of(context).pop(false)),
         KButton(key: const ValueKey('share-save'), label: l.save, tone: KTone.primary, onPressed: _busy ? null : _save),
@@ -144,7 +148,7 @@ class _ShareDialogState extends State<_ShareDialog> {
             key: const ValueKey('share-find'),
             controller: _search,
             onChanged: _find,
-            hint: l.findPeople,
+            hint: l.filesText.findPeople,
             icon: LucideIcons.search,
           ),
           for (final p in _found.take(6))
@@ -162,7 +166,7 @@ class _ShareDialogState extends State<_ShareDialog> {
               }),
             ),
           const SizedBox(height: 12),
-          if (_shares.isEmpty) Text(l.notShared, style: KText.small(k)),
+          if (_shares.isEmpty) Text(l.filesText.notShared, style: KText.small(k)),
           for (final (i, s) in _shares.indexed)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 4),
@@ -179,7 +183,7 @@ class _ShareDialogState extends State<_ShareDialog> {
                   ),
                   KMenuButton<String>(
                     key: ValueKey('level-$i'),
-                    tooltip: l.share,
+                    tooltip: l.filesText.share,
                     onSelected: (level) =>
                         setState(() => _shares[i] = FileShare(principalId: s.principalId, level: level)),
                     items: () => [
@@ -220,9 +224,9 @@ class _ShareDialogState extends State<_ShareDialog> {
 }
 
 String linkModeName(AppLocalizations l, String mode) => switch (mode) {
-  'add' => l.linkAdd,
-  'drop' => l.linkDrop,
-  _ => l.linkView,
+  'add' => l.filesText.linkAdd,
+  'drop' => l.filesText.linkDrop,
+  _ => l.filesText.linkView,
 };
 
 /// The links to a file or folder for people without an account: those there are, and making one – its address shown
@@ -309,7 +313,7 @@ class _LinkDialogState extends State<_LinkDialog> {
     final k = context.k;
     final links = _links;
     return _FileDialog(
-      title: l.linksTitle(widget.node.name),
+      title: l.filesText.linksTitle(widget.node.name),
       actions: [KButton(label: l.done, tone: KTone.quiet, onPressed: () => Navigator.of(context).pop())],
       child: SingleChildScrollView(
         child: Column(
@@ -317,7 +321,7 @@ class _LinkDialogState extends State<_LinkDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (_made != null) ...[
-              Text(l.linkMade, style: KText.small(k)),
+              Text(l.filesText.linkMade, style: KText.small(k)),
               const SizedBox(height: 6),
               Container(
                 padding: const EdgeInsets.fromLTRB(10, 4, 4, 4),
@@ -343,7 +347,7 @@ class _LinkDialogState extends State<_LinkDialog> {
               const SizedBox(height: 16),
             ],
             if (links == null && _error == null) const KProgressBar(),
-            if (links != null && links.isEmpty) Text(l.noLinks, style: KText.small(k)),
+            if (links != null && links.isEmpty) Text(l.filesText.noLinks, style: KText.small(k)),
             for (final link in links ?? const <FileLink>[])
               KListRow(
                 key: ValueKey('link-${link.id}'),
@@ -351,8 +355,8 @@ class _LinkDialogState extends State<_LinkDialog> {
                 leading: Icon(LucideIcons.link, size: 16, color: k.muted),
                 title: Text(linkModeName(l, link.mode), style: KText.label(k)),
                 subtitle: switch ([
-                  if (link.expires != null) l.expiresOn(shortDate(context, link.expires!)),
-                  if (link.hasPassword) l.withPassword,
+                  if (link.expires != null) l.filesText.expiresOn(shortDate(context, link.expires!)),
+                  if (link.hasPassword) l.filesText.withPassword,
                 ].join(' · ')) {
                   '' => null,
                   final text => Text(text, style: KText.small(k)),
@@ -368,7 +372,7 @@ class _LinkDialogState extends State<_LinkDialog> {
             const SizedBox(height: 16),
             if (widget.node.isDirectory) ...[
               KSegmented<String>(
-                options: [('view', l.linkView), ('add', l.linkAdd), ('drop', l.linkDrop)],
+                options: [('view', l.filesText.linkView), ('add', l.filesText.linkAdd), ('drop', l.filesText.linkDrop)],
                 value: _mode,
                 onChanged: (mode) => setState(() => _mode = mode),
               ),
@@ -376,24 +380,24 @@ class _LinkDialogState extends State<_LinkDialog> {
             ],
             Row(
               children: [
-                Text(l.expires, style: KText.small(k)),
+                Text(l.filesText.expires, style: KText.small(k)),
                 const SizedBox(width: 12),
                 KSelect<int>(
                   value: _days,
                   options: [
-                    (0, l.never),
-                    for (final days in [1, 7, 30]) (days, l.inDays(days)),
+                    (0, l.filesText.never),
+                    for (final days in [1, 7, 30]) (days, l.filesText.inDays(days)),
                   ],
                   onChanged: (days) => setState(() => _days = days),
                   expand: false,
                 ),
               ],
             ),
-            KTextField(controller: _password, obscureText: true, label: l.passwordOptional),
+            KTextField(controller: _password, obscureText: true, label: l.filesText.passwordOptional),
             const SizedBox(height: 12),
             KButton(
               key: const ValueKey('link-create'),
-              label: l.createLink,
+              label: l.filesText.createLink,
               icon: LucideIcons.link,
               tone: KTone.primary,
               onPressed: _busy ? null : _create,
@@ -452,7 +456,7 @@ class _VersionsDialogState extends State<_VersionsDialog> {
 
   Future<void> _restore(FileVersion version) async {
     final l = AppLocalizations.of(context);
-    if (!await confirmAction(context, text: l.restoreConfirm, confirm: l.restore)) return;
+    if (!await confirmAction(context, text: l.filesText.restoreConfirm, confirm: l.filesText.restore)) return;
     try {
       await widget.account.restoreVersion(accountId: widget.accountId, id: widget.file.id, versionId: version.id);
       _changed = true;
@@ -468,7 +472,7 @@ class _VersionsDialogState extends State<_VersionsDialog> {
     final k = context.k;
     final versions = _versions;
     return _FileDialog(
-      title: '${l.versions} · ${widget.file.name}',
+      title: '${l.filesText.versions} · ${widget.file.name}',
       actions: [KButton(label: l.done, tone: KTone.quiet, onPressed: () => Navigator.of(context).pop(_changed))],
       child: SingleChildScrollView(
         child: Column(
@@ -490,7 +494,7 @@ class _VersionsDialogState extends State<_VersionsDialog> {
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (v.isCurrent) KBadge(l.currentVersion),
+                    if (v.isCurrent) KBadge(l.filesText.currentVersion),
                     KIconButton(
                       icon: LucideIcons.download,
                       tooltip: l.save,
@@ -507,7 +511,7 @@ class _VersionsDialogState extends State<_VersionsDialog> {
                       KIconButton(
                         key: ValueKey('restore-$i'),
                         icon: LucideIcons.rotateCcw,
-                        tooltip: l.restore,
+                        tooltip: l.filesText.restore,
                         onPressed: () => _restore(v),
                       ),
                   ],
@@ -591,18 +595,18 @@ class _TargetDialogState extends State<_TargetDialog> {
     final k = context.k;
     final mayMove = !widget.node.hasRights || widget.node.mayDelete;
     return _FileDialog(
-      title: '${l.copyOrMove} · ${widget.node.name}',
+      title: '${l.filesText.copyOrMove} · ${widget.node.name}',
       actions: [
         KButton(label: l.cancel, tone: KTone.quiet, onPressed: () => Navigator.of(context).pop()),
         // Within a store a node moves; copies go to other stores (FileNode/copy).
         KButton(
           key: const ValueKey('copy-here'),
-          label: l.copyHere,
+          label: l.filesText.copyHere,
           onPressed: _mayAddHere && _store.accountId != widget.from.accountId ? () => _done(false) : null,
         ),
         KButton(
           key: const ValueKey('move-here'),
-          label: l.moveHere,
+          label: l.filesText.moveHere,
           tone: KTone.primary,
           onPressed: _mayAddHere && mayMove ? () => _done(true) : null,
         ),
@@ -676,4 +680,4 @@ class _TargetDialogState extends State<_TargetDialog> {
   }
 }
 
-String storeName(AppLocalizations l, FileStore s) => s.isPersonal ? l.myFiles : s.name;
+String storeName(AppLocalizations l, FileStore s) => s.isPersonal ? l.filesText.myFiles : s.name;

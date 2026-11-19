@@ -23,7 +23,7 @@ provisioning and recovery are much work, and they are kernoid's already – test
 
 A program may offer both and let its operator choose: built in for one program alone, beside for a suite. Moving from
 built in to beside keeps the accounts – they are kernoid's in both cases: the built-in identity's schema is the schema
-of a kernoid ([section 4](#4-the-database)), and a kernoid can take it over (OPEN: the steps, section 7).
+of a kernoid ([section 4](#4-the-database)), and a kernoid takes it over (section 7).
 
 ## 2. Beside: `kernoid-auth`
 
@@ -110,9 +110,17 @@ whole – -only, since `kernoid-oidc` carries code derived from Zitadel under AG
 notenwart and spezado are AGPL-3.0-or-later; combined with kernoid's identity they are distributed under AGPL-3.0-only.
 A program under another licence uses kernoid **beside** it, over OpenID Connect – with any client library.
 
-## 7. Open
+## 7. Taking a built-in identity over
 
-- **OPEN:** the steps to take a built-in identity over into a kernoid of its own (dump the schema, restore it, point the
-  program at the kernoid with `kernoid-auth`).
+A built-in identity becomes a kernoid of its own with PostgreSQL's tools and kernoid's CLI, no export format: dump
+kernoid's schema (`pg_dump --schema=kernoid`), restore it into the new kernoid's database, configure it with the same
+schema name and main key, `kernoid migrate`, give the instance its new host as primary domain, and point the program
+at it with `kernoid-auth` (an application of its project). Accounts keep their ids – the subject the program sees –,
+passwords and second factors; passkeys where the RP ID stays. The steps are in `docs/building-on-kernoid.md`;
+`scripts/profile-check.sh` checks them (implemented in 0.5.0).
+
+## 8. Open
+
+- **OPEN:** moving the pictures of a taken-over identity from `blob_objects` into object storage.
 - **OPEN:** whether `kernoid-auth` becomes MIT once an app needs it – today no app does; apps log in with
   `kernoid-client` (`oidc`).

@@ -16,6 +16,7 @@ import 'file_provider.dart';
 import 'files.dart';
 import 'sync_folders.dart';
 import 'tray.dart';
+import 'l10n/files_text.dart';
 
 export 'sync_folders.dart' show SyncFolders;
 export 'tray.dart' show Tray;
@@ -36,7 +37,7 @@ class FilesFeature extends KFeature {
   IconData get icon => LucideIcons.folder;
 
   @override
-  String label(AppLocalizations l) => l.files;
+  String label(AppLocalizations l) => l.filesText.files;
 
   @override
   bool offeredBy(Kernoid account) => account.offers(capability: KCapability.files);
@@ -94,7 +95,10 @@ class FilesSession extends KFeatureSession {
     final want = sync.folders.isNotEmpty;
     if (want && _tray == null) {
       final l = AppLocalizations.of(_context);
-      final tray = Tray(labels: (open: l.trayOpen, sync: l.traySync, quit: l.trayQuit), onSync: sync.syncAll);
+      final tray = Tray(
+        labels: (open: l.filesText.trayOpen, sync: l.filesText.traySync, quit: l.filesText.trayQuit),
+        onSync: sync.syncAll,
+      );
       _tray = tray;
       tray.start();
     } else if (!want && _tray != null) {

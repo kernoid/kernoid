@@ -18,6 +18,8 @@ import 'compose.dart';
 
 import 'package:kernoid_shell/pages/home.dart';
 
+import 'l10n/mail_text.dart';
+
 const _pageSize = 50;
 
 /// Mail: the user's mailbox and the shared ones granted to them, each a tree of folders; a folder's messages – or,
@@ -229,7 +231,7 @@ class _MailPageState extends State<MailPage> {
       final sure = await showKDialog<bool>(
         context,
         builder: (context) => KDialog(
-          content: Text(l.deleteForGood(ids.length)),
+          content: Text(l.mailText.deleteForGood(ids.length)),
           actions: [
             KButton(label: l.cancel, tone: KTone.quiet, onPressed: () => Navigator.of(context).pop(false)),
             KButton(
@@ -286,11 +288,11 @@ class _MailPageState extends State<MailPage> {
       context,
       position: position,
       items: [
-        ('new', LucideIcons.folderPlus, l.newSubfolder, false),
+        ('new', LucideIcons.folderPlus, l.mailText.newSubfolder, false),
         if (own) ('rename', LucideIcons.pencil, l.rename, false),
-        if (own) ('move', LucideIcons.folderInput, l.moveFolder, false),
-        if (box.role == 'trash' || box.role == 'junk') ('empty', LucideIcons.trash, l.emptyFolder, true),
-        if (own) ('delete', LucideIcons.trash2, l.deleteFolder, true),
+        if (own) ('move', LucideIcons.folderInput, l.mailText.moveFolder, false),
+        if (box.role == 'trash' || box.role == 'junk') ('empty', LucideIcons.trash, l.mailText.emptyFolder, true),
+        if (own) ('delete', LucideIcons.trash2, l.mailText.deleteFolder, true),
       ],
     );
     if (choice == null || !mounted) return;
@@ -331,7 +333,7 @@ class _MailPageState extends State<MailPage> {
     final target = await showKDialog<(bool, String?)>(
       context,
       builder: (context) => KDialog(
-        title: l.moveFolderTo(box.name),
+        title: l.mailText.moveFolderTo(box.name),
         content: SizedBox(
           width: 360,
           height: 360,
@@ -340,7 +342,7 @@ class _MailPageState extends State<MailPage> {
               KSideItem(
                 key: const ValueKey('folder-top'),
                 icon: LucideIcons.arrowUpToLine,
-                label: l.topLevel,
+                label: l.mailText.topLevel,
                 onTap: () => Navigator.of(context).pop((true, null)),
               ),
               for (final (b, depth) in mailboxTree(boxes))
@@ -369,8 +371,8 @@ class _MailPageState extends State<MailPage> {
     final l = AppLocalizations.of(context);
     if (!await confirmAction(
       context,
-      text: l.emptyFolderConfirm(mailboxName(l, box)),
-      confirm: l.emptyFolder,
+      text: l.mailText.emptyFolderConfirm(mailboxName(l, box)),
+      confirm: l.mailText.emptyFolder,
       danger: true,
     )) {
       return;
@@ -381,8 +383,10 @@ class _MailPageState extends State<MailPage> {
 
   Future<void> _deleteFolder(String accountId, Mailbox box) async {
     final l = AppLocalizations.of(context);
-    final text = box.total > 0 ? l.deleteFolderWithEmails(box.name, box.total) : l.deleteFolderConfirm(box.name);
-    if (!await confirmAction(context, text: text, confirm: l.deleteFolder, danger: true)) return;
+    final text = box.total > 0
+        ? l.mailText.deleteFolderWithEmails(box.name, box.total)
+        : l.mailText.deleteFolderConfirm(box.name);
+    if (!await confirmAction(context, text: text, confirm: l.mailText.deleteFolder, danger: true)) return;
     await _folderAction(
       accountId,
       () => widget.account.destroyMailbox(accountId: accountId, id: box.id, withEmails: box.total > 0),
@@ -415,7 +419,7 @@ class _MailPageState extends State<MailPage> {
       KPageRoute(
         builder: (page) => StatefulBuilder(
           builder: (page, rebuild) => KScaffold(
-            topBar: KTopBar(title: l.folders),
+            topBar: KTopBar(title: l.mailText.folders),
             body: _Mailboxes(
               accounts: _accounts,
               boxes: _boxes,
@@ -464,7 +468,7 @@ class _MailPageState extends State<MailPage> {
                 fieldKey: const ValueKey('mail-search'),
                 controller: _search,
                 onSubmitted: _runSearch,
-                hint: l.searchMail,
+                hint: l.mailText.searchMail,
               )
             : _ChosenBar(
                 count: _chosen.length,
@@ -496,7 +500,7 @@ class _MailPageState extends State<MailPage> {
       ],
     );
     final title = _query.isNotEmpty
-        ? l.searchResults
+        ? l.mailText.searchResults
         : _mailbox == null
         ? ''
         : mailboxName(l, _mailbox!);
@@ -509,7 +513,7 @@ class _MailPageState extends State<MailPage> {
             KIconButton(
               key: const ValueKey('manage-folders'),
               icon: LucideIcons.folderTree,
-              tooltip: l.folders,
+              tooltip: l.mailText.folders,
               onPressed: _folderPage,
             ),
           ],
@@ -517,7 +521,7 @@ class _MailPageState extends State<MailPage> {
             alignment: Alignment.centerLeft,
             child: KMenuButton<(String, Mailbox)>(
               key: const ValueKey('mailbox-menu'),
-              tooltip: l.mailboxes,
+              tooltip: l.mailText.mailboxes,
               onSelected: (choice) => _select(choice.$1, choice.$2),
               items: () => [
                 for (final a in _accounts) ...[
@@ -550,7 +554,7 @@ class _MailPageState extends State<MailPage> {
             ? null
             : KFloatingButton(
                 key: const ValueKey('write'),
-                tooltip: l.write,
+                tooltip: l.mailText.write,
                 onPressed: _write,
                 icon: LucideIcons.pencil,
               ),
@@ -571,7 +575,7 @@ class _MailPageState extends State<MailPage> {
               onNew: (accountId) => _newFolder(accountId, null),
               write: KButton(
                 key: const ValueKey('write'),
-                label: l.write,
+                label: l.mailText.write,
                 icon: LucideIcons.pencil,
                 tone: KTone.primary,
                 expand: true,
@@ -587,7 +591,7 @@ class _MailPageState extends State<MailPage> {
                 border: Border(left: BorderSide(color: context.k.line)),
               ),
               child: _open == null
-                  ? EmptyView(l.selectMessage, icon: LucideIcons.mail)
+                  ? EmptyView(l.mailText.selectMessage, icon: LucideIcons.mail)
                   : EmailView(
                       key: ValueKey(_open),
                       account: widget.account,
@@ -604,7 +608,7 @@ class _MailPageState extends State<MailPage> {
   }
 }
 
-String _accountName(AppLocalizations l, MailAccount a) => a.isPersonal ? l.myMailbox : a.name;
+String _accountName(AppLocalizations l, MailAccount a) => a.isPersonal ? l.mailText.myMailbox : a.name;
 
 EmailSummary _with(EmailSummary e, {bool? seen, bool? flagged}) => EmailSummary(
   id: e.id,
@@ -696,7 +700,7 @@ class _Mailboxes extends StatelessWidget {
                     children: [
                       Expanded(
                         child: KOverline(
-                          accounts.length > 1 ? _accountName(l, a) : l.folders,
+                          accounts.length > 1 ? _accountName(l, a) : l.mailText.folders,
                           padding: const EdgeInsets.fromLTRB(10, 12, 10, 4),
                         ),
                       ),
@@ -776,24 +780,29 @@ class _ChosenBar extends StatelessWidget {
         children: [
           KIconButton(icon: LucideIcons.x, tooltip: l.cancel, onPressed: onClear),
           const SizedBox(width: 4),
-          Expanded(child: Text(l.chosen(count), style: KText.label(k))),
+          Expanded(child: Text(l.mailText.chosen(count), style: KText.label(k))),
           KIconButton(
             key: const ValueKey('choose-all'),
             icon: LucideIcons.listChecks,
-            tooltip: l.chooseAll,
+            tooltip: l.mailText.chooseAll,
             onPressed: onAll,
           ),
           if (!readOnly) ...[
             KIconButton(
               key: const ValueKey('mark-read'),
               icon: LucideIcons.mailOpen,
-              tooltip: l.markRead,
+              tooltip: l.mailText.markRead,
               onPressed: onRead,
             ),
-            KIconButton(key: const ValueKey('mark-flag'), icon: LucideIcons.flag, tooltip: l.flag, onPressed: onFlag),
+            KIconButton(
+              key: const ValueKey('mark-flag'),
+              icon: LucideIcons.flag,
+              tooltip: l.mailText.flag,
+              onPressed: onFlag,
+            ),
             KMenuButton<Mailbox>(
               key: const ValueKey('move-to'),
-              tooltip: l.moveTo,
+              tooltip: l.mailText.moveTo,
               onSelected: onMove,
               icon: LucideIcons.folderInput,
               items: () => [
@@ -858,7 +867,7 @@ class _EmailList extends StatelessWidget {
       return loading
           ? const Center(child: KSpinner())
           : EmptyView(
-              searching ? l.nothingFound : l.noMessages,
+              searching ? l.nothingFound : l.mailText.noMessages,
               icon: searching ? LucideIcons.searchX : LucideIcons.inbox,
             );
     }
@@ -874,7 +883,7 @@ class _EmailList extends StatelessWidget {
               return Padding(
                 padding: const EdgeInsets.all(12),
                 child: Center(
-                  child: KButton(label: l.loadMore, tone: KTone.quiet, onPressed: loading ? null : onMore),
+                  child: KButton(label: l.mailText.loadMore, tone: KTone.quiet, onPressed: loading ? null : onMore),
                 ),
               );
             }
@@ -942,7 +951,7 @@ class _EmailList extends StatelessWidget {
                   children: [
                     Text(
                       e.locked
-                          ? l.encryptedMessage
+                          ? l.mailText.encryptedMessage
                           : e.subject.isEmpty
                           ? l.noSubject
                           : e.subject,
@@ -952,7 +961,7 @@ class _EmailList extends StatelessWidget {
                           .copyWith(fontSize: 14, fontWeight: unread ? FontWeight.w600 : FontWeight.w400),
                     ),
                     Text(
-                      e.locked ? l.unlockToRead : e.preview,
+                      e.locked ? l.mailText.unlockToRead : e.preview,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: KText.small(k),
@@ -1019,7 +1028,7 @@ class _EmailViewState extends State<EmailView> {
                 children: [
                   Icon(LucideIcons.lock, size: 40, color: context.k.accent),
                   const SizedBox(height: 12),
-                  Text(l.lockedEmail, textAlign: TextAlign.center),
+                  Text(l.mailText.lockedEmail, textAlign: TextAlign.center),
                   const SizedBox(height: 16),
                   KButton(
                     key: const ValueKey('unlock-to-read'),
@@ -1060,8 +1069,8 @@ class _EmailViewState extends State<EmailView> {
                         Text(people(e.from), style: KText.body(k).copyWith(fontWeight: FontWeight.w600)),
                         if (sender != null && sender.name != null) Text(sender.email, style: KText.small(k)),
                         const SizedBox(height: 4),
-                        _Line(l.to, people(e.to)),
-                        if (e.cc.isNotEmpty) _Line(l.cc, people(e.cc)),
+                        _Line(l.mailText.to, people(e.to)),
+                        if (e.cc.isNotEmpty) _Line(l.mailText.cc, people(e.cc)),
                       ],
                     ),
                   ),
@@ -1075,9 +1084,9 @@ class _EmailViewState extends State<EmailView> {
                 runSpacing: 8,
                 children: [
                   for (final (kind, label, icon) in [
-                    (Reply.reply, l.reply, LucideIcons.reply),
-                    (Reply.replyAll, l.replyAll, LucideIcons.replyAll),
-                    (Reply.forward, l.forward, LucideIcons.forward),
+                    (Reply.reply, l.mailText.reply, LucideIcons.reply),
+                    (Reply.replyAll, l.mailText.replyAll, LucideIcons.replyAll),
+                    (Reply.forward, l.mailText.forward, LucideIcons.forward),
                   ])
                     KButton(
                       key: ValueKey(kind.name),
@@ -1100,7 +1109,7 @@ class _EmailViewState extends State<EmailView> {
                       key: const ValueKey('html-or-text'),
                       tone: KTone.quiet,
                       icon: _asText ? LucideIcons.globe : LucideIcons.alignLeft,
-                      label: _asText ? l.asHtml : l.asText,
+                      label: _asText ? l.mailText.asHtml : l.mailText.asText,
                       onPressed: () => setState(() => _asText = !_asText),
                     ),
                 ],
@@ -1115,7 +1124,7 @@ class _EmailViewState extends State<EmailView> {
                 Text(e.text, style: KText.body(k).copyWith(height: 1.6)),
               if (e.attachments.isNotEmpty) ...[
                 Padding(padding: const EdgeInsets.symmetric(vertical: 20), child: const KDivider()),
-                KOverline(l.attachments, padding: const EdgeInsets.only(bottom: 10)),
+                KOverline(l.mailText.attachments, padding: const EdgeInsets.only(bottom: 10)),
                 Wrap(
                   spacing: 10,
                   runSpacing: 10,

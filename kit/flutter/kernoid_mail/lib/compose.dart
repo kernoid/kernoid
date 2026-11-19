@@ -9,6 +9,8 @@ import 'package:kernoid_l10n/l10n/app_localizations.dart';
 import 'package:kernoid_bridge/kernoid_bridge.dart';
 import 'package:kernoid_ui/ui.dart';
 
+import 'l10n/mail_text.dart';
+
 /// How a message went out.
 enum Sent { encrypted, plain }
 
@@ -33,7 +35,7 @@ Future<bool> writeMessage(
   );
   if (sent == null || !context.mounted) return false;
   final l = AppLocalizations.of(context);
-  KToast.of(context).show(sent == Sent.encrypted ? l.sentEncrypted : l.messageSent);
+  KToast.of(context).show(sent == Sent.encrypted ? l.mailText.sentEncrypted : l.mailText.messageSent);
   return true;
 }
 
@@ -113,13 +115,13 @@ class _ComposePageState extends State<ComposePage> {
         emailId: id,
         kind: widget.kind.name,
         phrases: ReplyPhrases(
-          wrote: l.quoteWrote('{date}', '{who}'),
-          forwarded: l.quoteForwarded,
-          from: l.from,
-          date: l.date,
-          subject: l.subject,
-          to: l.to,
-          dateFormat: l.quoteDateFormat,
+          wrote: l.mailText.quoteWrote('{date}', '{who}'),
+          forwarded: l.mailText.quoteForwarded,
+          from: l.mailText.from,
+          date: l.mailText.date,
+          subject: l.mailText.subject,
+          to: l.mailText.to,
+          dateFormat: l.mailText.quoteDateFormat,
         ),
       );
       if (!mounted) return;
@@ -216,7 +218,7 @@ class _ComposePageState extends State<ComposePage> {
     final plan = _plan;
     return KScaffold(
       topBar: KTopBar(
-        title: l.write,
+        title: l.mailText.write,
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 12),
@@ -225,7 +227,7 @@ class _ComposePageState extends State<ComposePage> {
               key: const ValueKey('send'),
               onPressed: _busy || _loading ? null : _send,
               icon: plan?.encrypted ?? false ? LucideIcons.lock : LucideIcons.send,
-              label: l.send,
+              label: l.mailText.send,
             ),
           ),
         ],
@@ -240,14 +242,14 @@ class _ComposePageState extends State<ComposePage> {
                   KTextFormField(
                     key: const ValueKey('to'),
                     controller: _to,
-                    label: l.to,
+                    label: l.mailText.to,
                     suffix: _copies
                         ? null
                         : KButton(
                             tone: KTone.quiet,
                             key: const ValueKey('show-cc'),
                             onPressed: () => setState(() => _copies = true),
-                            label: '${l.cc} ${l.bcc}',
+                            label: '${l.mailText.cc} ${l.mailText.bcc}',
                           ),
                     keyboardType: TextInputType.emailAddress,
                     autocorrect: false,
@@ -257,14 +259,14 @@ class _ComposePageState extends State<ComposePage> {
                     KTextFormField(
                       key: const ValueKey('cc'),
                       controller: _cc,
-                      label: l.cc,
+                      label: l.mailText.cc,
                       keyboardType: TextInputType.emailAddress,
                       autocorrect: false,
                     ),
                     KTextFormField(
                       key: const ValueKey('bcc'),
                       controller: _bcc,
-                      label: l.bcc,
+                      label: l.mailText.bcc,
                       keyboardType: TextInputType.emailAddress,
                       autocorrect: false,
                     ),
@@ -283,7 +285,7 @@ class _ComposePageState extends State<ComposePage> {
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
-                              plan.encrypted ? l.willEncrypt : l.wontEncrypt(plan.reason ?? ''),
+                              plan.encrypted ? l.mailText.willEncrypt : l.mailText.wontEncrypt(plan.reason ?? ''),
                               style: KText.small(context.k)
                                   .copyWith(color: plan.encrypted ? context.k.accent : context.k.muted),
                             ),
@@ -291,12 +293,12 @@ class _ComposePageState extends State<ComposePage> {
                         ],
                       ),
                     ),
-                  KTextFormField(key: const ValueKey('subject'), controller: _subject, label: l.subject),
+                  KTextFormField(key: const ValueKey('subject'), controller: _subject, label: l.mailText.subject),
                   const SizedBox(height: 12),
                   KTextFormField(
                     key: const ValueKey('text'),
                     controller: _text,
-                    label: l.message,
+                    label: l.mailText.message,
                     minLines: 10,
                     maxLines: null,
                   ),
@@ -335,7 +337,7 @@ class _ComposePageState extends State<ComposePage> {
                         key: const ValueKey('attach'),
                         onPressed: _busy ? null : _attach,
                         icon: LucideIcons.paperclip,
-                        label: l.attachFile,
+                        label: l.mailText.attachFile,
                       ),
                     ],
                   ),

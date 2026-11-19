@@ -101,7 +101,11 @@ class _KernoidAppState extends State<KernoidApp> {
         builder: (context, mode, _) => KApp(
           onGenerateTitle: (context) => AppLocalizations.of(context).appTitle,
           mode: mode,
-          localizationsDelegates: const [AppLocalizations.delegate, GlobalWidgetsLocalizations.delegate],
+          localizationsDelegates: [
+            AppLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            for (final feature in widget.features) ...feature.localizationsDelegates,
+          ],
           supportedLocales: AppLocalizations.supportedLocales,
           home: _resuming
               ? const KScaffold(body: KLoading())

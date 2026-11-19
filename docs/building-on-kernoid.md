@@ -87,6 +87,29 @@ schema, owned by the role of `migrate_url`, before the first start). kernoid's p
 `Session::has_project_role` checks the program's roles. A program that builds kernoid in is AGPL-3.0 as a whole
 ([RFC 0009](https://github.com/kernoid/kernoid/blob/main/rfcs/0009-kernoid-in-other-servers.md), 6).
 
+### From built in to a kernoid of its own
+
+When a program's identity should serve more than the program – a suite, other programs logging in –, its schema
+becomes a kernoid of its own. The accounts, their passwords, second factors and sessions move with it; an account keeps
+its id, which is the subject (`sub`) the program sees through `kernoid-auth` as well. The steps (checked by
+`scripts/profile-check.sh`):
+
+1. Stop the program. Dump kernoid's schema – nothing of the program's –:
+   `pg_dump --schema=kernoid --no-owner --no-privileges <program's database> > kernoid.sql`.
+2. Create the new kernoid's database and its two roles ([Operations](operations.md)), restore the dump as the owner,
+   and configure the kernoid with `database.schema = "kernoid"` and **the program's `encryption.main_key`** (it wraps
+   the tenant keys and the signing keys). Keep `[blob] kind = "database"`: the pictures of the accounts are in
+   `blob_objects` (OPEN: moving them into object storage).
+3. `kernoid migrate` – it brings the schema to the new kernoid's version and grants the runtime role.
+4. Give the instance its new host: `kernoid instance add-domain <INSTANCE> <HOST>`, then `kernoid instance set-primary
+   <INSTANCE> <HOST>` – the issuer is built from it. Passkeys are bound to the instance's RP ID: set it with
+   `kernoid instance set-passkey-rp-id` to the domain they were made for, where the new host is below it; otherwise
+   accounts add their passkeys again.
+5. In kernoid, register the program as an application of its project (`kernoid app add`, redirect URI
+   `https://<program>/auth/callback`), and in the program, replace `Embedded` by `kernoid-auth` with that client and
+   the new issuer. Sessions of the program's own end: people log in once more, at the new kernoid.
+6. Once the program runs against the new kernoid, drop the schema from the program's database.
+
 ## Spaces, end to end
 
 kernoid's foundation ([RFC 0010](https://github.com/kernoid/kernoid/blob/main/rfcs/0010-foundation.md)) keeps data that

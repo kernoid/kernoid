@@ -9,6 +9,7 @@ import 'package:kernoid_shell/kernoid_shell.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'contacts.dart';
+import 'l10n/contacts_text.dart';
 
 /// Contacts, where the server offers them.
 class ContactsFeature extends KFeature {
@@ -21,7 +22,7 @@ class ContactsFeature extends KFeature {
   IconData get icon => LucideIcons.bookUser;
 
   @override
-  String label(AppLocalizations l) => l.contacts;
+  String label(AppLocalizations l) => l.contactsText.contacts;
 
   @override
   bool offeredBy(Kernoid account) => account.offers(capability: KCapability.contacts);
