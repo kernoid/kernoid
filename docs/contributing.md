@@ -27,6 +27,7 @@ After adding or changing a query, update the cache against a migrated database a
 
 ```sh
 cargo sqlx migrate run --source crates/kernoid-store/migrations
+(cd crates/kernoid-auth && cargo sqlx migrate run --source migrations)   # sqlx-cli with the feature sqlx-toml
 cargo sqlx prepare --workspace -- --all-targets
 ```
 

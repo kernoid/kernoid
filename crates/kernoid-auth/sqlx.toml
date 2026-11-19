@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Date and time columns as Jiff's types (as every crate of kernoid); the sessions' migrations keep their own history,
+# apart from kernoid's – a program runs them in its own database (`kernoid_auth::sessions::PgSessions::migrate`).
+[macros.type-overrides]
+'TIMESTAMPTZ' = "jiff_sqlx::Timestamp"
+
+[migrate]
+table-name = "_kernoid_auth_migrations"

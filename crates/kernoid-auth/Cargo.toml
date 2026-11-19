@@ -20,9 +20,11 @@ description = "Logging in with kernoid, or any OpenID provider, for the servers 
 workspace = true
 
 [features]
-default = ["axum"]
+default = ["axum", "postgres"]
 # Extractors and routes for axum.
 axum = ["dep:axum"]
+# Sessions in PostgreSQL (`sessions::PgSessions`), with migrations of their own.
+postgres = ["dep:sqlx", "dep:jiff-sqlx"]
 
 [dependencies]
 aws-lc-rs = { version = "1.18.2", features = ["ring-io"] }
@@ -30,16 +32,19 @@ axum = { version = "0.8.9", optional = true }
 base64 = "0.22.1"
 getrandom = "0.4.3"
 jiff = { version = "1.0.1", features = ["serde"] }
+jiff-sqlx = { version = "1.0.0", features = ["postgres", "serde"], optional = true }
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls", "json", "form", "http2"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 sha2 = "0.11.1"
+sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres", "macros", "migrate", "json", "sqlx-toml"], optional = true }
 thiserror = "2.0.21"
 tokio = { version = "1.54.1", features = ["rt", "net", "sync"] }
 tracing = "0.1.44"
 url = "2.5.8"
 
 [dev-dependencies]
+sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres", "macros", "migrate"] }
 axum = { version = "0.8.9", features = ["form"] }
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "net"] }
 tower = { version = "0.5.3", features = ["util"] }

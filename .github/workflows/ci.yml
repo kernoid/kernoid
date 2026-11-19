@@ -45,9 +45,11 @@ jobs:
         run: rustup toolchain install
       - uses: Swatinem/rust-cache@2201cc584a476d1b508be977bbe4b7d1c7a52e9c # v2.9.3
       - name: sqlx CLI
-        run: cargo install sqlx-cli@0.9.0 --locked --no-default-features --features postgres,rustls
-      - name: Migrations apply
-        run: cargo sqlx migrate run --source crates/kernoid-store/migrations
+        run: cargo install sqlx-cli@0.9.0 --locked --no-default-features --features postgres,rustls,sqlx-toml
+      - name: Migrations apply – kernoid's, and kernoid-auth's sessions (a history of their own, its sqlx.toml)
+        run: |
+          cargo sqlx migrate run --source crates/kernoid-store/migrations
+          (cd crates/kernoid-auth && cargo sqlx migrate run --source migrations)
       - name: Query cache (.sqlx) matches the queries and the schema
         run: cargo sqlx prepare --workspace --check -- --all-targets
       - run: cargo fmt --check

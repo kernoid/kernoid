@@ -58,7 +58,7 @@ let app: Router = Router::new()
 A web app sends the browser to `/auth/login?next=/library`; kernoid's login does the rest. Requests with the session
 cookie that change something carry the header `kernoid-csrf`. The program's apps send kernoid's access tokens as
 `Authorization: Bearer` (for an application with JWT access tokens). `MemorySessions` keeps sessions in the process;
-a program with several processes implements `Sessions` on its own database.
+`PgSessions` in the program's PostgreSQL (`PgSessions::migrate(&pool)` once at start makes its table).
 
 This is the way for a **suite**: one kernoid, many programs, one login.
 

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM kernoid_auth_sessions WHERE subject = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7e3f7f122f9b090b7beb5d773bc4d7e883343ddee103805c145cf9af8f7cdefa"
+}

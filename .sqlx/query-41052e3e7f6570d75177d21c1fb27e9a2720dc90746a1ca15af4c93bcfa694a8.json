@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT principal, id_token, expires_at FROM kernoid_auth_sessions WHERE id_hash = $1 AND expires_at > now()",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "principal",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "kernoid_auth_sessions",
+            "name": "principal"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "id_token",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "kernoid_auth_sessions",
+            "name": "id_token"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "expires_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "kernoid_auth_sessions",
+            "name": "expires_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "41052e3e7f6570d75177d21c1fb27e9a2720dc90746a1ca15af4c93bcfa694a8"
+}

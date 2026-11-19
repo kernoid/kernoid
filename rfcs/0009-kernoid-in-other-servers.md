@@ -37,8 +37,9 @@ Connect, written against the standard so that it works with any provider; kernoi
   `urn:kernoid:project:roles` (RFC 0001), roles of another provider through a claim the program names;
 - the program's own **sessions** after the login: an HttpOnly cookie for its web app (with the same protection
   against cross-site requests as kernoid's, `kernoid-csrf` and the origin), bearer tokens for its apps; stored behind a
-  trait (`Sessions`), in the process (`MemorySessions`) or in the program's own database – **OPEN:** an
-  implementation in PostgreSQL the crate brings;
+  trait (`Sessions`), in the process (`MemorySessions`), in PostgreSQL (`PgSessions`, feature `postgres`: a table
+  `kernoid_auth_sessions` in the program's database with a history of migrations of its own, ids only as hashes) or
+  in a program's own store;
 - **back-channel logout** (an endpoint that ends the sessions of a `sid` or `sub`) and front-channel logout;
 - an axum extractor that gives a handler the `Principal`, or answers `401`.
 

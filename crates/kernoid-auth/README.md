@@ -8,8 +8,9 @@ Logging in with [kernoid](https://kernoid.dev) – or any OpenID provider – fo
   (`relying::RelyingParty`).
 - **Who logged in** as a `Principal`: the subject, and with kernoid its tenant (`urn:kernoid:tenant`) and its roles in
   the program's project (`urn:kernoid:project:roles`); another provider's roles through a claim the program names.
-- **Sessions** of the program's own behind a trait (`sessions::Sessions`; `MemorySessions` for one process), ended
-  by the provider's **back-channel logout**.
+- **Sessions** of the program's own behind a trait (`sessions::Sessions`; `MemorySessions` for one process,
+  `PgSessions` in PostgreSQL – `PgSessions::migrate` makes its table, with a history of its own), ended by the
+  provider's **back-channel logout**.
 - **Access tokens** of the program's apps (JWT, RFC 9068) checked without asking the provider.
 - On **axum** (feature `axum`, on by default): the routes `/auth/login`, `/auth/callback`, `/auth/logout` and
   `/auth/backchannel-logout`, and the extractor `web::Authenticated`. The session cookie is HttpOnly and
