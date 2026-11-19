@@ -125,7 +125,8 @@ calendars and contacts, [0005](rfcs/0005-files.md) files, [0006](rfcs/0006-end-t
 and end-to-end encryption, [0007](rfcs/0007-push-notifications.md) push notifications,
 [0008](rfcs/0008-suite-and-building-blocks.md) the suite – building blocks, services, licences –,
 [0009](rfcs/0009-kernoid-in-other-servers.md) kernoid's identity in other servers, [0010](rfcs/0010-foundation.md) the
-foundation of end-to-end encrypted spaces and the relay, [0011](rfcs/0011-app-kit.md) the app kit. Change the RFC with
+foundation of end-to-end encrypted spaces and the relay, [0011](rfcs/0011-app-kit.md) the app kit, [0012](rfcs/0012-streams.md) streams in the foundation (a proposal for
+review). Change the RFC with
 the code.
 
 ## Rules

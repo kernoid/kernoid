@@ -113,7 +113,8 @@ version). ML-DSA is ml-dsa 0.1, which signs in constant time – the server sign
 
 ## 8. Open
 
-- **OPEN:** streams, erasure and visibility (aktujo RFCs 0007–0009) – after 0.5.0.
+- **OPEN:** streams, erasure and visibility (aktujo RFCs 0007–0009) – after 0.5.0; the mechanism of streams is proposed
+  in [0012](0012-streams.md), for review before it is built.
 - **OPEN:** vaults on spaces (section 5) – with streams.
 - **OPEN:** a space's events read by the server for an account that allows it (a node with keys, aktujo RFC 0009) –
   with aktujo's server mode.
