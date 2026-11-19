@@ -84,8 +84,23 @@ the step after 0.5.0.
 ## 6. Post-quantum
 
 aktujo's keys are classical (Ed25519, X25519 through HPKE); kernoid's rule is to prefer post-quantum where it disturbs
-nothing (RFC 0006, 1). **OPEN:** hybrid keys (ML-KEM-768 with X25519, ML-DSA-65 with Ed25519) for spaces, decided with
-the tree of keys of aktujo RFC 0009 – one change of the format rather than two.
+nothing (RFC 0006, 1). The format of today's spaces stays as it is; the tree of keys of aktujo RFC 0009 is built on
+**hybrid keys** – one change of the format rather than two. They are in `kernoid_crypt::pq` (implemented in 0.5.0):
+
+- **Receiving:** X-Wing (draft-connolly-cfrg-xwing-kem-11) – ML-KEM-768 and X25519, combined with SHA3-256 –, a key of
+  32 bytes, public 1216, ciphertext 1120. Sealing to it is a KEM–DEM: HKDF-SHA256 over X-Wing's secret, bound to the
+  ciphertext, the receiving key and a context the caller names (a stream and a generation), then XChaCha20-Poly1305.
+- **Signing:** Ed25519 and ML-DSA-65 (FIPS 204, deterministic, the domain's label as context) over the same message,
+  prefixed with a label of the construction and the domain; a signature holds only when both do. Public 1984 bytes,
+  signature 3373.
+- **From one seed:** both pairs are derived with HKDF-SHA256 and a label per half, so that a recovery code still gives
+  back every key.
+
+X-Wing is put together from ml-kem 0.2 and x25519-dalek rather than taken from the HPKE library: that one needs ml-kem
+0.3, which rpgp 0.21 (kernoid-e2e) does not accept beside its own (they share the crate `kem`). It is checked against
+the draft's three test vectors; the bytes do not change when the library's X-Wing replaces it (OPEN: with rpgp's next
+version). ML-DSA is ml-dsa 0.1, which signs in constant time – the server signs as a node of a space (aktujo RFC 0009,
+5), on request. **OPEN:** a review of `pq` by someone besides its author, before a space depends on it.
 
 ## 7. 0.5.0
 
@@ -99,6 +114,6 @@ the tree of keys of aktujo RFC 0009 – one change of the format rather than two
 ## 8. Open
 
 - **OPEN:** streams, erasure and visibility (aktujo RFCs 0007–0009) – after 0.5.0.
-- **OPEN:** vaults on spaces (section 5) and post-quantum keys (section 6) – with streams.
+- **OPEN:** vaults on spaces (section 5) – with streams.
 - **OPEN:** a space's events read by the server for an account that allows it (a node with keys, aktujo RFC 0009) –
   with aktujo's server mode.

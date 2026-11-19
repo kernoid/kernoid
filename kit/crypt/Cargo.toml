@@ -24,6 +24,10 @@ hex = "0.4.3"
 hkdf = "0.13.0"
 hmac = "0.13.0"
 hpke = { version = "0.14.1", default-features = false, features = ["x25519", "chacha", "alloc", "getrandom"] }
+ml-dsa = { version = "0.1.2", default-features = false, features = ["alloc", "zeroize"] }
+ml-kem = { version = "0.2.3", features = ["deterministic"] }
+sha3 = "0.10.9"
+x25519-dalek = "3.0.0"
 kernoid-base = { version = "0.5.0", path = "../base" }
 kernoid-log = { version = "0.5.0", path = "../log" }
 serde = { version = "1.0.229", features = ["derive"] }

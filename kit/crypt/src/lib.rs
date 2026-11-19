@@ -4,7 +4,7 @@
 //!
 //! | Purpose | Algorithm |
 //! |---|---|
-//! | signing | Ed25519 (RFC 8032) |
+//! | signing | Ed25519 (RFC 8032) – hybrid with ML-DSA-65 and X-Wing for what is new: [`pq`] |
 //! | wrapping a key for a member | HPKE (RFC 9180), mode Base, DHKEM(X25519, HKDF-SHA256), HKDF-SHA256, ChaCha20Poly1305 |
 //! | encrypting events, originals and earlier keys | XChaCha20-Poly1305, random 24-byte nonce |
 //! | deriving keys from a seed | HKDF-SHA256 (RFC 5869) |
@@ -13,6 +13,8 @@
 //! Limits, part of the design: removing a member protects the future, not the past; a compromised device reads until
 //! the next change of key; losing every key and the recovery code loses the space; a relay sees which spaces it
 //! holds, who sends when and how much, and the member list – not the events.
+
+pub mod pq;
 
 use std::{collections::BTreeMap, fmt, str::FromStr};
 

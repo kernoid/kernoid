@@ -22,6 +22,8 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 - **Strings per feature package:** `kernoid_mail`, `_calendar`, `_contacts` and `_files` keep their own (`l.mailText.…`);
   `kernoid_l10n` only those they share. Features of other programs give the shell their delegates
   (`KFeature.localizationsDelegates`).
+- **Post-quantum hybrid keys** for the foundation (`kernoid_crypt::pq`, RFC 0010, 6): X-Wing (ML-KEM-768 + X25519)
+  to seal to, Ed25519 + ML-DSA-65 to sign, both from one seed; X-Wing checked against the draft's test vectors.
 - **kernoid-auth:** sessions in PostgreSQL (`PgSessions`, feature `postgres`, on by default) – a table in the program's
   database with migrations of their own; ids stored only as hashes.
 
