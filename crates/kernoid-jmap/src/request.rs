@@ -121,12 +121,21 @@ impl Context<'_> {
         if access.any() { Ok(access) } else { Err(not_found()) }
     }
 
-    /// Mail, calendars and contacts are only for an account with the service `mail` (RFC 0003, 4).
+    /// Mail is only for an account with the service `mail` (RFC 0003, 4), where the installation has it (RFC 0008, 4).
     fn require_mail(&self) -> Result<(), MethodError> {
         if self.caller.mail {
             Ok(())
         } else {
             Err(MethodError::new("accountNotSupportedByMethod", "this account has no mail"))
+        }
+    }
+
+    /// Calendars and contacts likewise, where the installation has the service `calendars`.
+    fn require_calendars(&self) -> Result<(), MethodError> {
+        if self.caller.calendars {
+            Ok(())
+        } else {
+            Err(MethodError::new("accountNotSupportedByMethod", "this account has no calendars"))
         }
     }
 
@@ -141,7 +150,7 @@ impl Context<'_> {
         &self,
         args: &Map<String, Value>,
     ) -> Result<(Uuid, kernoid_groupware::CollectionAccess), MethodError> {
-        self.require_mail()?;
+        self.require_calendars()?;
         let id = args
             .get("accountId")
             .and_then(Value::as_str)

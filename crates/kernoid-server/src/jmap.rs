@@ -140,12 +140,16 @@ where
             (Ok(mail), Ok(files)) => (mail, files),
             (Err(error), _) | (_, Err(error)) => return Err(crate::sessions::problem(error)),
         };
-        if !mail && !files {
+        // What the account has, as far as the installation runs it (RFC 0008, 4).
+        let services = state.services;
+        let (calendars, mail, files) = (mail && services.calendars, mail && services.mail, files && services.files);
+        if !mail && !calendars && !files {
             return Err(Problem::new(StatusCode::FORBIDDEN)
-                .detail("this account has no mail and no files")
+                .detail("this account has no mail, calendars or files")
                 .into_response());
         }
-        let caller = Caller { account: account.id, tenant: account.tenant, username: account.address, mail, files };
+        let caller =
+            Caller { account: account.id, tenant: account.tenant, username: account.address, mail, calendars, files };
         Ok(Self(caller, base))
     }
 }

@@ -45,8 +45,13 @@ fn mail_error(failure: MailAdminError) -> async_graphql::Error {
     async_graphql::Error::new(failure.to_string()).extend_with(|_, extensions| extensions.set("code", code))
 }
 
+/// The state – only where the installation has the service `mail` (RFC 0008, 4).
 fn state<'a>(context: &'a Context<'_>) -> async_graphql::Result<&'a AppState> {
-    context.data::<AppState>()
+    let state = context.data::<AppState>()?;
+    if !state.services.mail {
+        return Err(crate::graphql::service_off("mail"));
+    }
+    Ok(state)
 }
 
 fn mailbox(value: Option<&str>) -> async_graphql::Result<Option<Uuid>> {
@@ -55,6 +60,7 @@ fn mailbox(value: Option<&str>) -> async_graphql::Result<Option<Uuid>> {
 
 /// The account and tenant of the session.
 async fn own(context: &Context<'_>) -> async_graphql::Result<(Uuid, Uuid)> {
+    state(context)?;
     let identity = context.data::<Identity>()?;
     let session = identity.data_session(instance(context)?.id, token(context)?).await.map_err(error)?;
     Ok((session.account.id, session.account.tenant))

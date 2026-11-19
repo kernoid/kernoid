@@ -20,6 +20,9 @@ pub struct Config {
     pub roles: Vec<Role>,
     #[serde(default)]
     pub http: Http,
+    /// The parts of kernoid this installation runs (RFC 0008, 4); identity is always there.
+    #[serde(default)]
+    pub services: Services,
     pub database: Database,
     pub blob: Blob,
     pub encryption: Encryption,
@@ -482,12 +485,62 @@ pub struct Database {
     pub idle_in_transaction_timeout_ms: u32,
 }
 
+/// The services of an installation (RFC 0008, 4). A service that is off serves no routes, runs no jobs and is not
+/// offered; its tables stay, so that switching it on later needs no migration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Services {
+    /// Mail: the mail store, SMTP, IMAP and POP3, JMAP Mail, Sieve.
+    #[serde(default = "yes")]
+    pub mail: bool,
+    /// Calendars and contacts: JMAP, CalDAV, CardDAV and scheduling – in the accounts' mail stores (RFC 0004), with or
+    /// without the service `mail`.
+    #[serde(default = "yes")]
+    pub calendars: bool,
+    /// Files: file stores, drives, WebDAV, JMAP FileNode, links.
+    #[serde(default = "yes")]
+    pub files: bool,
+}
+
+impl Default for Services {
+    fn default() -> Self {
+        Self { mail: true, calendars: true, files: true }
+    }
+}
+
+impl Services {
+    /// Identity alone.
+    pub const NONE: Self = Self { mail: false, calendars: false, files: false };
+
+    /// Whether accounts have mail stores: for mail, or for calendars and contacts.
+    pub fn mail_store(&self) -> bool {
+        self.mail || self.calendars
+    }
+
+    /// Whether any service keeps content in object storage.
+    pub fn keeps_content(&self) -> bool {
+        self.mail || self.files
+    }
+
+    /// Whether JMAP is served: for mail, calendars or files.
+    pub fn jmap(&self) -> bool {
+        self.mail || self.calendars || self.files
+    }
+}
+
+fn yes() -> bool {
+    true
+}
+
 /// Where kernoid keeps content: message bodies, attachments, files.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum Blob {
     /// S3-compatible object storage.
     S3(S3),
+    /// In PostgreSQL, up to 4 MiB an object – for an installation of identity alone, which keeps only pictures of
+    /// accounts (RFC 0008, 5); refused while a service that keeps content is on.
+    Database,
     /// Kept in memory and lost on exit – for tests and trying kernoid out only.
     Memory,
 }
@@ -573,6 +626,8 @@ pub enum Error {
     EnvKey(String),
     #[error("environment variable {0} overrides a key that is not a table")]
     EnvConflict(String),
+    #[error("invalid configuration: {0}")]
+    Conflict(&'static str),
 }
 
 impl Config {
@@ -602,7 +657,25 @@ impl Config {
             config.roles = Role::EACH.to_vec();
         }
         config.roles.dedup();
+        config.check()?;
         Ok(config)
+    }
+
+    /// What the services allow (RFC 0008, 4, 5): no tables of a service that is off, no objects in PostgreSQL while
+    /// a service keeps content.
+    fn check(&self) -> Result<(), Error> {
+        if !self.services.mail && self.smtp.is_some() {
+            return Err(Error::Conflict("[smtp] needs the service mail ([services] mail = true)"));
+        }
+        if !self.services.mail && self.imap.is_some() {
+            return Err(Error::Conflict("[imap] needs the service mail ([services] mail = true)"));
+        }
+        if matches!(self.blob, Blob::Database) && self.services.keeps_content() {
+            return Err(Error::Conflict(
+                "[blob] kind = \"database\" is only for installations without mail and files: use object storage",
+            ));
+        }
+        Ok(())
     }
 
     pub fn has_role(&self, role: Role) -> bool {
@@ -669,6 +742,25 @@ mod tests {
 
     fn env(pairs: &[(&str, &str)]) -> Vec<(String, String)> {
         pairs.iter().map(|(k, v)| ((*k).to_owned(), (*v).to_owned())).collect()
+    }
+
+    #[test]
+    fn services() {
+        let config = Config::from_sources(MINIMAL, []).unwrap();
+        assert_eq!(config.services, Services::default());
+        let identity = MINIMAL.replace("kind = \"memory\"", "kind = \"database\"")
+            + "\n[services]\nmail = false\ncalendars = false\nfiles = false\n";
+        let config = Config::from_sources(&identity, []).unwrap();
+        assert_eq!(config.services, Services::NONE);
+        assert!(matches!(config.blob, Blob::Database));
+        // Objects in PostgreSQL only without mail and files.
+        let mail = MINIMAL.replace("kind = \"memory\"", "kind = \"database\"");
+        assert!(matches!(Config::from_sources(&mail, []), Err(Error::Conflict(_))));
+        // No SMTP without mail.
+        let smtp = format!("{MINIMAL}\n[services]\nmail = false\n[smtp]\nhostname = \"mx.example.org\"\n");
+        assert!(matches!(Config::from_sources(&smtp, []), Err(Error::Conflict(_))));
+        let config = Config::from_sources(MINIMAL, env(&[("KERNOID__SERVICES__FILES", "false")])).unwrap();
+        assert!(!config.services.files && config.services.mail);
     }
 
     #[test]

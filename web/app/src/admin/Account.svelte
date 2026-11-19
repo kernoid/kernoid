@@ -12,6 +12,7 @@
 </script>
 
 <script lang="ts">
+  import { services as installation } from "../services.svelte.js";
   import { emptyText, loaded } from "../app.svelte.js";
   import Failure from "../Failure.svelte";
   import {
@@ -235,7 +236,7 @@
     <h2>{t("Services")}</h2>
     <table class="nodes">
       <tbody>
-        {#each ["mail", "files"] as service (service)}
+        {#each ["mail", "files"].filter((service) => (service === "mail" ? installation().mail || installation().calendars : installation().files)) as service (service)}
           {@const state = ok(services)?.find((entry) => entry.service === service)?.state ?? "off"}
           <tr>
             <td class="name">{service === "mail" ? t("Mail") : t("Files")}</td>

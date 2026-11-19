@@ -5,6 +5,7 @@
      permissions allow; kernoid checks them again on every request. Instance administrators pick the tenant they
      work on. -->
 <script lang="ts">
+  import { services } from "../services.svelte.js";
   import {
     AppWindow,
     Building,
@@ -143,8 +144,11 @@
   } satisfies Directory);
 
   const may = (permission: string) => access.value?.permissions.includes(permission) ?? false;
-  const tenantPages = $derived(TENANT_PAGES.filter(([, , permission]) => may(permission)));
-  const instancePages = $derived(access.value?.instance ? INSTANCE_PAGES : []);
+  // Pages of a service the installation does not run are not offered (RFC 0008, 4).
+  const offered = (page: Page): boolean =>
+    (page !== "drives" || services().files) && (page !== "mail-queue" || services().mail);
+  const tenantPages = $derived(TENANT_PAGES.filter(([page, , permission]) => may(permission) && offered(page)));
+  const instancePages = $derived(access.value?.instance ? INSTANCE_PAGES.filter(([page]) => offered(page)) : []);
   const page = $derived.by((): Page | undefined => {
     const wanted = hash.page as Page;
     const allowed = [...tenantPages.map(([name]) => name), ...instancePages.map(([name]) => name)];

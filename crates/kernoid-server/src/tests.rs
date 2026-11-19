@@ -46,6 +46,52 @@ async fn get(path: &str) -> (StatusCode, axum::http::HeaderMap, String) {
     send(Request::get(path).body(Body::empty()).unwrap()).await
 }
 
+/// Answers of a router that runs only `services` (RFC 0008, 4).
+async fn status_with(services: kernoid_config::Services, method: &str, path: &str) -> (StatusCode, String) {
+    let app = router(state().with_services(services), Router::new(), &Http::default());
+    let request = Request::builder().method(method).uri(path).body(Body::empty()).unwrap();
+    let response = app.oneshot(request).await.unwrap();
+    let status = response.status();
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    (status, String::from_utf8(body.to_vec()).unwrap())
+}
+
+#[tokio::test]
+async fn services_that_are_off_serve_nothing() {
+    use kernoid_config::Services;
+    let (status, body) = status_with(Services::NONE, "GET", "/v1/services").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, r#"{"mail":false,"calendars":false,"files":false}"#);
+    // Identity alone: no JMAP, no CalDAV, no WebDAV, no autoconfiguration, no administration of mail or files.
+    for (method, path) in [
+        ("GET", "/jmap/session"),
+        ("GET", "/.well-known/jmap"),
+        ("PROPFIND", "/dav/"),
+        ("PROPFIND", "/webdav/"),
+        ("GET", "/mail/config-v1.1.xml"),
+        ("GET", "/v1/tenant/mail-quota"),
+        ("GET", "/v1/drives"),
+        ("GET", "/v1/accounts/00000000-0000-0000-0000-000000000001/collections"),
+    ] {
+        assert_eq!(status_with(Services::NONE, method, path).await, unrouted(), "{method} {path}");
+    }
+    // Identity is there: these routes answer (with an error of their own: no instance, no login).
+    for path in ["/v1/sessions/current", "/v1/accounts"] {
+        assert_ne!(status_with(Services::NONE, "GET", path).await, unrouted(), "{path}");
+    }
+    // Files without mail: JMAP and WebDAV, but no mail programs' autoconfiguration.
+    let files = Services { mail: false, calendars: false, files: true };
+    assert_ne!(status_with(files, "GET", "/jmap/session").await, unrouted());
+    assert_ne!(status_with(files, "PROPFIND", "/webdav/").await, unrouted());
+    assert_eq!(status_with(files, "GET", "/mail/config-v1.1.xml").await, unrouted());
+    assert_eq!(status_with(files, "PROPFIND", "/dav/").await, unrouted());
+}
+
+/// What a path no route serves answers.
+fn unrouted() -> (StatusCode, String) {
+    (StatusCode::NOT_FOUND, r#"{"type":"about:blank","title":"Not Found","status":404}"#.into())
+}
+
 #[tokio::test]
 async fn live_without_database() {
     let (status, _, body) = get("/healthz").await;

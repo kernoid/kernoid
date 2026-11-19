@@ -42,12 +42,18 @@ fn groupware_error(failure: GroupwareAdminError) -> async_graphql::Error {
     async_graphql::Error::new(failure.to_string()).extend_with(|_, extensions| extensions.set("code", code))
 }
 
+/// The state – only where the installation has the service `calendars` (RFC 0008, 4).
 fn state<'a>(context: &'a Context<'_>) -> async_graphql::Result<&'a AppState> {
-    context.data::<AppState>()
+    let state = context.data::<AppState>()?;
+    if !state.services.calendars {
+        return Err(crate::graphql::service_off("calendars"));
+    }
+    Ok(state)
 }
 
 /// The account and tenant of the session.
 async fn own(context: &Context<'_>) -> async_graphql::Result<(Uuid, Uuid)> {
+    state(context)?;
     let identity = context.data::<Identity>()?;
     let session = identity.data_session(instance(context)?.id, token(context)?).await.map_err(error)?;
     Ok((session.account.id, session.account.tenant))

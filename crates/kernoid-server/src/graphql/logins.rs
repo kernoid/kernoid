@@ -233,6 +233,9 @@ impl LoginsMutation {
     ) -> async_graphql::Result<bool> {
         let (identity, admin) = admin(context).await?;
         let service = Service::parse(&service).map_err(error)?;
+        if !crate::services::runs(context.data::<AppState>()?.services, service) {
+            return Err(crate::graphql::service_off(service.as_str()));
+        }
         identity.admin_grant_service(&admin, uuid(&account, "the account")?, service).await.map_err(error)?;
         Ok(true)
     }

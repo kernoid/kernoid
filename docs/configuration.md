@@ -35,11 +35,29 @@ allow_http = true
 main_key = "…"   # 64 hex characters: openssl rand -hex 32
 ```
 
+A service that is off serves no routes, runs no background work and is not offered in the web app; its tables stay,
+so that switching it on later needs no migration. `[smtp]` and `[imap]` need `services.mail`. `GET /v1/services`
+tells apps and other servers what an installation runs. **Identity alone** – logins, accounts, OpenID Connect, SAML,
+SCIM, the administration – needs nothing but PostgreSQL:
+
+```toml
+[services]
+mail = false
+calendars = false
+files = false
+
+[blob]
+kind = "database"
+```
+
 ## Keys
 
 | Key | Default | Meaning |
 |---|---|---|
 | `roles` | `["all"]` | what this process does: `api` (HTTP), `worker` (background work), `smtp` (the MX and submission), `imap` (IMAP and POP3), `ldap` (the directory), `all` |
+| `services.mail` | `true` | mail: the mail store, SMTP, IMAP and POP3, JMAP Mail, Sieve, mail programs' autoconfiguration, the Web Key Directory ([RFC 0008](https://github.com/kernoid/kernoid/blob/main/rfcs/0008-suite-and-building-blocks.md), 4) |
+| `services.calendars` | `true` | calendars and contacts: JMAP, CalDAV, CardDAV, scheduling – in the accounts' mail stores, with or without `services.mail` |
+| `services.files` | `true` | files: file stores, drives, WebDAV, JMAP FileNode, links |
 | `http.listen` | `0.0.0.0:8080` | address and port to listen on |
 | `http.tls.certificate`, `http.tls.key` | – | PEM files; with them kernoid serves HTTPS itself (TLS 1.2 and 1.3, HTTP/2) |
 | `http.trusted_proxies` | `[]` | addresses or networks whose `Forwarded` / `X-Forwarded-*` headers are believed |
@@ -53,7 +71,7 @@ main_key = "…"   # 64 hex characters: openssl rand -hex 32
 | `database.max_connections` | `10` | |
 | `database.statement_timeout_ms` | `30000` | longest time one statement may run; `0` for no limit |
 | `database.idle_in_transaction_timeout_ms` | `10000` | longest time a transaction may stay open without a statement; `0` for no limit |
-| `blob.kind` | required | `s3`, or `memory` (lost on exit – for tests only) |
+| `blob.kind` | required | `s3`; `database` – objects in PostgreSQL, up to 4 MiB each, only with `services.mail` and `services.files` off (identity alone keeps nothing but pictures of accounts); or `memory` (lost on exit – for tests only) |
 | `blob.endpoint` | – | S3 endpoint URL; leave out for AWS |
 | `blob.region` | `us-east-1` | |
 | `blob.bucket`, `blob.access_key_id`, `blob.secret_access_key` | required for `s3` | |

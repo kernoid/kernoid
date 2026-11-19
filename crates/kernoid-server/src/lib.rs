@@ -33,6 +33,7 @@ mod oidc;
 mod problem;
 mod registration;
 mod scim;
+mod services;
 mod sessions;
 mod webdav;
 pub mod wkd;
@@ -50,7 +51,7 @@ use axum::{
     http::{Method, StatusCode, header},
     routing::{get, post},
 };
-use kernoid_config::Http;
+use kernoid_config::{Http, Services};
 use kernoid_identity::{DnsResolver, Identity};
 use kernoid_store::{BlobStore, PgPool};
 use serde::Serialize;
@@ -101,6 +102,8 @@ pub struct AppState {
     pub mail_host: Option<String>,
     /// Whether kernoid serves IMAP too.
     pub imap: bool,
+    /// The services of the installation (RFC 0008, 4): a service that is off serves no routes.
+    pub services: Services,
 }
 
 impl AppState {
@@ -119,7 +122,14 @@ impl AppState {
             notification_from: None,
             mail_host: None,
             imap: false,
+            services: Services::default(),
         }
+    }
+
+    /// Serves only `services` (RFC 0008, 4).
+    pub fn with_services(mut self, services: Services) -> Self {
+        self.services = services;
+        self
     }
 
     pub fn with_modules(mut self, modules: &[&'static str]) -> Self {
@@ -174,6 +184,7 @@ struct ApiDoc;
 /// kernoid's own routes, together with `modules` (the routes of the modules that are on), with the layers every
 /// request passes: request id, tracing, metrics, limits, the client as seen through trusted proxies.
 /// Every REST route with its OpenAPI description.
+/// The REST routes of identity – always there – with their OpenAPI description.
 fn rest() -> OpenApiRouter<AppState> {
     OpenApiRouter::with_openapi(ApiDoc::openapi())
         .routes(routes!(live))
@@ -208,8 +219,6 @@ fn rest() -> OpenApiRouter<AppState> {
         .routes(routes!(avatars::set, avatars::remove))
         .routes(routes!(avatars::list))
         .routes(routes!(avatars::get))
-        .routes(routes!(mail_settings::get, mail_settings::set))
-        .routes(routes!(mail_settings::name_mailbox))
         .routes(routes!(consents::own))
         .routes(routes!(consents::revoke_own))
         .routes(routes!(admin::tenant::get, admin::tenant::rename))
@@ -243,42 +252,12 @@ fn rest() -> OpenApiRouter<AppState> {
         .routes(routes!(consents::revoke))
         .routes(routes!(admin::directory::groups, admin::directory::add_group))
         .routes(routes!(admin::directory::rename_group, admin::directory::remove_group))
-        .routes(routes!(admin::directory::set_send_as))
         .routes(routes!(admin::directory::add_member, admin::directory::remove_member))
         .routes(routes!(admin::directory::add_address, admin::directory::remove_address))
-        .routes(routes!(admin::tenant::mail_dns))
-        .routes(routes!(admin::tenant::rotate_dkim))
-        .routes(routes!(admin::mail::add_shared_mailbox))
-        .routes(routes!(admin::mail::overview))
-        .routes(routes!(admin::mail::set_quota))
-        .routes(routes!(admin::mail::default_quota, admin::mail::set_default_quota))
-        .routes(routes!(admin::mail::access, admin::mail::set_access, admin::mail::remove_access))
-        .routes(routes!(admin::mail::sieve_scripts))
-        .routes(routes!(admin::mail::put_sieve_script, admin::mail::remove_sieve_script))
-        .routes(routes!(admin::mail::activate_sieve_script))
-        .routes(routes!(admin::mail::import))
-        .routes(routes!(admin::mail::retention, admin::mail::set_retention))
-        .routes(routes!(admin::files::overview))
-        .routes(routes!(admin::files::set_quota))
-        .routes(routes!(admin::files::default_quota, admin::files::set_default_quota))
-        .routes(routes!(admin::files::retention, admin::files::set_retention))
         .routes(routes!(admin::tenant::language, admin::tenant::set_language))
         .routes(routes!(admin::tenant::e2e_policy, admin::tenant::set_e2e_policy))
         .routes(routes!(admin::tenant::set_recovery_key))
-        .routes(routes!(admin::files::drives, admin::files::add_drive))
-        .routes(routes!(admin::files::access, admin::files::set_access, admin::files::remove_access))
-        .routes(routes!(admin::mail::export, admin::mail::import_mbox))
-        .routes(routes!(admin::mail::queue))
         .routes(routes!(admin::audit::log))
-        .routes(routes!(admin::mail::own_shared))
-        .routes(routes!(admin::mail::own_access, admin::mail::share_own, admin::mail::unshare_own))
-        .routes(routes!(admin::collections::list))
-        .routes(routes!(admin::collections::access))
-        .routes(routes!(admin::collections::set_access, admin::collections::remove_access))
-        .routes(routes!(admin::collections::export))
-        .routes(routes!(admin::collections::import))
-        .routes(routes!(admin::collections::own_list))
-        .routes(routes!(admin::collections::own_access, admin::collections::share, admin::collections::unshare))
         .routes(routes!(admin::directory::roles))
         .routes(routes!(admin::directory::define_role, admin::directory::delete_role))
         .routes(routes!(admin::directory::grant_role, admin::directory::revoke_role))
@@ -313,10 +292,6 @@ fn rest() -> OpenApiRouter<AppState> {
         .routes(routes!(registration::options))
         .routes(routes!(registration::start))
         .routes(routes!(registration::confirm))
-        .routes(routes!(file_links::link))
-        .routes(routes!(file_links::unlock))
-        .routes(routes!(file_links::nodes))
-        .routes(routes!(file_links::download))
         .routes(routes!(federation::start))
         .routes(routes!(federation::exchange))
         .routes(routes!(admin::applications::list, admin::applications::add))
@@ -339,11 +314,79 @@ fn rest() -> OpenApiRouter<AppState> {
         .routes(routes!(admin::instance::remove_signing_key))
         .routes(routes!(admin::instance::saml_keys, admin::instance::add_saml_key))
         .routes(routes!(admin::instance::activate_saml_key))
+        .routes(routes!(services::list))
+}
+
+/// The REST routes of the service `mail` (RFC 0008, 4).
+fn rest_mail() -> OpenApiRouter<AppState> {
+    OpenApiRouter::new()
+        .routes(routes!(mail_settings::get, mail_settings::set))
+        .routes(routes!(mail_settings::name_mailbox))
+        .routes(routes!(admin::directory::set_send_as))
+        .routes(routes!(admin::tenant::mail_dns))
+        .routes(routes!(admin::tenant::rotate_dkim))
+        .routes(routes!(admin::mail::add_shared_mailbox))
+        .routes(routes!(admin::mail::overview))
+        .routes(routes!(admin::mail::set_quota))
+        .routes(routes!(admin::mail::default_quota, admin::mail::set_default_quota))
+        .routes(routes!(admin::mail::access, admin::mail::set_access, admin::mail::remove_access))
+        .routes(routes!(admin::mail::sieve_scripts))
+        .routes(routes!(admin::mail::put_sieve_script, admin::mail::remove_sieve_script))
+        .routes(routes!(admin::mail::activate_sieve_script))
+        .routes(routes!(admin::mail::import))
+        .routes(routes!(admin::mail::retention, admin::mail::set_retention))
+        .routes(routes!(admin::mail::export, admin::mail::import_mbox))
+        .routes(routes!(admin::mail::queue))
+        .routes(routes!(admin::mail::own_shared))
+        .routes(routes!(admin::mail::own_access, admin::mail::share_own, admin::mail::unshare_own))
+}
+
+/// The REST routes of the service `calendars`.
+fn rest_calendars() -> OpenApiRouter<AppState> {
+    OpenApiRouter::new()
+        .routes(routes!(admin::collections::list))
+        .routes(routes!(admin::collections::access))
+        .routes(routes!(admin::collections::set_access, admin::collections::remove_access))
+        .routes(routes!(admin::collections::export))
+        .routes(routes!(admin::collections::import))
+        .routes(routes!(admin::collections::own_list))
+        .routes(routes!(admin::collections::own_access, admin::collections::share, admin::collections::unshare))
+}
+
+/// The REST routes of the service `files`.
+fn rest_files() -> OpenApiRouter<AppState> {
+    OpenApiRouter::new()
+        .routes(routes!(admin::files::overview))
+        .routes(routes!(admin::files::set_quota))
+        .routes(routes!(admin::files::default_quota, admin::files::set_default_quota))
+        .routes(routes!(admin::files::retention, admin::files::set_retention))
+        .routes(routes!(admin::files::drives, admin::files::add_drive))
+        .routes(routes!(admin::files::access, admin::files::set_access, admin::files::remove_access))
+        .routes(routes!(file_links::link))
+        .routes(routes!(file_links::unlock))
+        .routes(routes!(file_links::nodes))
+        .routes(routes!(file_links::download))
+}
+
+/// The REST routes of `services`.
+fn rest_of(services: Services) -> OpenApiRouter<AppState> {
+    let mut rest = rest();
+    if services.mail {
+        rest = rest.merge(rest_mail());
+    }
+    if services.calendars {
+        rest = rest.merge(rest_calendars());
+    }
+    if services.files {
+        rest = rest.merge(rest_files());
+    }
+    rest
 }
 
 /// The OpenAPI description of the REST API, as `/openapi.json` serves it.
+/// Every service's, whatever an installation runs – the description of kernoid's API.
 pub fn openapi() -> utoipa::openapi::OpenApi {
-    let mut openapi = rest().merge(rest_transfers()).split_for_parts().1;
+    let mut openapi = rest_of(Services::default()).merge(rest_transfers()).split_for_parts().1;
     unique_operation_ids(&mut openapi);
     openapi
 }
@@ -376,7 +419,7 @@ fn unique_operation_ids(openapi: &mut utoipa::openapi::OpenApi) {
     }
 }
 
-/// REST routes that take files of any size: their own limits, with the other transfers.
+/// REST routes that take files of any size: their own limits, with the other transfers – all of the service `files`.
 fn rest_transfers() -> OpenApiRouter<AppState> {
     OpenApiRouter::new().routes(routes!(file_links::add))
 }
@@ -387,9 +430,12 @@ pub fn graphql_schema() -> String {
 }
 
 pub fn router(state: AppState, modules: Router, http: &Http) -> Router {
-    let (rest, mut openapi) = rest().with_state(state.clone()).split_for_parts();
+    let services = state.services;
+    let (rest, mut openapi) = rest_of(services).with_state(state.clone()).split_for_parts();
     let (rest_transfers, transfers_openapi) = rest_transfers().split_for_parts();
-    openapi.merge(transfers_openapi);
+    if services.files {
+        openapi.merge(transfers_openapi);
+    }
     unique_operation_ids(&mut openapi);
     // A login UI of the instance's own, on another origin, calls the API from the browser (cors.rs).
     let rest = rest.layer(axum::middleware::from_fn_with_state(state.clone(), cors::login_ui));
@@ -443,20 +489,29 @@ pub fn router(state: AppState, modules: Router, http: &Http) -> Router {
         .allow_methods([Method::GET, Method::POST, Method::PUT])
         .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE, header::ACCEPT, header::RANGE])
         .expose_headers([header::CONTENT_RANGE, header::CONTENT_LENGTH]);
-    let mail = Router::new()
-        .route("/.well-known/jmap", get(jmap::well_known))
-        .route("/.well-known/autoconfig/mail/config-v1.1.xml", get(autoconfig::config))
-        .route("/.well-known/openpgpkey/hu/{hash}", get(wkd::direct))
-        .route("/.well-known/openpgpkey/policy", get(wkd::policy))
-        .route("/.well-known/openpgpkey/{domain}/hu/{hash}", get(wkd::advanced))
-        .route("/.well-known/openpgpkey/{domain}/policy", get(wkd::policy))
-        .route("/mail/config-v1.1.xml", get(autoconfig::config))
-        .route("/jmap/session", get(jmap::session))
-        .route("/jmap/api", post(jmap::api))
-        .route("/jmap/download/{account}/{blob}/{name}", get(jmap::download))
-        .route("/jmap/view/{account}/{blob}", get(jmap::view))
-        .route("/jmap/eventsource", get(jmap::event_source))
-        .route("/jmap/ws", get(jmap_ws::upgrade))
+    // Mail programs' autoconfiguration and the Web Key Directory only with the service `mail`; JMAP with any of mail,
+    // calendars and files (RFC 0008, 4).
+    let mut mail = Router::new();
+    if services.mail {
+        mail = mail
+            .route("/.well-known/autoconfig/mail/config-v1.1.xml", get(autoconfig::config))
+            .route("/.well-known/openpgpkey/hu/{hash}", get(wkd::direct))
+            .route("/.well-known/openpgpkey/policy", get(wkd::policy))
+            .route("/.well-known/openpgpkey/{domain}/hu/{hash}", get(wkd::advanced))
+            .route("/.well-known/openpgpkey/{domain}/policy", get(wkd::policy))
+            .route("/mail/config-v1.1.xml", get(autoconfig::config));
+    }
+    if services.jmap() {
+        mail = mail
+            .route("/.well-known/jmap", get(jmap::well_known))
+            .route("/jmap/session", get(jmap::session))
+            .route("/jmap/api", post(jmap::api))
+            .route("/jmap/download/{account}/{blob}/{name}", get(jmap::download))
+            .route("/jmap/view/{account}/{blob}", get(jmap::view))
+            .route("/jmap/eventsource", get(jmap::event_source))
+            .route("/jmap/ws", get(jmap_ws::upgrade));
+    }
+    let mail = mail
         .layer(axum::extract::DefaultBodyLimit::max(MAIL_BODY_LIMIT))
         .layer(RequestBodyLimitLayer::new(MAIL_BODY_LIMIT))
         .layer(mail_cors.clone())
@@ -466,23 +521,33 @@ pub fn router(state: AppState, modules: Router, http: &Http) -> Router {
     let transfer_limit = state.jmap.as_ref().map_or(MAIL_BODY_LIMIT, |jmap| {
         MAIL_BODY_LIMIT.max(usize::try_from(jmap.max_size()).unwrap_or(usize::MAX).saturating_add(64 * 1024))
     });
-    let transfers = Router::new()
-        .route("/jmap/upload/{account}/", post(jmap::upload))
-        .route("/jmap/files/{account}/{node}", axum::routing::put(jmap::write_file))
-        .layer(mail_cors)
-        .merge(webdav::routes())
-        .merge(rest_transfers)
+    let mut uploads = Router::new();
+    if services.jmap() {
+        uploads = uploads.route("/jmap/upload/{account}/", post(jmap::upload));
+    }
+    if services.files {
+        uploads = uploads.route("/jmap/files/{account}/{node}", axum::routing::put(jmap::write_file));
+    }
+    let mut transfers = uploads.layer(mail_cors);
+    if services.files {
+        transfers = transfers.merge(webdav::routes()).merge(rest_transfers);
+    }
+    let transfers = transfers
         .layer(axum::extract::DefaultBodyLimit::max(transfer_limit))
         .layer(RequestBodyLimitLayer::new(transfer_limit))
         .layer(TimeoutLayer::with_status_code(StatusCode::REQUEST_TIMEOUT, TRANSFER_TIMEOUT))
         .with_state(state.clone());
     // CalDAV and CardDAV (dav.rs): WebDAV's own methods, any of them; not called from browsers.
-    let dav = Router::new()
-        .route("/.well-known/caldav", axum::routing::any(dav::well_known))
-        .route("/.well-known/carddav", axum::routing::any(dav::well_known))
-        .route("/dav", axum::routing::any(dav::handle))
-        .route("/dav/", axum::routing::any(dav::handle))
-        .route("/dav/{*path}", axum::routing::any(dav::handle))
+    let mut dav = Router::new();
+    if services.calendars {
+        dav = dav
+            .route("/.well-known/caldav", axum::routing::any(dav::well_known))
+            .route("/.well-known/carddav", axum::routing::any(dav::well_known))
+            .route("/dav", axum::routing::any(dav::handle))
+            .route("/dav/", axum::routing::any(dav::handle))
+            .route("/dav/{*path}", axum::routing::any(dav::handle));
+    }
+    let dav = dav
         .layer(axum::extract::DefaultBodyLimit::max(dav::DAV_BODY_LIMIT))
         .layer(RequestBodyLimitLayer::new(dav::DAV_BODY_LIMIT))
         .with_state(state.clone());

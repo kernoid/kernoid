@@ -29,8 +29,13 @@ fn files_error(failure: FilesAdminError) -> async_graphql::Error {
     async_graphql::Error::new(failure.to_string()).extend_with(|_, extensions| extensions.set("code", code))
 }
 
+/// The state – only where the installation has the service `files` (RFC 0008, 4).
 fn state<'a>(context: &'a Context<'_>) -> async_graphql::Result<&'a AppState> {
-    context.data::<AppState>()
+    let state = context.data::<AppState>()?;
+    if !state.services.files {
+        return Err(crate::graphql::service_off("files"));
+    }
+    Ok(state)
 }
 
 /// An account's files as its administrators see them.

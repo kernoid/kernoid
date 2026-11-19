@@ -57,8 +57,11 @@ pub struct Caller {
     pub tenant: Uuid,
     /// The account's login name.
     pub username: String,
-    /// Mail, and with it calendars and contacts.
+    /// Mail: the account has the service `mail` and the installation the service `mail` (RFC 0008, 4).
     pub mail: bool,
+    /// Calendars and contacts: the account has the service `mail` and the installation the service `calendars`; they
+    /// live in the account's mail store (RFC 0004).
+    pub calendars: bool,
     pub files: bool,
 }
 
@@ -156,10 +159,14 @@ impl Jmap {
             primary.insert(VACATION.into(), json!(own));
         }
         // Calendars and address books: the own account has both; one that shares some has those (RFC 0004, 9).
-        if caller.mail
+        if caller.calendars
             && let Some(groupware) = &self.groupware
         {
-            add_groupware(accounts.get_mut(&own), true, true, true);
+            // Without the service `mail`, the own account is in the session for its calendars alone.
+            let entry = accounts.entry(own.clone()).or_insert_with(|| {
+                json!({ "name": caller.username, "isPersonal": true, "isReadOnly": false, "accountCapabilities": {} })
+            });
+            add_groupware(Some(entry), true, true, true);
             primary.insert(CALENDARS.into(), json!(own));
             primary.insert(CONTACTS.into(), json!(own));
             for shared in groupware.shared_with(caller.account).await.unwrap_or_default() {
@@ -248,7 +255,12 @@ impl Jmap {
             },
         });
         if caller.mail {
-            for capability in [MAIL, SUBMISSION, VACATION, CALENDARS, CONTACTS] {
+            for capability in [MAIL, SUBMISSION, VACATION] {
+                capabilities[capability] = json!({});
+            }
+        }
+        if caller.calendars && self.groupware.is_some() {
+            for capability in [CALENDARS, CONTACTS] {
                 capabilities[capability] = json!({});
             }
         }
@@ -281,9 +293,9 @@ impl Jmap {
         }))
     }
 
-    /// The session's state: the mail store's for an account with mail, else the file store's.
+    /// The session's state: the mail store's for an account with mail or calendars, else the file store's.
     pub(crate) async fn session_state(&self, caller: &Caller) -> Result<String, SessionError> {
-        if caller.mail {
+        if caller.mail || caller.calendars {
             return Ok(self.mail.state(caller.account).await?.to_string());
         }
         match &self.files {
@@ -343,28 +355,26 @@ impl Jmap {
     /// accounts the caller reaches as mail, files of those whose files it reaches.
     pub async fn state_change(&self, caller: &Caller, accounts: &[Uuid]) -> Result<Value, SessionError> {
         let mut changed = serde_json::Map::new();
-        let shared_mail: Vec<Uuid> = match caller.mail {
+        let shared_mail: Vec<Uuid> = match caller.mail || caller.calendars {
             true => self.mail.shared_with(caller.account).await?.into_iter().map(|store| store.owner).collect(),
             false => Vec::new(),
         };
         for account in accounts {
             let own = *account == caller.account;
             let mut types = serde_json::Map::new();
-            if caller.mail && (own || shared_mail.contains(account)) {
+            let mail = caller.mail && (own || shared_mail.contains(account));
+            let calendars = caller.calendars && (own || shared_mail.contains(account));
+            if mail || calendars {
                 let state = json!(self.mail.state(*account).await?.to_string());
-                for kind in [
-                    "Mailbox",
-                    "Email",
-                    "Thread",
-                    "EmailDelivery",
-                    "EmailSubmission",
-                    "Calendar",
-                    "CalendarEvent",
-                    "CalendarEventNotification",
-                    "AddressBook",
-                    "ContactCard",
-                ] {
-                    types.insert(kind.into(), state.clone());
+                if mail {
+                    for kind in ["Mailbox", "Email", "Thread", "EmailDelivery", "EmailSubmission"] {
+                        types.insert(kind.into(), state.clone());
+                    }
+                }
+                if calendars {
+                    for kind in ["Calendar", "CalendarEvent", "CalendarEventNotification", "AddressBook", "ContactCard"] {
+                        types.insert(kind.into(), state.clone());
+                    }
                 }
             }
             if let Some(files) = &self.files

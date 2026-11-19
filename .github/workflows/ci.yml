@@ -61,6 +61,8 @@ jobs:
       - run: cargo test --locked
       - name: The kit against this kernoid
         run: scripts/client-check.sh target/debug/kernoid
+      - name: Small installations – identity alone (RFC 0008, 5)
+        run: scripts/profile-check.sh target/debug/kernoid
       - if: always()
         run: df -h .
 

@@ -5,20 +5,25 @@
   import { message, touch } from "./app.svelte.js";
   import { t } from "./i18n.js";
   import { Jmap, fetchSession } from "./jmap.js";
+  import { hasJmap, loadServices } from "./services.svelte.js";
   import Shell from "./Shell.svelte";
 
   let jmap = $state<Jmap>();
+  // Identity alone has no JMAP: the frame shows the account and the administration only.
+  let ready = $state(false);
   let failure = $state<unknown>();
   let admin = $state(false);
 
   $effect(() => {
     let stop = () => {};
-    fetchSession()
-      .then((session) => {
-        const value = new Jmap(session);
+    loadServices()
+      .then(async (services) => {
+        if (!hasJmap(services)) return;
+        const value = new Jmap(await fetchSession());
         stop = value.listen((types) => touch(...types));
         jmap = value;
       })
+      .then(() => (ready = true))
       .catch((error: unknown) => (failure = error));
     // Administration appears for those who may administer something.
     adminAccess()
@@ -34,7 +39,7 @@
     <p class="muted">{message(failure)}</p>
     <button type="button" onclick={() => window.location.reload()}>{t("Try again")}</button>
   </main>
-{:else if jmap}
+{:else if ready}
   <Shell {jmap} {admin} />
 {:else}
   <main class="center muted">{t("Loading")}</main>

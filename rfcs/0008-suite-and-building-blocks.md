@@ -74,8 +74,8 @@ off:
 
 - serves **no routes** – its JMAP capabilities are missing from the session, its REST and GraphQL operations answer
   `404`, WebDAV, CalDAV, CardDAV and the autoconfiguration of mail programs are not there;
-- runs **no jobs** in the worker and opens **no ports**; a role that only it needs (`smtp`, `imap`, `relay`) is refused
-  at start, with a message;
+- runs **no jobs** in the worker and opens **no ports**: its tables of configuration (`[smtp]`, `[imap]`) are refused at
+  start, with a message, and a role that only it needs (`smtp`, `imap`, `relay`) does nothing;
 - is **not offered**: the web app, the login UI and the administration hide it, and `GET /v1/services` (anyone may
   read it) names what is on, so that apps and other servers can ask;
 - keeps its **tables**: the schema of every service is migrated, whatever is on (one history, [0009](0009-kernoid-in-other-servers.md),
@@ -91,7 +91,8 @@ is off for the installation is off for every tenant.
 
 - **Identity alone:** `[services]` all `false`, the roles `api` and `worker`. It needs PostgreSQL; **object storage is
   not needed**: with `[blob] kind = "database"` the few objects identity keeps (pictures of accounts) are stored in
-  PostgreSQL, sealed like any other, up to 4 MiB each. `database` is refused while mail, files or the relay is on.
+  PostgreSQL (`blob_objects`), sealed like any other, up to 4 MiB each. `database` is refused while mail or files is on
+  (implemented in 0.5.0); with the relay, see [0010](0010-foundation.md).
 - **A relay alone:** `relay = true`, the others `false`, the roles `api`, `worker` and `relay` (or `all`). Spaces are
   founded by accounts of the installation, or by anyone when the relay is open ([0010](0010-foundation.md), section 4).
 - **Everything:** as today.

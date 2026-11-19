@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE blob_objects SET path = 'tenants/00000000-0000-0000-0000-000000000001/x'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "0b2732dc98df404ccf091e163c4e7cc58411541169671d3d6192c1bd83c2bac1"
+}

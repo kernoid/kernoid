@@ -17,6 +17,7 @@
   import MailSettings from "./MailSettings.svelte";
   import Encryption from "./Encryption.svelte";
   import Vacation from "./Vacation.svelte";
+  import { services } from "../services.svelte.js";
 
   const session = loaded(() => client.session());
   const emailLanguage = loaded(() => client.emailLanguage());
@@ -163,11 +164,15 @@
       </section>
     {/if}
 
-    <MailSettings />
+    {#if services().mail}
+      <MailSettings />
 
-    <Vacation />
+      <Vacation />
+    {/if}
 
-    <Encryption />
+    {#if services().mail || services().files}
+      <Encryption />
+    {/if}
 
     {#if notificationsSupported()}
       <section>

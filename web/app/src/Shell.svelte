@@ -8,7 +8,7 @@
   import { loaded, message, provideJmap } from "./app.svelte.js";
   import { avatarOfAccount, loadAvatars } from "./avatars.svelte.js";
   import { t } from "./i18n.js";
-  import { FILENODE, type Jmap, MAIL } from "./jmap.js";
+  import { CALENDARS, CONTACTS, FILENODE, type Jmap, MAIL } from "./jmap.js";
   import MailNotifications from "./mail/MailNotifications.svelte";
   import MailView from "./mail/MailView.svelte";
   import CalendarView from "./calendar/CalendarView.svelte";
@@ -23,9 +23,9 @@
 
   type Section = "mail" | "calendar" | "contacts" | "files" | "account" | "admin";
 
-  let { jmap, admin }: { jmap: Jmap; admin: boolean } = $props();
+  let { jmap, admin }: { jmap: Jmap | undefined; admin: boolean } = $props();
   // svelte-ignore state_referenced_locally
-  provideJmap(jmap);
+  if (jmap) provideJmap(jmap);
 
   let hash = $state(window.location.hash);
   let sectionBar = $state<HTMLElement>();
@@ -37,9 +37,12 @@
   });
 
   const available = $derived.by((): Section[] => {
+    if (!jmap) return [];
     const primary = jmap.session.primaryAccounts;
     const out: Section[] = [];
-    if (primary[MAIL]) out.push("mail", "calendar", "contacts");
+    if (primary[MAIL]) out.push("mail");
+    if (primary[CALENDARS]) out.push("calendar");
+    if (primary[CONTACTS]) out.push("contacts");
     // Files also for someone with no store of their own who reaches a drive or someone's shared folders.
     const accounts = Object.values(jmap.session.accounts);
     if (primary[FILENODE] || accounts.some((account) => account.accountCapabilities[FILENODE])) out.push("files");
@@ -115,8 +118,8 @@
         {/each}
       </div>
       <UserMenu
-        name={me.value?.account.display_name ?? jmap.session.username}
-        address={me.value?.account.address ?? jmap.session.username}
+        name={me.value?.account.display_name ?? jmap?.session.username ?? ""}
+        address={me.value?.account.address ?? jmap?.session.username ?? ""}
         avatar={avatarOfAccount(me.value?.account.id)}
         {admin}
         onlogout={() => void logout()}

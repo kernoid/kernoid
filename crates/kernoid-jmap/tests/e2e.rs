@@ -83,7 +83,7 @@ async fn mail_arrives_encrypted_to_the_key_the_client_made(pool: PgPool) {
         .with_key_directory(Arc::new(Directory));
     let address = "alice@firma.example";
     let account = identity.add_account(tenant, &Address::parse(address).unwrap(), "Alice", WHO).await.unwrap();
-    let alice = Caller { account, tenant, username: address.into(), mail: true, files: false };
+    let alice = Caller { account, tenant, username: address.into(), mail: true, calendars: true, files: false };
     let id = account.to_string();
 
     let session = jmap.session(&alice, "https://login.firma.example").await.unwrap();
@@ -260,7 +260,7 @@ async fn encrypted_calendars_hold_only_what_the_apps_encrypted(pool: PgPool) {
         .with_groupware(groupware.clone());
     let address = "alice@firma.example";
     let account = identity.add_account(tenant, &Address::parse(address).unwrap(), "Alice", WHO).await.unwrap();
-    let alice = Caller { account, tenant, username: address.into(), mail: true, files: false };
+    let alice = Caller { account, tenant, username: address.into(), mail: true, calendars: true, files: false };
     let id = account.to_string();
     let using = ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:calendars", "https://kernoid.dev/jmap/openpgp"];
     let call = |name: &'static str, args: Value| {

@@ -126,6 +126,13 @@ pub(crate) async fn grant_service(
     AdminSession(admin): AdminSession,
     Path((account, service)): Path<(String, String)>,
 ) -> Response {
+    if let Ok(service) = Service::parse(&service)
+        && !crate::services::runs(state.services, service)
+    {
+        return Problem::new(axum::http::StatusCode::CONFLICT)
+            .detail(format!("this installation has no {}", service.as_str()))
+            .into_response();
+    }
     let result = async {
         let service = Service::parse(&service)?;
         state.identity.admin_grant_service(&admin, id(&account, "the account")?, service).await

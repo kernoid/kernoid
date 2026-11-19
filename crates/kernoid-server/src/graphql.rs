@@ -60,6 +60,12 @@ pub fn schema() -> ApiSchema {
 struct BearerToken(String);
 
 /// An identity error as a GraphQL error with a code; internal errors are logged, never shown.
+/// A field of a service this installation does not run (RFC 0008, 4).
+pub(crate) fn service_off(service: &str) -> async_graphql::Error {
+    async_graphql::Error::new(format!("this installation has no {service}"))
+        .extend_with(|_, extensions| extensions.set("code", "SERVICE_OFF"))
+}
+
 fn error(error: IdentityError) -> async_graphql::Error {
     let code = match &error {
         IdentityError::InvalidCredentials

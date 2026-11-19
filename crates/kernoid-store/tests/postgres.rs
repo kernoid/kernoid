@@ -243,6 +243,37 @@ async fn ping_and_paths(pool: PgPool) {
 }
 
 #[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
+async fn objects_in_postgresql_are_sealed_and_limited(pool: PgPool) {
+    let tenant = Uuid::from_u128(1);
+    let keys = Arc::new(TenantKeys::new(pool.clone(), Key::random().unwrap()));
+    let store = BlobStore::open(&Blob::Database, keys.clone(), pool.clone()).unwrap();
+    assert!(matches!(BlobStore::from_config(&Blob::Database, keys), Err(BlobError::NeedsDatabase)));
+    store.ping().await.unwrap();
+    store.put(tenant, "avatars/a/1", Bytes::from_static(b"picture")).await.unwrap();
+    store.put(tenant, "avatars/a/1", Bytes::from_static(b"another")).await.unwrap();
+    assert_eq!(store.get(tenant, "avatars/a/1").await.unwrap(), "another");
+    // Sealed like everything else: the table holds no plain content.
+    let stored = sqlx::query_scalar!("SELECT content FROM blob_objects").fetch_one(&pool).await.unwrap();
+    assert!(!stored.windows(7).any(|w| w == b"another"));
+    // Bound to its path: moved elsewhere, it no longer opens.
+    sqlx::query!("UPDATE blob_objects SET path = 'tenants/00000000-0000-0000-0000-000000000001/x'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(store.get(tenant, "x").await.is_err());
+    store.delete(tenant, "x").await.unwrap();
+    assert!(matches!(store.get(tenant, "x").await, Err(BlobError::NotFound)));
+    let large = Bytes::from(vec![0u8; kernoid_store::DATABASE_OBJECT_LIMIT + 1]);
+    assert!(matches!(store.put(tenant, "big", large).await, Err(BlobError::TooLarge(_))));
+    // The runtime role may keep objects there.
+    runtime_role(&pool).await;
+    let write = async |c: &mut sqlx::PgConnection| {
+        sqlx::query!("INSERT INTO blob_objects (path, content) VALUES ('p', '\\x00')").execute(c).await.map(drop)
+    };
+    assert_eq!(as_runtime(&pool, write).await, None);
+}
+
+#[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
 async fn rotated_tenant_keys_keep_old_content_readable(pool: PgPool) {
     let tenant = Uuid::from_u128(1);
     let keys = Arc::new(TenantKeys::new(pool.clone(), Key::random().unwrap()));

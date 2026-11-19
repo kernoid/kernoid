@@ -838,6 +838,7 @@ async fn serve(config: Config) -> anyhow::Result<()> {
     tracing::info!(
         version = env!("CARGO_PKG_VERSION"),
         roles = ?config.roles,
+        services = ?config.services,
         modules = ?modules.names().collect::<Vec<_>>(),
         "starting"
     );
@@ -849,7 +850,7 @@ async fn serve(config: Config) -> anyhow::Result<()> {
         None => None,
     };
     let keys = Arc::new(TenantKeys::with_main_keys(db.clone(), main_keys.clone()));
-    let mut blobs = BlobStore::from_config(&config.blob, keys.clone()).context("setting up object storage")?;
+    let mut blobs = BlobStore::open(&config.blob, keys.clone(), db.clone()).context("setting up object storage")?;
     // Content of tenants that switched the module on is scanned as it is stored, mail before it is accepted.
     if let Some(table) = modules.config(kernoid_clamav::NAME) {
         blobs = blobs.with_scanner(kernoid_clamav::ClamAvModule::scanner(table).map_err(anyhow::Error::msg)?);
@@ -866,7 +867,8 @@ async fn serve(config: Config) -> anyhow::Result<()> {
         Identity::with_secrets(events.clone(), main_keys.clone()),
         oidc.clone(),
     )
-    .with_modules(&known);
+    .with_modules(&known)
+    .with_services(config.services);
     match DnsResolver::from_system() {
         Ok(dns) => state = state.with_dns(dns),
         Err(error) => tracing::warn!(%error, "no DNS resolver; tenants cannot verify domains themselves"),
@@ -877,23 +879,33 @@ async fn serve(config: Config) -> anyhow::Result<()> {
     // Changes of mail stores, from PostgreSQL – for JMAP's push and IMAP's IDLE.
     let mail_events = kernoid_mail::MailEvents::default();
     let queue_days = config.smtp.as_ref().map_or(5, |smtp| smtp.queue_days);
-    state = state.with_jmap(
-        kernoid_jmap::Jmap::new(
+    let services = config.services;
+    if services.jmap() {
+        let mut jmap = kernoid_jmap::Jmap::new(
             mail_store(db.clone(), blobs.clone(), &config),
             config.mail.max_message_size.max(config.files.max_file_size),
             jiff::SignedDuration::from_hours(24 * i64::from(queue_days)),
         )
-        .with_groupware(kernoid_groupware::Groupware::new(mail_store(db.clone(), blobs.clone(), &config), keys.clone()))
-        .with_files(file_store(db.clone(), blobs.clone(), &config))
         .with_identity(Identity::new(events.clone()))
-        .with_key_directory(std::sync::Arc::new(kernoid_server::wkd::Lookup::new())),
-        mail_events.clone(),
-    );
+        .with_key_directory(std::sync::Arc::new(kernoid_server::wkd::Lookup::new()));
+        if services.calendars {
+            jmap = jmap.with_groupware(kernoid_groupware::Groupware::new(
+                mail_store(db.clone(), blobs.clone(), &config),
+                keys.clone(),
+            ));
+        }
+        if services.files {
+            jmap = jmap.with_files(file_store(db.clone(), blobs.clone(), &config));
+        }
+        state = state.with_jmap(jmap, mail_events.clone());
+    }
     // Calendars and contacts (RFC 0004) over CalDAV and CardDAV.
-    state = state.with_dav(kernoid_dav::Dav::new(kernoid_groupware::Groupware::new(
-        mail_store(db.clone(), blobs.clone(), &config),
-        keys.clone(),
-    )));
+    if services.calendars {
+        state = state.with_dav(kernoid_dav::Dav::new(kernoid_groupware::Groupware::new(
+            mail_store(db.clone(), blobs.clone(), &config),
+            keys.clone(),
+        )));
+    }
     if let Some(from) = &config.mail.notification_from {
         state = state.with_notifications(from.clone());
     }
@@ -963,7 +975,7 @@ async fn serve(config: Config) -> anyhow::Result<()> {
         }
         _ => None,
     };
-    if config.has_role(Role::Api) || serves_clients {
+    if (config.has_role(Role::Api) && services.jmap()) || serves_clients {
         tasks.spawn({
             let (events, db, stop) = (mail_events.clone(), db.clone(), shutdown.clone());
             async move {
@@ -1158,13 +1170,18 @@ async fn serve(config: Config) -> anyhow::Result<()> {
             }
             None => tracing::info!("no [smtp] in the configuration: not sending mail"),
         }
-        tasks.spawn(held_submissions(mail_store(db.clone(), blobs.clone(), &config), shutdown.clone()));
-        tasks.spawn(link_notices(
-            Identity::new(events.clone()),
-            mail_store(db.clone(), blobs.clone(), &config),
-            config.smtp.as_ref().map(|smtp| smtp.hostname.clone()),
-            shutdown.clone(),
-        ));
+        if services.mail {
+            tasks.spawn(held_submissions(mail_store(db.clone(), blobs.clone(), &config), shutdown.clone()));
+        }
+        // Notices of what came in through links go out as mail.
+        if services.files && services.mail {
+            tasks.spawn(link_notices(
+                Identity::new(events.clone()),
+                mail_store(db.clone(), blobs.clone(), &config),
+                config.smtp.as_ref().map(|smtp| smtp.hostname.clone()),
+                shutdown.clone(),
+            ));
+        }
         tasks.spawn(mail_housekeeping(
             mail_store(db.clone(), blobs.clone(), &config),
             file_store(db.clone(), blobs.clone(), &config),
@@ -1630,7 +1647,7 @@ async fn mail_housekeeping(
 async fn files(config: &Config, command: FilesCommand) -> anyhow::Result<()> {
     let db = kernoid_store::connect(&config.database).await.context("connecting to PostgreSQL")?;
     let keys = Arc::new(TenantKeys::with_main_keys(db.clone(), main_keys(config)?));
-    let blobs = BlobStore::from_config(&config.blob, keys).context("setting up object storage")?;
+    let blobs = BlobStore::open(&config.blob, keys, db.clone()).context("setting up object storage")?;
     let identity = Identity::new(EventStore::new(db.clone()));
     let files = file_store(db, blobs, config);
     match command {
@@ -1666,7 +1683,7 @@ async fn files(config: &Config, command: FilesCommand) -> anyhow::Result<()> {
 async fn collections(config: &Config, command: CollectionCommand) -> anyhow::Result<()> {
     let db = kernoid_store::connect(&config.database).await.context("connecting to PostgreSQL")?;
     let keys = Arc::new(TenantKeys::with_main_keys(db.clone(), main_keys(config)?));
-    let blobs = BlobStore::from_config(&config.blob, keys.clone()).context("setting up object storage")?;
+    let blobs = BlobStore::open(&config.blob, keys.clone(), db.clone()).context("setting up object storage")?;
     let identity = Identity::new(EventStore::new(db.clone()));
     let groupware = kernoid_groupware::Groupware::new(mail_store(db, blobs, config), keys);
     match command {
@@ -1726,7 +1743,7 @@ async fn collections(config: &Config, command: CollectionCommand) -> anyhow::Res
 async fn mail(config: &Config, command: MailCommand) -> anyhow::Result<()> {
     let db = kernoid_store::connect(&config.database).await.context("connecting to PostgreSQL")?;
     let keys = Arc::new(TenantKeys::with_main_keys(db.clone(), main_keys(config)?));
-    let blobs = BlobStore::from_config(&config.blob, keys).context("setting up object storage")?;
+    let blobs = BlobStore::open(&config.blob, keys, db.clone()).context("setting up object storage")?;
     let identity = Identity::new(EventStore::new(db.clone()));
     let mail = mail_store(db, blobs, config);
     // A mailbox by id or role.

@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO blob_objects (path, content) VALUES ('p', '\\x00')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "1c4b57d304eb155e518118fea3c06f06a1d504a2c5238ddee47388f633d72299"
+}

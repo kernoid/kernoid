@@ -7,6 +7,31 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 ## [Unreleased]
 
+kernoid becomes the core of a suite of building blocks ([RFC 0008](rfcs/0008-suite-and-building-blocks.md)–0011): an
+installation runs only the services it wants, down to identity alone, and the parts apps use are one kit under MIT.
+Migration 0052 adds a table; installations that keep mail, calendars and files change nothing in their configuration.
+
+### Added
+
+- **Services** (`[services]`: `mail`, `calendars`, `files`, all on by default): a service that is off serves no routes
+  (JMAP's capabilities, REST and GraphQL operations, CalDAV/CardDAV, WebDAV, mail programs' autoconfiguration, the
+  Web Key Directory), runs no background work and is hidden in the web app; `[smtp]` and `[imap]` need `mail`.
+  Calendars and contacts may run without mail. `GET /v1/services` says what an installation runs.
+- **Identity alone without object storage:** `[blob] kind = "database"` keeps objects – pictures of accounts – in
+  PostgreSQL (`blob_objects`, sealed like every object, up to 4 MiB each), for installations without mail and files.
+- RFCs 0008 (the suite: building blocks, services, licences), 0009 (kernoid's identity in other servers), 0010 (the
+  foundation of end-to-end encrypted spaces) and 0011 (the app kit).
+
+### Changed
+
+- **The kit:** the Rust SDK, kernoid-e2e and kernoid-sync move from `apps/` to `kit/`, one Cargo workspace under MIT
+  with one lock file; CI checks that nothing in it is under another licence or reaches a server crate. The terminal
+  app moves to `tui/`.
+- **Licence:** the web SDK, the login UI and the web app (`web/`) are AGPL-3.0-or-later now, like the server – no app
+  under MIT uses them (RFC 0008, 6). A web app under another licence logs in with any OpenID Connect library.
+- **JMAP:** an account's mail and its calendars and contacts are separate in the session (`Caller::calendars`), so
+  that each follows its service.
+
 ## [0.4.0] – 2026-11-19
 
 Dates and times move from chrono, which is no longer maintained, to Jiff 1.0. No migration and no change to the

@@ -8165,6 +8165,26 @@
         }
       }
     },
+    "/v1/services": {
+      "get": {
+        "tags": [
+          "meta"
+        ],
+        "summary": "The services this installation runs; anyone may ask.",
+        "operationId": "get_v1_services",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServicesView"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/sessions": {
       "get": {
         "tags": [
@@ -13149,6 +13169,29 @@
           "state": {
             "type": "string",
             "description": "`on`, or `requested` – waiting for an administrator."
+          }
+        }
+      },
+      "ServicesView": {
+        "type": "object",
+        "description": "The services of this installation; identity is always there.",
+        "required": [
+          "mail",
+          "calendars",
+          "files"
+        ],
+        "properties": {
+          "calendars": {
+            "type": "boolean",
+            "description": "Calendars and contacts: JMAP, CalDAV, CardDAV."
+          },
+          "files": {
+            "type": "boolean",
+            "description": "Files: JMAP FileNode, WebDAV, links."
+          },
+          "mail": {
+            "type": "boolean",
+            "description": "Mail: JMAP Mail, SMTP, IMAP."
           }
         }
       },

@@ -62,7 +62,7 @@ impl Setup {
         let address = format!("{local}@firma.example");
         let account =
             self.identity.add_account(self.tenant, &Address::parse(&address).unwrap(), local, WHO).await.unwrap();
-        Caller { account, tenant: self.tenant, username: address, mail: true, files: false }
+        Caller { account, tenant: self.tenant, username: address, mail: true, calendars: true, files: false }
     }
 
     async fn one(&self, caller: &Caller, name: &str, args: Value) -> Value {
