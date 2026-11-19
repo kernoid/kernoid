@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT o.blob AS \"blob!\" FROM relay_stream_originals o JOIN relay_spaces s ON s.space = o.space\n               WHERE s.space = $1 AND s.tenant_id = $2 AND o.blob IS NOT NULL",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "blob!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "relay_stream_originals",
+            "name": "blob"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "e0abf089506d5ebd020dc564778e366f241f06289a82b7b06936e76f9120e39f"
+}

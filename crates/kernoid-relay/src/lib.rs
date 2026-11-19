@@ -18,6 +18,12 @@
 //! | `GET …/requests` | the requests to join, for members who may manage |
 //!
 //! Every request but the open ones is signed by a member (`kernoid_crypt::request_signature`).
+//!
+//! Protocol 2 – streams (RFC 0012) – is in [`v2`], below `/relay/<scheme>/v2/`; a space is of one protocol.
+
+mod v2;
+
+pub use v2::{READ_HEADER, WRITE_HEADER};
 
 use std::{
     collections::BTreeMap,
@@ -170,11 +176,11 @@ impl Relay {
     /// The domain and tenant of a space the relay holds, in the domain the request names.
     async fn held(&self, scheme: &str, space: &SpaceId) -> Result<(Domain, Uuid), RelayError> {
         let domain = self.domain(scheme)?;
-        let row = sqlx::query!("SELECT domain, tenant_id FROM relay_spaces WHERE space = $1", space.as_str())
+        let row = sqlx::query!("SELECT domain, tenant_id, protocol FROM relay_spaces WHERE space = $1", space.as_str())
             .fetch_optional(&self.db)
             .await?
             .ok_or_else(not_found)?;
-        if row.domain != scheme {
+        if row.domain != scheme || row.protocol != 1 {
             return Err(not_found());
         }
         Ok((domain, row.tenant_id))
@@ -290,12 +296,20 @@ impl Relay {
         )
         .fetch_all(&mut *transaction)
         .await?;
+        let originals = sqlx::query_scalar!(
+            r#"SELECT o.blob AS "blob!" FROM relay_stream_originals o JOIN relay_spaces s ON s.space = o.space
+               WHERE s.space = $1 AND s.tenant_id = $2 AND o.blob IS NOT NULL"#,
+            space,
+            tenant,
+        )
+        .fetch_all(&mut *transaction)
+        .await?;
         let removed = sqlx::query!("DELETE FROM relay_spaces WHERE space = $1 AND tenant_id = $2", space, tenant)
             .execute(&mut *transaction)
             .await?
             .rows_affected();
-        for key in blobs {
-            garbage::mark_now(&mut transaction, tenant, &key).await?;
+        for key in blobs.iter().chain(&originals) {
+            garbage::mark_now(&mut transaction, tenant, key).await?;
         }
         transaction.commit().await?;
         Ok(removed > 0)
@@ -309,6 +323,7 @@ pub fn router(relay: Relay) -> Router {
         .route("/relay/{scheme}/v1/spaces/{space}/envelopes", get(envelopes).post(add_envelope))
         .route("/relay/{scheme}/v1/spaces/{space}/requests", get(requests).post(add_request))
         .layer(DefaultBodyLimit::max(MAX_BODY))
+        .merge(v2::routes())
         .with_state(relay)
 }
 

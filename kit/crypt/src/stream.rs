@@ -1145,3 +1145,47 @@ impl Joining {
         Self::mac(secret, &self.device, &self.person).verify_slice(&self.proof.0).is_ok()
     }
 }
+
+/// What founding a space gives the founding device.
+#[derive(Debug, Clone)]
+pub struct Founding {
+    /// Record 0 of the roster.
+    pub record: RosterRecord,
+    pub person: PersonId,
+    pub person_seed: [u8; 32],
+    pub space_stream: StreamId,
+    pub space_key: StreamKey,
+}
+
+/// Record 0 of a new space: a person, its device with every permission, the person's key and the space stream linked
+/// to it.
+pub fn found(
+    domain: Domain,
+    space: &SpaceId,
+    keys: &HybridKeys,
+    device: DeviceId,
+    device_name: Option<String>,
+    person_name: Option<String>,
+) -> Result<Founding, EncryptionError> {
+    let person = PersonId::generate();
+    let person_seed: [u8; 32] = random();
+    let founder = Device::new(keys, person.clone(), device, device_name).with(&[
+        Permission::Write,
+        Permission::Members,
+        Permission::Purge,
+    ]);
+    let key = person_key(domain, space, &person, 0, &person_seed, None, &[&founder])?;
+    let space_stream = StreamId::generate();
+    let space_key = StreamKey::generate();
+    let link = link_to_person(domain, &space_stream, 0, &space_key, &key)?;
+    let record = RosterRecord {
+        space_stream: Some(space_stream.clone()),
+        add_persons: vec![Person { id: person.clone(), name: person_name }],
+        add_devices: vec![founder],
+        person_keys: vec![key],
+        space_links: Some(SpaceLinks { generation: 0, links: vec![link], previous: None }),
+        ..RosterRecord::blank(space)
+    }
+    .sign(keys);
+    Ok(Founding { record, person, person_seed, space_stream, space_key })
+}

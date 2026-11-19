@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT domain, tenant_id FROM relay_spaces WHERE space = $1",
+  "query": "SELECT domain, tenant_id, protocol FROM relay_spaces WHERE space = $1",
   "describe": {
     "columns": [
       {
@@ -24,6 +24,17 @@
             "name": "tenant_id"
           }
         }
+      },
+      {
+        "ordinal": 2,
+        "name": "protocol",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "relay_spaces",
+            "name": "protocol"
+          }
+        }
       }
     ],
     "parameters": {
@@ -33,8 +44,9 @@
     },
     "nullable": [
       false,
+      false,
       false
     ]
   },
-  "hash": "bddf20dc72d6c7809ea37a6612ade0d5393dd7cf593637e4a6f6b3d5f40357cc"
+  "hash": "e46d0daf21de2d7fe620540bf9b516415addb62ecf2ccb50d78e5c5f254a0e16"
 }

@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT inbox FROM relay_streams WHERE space = $1 AND stream = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "inbox",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "relay_streams",
+            "name": "inbox"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "12e5db3e1f0984a15d6fe89cec8b736f1e96d698fe30d7d05833451c78d3c1d4"
+}
