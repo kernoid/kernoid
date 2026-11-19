@@ -69,7 +69,9 @@ server crate by a path without anyone noticing; apart, the kit cannot reach serv
 `scripts/kit-check.sh` (CI's job `kit`) checks that every crate is MIT, that no path leads out of `kit/` and that every
 file in it says MIT. Its requirements are minimum versions, as a library's; `kit/Cargo.lock` pins them (at least two
 weeks old, `tui/scripts/check-age.py --dir=kit`), and `kit/deny.toml` allows only permissive licences. The server
-takes `kernoid-e2e` from it by path. The SDK logs in with HTTP Basic (an address and an app password) and sends the
+takes `kernoid-e2e` from it by path. Streams (RFC 0012) are `kernoid_crypt::stream` (with the hybrid keys of
+`kernoid_crypt::pq`), `kernoid_space_store::streams` and `kernoid_replica::streams`; protocol 1 (`Replica`, member
+lists and envelopes) stays beside them until every program has moved. The SDK logs in with HTTP Basic (an address and an app password) and sends the
 credentials only to the origin it logged in to. The kit's crates are on crates.io, released with kernoid in the same
 version (`[workspace.package] version` in `kit/Cargo.toml`) – CI's job `crates` publishes them in the order
 `kit/scripts/publish-order.sh` gives on a version tag, through crates.io's trusted publishing (environment

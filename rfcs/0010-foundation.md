@@ -82,6 +82,19 @@ vaults move onto them and kernoid has one end-to-end design for files, documents
 a space shown as a folder of the file store. Until then, a vault and a space are two things – OPEN, to be closed in
 the step after 0.5.0.
 
+With streams in place ([0012](0012-streams.md)), the move is planned as follows (**OPEN**, needs the maintainer's go
+ahead, since it changes stored data):
+
+1. A vault is a space of protocol 2 at the account's kernoid; its directories and files are streams (a directory's
+   stream links the streams of what lies in it), names and versions are events, contents are originals in parts. The
+   file store keeps only a directory node that names the space (`kernoid:space`) – the server sees no names any more.
+2. The SDK (`kernoid-client`) and `kernoid-sync` reach vaults through `kernoid_replica::streams`; the apps through the
+   bridge; the terminal app through the SDK.
+3. The web app needs streams in the browser: `kernoid-crypt` built for WebAssembly as `kernoid-e2e` is, requests and a
+   store of its own in TypeScript (IndexedDB).
+4. Existing OpenPGP vaults are copied into spaces by a member's app, then removed – a migration of stored data, run
+   per vault, with the OpenPGP vault kept until the copy is checked.
+
 ## 6. Post-quantum
 
 aktujo's keys are classical (Ed25519, X25519 through HPKE); kernoid's rule is to prefer post-quantum where it disturbs
