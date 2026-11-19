@@ -89,6 +89,7 @@ impl Setup {
             calendars: mail,
             files: true,
             shared_files: true,
+            relay: false,
         }
     }
 

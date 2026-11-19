@@ -70,6 +70,7 @@ impl Setup {
             calendars: true,
             files: false,
             shared_files: true,
+            relay: false,
         }
     }
 

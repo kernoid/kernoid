@@ -316,6 +316,27 @@ impl Relay {
     }
 }
 
+impl Relay {
+    /// Removes the spaces of vaults destroyed in the file store (`relay_space_removals`, RFC 0010, 5), at most
+    /// `batch` of them; returns how many were done.
+    pub async fn remove_destroyed_vaults(&self, batch: i64) -> Result<usize, sqlx::Error> {
+        let due = sqlx::query!(
+            r#"SELECT r.space, s.tenant_id AS "tenant?" FROM relay_space_removals r
+               LEFT JOIN relay_spaces s ON s.space = r.space ORDER BY r.since LIMIT $1"#,
+            batch,
+        )
+        .fetch_all(&self.db)
+        .await?;
+        for row in &due {
+            if let Some(tenant) = row.tenant {
+                self.remove_space(tenant, &row.space).await?;
+            }
+            sqlx::query!("DELETE FROM relay_space_removals WHERE space = $1", row.space).execute(&self.db).await?;
+        }
+        Ok(due.len())
+    }
+}
+
 /// The routes of the relay, below `/relay/{scheme}/v1/`.
 pub fn router(relay: Relay) -> Router {
     Router::new()
@@ -385,14 +406,12 @@ async fn add_record(
         if held.is_some() {
             return Err(RelayError(StatusCode::CONFLICT, "not the next record".into()));
         }
-        let (tenant, account) = match relay.open_for {
-            Some(tenant) => (tenant, None),
-            None => {
-                let founder =
-                    relay.founders.founder(&extensions, &headers).await.ok_or_else(|| {
-                        RelayError(StatusCode::UNAUTHORIZED, "founding a space needs an account".into())
-                    })?;
-                (founder.tenant, Some(founder.account))
+        // An account founds a space as its own, also on an open relay (a vault names the space it founded).
+        let (tenant, account) = match (relay.founders.founder(&extensions, &headers).await, relay.open_for) {
+            (Some(founder), _) => (founder.tenant, Some(founder.account)),
+            (None, Some(tenant)) => (tenant, None),
+            (None, None) => {
+                return Err(RelayError(StatusCode::UNAUTHORIZED, "founding a space needs an account".into()));
             }
         };
         let inserted = sqlx::query!(

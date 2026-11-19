@@ -41,6 +41,9 @@ pub const WEBSOCKET: &str = "urn:ietf:params:jmap:websocket";
 pub const FILE_VERSIONS: &str = "https://kernoid.dev/jmap/file-versions";
 /// kernoid's own: links to files for people without an account (`FileLink/get`, `/set`, RFC 0005, 11.3).
 pub const FILE_LINKS: &str = "https://kernoid.dev/jmap/file-links";
+/// Vaults on spaces (RFC 0010, 5): the relay whose spaces hold them – `relayUrl`, the base of its protocol 2 for
+/// kernoid's own spaces.
+pub const SPACE_VAULTS: &str = "https://kernoid.dev/jmap/space-vaults";
 pub use openpgp::{KeyDirectory, OPENPGP};
 pub use vacation::VACATION;
 
@@ -67,6 +70,8 @@ pub struct Caller {
     /// Stores of others shared with the caller: off when the installation or the tenant is without files (RFC 0008,
     /// 4) – the grants stay.
     pub shared_files: bool,
+    /// Vaults on spaces: the installation and the tenant have the relay (RFC 0010, 5).
+    pub relay: bool,
 }
 
 /// JMAP for one installation.
@@ -279,6 +284,9 @@ impl Jmap {
                 // Where a link opens: its token goes into the fragment, which browsers do not send.
                 capabilities[FILE_LINKS] = json!({ "urlTemplate": format!("{base}/app/link.html#{{token}}") });
             }
+        }
+        if self.files.is_some() && (caller.files || caller.shared_files) && caller.relay {
+            capabilities[SPACE_VAULTS] = json!({ "relayUrl": format!("{base}/relay/kernoid") });
         }
         if self.identity.is_some() {
             capabilities[PRINCIPALS] = json!({});

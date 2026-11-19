@@ -91,6 +91,7 @@ async fn mail_arrives_encrypted_to_the_key_the_client_made(pool: PgPool) {
         calendars: true,
         files: false,
         shared_files: true,
+        relay: false,
     };
     let id = account.to_string();
 
@@ -276,6 +277,7 @@ async fn encrypted_calendars_hold_only_what_the_apps_encrypted(pool: PgPool) {
         calendars: true,
         files: false,
         shared_files: true,
+        relay: false,
     };
     let id = account.to_string();
     let using = ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:calendars", "https://kernoid.dev/jmap/openpgp"];

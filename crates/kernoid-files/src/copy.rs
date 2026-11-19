@@ -50,6 +50,9 @@ fn copy<'a>(
         if !from.readable(node.id) {
             return Err(FilesError::Forbidden("reading what is copied".into()));
         }
+        if node.space.is_some() {
+            return Err(FilesError::Invalid("a vault on a space is not copied".into()));
+        }
         let mut new = match (node.node_type, node.content) {
             (NodeType::File, Some(content)) => {
                 NewNode::file(parent, name, files.existing(content).await?, node.media_type.clone())

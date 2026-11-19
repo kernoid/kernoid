@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, parent_id, node_type, name, role, content_id, size, media_type, executable,\n                created, modified, accessed, changed, is_subscribed, vault_id, vault_key, encrypted_name\n         FROM file_nodes WHERE account_id = $1 AND id = ANY($2) ORDER BY id",
+  "query": "SELECT id, parent_id, node_type, name, role, content_id, size, media_type, executable,\n                created, modified, accessed, changed, is_subscribed, vault_id, vault_key, encrypted_name, space_id\n         FROM file_nodes WHERE account_id = $1 AND id = ANY($2) ORDER BY id",
   "describe": {
     "columns": [
       {
@@ -189,6 +189,17 @@
             "name": "encrypted_name"
           }
         }
+      },
+      {
+        "ordinal": 17,
+        "name": "space_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "file_nodes",
+            "name": "space_id"
+          }
+        }
       }
     ],
     "parameters": {
@@ -214,8 +225,9 @@
       false,
       true,
       true,
+      true,
       true
     ]
   },
-  "hash": "bcec48c2b2cdaa50f4e60cf0d4abd360d067464a8367a31bb9e2e28665785884"
+  "hash": "6f4d013220cfaab308d9f54ce58305c164dd27c1a365012b0f7477a1eda41570"
 }

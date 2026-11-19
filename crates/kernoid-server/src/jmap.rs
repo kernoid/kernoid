@@ -177,6 +177,7 @@ where
             calendars,
             files,
             shared_files,
+            relay: services.relay && on("relay"),
         };
         Ok(Self(caller, base))
     }

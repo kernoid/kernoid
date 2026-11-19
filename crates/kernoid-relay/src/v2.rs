@@ -260,14 +260,12 @@ async fn add_roster_record(
         if held.is_some() {
             return Err(RelayError(StatusCode::CONFLICT, "not the next record".into()));
         }
-        let (tenant, account) = match relay.open_for {
-            Some(tenant) => (tenant, None),
-            None => {
-                let founder =
-                    relay.founders.founder(&extensions, &headers).await.ok_or_else(|| {
-                        RelayError(StatusCode::UNAUTHORIZED, "founding a space needs an account".into())
-                    })?;
-                (founder.tenant, Some(founder.account))
+        // An account founds a space as its own, also on an open relay (a vault names the space it founded).
+        let (tenant, account) = match (relay.founders.founder(&extensions, &headers).await, relay.open_for) {
+            (Some(founder), _) => (founder.tenant, Some(founder.account)),
+            (None, Some(tenant)) => (tenant, None),
+            (None, None) => {
+                return Err(RelayError(StatusCode::UNAUTHORIZED, "founding a space needs an account".into()));
             }
         };
         let inserted = sqlx::query!(

@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT r.space, s.tenant_id AS \"tenant?\" FROM relay_space_removals r\n               LEFT JOIN relay_spaces s ON s.space = r.space ORDER BY r.since LIMIT $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "space",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "relay_space_removals",
+            "name": "space"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "tenant?",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "relay_spaces",
+            "name": "tenant_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "3b65209b5f076243e6bc106e72b5a607ab44397dd064ad0cbb135e1620c9c407"
+}

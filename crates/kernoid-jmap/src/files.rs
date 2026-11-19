@@ -48,8 +48,10 @@ const DIRECTORY_PROPERTIES: [&str; 4] = ["role", "isSubscribed", "myRights", "sh
 const FILE_PROPERTIES: [&str; 4] = ["blobId", "size", "mediaType", "executable"];
 const COMMON_PROPERTIES: [&str; 8] = ["@type", "id", "parentId", "name", "created", "modified", "accessed", "changed"];
 /// kernoid's own (RFC 0006, 6): the vault a node lies in, the vault's public key (on its root), the encrypted name;
-/// `kernoid:newVault` (`publicKey`, `sealed`) makes a new directory a vault.
-const VAULT_PROPERTIES: [&str; 4] = ["kernoid:vault", "kernoid:vaultKey", "kernoid:encryptedName", "kernoid:newVault"];
+/// `kernoid:newVault` (`publicKey`, `sealed`) makes a new directory a vault; with `space` instead of `publicKey`, a vault
+/// on a space of the relay (RFC 0010, 5), named on its directory as `kernoid:space`.
+const VAULT_PROPERTIES: [&str; 5] =
+    ["kernoid:vault", "kernoid:vaultKey", "kernoid:encryptedName", "kernoid:newVault", "kernoid:space"];
 /// What `FileNode/get` shows of a node the user can discover but not read (draft, section 5).
 const VISIBLE_UNREADABLE: [&str; 7] = ["@type", "id", "name", "parentId", "myRights", "isSubscribed", "shareWith"];
 
@@ -160,6 +162,7 @@ fn node_object(node: &NodeInfo, view: &View, shares: &Shares, properties: Option
         put("kernoid:vault", json!(node.vault.map(|vault| vault.to_string())));
         put("kernoid:vaultKey", b64(&node.vault_key));
         put("kernoid:encryptedName", b64(&node.encrypted_name));
+        put("kernoid:space", json!(node.space));
     }
     match node.node_type {
         NodeType::Directory => {
@@ -1346,9 +1349,14 @@ impl Context<'_> {
         new.encrypted_name = base64_property(object, "kernoid:encryptedName")?;
         if let Some(vault) = object.get("kernoid:newVault").filter(|value| !value.is_null()) {
             let vault = vault.as_object().ok_or_else(|| set(invalid_properties("kernoid:newVault is an object")))?;
-            new.vault = Some(kernoid_files::NewVault {
-                public_key: base64_property(vault, "publicKey")?.ok_or_else(|| set(invalid_properties("publicKey")))?,
-                sealed: base64_property(vault, "sealed")?.ok_or_else(|| set(invalid_properties("sealed")))?,
+            let sealed = base64_property(vault, "sealed")?.ok_or_else(|| set(invalid_properties("sealed")))?;
+            new.vault = Some(match vault.get("space").and_then(Value::as_str) {
+                Some(space) => kernoid_files::NewVault::Space { space: space.to_owned(), sealed },
+                None => kernoid_files::NewVault::OpenPgp {
+                    public_key: base64_property(vault, "publicKey")?
+                        .ok_or_else(|| set(invalid_properties("publicKey")))?,
+                    sealed,
+                },
             });
         }
         if node_type == NodeType::File {

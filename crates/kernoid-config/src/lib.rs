@@ -499,7 +499,7 @@ pub struct Database {
 /// The services of an installation (RFC 0008, 4). A service that is off serves no routes, runs no jobs and is not
 /// offered; its tables stay, so that switching it on later needs no migration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, serde::Serialize)]
-#[serde(deny_unknown_fields)]
+#[serde(from = "RawServices")]
 pub struct Services {
     /// Mail: the mail store, SMTP, IMAP and POP3, JMAP Mail, Sieve.
     #[serde(default = "yes")]
@@ -511,14 +511,34 @@ pub struct Services {
     /// Files: file stores, drives, WebDAV, JMAP FileNode, links.
     #[serde(default = "yes")]
     pub files: bool,
-    /// The relay: hosting end-to-end encrypted spaces of kernoid's foundation (RFC 0010, 4) – off by default.
-    #[serde(default)]
+    /// The relay: hosting end-to-end encrypted spaces of kernoid's foundation (RFC 0010, 4) – where vaults live
+    /// (RFC 0010, 5), so on wherever files are unless set.
     pub relay: bool,
+}
+
+/// `[services]` as written: the relay follows files unless set.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawServices {
+    #[serde(default = "yes")]
+    mail: bool,
+    #[serde(default = "yes")]
+    calendars: bool,
+    #[serde(default = "yes")]
+    files: bool,
+    #[serde(default)]
+    relay: Option<bool>,
+}
+
+impl From<RawServices> for Services {
+    fn from(raw: RawServices) -> Self {
+        Self { mail: raw.mail, calendars: raw.calendars, files: raw.files, relay: raw.relay.unwrap_or(raw.files) }
+    }
 }
 
 impl Default for Services {
     fn default() -> Self {
-        Self { mail: true, calendars: true, files: true, relay: false }
+        Self { mail: true, calendars: true, files: true, relay: true }
     }
 }
 
@@ -816,6 +836,10 @@ mod tests {
         assert!(matches!(Config::from_sources(&smtp, []), Err(Error::Conflict(_))));
         let config = Config::from_sources(MINIMAL, env(&[("KERNOID__SERVICES__FILES", "false")])).unwrap();
         assert!(!config.services.files && config.services.mail);
+        // The relay follows files unless set: vaults live there (RFC 0010, 5).
+        assert!(!config.services.relay);
+        let relay = format!("{MINIMAL}\n[services]\nfiles = false\nrelay = true\n");
+        assert!(Config::from_sources(&relay, []).unwrap().services.relay);
     }
 
     #[test]

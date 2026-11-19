@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! The keys of vaults (RFC 0006, 6): a vault's secret key, encrypted by a member's app to the key of each account that
 //! may read the vault. kernoid keeps them and hands each account its own; it cannot open any. Sharing a vault with
-//! someone means a member who may share also gives them the key – until then the grant waits.
+//! someone means a member who may share also gives them the key – until then the grant waits. For a vault on a space
+//! (RFC 0010, 5) the wrapped secret is the member's recovery code of the space.
 
 use uuid::Uuid;
 
@@ -17,7 +18,7 @@ impl Files {
     /// The vault's root, checked: a node of the store that is a vault's root.
     async fn vault_root(&self, connection: &mut sqlx::PgConnection, access: &FileAccess, vault: Uuid) -> Result<()> {
         let node = acting_on(&mut *connection, access, vault, Rights::NONE).await?;
-        if node.vault != Some(vault) || node.vault_key.is_none() {
+        if node.vault != Some(vault) || (node.vault_key.is_none() && node.space.is_none()) {
             return Err(FilesError::NotFound("the vault"));
         }
         Ok(())

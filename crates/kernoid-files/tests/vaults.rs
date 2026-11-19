@@ -70,7 +70,7 @@ async fn what_lies_in_a_vault_stays_in_it(pool: PgPool) {
 
     // A vault: a directory with its public key and its secret key wrapped for the creator; an encrypted name.
     let mut new = named(NewNode::directory(None, "v-1"), b"name of the vault");
-    new.vault = Some(NewVault { public_key: b"public".to_vec(), sealed: b"wrapped for alice".to_vec() });
+    new.vault = Some(NewVault::OpenPgp { public_key: b"public".to_vec(), sealed: b"wrapped for alice".to_vec() });
     let vault = files.create(&own, new, &options).await.unwrap().node;
     assert_eq!((vault.vault, vault.vault_key.as_deref()), (Some(vault.id), Some(&b"public"[..])));
     assert_eq!(files.vault_key(&own, vault.id).await.unwrap().as_deref(), Some(&b"wrapped for alice"[..]));
@@ -84,7 +84,7 @@ async fn what_lies_in_a_vault_stays_in_it(pool: PgPool) {
     let outside = named(NewNode::file(Some(plain.id), "x", content.clone(), None), b"name");
     assert!(matches!(files.create(&own, outside, &options).await, Err(FilesError::Invalid(_))));
     let mut nested = named(NewNode::directory(Some(vault.id), "v-2"), b"inner");
-    nested.vault = Some(NewVault { public_key: b"p".to_vec(), sealed: b"s".to_vec() });
+    nested.vault = Some(NewVault::OpenPgp { public_key: b"p".to_vec(), sealed: b"s".to_vec() });
     assert!(matches!(files.create(&own, nested, &options).await, Err(FilesError::Invalid(_))));
 
     // Nothing moves out of the vault or into it – but to the Trash and back.
@@ -114,7 +114,7 @@ async fn keys_go_to_members_from_who_may_share(pool: PgPool) {
     let carol = account(&identity, tenant, "carol").await;
     let options = SetOptions::default();
     let mut new = named(NewNode::directory(None, "v"), b"vault");
-    new.vault = Some(NewVault { public_key: b"public".to_vec(), sealed: b"for alice".to_vec() });
+    new.vault = Some(NewVault::OpenPgp { public_key: b"public".to_vec(), sealed: b"for alice".to_vec() });
     let vault = files.create(&FileAccess::own(alice), new, &options).await.unwrap().node;
 
     // Bob may read and write, Carol may also share.
@@ -142,7 +142,7 @@ async fn the_tenant_forbids_or_requires_vaults(pool: PgPool) {
     let options = SetOptions::default();
     let vault = || {
         let mut new = named(NewNode::directory(None, format!("v-{}", Uuid::now_v7())), b"vault");
-        new.vault = Some(NewVault { public_key: b"public".to_vec(), sealed: b"sealed".to_vec() });
+        new.vault = Some(NewVault::OpenPgp { public_key: b"public".to_vec(), sealed: b"sealed".to_vec() });
         new
     };
     let rules = |vaults| E2ePolicy { vaults, ..E2ePolicy::default() };
@@ -155,4 +155,51 @@ async fn the_tenant_forbids_or_requires_vaults(pool: PgPool) {
         Err(FilesError::Forbidden(_))
     ));
     files.create(&own, vault(), &options).await.unwrap();
+}
+
+#[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
+async fn a_vault_on_a_space_names_it_and_holds_nothing(pool: PgPool) {
+    let (identity, files, tenant) = setup(pool.clone()).await;
+    let alice = account(&identity, tenant, "alice").await;
+    let bob = account(&identity, tenant, "bob").await;
+    let own = FileAccess::own(alice);
+    let options = SetOptions::default();
+    let space = "01a19b60-0000-7000-8000-000000000001";
+    let vault = |space: &str| {
+        let mut new = NewNode::directory(None, "k-vault");
+        new.vault = Some(NewVault::Space { space: space.into(), sealed: b"alice's code".to_vec() });
+        new
+    };
+
+    // Only a space Alice founded at this relay.
+    assert!(matches!(files.create(&own, vault(space), &options).await, Err(FilesError::Invalid(_))));
+    #[allow(clippy::disallowed_methods, reason = "the relay's table, filled as the relay would")]
+    sqlx::query(
+        "INSERT INTO relay_spaces (space, domain, tenant_id, account_id, protocol) VALUES ($1, 'kernoid', $2, $3, 2)",
+    )
+    .bind(space)
+    .bind(tenant)
+    .bind(alice)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let node = files.create(&own, vault(space), &options).await.unwrap().node;
+    assert_eq!((node.vault, node.space.as_deref(), node.vault_key.as_deref()), (Some(node.id), Some(space), None));
+    assert_eq!(files.vault_key(&own, node.id).await.unwrap().as_deref(), Some(&b"alice's code"[..]));
+    assert!(files.create(&FileAccess::own(bob), vault(space), &options).await.is_err(), "not Bob's space");
+
+    // Nothing lies in it, nothing copies it.
+    let inside = named(NewNode::directory(Some(node.id), "k-x"), b"x");
+    assert!(matches!(files.create(&own, inside, &options).await, Err(FilesError::Invalid(_))));
+    let plain = NewNode::directory(Some(node.id), "Plain");
+    assert!(matches!(files.create(&own, plain, &options).await, Err(FilesError::Invalid(_))));
+    let view = files.view(own.clone()).await.unwrap();
+    assert!(files.copy_tree(&own, &view, &node, None, "Copy".into(), &options).await.is_err());
+
+    // Destroyed, its space waits for the worker.
+    files.destroy(&own, node.id, true).await.unwrap();
+    #[allow(clippy::disallowed_methods, reason = "the relay's table")]
+    let waiting: Vec<String> =
+        sqlx::query_scalar("SELECT space FROM relay_space_removals").fetch_all(&pool).await.unwrap();
+    assert_eq!(waiting, [space]);
 }

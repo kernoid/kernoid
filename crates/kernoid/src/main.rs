@@ -1218,9 +1218,15 @@ async fn serve(config: Config) -> anyhow::Result<()> {
                 shutdown.clone(),
             ));
         }
+        let relay = if config.services.relay {
+            Some(relay_of(&config, db.clone(), blobs.clone(), Identity::new(events.clone()))?)
+        } else {
+            None
+        };
         tasks.spawn(mail_housekeeping(
             mail_store(db.clone(), blobs.clone(), &config),
             file_store(db.clone(), blobs.clone(), &config),
+            relay,
             blobs.clone(),
             config.mail.changes_kept_days,
             shutdown.clone(),
@@ -1386,6 +1392,7 @@ async fn link_notices(
 async fn mail_housekeeping(
     mail: kernoid_mail::Mail,
     files: kernoid_files::Files,
+    relay: Option<kernoid_relay::Relay>,
     blobs: BlobStore,
     changes_kept_days: u32,
     shutdown: CancellationToken,
@@ -1550,6 +1557,19 @@ async fn mail_housekeeping(
                         Err(error) => {
                             tracing::warn!(%error, "indexing files for search failed; trying again later");
                             break;
+                        }
+                    }
+                }
+                // Spaces of vaults destroyed in the file store (RFC 0010, 5).
+                if let Some(relay) = &relay {
+                    loop {
+                        match relay.remove_destroyed_vaults(HOUSEKEEPING_BATCH).await {
+                            Ok(done) if (done as i64) < HOUSEKEEPING_BATCH || shutdown.is_cancelled() => break,
+                            Ok(_) => {}
+                            Err(error) => {
+                                tracing::warn!(%error, "removing the spaces of destroyed vaults failed");
+                                break;
+                            }
                         }
                     }
                 }

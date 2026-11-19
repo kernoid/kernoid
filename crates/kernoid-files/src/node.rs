@@ -84,6 +84,8 @@ pub struct NodeInfo {
     pub vault: Option<Uuid>,
     pub vault_key: Option<Vec<u8>>,
     pub encrypted_name: Option<Vec<u8>>,
+    /// A vault on a space (RFC 0010, 5): the space of the relay that holds it – on its directory, which holds nothing.
+    pub space: Option<String>,
 }
 
 impl NodeInfo {
@@ -108,6 +110,7 @@ impl NodeInfo {
             vault: None,
             vault_key: None,
             encrypted_name: None,
+            space: None,
         }
     }
 }
@@ -133,10 +136,35 @@ pub struct NewNode {
 
 /// What makes a new directory a vault.
 #[derive(Debug, Clone)]
-pub struct NewVault {
-    pub public_key: Vec<u8>,
-    /// The vault's secret key, encrypted to the creator's key.
-    pub sealed: Vec<u8>,
+pub enum NewVault {
+    /// An OpenPGP vault (RFC 0006, 6): its public key, and its secret key encrypted to the creator's key – kept until
+    /// every vault moved onto a space.
+    OpenPgp { public_key: Vec<u8>, sealed: Vec<u8> },
+    /// A vault on a space of this installation's relay (RFC 0010, 5), founded by the creator: the space, and the
+    /// creator's recovery code of it encrypted to the creator's key. Nothing lies in its directory.
+    Space { space: String, sealed: Vec<u8> },
+}
+
+impl NewVault {
+    fn sealed(&self) -> &[u8] {
+        match self {
+            Self::OpenPgp { sealed, .. } | Self::Space { sealed, .. } => sealed,
+        }
+    }
+
+    fn public_key(&self) -> Option<Vec<u8>> {
+        match self {
+            Self::OpenPgp { public_key, .. } => Some(public_key.clone()),
+            Self::Space { .. } => None,
+        }
+    }
+
+    fn space(&self) -> Option<String> {
+        match self {
+            Self::Space { space, .. } => Some(space.clone()),
+            Self::OpenPgp { .. } => None,
+        }
+    }
 }
 
 impl NewNode {
@@ -268,6 +296,7 @@ macro_rules! node_info {
             vault: row.vault_id,
             vault_key: row.vault_key,
             encrypted_name: row.encrypted_name,
+            space: row.space_id,
         }
     }};
 }
@@ -292,6 +321,19 @@ async fn vault_rule(connection: &mut PgConnection, account: Uuid) -> Result<Stri
     .unwrap_or_else(|| "allowed".to_owned()))
 }
 
+/// Whether a node is the directory of a vault on a space, which holds nothing itself.
+async fn is_space_vault(connection: &mut PgConnection, account: Uuid, node: Option<Uuid>) -> Result<bool> {
+    let Some(node) = node else { return Ok(false) };
+    Ok(sqlx::query_scalar!(
+        r#"SELECT space_id IS NOT NULL AS "space!" FROM file_nodes WHERE id = $1 AND account_id = $2"#,
+        node,
+        account
+    )
+    .fetch_optional(connection)
+    .await?
+    .unwrap_or(false))
+}
+
 /// Checks where a node may be in respect of vaults, and returns the vault it lies in: a new vault only outside one and
 /// where the tenant allows it; inside a vault only with an encrypted name, outside only without; outside any vault only
 /// where the tenant does not require vaults.
@@ -303,6 +345,9 @@ async fn placed_in_vault(
     vault: Option<&NewVault>,
     encrypted_name: bool,
 ) -> Result<Option<Uuid>> {
+    if is_space_vault(&mut *connection, account, parent).await? {
+        return Err(FilesError::Invalid("a vault on a space holds nothing in the file store".into()));
+    }
     let around = vault_of(&mut *connection, account, parent).await?;
     let inside = match (vault, around) {
         (Some(_), Some(_)) => return Err(FilesError::Invalid("a vault cannot lie in a vault".into())),
@@ -315,6 +360,8 @@ async fn placed_in_vault(
         (None, around) => around,
     };
     match (inside, encrypted_name) {
+        // A vault on a space: its name is in the space.
+        (Some(_), false) if vault.is_some_and(|vault| vault.space().is_some()) => Ok(inside),
         (Some(_), false) => Err(FilesError::Invalid("a name in a vault is encrypted (kernoid:encryptedName)".into())),
         (None, true) => Err(FilesError::Invalid("only a name in a vault is encrypted".into())),
         (None, false) if vault_rule(&mut *connection, account).await? == "required" => {
@@ -328,7 +375,7 @@ async fn placed_in_vault(
 async fn load(connection: &mut PgConnection, account: Uuid, ids: &[Uuid]) -> Result<Vec<NodeInfo>> {
     let rows = sqlx::query!(
         "SELECT id, parent_id, node_type, name, role, content_id, size, media_type, executable,
-                created, modified, accessed, changed, is_subscribed, vault_id, vault_key, encrypted_name
+                created, modified, accessed, changed, is_subscribed, vault_id, vault_key, encrypted_name, space_id
          FROM file_nodes WHERE account_id = $1 AND id = ANY($2) ORDER BY id",
         account,
         ids,
@@ -525,7 +572,16 @@ async fn destroy_in(
     .fetch_all(&mut **tx)
     .await?;
     // One statement: the references among the nodes are checked at its end, when all of them are gone.
-    sqlx::query!("DELETE FROM file_nodes WHERE id = ANY($1)", &ids).execute(&mut **tx).await?;
+    let spaces =
+        sqlx::query_scalar!(r#"DELETE FROM file_nodes WHERE id = ANY($1) RETURNING space_id AS "space?""#, &ids)
+            .fetch_all(&mut **tx)
+            .await?;
+    // The spaces of vaults destroyed: the worker removes them from the relay (RFC 0010, 5).
+    for space in spaces.into_iter().flatten() {
+        sqlx::query!("INSERT INTO relay_space_removals (space) VALUES ($1) ON CONFLICT DO NOTHING", space)
+            .execute(&mut **tx)
+            .await?;
+    }
     content::released(tx, locked, gone).await?;
     for id in &ids {
         record(tx, locked.account, modseq, *id, Change::Destroyed).await?;
@@ -583,7 +639,7 @@ impl Files {
         self.open(&mut tx, account).await?;
         let rows = sqlx::query!(
             "SELECT id, parent_id, node_type, name, role, content_id, size, media_type, executable,
-                    created, modified, accessed, changed, is_subscribed, vault_id, vault_key, encrypted_name
+                    created, modified, accessed, changed, is_subscribed, vault_id, vault_key, encrypted_name, space_id
              FROM file_nodes WHERE account_id = $1 ORDER BY id",
             account,
         )
@@ -669,6 +725,20 @@ impl Files {
         let id = Uuid::now_v7();
         let vault =
             placed_in_vault(&mut tx, account, id, new.parent, new.vault.as_ref(), new.encrypted_name.is_some()).await?;
+        if let Some(space) = new.vault.as_ref().and_then(NewVault::space) {
+            // A space of kernoid's own at this relay, founded by whoever makes the vault, and not a vault yet.
+            let founded = sqlx::query_scalar!(
+                r#"SELECT EXISTS (SELECT 1 FROM relay_spaces WHERE space = $1 AND account_id = $2 AND domain = 'kernoid'
+                                 AND protocol = 2) AS "founded!""#,
+                space,
+                access.user,
+            )
+            .fetch_one(&mut *tx)
+            .await?;
+            if !founded {
+                return Err(FilesError::Invalid("no space of yours on this relay".into()));
+            }
+        }
         let now = Timestamp::now();
         let modified = new.modified.unwrap_or(now);
         let content = match &new.content {
@@ -683,8 +753,8 @@ impl Files {
         sqlx::query!(
             "INSERT INTO file_nodes (id, account_id, parent_id, node_type, name, content_id, size, media_type,
                                      executable, created, modified, accessed, is_subscribed, vault_id, vault_key,
-                                     encrypted_name)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)",
+                                     encrypted_name, space_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)",
             id,
             account,
             new.parent,
@@ -699,8 +769,9 @@ impl Files {
             new.accessed.unwrap_or(now).to_sqlx(),
             new.is_subscribed,
             vault,
-            new.vault.as_ref().map(|vault| vault.public_key.clone()),
+            new.vault.as_ref().and_then(NewVault::public_key),
             new.encrypted_name,
+            new.vault.as_ref().and_then(NewVault::space),
         )
         .execute(&mut *tx)
         .await?;
@@ -709,7 +780,7 @@ impl Files {
                 "INSERT INTO file_vault_keys (vault_id, account_id, sealed) VALUES ($1, $2, $3)",
                 id,
                 access.user,
-                created.sealed,
+                created.sealed(),
             )
             .execute(&mut *tx)
             .await?;

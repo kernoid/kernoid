@@ -62,7 +62,7 @@ instance administrator). Its accounts then do not see it; what they keep there s
 | `services.mail` | `true` | mail: the mail store, SMTP, IMAP and POP3, JMAP Mail, Sieve, mail programs' autoconfiguration, the Web Key Directory ([RFC 0008](https://github.com/kernoid/kernoid/blob/main/rfcs/0008-suite-and-building-blocks.md), 4) |
 | `services.calendars` | `true` | calendars and contacts: JMAP, CalDAV, CardDAV, scheduling – in the accounts' mail stores, with or without `services.mail` |
 | `services.files` | `true` | files: file stores, drives, WebDAV, JMAP FileNode, links |
-| `services.relay` | `false` | the relay of end-to-end encrypted spaces ([RFC 0010](https://github.com/kernoid/kernoid/blob/main/rfcs/0010-foundation.md), 4), served by the role `api` below `/relay/<program>/v1/` |
+| `services.relay` | as `services.files` | the relay of end-to-end encrypted spaces ([RFC 0010](https://github.com/kernoid/kernoid/blob/main/rfcs/0010-foundation.md), 4) – where vaults live (5) –, served by the role `api` below `/relay/<program>/v1/` and `/v2/` |
 | `relay.domains` | `["kernoid"]` | the programs whose spaces the relay keeps, by the scheme of their signed requests – add `aktujo` for aktujo's apps |
 | `relay.open_for_tenant` | – | the id of a tenant: anyone may found a space, kept for that tenant – for a relay that is all an installation does. Without it, only accounts of the installation found spaces (with their session or app token in `kernoid-session`), for their tenants |
 | `http.listen` | `0.0.0.0:8080` | address and port to listen on |
