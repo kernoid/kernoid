@@ -6,7 +6,7 @@
 //! generation first when the stream is due since someone was removed), makes streams below others or for a person
 //! alone, shares a stream with a person, keeps originals of a stream (large ones in parts), and purges a stream.
 
-use std::{collections::BTreeMap, time::Duration};
+use std::{collections::BTreeMap, sync::Arc};
 
 use kernoid_base::{Bytes, Sha256Hash, SpaceId, base64url, from_base64url, from_root, to_root};
 use kernoid_crypt::{
@@ -26,13 +26,12 @@ use kernoid_space_store::{
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::{Value, json};
 
-use crate::{FOUNDER_HEADER, INVITATION_LIFETIME, SyncError, now_ms, relay_error, state_error};
+use crate::{FOUNDER_HEADER, INVITATION_LIFETIME, SyncError, now_ms, relay_error, state_error, transport::Transport};
 
 /// The setting under which the state of a space of streams is kept.
 const STATE: &str = "streams";
 /// The largest part of an original: the relay takes requests of at most 64 MiB.
 pub const PART: usize = 16 * 1024 * 1024;
-const MAX_RESPONSE: u64 = 512 * 1024 * 1024;
 
 fn now_s() -> u64 {
     now_ms() / 1000
@@ -96,7 +95,7 @@ fn parse_invitation(text: &str) -> Result<(String, SpaceId, [u8; 16], bool), Syn
 
 /// Requests to a relay's protocol 2, signed by a device.
 struct Client<'a> {
-    agent: ureq::Agent,
+    transport: Arc<dyn Transport>,
     base: String,
     domain: Domain,
     keys: &'a HybridKeys,
@@ -111,9 +110,8 @@ struct Tokens {
 }
 
 impl<'a> Client<'a> {
-    fn new(base: &str, domain: Domain, keys: &'a HybridKeys) -> Self {
-        let agent = crate::agent(Duration::from_secs(300));
-        Client { agent, base: base.trim_end_matches('/').to_owned(), domain, keys }
+    fn new(transport: &Arc<dyn Transport>, base: &str, domain: Domain, keys: &'a HybridKeys) -> Self {
+        Client { transport: transport.clone(), base: base.trim_end_matches('/').to_owned(), domain, keys }
     }
 
     fn signed_path(&self, path: &str) -> String {
@@ -130,33 +128,20 @@ impl<'a> Client<'a> {
     ) -> Result<(u16, Vec<u8>), SyncError> {
         let url = format!("{}{path}", self.base);
         let signature = request_signature(self.domain, self.keys, method, &self.signed_path(path), now_s());
-        let mut builder = ureq::http::Request::builder().method(method).uri(&url).header("Authorization", signature);
-        if let Some(token) = tokens.read {
-            builder = builder.header(kernoid_crypt::stream::READ_HEADER, token);
+        let mut headers = vec![("Authorization", signature.as_str())];
+        if let Some(token) = &tokens.read {
+            headers.push((kernoid_crypt::stream::READ_HEADER, token));
         }
-        if let Some(token) = tokens.write {
-            builder = builder.header(kernoid_crypt::stream::WRITE_HEADER, token);
+        if let Some(token) = &tokens.write {
+            headers.push((kernoid_crypt::stream::WRITE_HEADER, token));
         }
-        if let Some(token) = tokens.founder {
-            builder = builder.header(FOUNDER_HEADER, token);
+        if let Some(token) = &tokens.founder {
+            headers.push((FOUNDER_HEADER, token));
         }
-        let response = match body {
-            Some(body) => {
-                let request = builder.header("Content-Type", "application/json").body(body).map_err(relay_error)?;
-                self.agent.run(request)
-            }
-            None => self.agent.run(builder.body(()).map_err(relay_error)?),
+        if body.is_some() {
+            headers.push(("Content-Type", "application/json"));
         }
-        .map_err(|e| relay_error(format!("{}: {e}", self.base)))?;
-        let mut response = response;
-        let status = response.status().as_u16();
-        let body = response
-            .body_mut()
-            .with_config()
-            .limit(MAX_RESPONSE)
-            .read_to_vec()
-            .map_err(|e| relay_error(format!("its answer: {e}")))?;
-        Ok((status, body))
+        self.transport.send(method, &url, &headers, body).map_err(|e| relay_error(format!("{}: {e}", self.base)))
     }
 
     fn refused(status: u16, body: &[u8]) -> SyncError {
@@ -203,18 +188,34 @@ fn stream_tokens(domain: Domain, key: &StreamKey, stream: &StreamId, generation:
 }
 
 /// What one device holds of its spaces of streams, and how it synchronises them.
-#[derive(Debug)]
 pub struct Streams {
     domain: Domain,
     device: DeviceId,
     store: Store,
     clock: Clock,
+    transport: Arc<dyn Transport>,
+}
+
+impl std::fmt::Debug for Streams {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Streams").field("domain", &self.domain).field("device", &self.device).finish_non_exhaustive()
+    }
 }
 
 impl Streams {
     /// The spaces of streams of a device named `device`, kept in `store`.
     pub fn open(domain: Domain, device: DeviceId, store: Store) -> Self {
-        Streams { domain, clock: Clock::new(device.clone()), device, store }
+        Self::with_transport(domain, device, store, crate::transport::default_transport())
+    }
+
+    /// The same, reaching relays through `transport` – e.g. a web page's worker.
+    pub fn with_transport(domain: Domain, device: DeviceId, store: Store, transport: Arc<dyn Transport>) -> Self {
+        Streams { domain, clock: Clock::new(device.clone()), device, store, transport }
+    }
+
+    /// The store, to change it as a whole – e.g. to keep it elsewhere than in a file.
+    pub fn store_mut(&mut self) -> &mut Store {
+        &mut self.store
     }
 
     pub fn store(&self) -> &Store {
@@ -298,7 +299,7 @@ impl Streams {
             device_name.map(str::to_owned),
             person_name.map(str::to_owned),
         )?;
-        let client = Client::new(relay, self.domain, &keys);
+        let client = Client::new(&self.transport, relay, self.domain, &keys);
         let roster_path = format!("/v2/spaces/{space}/roster");
         let tokens = Tokens { founder: founder.map(str::to_owned), ..Tokens::default() };
         client.expect("POST", &roster_path, tokens, Some(to_root(&founding.record).expect("canonical")), &[201])?;
@@ -391,7 +392,7 @@ impl Streams {
             let device = Device::new(&keys, placeholder, self.device.clone(), device_name.map(str::to_owned));
             (None, Joining::new(&secret, device, None))
         };
-        let client = Client::new(&relay, self.domain, &keys);
+        let client = Client::new(&self.transport, &relay, self.domain, &keys);
         client.expect(
             "POST",
             &format!("/v2/spaces/{space}/requests"),
@@ -413,7 +414,7 @@ impl Streams {
         device_name: Option<&str>,
     ) -> Result<StreamsReport, SyncError> {
         let recovery = HybridKeys::from_seed(self.domain, code.0);
-        let client = Client::new(relay, self.domain, &recovery);
+        let client = Client::new(&self.transport, relay, self.domain, &recovery);
         let roster = self.fetch_roster(&client, space, &Roster::new(self.domain, space.clone()))?;
         let rdevice = roster
             .device(&recovery.verifying().id())
@@ -492,7 +493,7 @@ impl Streams {
                 ..RosterRecord::blank(space)
             })
             .sign(&keys);
-        let client = Client::new(&state.relay, self.domain, &keys);
+        let client = Client::new(&self.transport, &state.relay, self.domain, &keys);
         client.expect(
             "POST",
             &format!("/v2/spaces/{space}/roster"),
@@ -532,7 +533,7 @@ impl Streams {
     pub fn sync(&mut self, space: &SpaceId) -> Result<StreamsReport, SyncError> {
         let mut state = self.state(space)?;
         let keys = self.device_keys(&state)?;
-        let client = Client::new(&state.relay, self.domain, &keys);
+        let client = Client::new(&self.transport, &state.relay, self.domain, &keys);
         let mut report = StreamsReport::default();
         let before = self.store.roster(self.domain, space)?;
         let roster = self.fetch_roster(&client, space, &before)?;
@@ -868,7 +869,7 @@ impl Streams {
         let event = log.get(&hash).expect("just written").clone();
         let writer = Writer { domain: self.domain, space, keys: &keys, at: roster.records().len() as u64 - 1 };
         let record = StreamRecord::event(&writer, stream, generation, &key, &event);
-        let client = Client::new(&state.relay, self.domain, &keys);
+        let client = Client::new(&self.transport, &state.relay, self.domain, &keys);
         self.post_record(space, &client, &record, Some(key.token_text(self.domain, Token::Write, stream, generation)))?;
         let canonical = event.to_canonical().expect("canonical");
         self.store.add_stream_event(space, stream, &hash.to_string(), &canonical)?;
@@ -878,7 +879,7 @@ impl Streams {
     /// Makes a stream below `parent`: a stream (a folder for a document) or a person alone. Returns it.
     pub fn new_stream(&mut self, space: &SpaceId, parent: &Parent) -> Result<StreamId, SyncError> {
         let (state, keys, _) = self.context(space)?;
-        let client = Client::new(&state.relay, self.domain, &keys);
+        let client = Client::new(&self.transport, &state.relay, self.domain, &keys);
         let stream = StreamId::generate();
         let key = StreamKey::generate();
         client.expect(
@@ -913,7 +914,7 @@ impl Streams {
             self.renew(space, above)?;
         }
         let (state, keys, roster) = self.context(space)?;
-        let client = Client::new(&state.relay, self.domain, &keys);
+        let client = Client::new(&self.transport, &state.relay, self.domain, &keys);
         let (generation, key) = self.current(space, stream)?;
         let body = LinkBody { stream: stream.clone(), generation, key: Bytes(key.0.to_vec()) };
         let writer = Writer { domain: self.domain, space, keys: &keys, at: roster.records().len() as u64 - 1 };
@@ -939,7 +940,7 @@ impl Streams {
     /// parent still there – what is written from now on, nobody removed can read.
     pub fn renew(&mut self, space: &SpaceId, stream: &StreamId) -> Result<u32, SyncError> {
         let (state, keys, roster) = self.context(space)?;
-        let client = Client::new(&state.relay, self.domain, &keys);
+        let client = Client::new(&self.transport, &state.relay, self.domain, &keys);
         let (generation, previous) = self.current(space, stream)?;
         let next = generation + 1;
         let key = StreamKey::generate();
@@ -1018,7 +1019,7 @@ impl Streams {
                 ..RosterRecord::blank(space)
             })
             .sign(&keys);
-        let client = Client::new(&state.relay, self.domain, &keys);
+        let client = Client::new(&self.transport, &state.relay, self.domain, &keys);
         client.expect(
             "POST",
             &format!("/v2/spaces/{space}/roster"),
@@ -1042,7 +1043,7 @@ impl Streams {
         let record = roster
             .next(RosterRecord { remove_persons: vec![person.clone()], ..RosterRecord::blank(space) })
             .sign(&keys);
-        let client = Client::new(&state.relay, self.domain, &keys);
+        let client = Client::new(&self.transport, &state.relay, self.domain, &keys);
         client.expect(
             "POST",
             &format!("/v2/spaces/{space}/roster"),
@@ -1072,7 +1073,7 @@ impl Streams {
         bytes: &[u8],
     ) -> Result<Vec<Sha256Hash>, SyncError> {
         let (state, keys, _) = self.context(space)?;
-        let client = Client::new(&state.relay, self.domain, &keys);
+        let client = Client::new(&self.transport, &state.relay, self.domain, &keys);
         let (generation, key) = self.current(space, stream)?;
         let write = key.token_text(self.domain, Token::Write, stream, generation);
         let mut parts = Vec::new();
@@ -1097,7 +1098,7 @@ impl Streams {
     /// The bytes of an original of a stream from its parts.
     pub fn original(&self, space: &SpaceId, stream: &StreamId, parts: &[Sha256Hash]) -> Result<Vec<u8>, SyncError> {
         let (state, keys, _) = self.context(space)?;
-        let client = Client::new(&state.relay, self.domain, &keys);
+        let client = Client::new(&self.transport, &state.relay, self.domain, &keys);
         let held = self.store.stream_keys(space, stream)?;
         let (generation, key) =
             held.iter().next_back().ok_or_else(|| state_error("this device cannot open the stream"))?;
@@ -1130,7 +1131,7 @@ impl Streams {
     /// Removes a stream with its records and originals at the relay (`purge`), and here.
     pub fn purge(&mut self, space: &SpaceId, stream: &StreamId) -> Result<(), SyncError> {
         let (state, keys, _) = self.context(space)?;
-        let client = Client::new(&state.relay, self.domain, &keys);
+        let client = Client::new(&self.transport, &state.relay, self.domain, &keys);
         let (generation, key) = self.current(space, stream)?;
         client.expect(
             "DELETE",

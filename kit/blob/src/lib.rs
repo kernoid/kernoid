@@ -302,6 +302,8 @@ impl Blobs for FolderBlobs {
                 return Err(error);
             }
         };
+        // Closed before it is renamed (a file in WebAssembly closes nothing, hence the lint there).
+        #[allow(clippy::drop_non_drop, reason = "closes the file natively; nothing to close in WebAssembly")]
         drop(file);
         let path = self.path(&hash);
         if path.exists() {

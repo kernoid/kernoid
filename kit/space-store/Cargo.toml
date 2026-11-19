@@ -20,6 +20,8 @@ workspace = true
 [features]
 # The database encrypted as a whole: SQLCipher (BSD-3-Clause) with OpenSSL (Apache-2.0) built in, instead of SQLite.
 sqlcipher = ["rusqlite/bundled-sqlcipher-vendored-openssl"]
+# The whole database as bytes and back (`Store::to_bytes`, `from_bytes`), for a store kept elsewhere than in a file.
+serialize = ["rusqlite/serialize"]
 
 [dependencies]
 kernoid-base = { version = "0.5.0", path = "../base" }

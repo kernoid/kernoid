@@ -175,6 +175,21 @@ impl Store {
         Self::prepare(Connection::open_in_memory()?)
     }
 
+    /// A store in memory with what `bytes` holds – a whole database as [`Store::to_bytes`] gave it –, brought to this
+    /// version. Where a program keeps it elsewhere than in a file: a web page's IndexedDB.
+    #[cfg(feature = "serialize")]
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, StoreError> {
+        let mut connection = Connection::open_in_memory()?;
+        connection.deserialize_read_exact(rusqlite::MAIN_DB, bytes, bytes.len(), false)?;
+        Self::prepare(connection)
+    }
+
+    /// The whole database, to keep it elsewhere than in a file.
+    #[cfg(feature = "serialize")]
+    pub fn to_bytes(&mut self) -> Result<Vec<u8>, StoreError> {
+        Ok(self.connection.serialize(rusqlite::MAIN_DB)?.to_vec())
+    }
+
     fn prepare(connection: Connection) -> Result<Self, StoreError> {
         connection.execute_batch("PRAGMA foreign_keys = ON;")?;
         let version: i64 = connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;

@@ -11,12 +11,9 @@
 //! OPEN: the seed is kept in the store beside the data; the key store of the operating system is not used yet.
 
 pub mod streams;
+pub mod transport;
 
-use std::{
-    collections::BTreeMap,
-    sync::Arc,
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
+use std::{collections::BTreeMap, sync::Arc};
 
 use kernoid_base::{Sha256Hash, SpaceId, base64url, from_base64url, from_root, to_root};
 use kernoid_blob::{BlobError, Blobs};
@@ -37,8 +34,6 @@ const JOINING: &str = "joining";
 pub const INVITATION_LIFETIME: u64 = 24 * 60 * 60;
 /// How many envelopes are asked for at once.
 const PAGE: usize = 500;
-/// The largest answer read: a page of envelopes with originals.
-const MAX_RESPONSE: u64 = 512 * 1024 * 1024;
 
 /// Why synchronising failed.
 #[derive(Debug, thiserror::Error)]
@@ -72,8 +67,16 @@ fn relay_error(message: impl std::fmt::Display) -> SyncError {
 }
 
 /// Milliseconds since 1970-01-01 UTC.
+#[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
 pub fn now_ms() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
     SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |since| since.as_millis() as u64)
+}
+
+/// Milliseconds since 1970-01-01 UTC: the browser's clock.
+#[cfg(all(target_family = "wasm", target_os = "unknown"))]
+pub fn now_ms() -> u64 {
+    js_sys::Date::now() as u64
 }
 
 fn now_s() -> u64 {
@@ -143,33 +146,21 @@ pub const FOUNDER_HEADER: &str = "kernoid-session";
 
 /// Requests to a relay, signed by a member.
 struct Client<'a> {
-    agent: ureq::Agent,
+    transport: Arc<dyn transport::Transport>,
     base: String,
     keys: &'a MemberKeys,
     /// The token of the account founding a space, sent in [`FOUNDER_HEADER`].
     founder: Option<&'a str>,
 }
 
-/// An HTTP agent for a relay: rustls on AWS-LC with post-quantum key exchange preferred and the system's trust store.
-pub(crate) fn agent(timeout: Duration) -> ureq::Agent {
-    use ureq::tls::{RootCerts, TlsConfig, TlsProvider};
-    let tls = TlsConfig::builder()
-        .provider(TlsProvider::Rustls)
-        .root_certs(RootCerts::PlatformVerifier)
-        .unversioned_rustls_crypto_provider(std::sync::Arc::new(rustls::crypto::aws_lc_rs::default_provider()))
-        .build();
-    ureq::Agent::config_builder()
-        .http_status_as_error(false)
-        .timeout_global(Some(timeout))
-        .tls_config(tls)
-        .build()
-        .into()
-}
-
 impl<'a> Client<'a> {
     fn new(base: &str, keys: &'a MemberKeys) -> Self {
-        let agent = agent(Duration::from_secs(120));
-        Client { agent, base: base.trim_end_matches('/').to_owned(), keys, founder: None }
+        Client {
+            transport: transport::default_transport(),
+            base: base.trim_end_matches('/').to_owned(),
+            keys,
+            founder: None,
+        }
     }
 
     /// The same, founding a space for the account of `token`.
@@ -186,38 +177,20 @@ impl<'a> Client<'a> {
 
     fn get(&self, path: &str) -> Result<(u16, Vec<u8>), SyncError> {
         let signature = request_signature(self.keys, "GET", &self.signed_path(path), now_s());
-        let response = self
-            .agent
-            .get(format!("{}{path}", self.base))
-            .header("Authorization", signature)
-            .call()
-            .map_err(|e| relay_error(format!("{}: {e}", self.base)))?;
-        Self::read(response)
+        self.transport
+            .send("GET", &format!("{}{path}", self.base), &[("Authorization", &signature)], None)
+            .map_err(|e| relay_error(format!("{}: {e}", self.base)))
     }
 
     fn post(&self, path: &str, body: Vec<u8>) -> Result<(u16, Vec<u8>), SyncError> {
         let signature = request_signature(self.keys, "POST", &self.signed_path(path), now_s());
-        let mut request = self
-            .agent
-            .post(format!("{}{path}", self.base))
-            .header("Authorization", signature)
-            .header("Content-Type", "application/json");
+        let mut headers = vec![("Authorization", signature.as_str()), ("Content-Type", "application/json")];
         if let Some(token) = self.founder {
-            request = request.header(FOUNDER_HEADER, token);
+            headers.push((FOUNDER_HEADER, token));
         }
-        let response = request.send(body).map_err(|e| relay_error(format!("{}: {e}", self.base)))?;
-        Self::read(response)
-    }
-
-    fn read(mut response: ureq::http::Response<ureq::Body>) -> Result<(u16, Vec<u8>), SyncError> {
-        let status = response.status().as_u16();
-        let body = response
-            .body_mut()
-            .with_config()
-            .limit(MAX_RESPONSE)
-            .read_to_vec()
-            .map_err(|e| relay_error(format!("its answer: {e}")))?;
-        Ok((status, body))
+        self.transport
+            .send("POST", &format!("{}{path}", self.base), &headers, Some(body))
+            .map_err(|e| relay_error(format!("{}: {e}", self.base)))
     }
 
     /// The error of an answer that is not a success.

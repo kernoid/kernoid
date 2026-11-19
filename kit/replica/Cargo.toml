@@ -29,8 +29,17 @@ serde_json = "1.0.154"
 thiserror = "2.0.21"
 # HTTPS to the relay: rustls on AWS-LC, post-quantum key exchange preferred, the system's trust store (RFC 0006, 2) –
 # not ureq's default of ring and webpki-roots.
-rustls = { version = "0.23.46", default-features = false, features = ["aws-lc-rs", "prefer-post-quantum", "std", "tls12"] }
-ureq = { version = "3.4.2", default-features = false, features = ["rustls-no-provider", "platform-verifier", "gzip"] }
+rustls = { version = "0.23.46", default-features = false, features = ["aws-lc-rs", "prefer-post-quantum", "std", "tls12"], optional = true }
+ureq = { version = "3.4.2", default-features = false, features = ["rustls-no-provider", "platform-verifier", "gzip"], optional = true }
+
+[target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
+# The browser's clock (`now_ms`).
+js-sys = "0.3.91"
+
+[features]
+default = ["native"]
+# Reaching relays through ureq; without it, the program gives a transport of its own (a web page's worker).
+native = ["dep:rustls", "dep:ureq"]
 
 [dev-dependencies]
 serde_json = "1.0.154"
