@@ -7,7 +7,7 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 ## [Unreleased]
 
-## [0.4.0] – DATE
+## [0.4.0] – 2026-11-19
 
 Dates and times move from chrono, which is no longer maintained, to Jiff 1.0. No migration and no change to the
 configuration; times in the APIs stay RFC 3339 and change only in how UTC is written (below). Upgrade by pulling the
