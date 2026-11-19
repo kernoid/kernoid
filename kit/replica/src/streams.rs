@@ -112,11 +112,7 @@ struct Tokens {
 
 impl<'a> Client<'a> {
     fn new(base: &str, domain: Domain, keys: &'a HybridKeys) -> Self {
-        let agent: ureq::Agent = ureq::Agent::config_builder()
-            .http_status_as_error(false)
-            .timeout_global(Some(Duration::from_secs(300)))
-            .build()
-            .into();
+        let agent = crate::agent(Duration::from_secs(300));
         Client { agent, base: base.trim_end_matches('/').to_owned(), domain, keys }
     }
 
@@ -334,8 +330,12 @@ impl Streams {
         let roster = self.roster(&space)?;
         let name: DeviceId =
             format!("recovery-{}", &recovery.verifying().id().hex()[..12]).parse().expect("a device name");
-        let device = Device::new(&recovery, founding.person.clone(), name, Some("Recovery code".into()))
-            .with(&[Permission::Members]);
+        // What the recovery code's device may, the devices it brings back may.
+        let device = Device::new(&recovery, founding.person.clone(), name, Some("Recovery code".into())).with(&[
+            Permission::Write,
+            Permission::Members,
+            Permission::Purge,
+        ]);
         let seals = person_key(self.domain, &space, &founding.person, 0, &founding.person_seed, None, &[&device])?;
         let record = roster.next(RosterRecord {
             add_devices: vec![device],
@@ -423,8 +423,9 @@ impl Streams {
         let (generation, seed) =
             seeds.iter().next_back().map(|(g, s)| (*g, *s)).ok_or_else(|| state_error("no key of the person"))?;
         let keys = HybridKeys::generate(self.domain);
+        let permissions: Vec<Permission> = rdevice.permissions.iter().copied().collect();
         let device = Device::new(&keys, rdevice.person.clone(), self.device.clone(), device_name.map(str::to_owned))
-            .with(&[Permission::Write, Permission::Members, Permission::Purge]);
+            .with(&permissions);
         let seals = person_key(self.domain, space, &rdevice.person, generation, &seed, None, &[&device])?;
         let record = roster
             .next(RosterRecord { add_devices: vec![device], person_keys: vec![seals], ..RosterRecord::blank(space) })
@@ -445,6 +446,72 @@ impl Streams {
         };
         self.save_state(space, &state)?;
         self.sync(space)
+    }
+
+    /// Adds a person without asking them: the person, its key, the space stream linked to it, and a recovery code
+    /// whose device brings the person's first device in ([`Streams::recover`]) with `permissions` (and `write`). For
+    /// handing a space to someone over another channel – kernoid's vaults give the code to an account's OpenPGP key
+    /// (RFC 0010, 5). Whoever adds the person knew the code: until the person's devices remove the recovery device, its
+    /// maker could act as the person. Needs `members`.
+    pub fn add_person(
+        &mut self,
+        space: &SpaceId,
+        name: Option<&str>,
+        permissions: &[Permission],
+    ) -> Result<(PersonId, RecoveryCode), SyncError> {
+        // A record follows the roster's newest one: read what is new first.
+        self.sync(space)?;
+        let (state, keys, roster) = self.context(space)?;
+        if !roster.device(&keys.verifying().id()).is_some_and(|d| d.may(Permission::Members)) {
+            return Err(state_error("only a device with `members` adds persons"));
+        }
+        let code = RecoveryCode::generate();
+        let recovery = HybridKeys::from_seed(self.domain, code.0);
+        let person = PersonId::generate();
+        let seed: [u8; 32] = kernoid_base::random();
+        let device_name: DeviceId =
+            format!("recovery-{}", &recovery.verifying().id().hex()[..12]).parse().expect("a device name");
+        let mut granted = vec![Permission::Write];
+        granted.extend(permissions.iter().copied().filter(|p| *p != Permission::Write));
+        let device = Device::new(&recovery, person.clone(), device_name, Some("Recovery code".into())).with(&granted);
+        let key = person_key(self.domain, space, &person, 0, &seed, None, &[&device])?;
+        let current = roster.space_generation().ok_or_else(|| state_error("no space stream"))?;
+        let space_stream = roster.space_stream().cloned().ok_or_else(|| state_error("no space stream"))?;
+        let space_key = self
+            .store
+            .stream_keys(space, &space_stream)?
+            .remove(&current)
+            .ok_or_else(|| state_error("no current key of the space stream"))?;
+        let link = link_to_person(self.domain, &space_stream, current, &space_key, &key)?;
+        let record = roster
+            .next(RosterRecord {
+                add_persons: vec![Person { id: person.clone(), name: name.map(str::to_owned) }],
+                add_devices: vec![device],
+                person_keys: vec![key],
+                space_links: Some(SpaceLinks { generation: current, links: vec![link], previous: None }),
+                ..RosterRecord::blank(space)
+            })
+            .sign(&keys);
+        let client = Client::new(&state.relay, self.domain, &keys);
+        client.expect(
+            "POST",
+            &format!("/v2/spaces/{space}/roster"),
+            Tokens::default(),
+            Some(to_root(&record).expect("canonical")),
+            &[201],
+        )?;
+        self.store.add_roster_record(self.domain, &record)?;
+        Ok((person, code))
+    }
+
+    /// Whether this device is a device of the space already (it may still wait to be added).
+    pub fn has_space(&self, space: &SpaceId) -> Result<bool, SyncError> {
+        Ok(self.store.setting(Some(space), STATE)?.is_some())
+    }
+
+    /// The relay a space is kept at.
+    pub fn relay(&self, space: &SpaceId) -> Result<String, SyncError> {
+        Ok(self.state(space)?.relay)
     }
 
     /// Reads the roster's new records from the relay, checks them on top of `roster` and returns the result.
@@ -832,6 +899,12 @@ impl Streams {
         self.link(space, stream, &Parent::Person(person.clone()))
     }
 
+    /// Links a stream below another one too – what moving a document into another folder needs: whoever opens
+    /// `above` can open `stream` from now on.
+    pub fn link_below(&mut self, space: &SpaceId, stream: &StreamId, above: &StreamId) -> Result<(), SyncError> {
+        self.link(space, stream, &Parent::Stream(above.clone()))
+    }
+
     /// Writes the current key of `stream` under `parent`.
     fn link(&mut self, space: &SpaceId, stream: &StreamId, parent: &Parent) -> Result<(), SyncError> {
         if let Parent::Stream(above) = parent
@@ -921,6 +994,8 @@ impl Streams {
     /// Removes a device of the space. Its person gets a new key for the devices left; every stream this device knows
     /// gets a new generation before it is written again.
     pub fn remove_device(&mut self, space: &SpaceId, device: &DeviceKeyId) -> Result<(), SyncError> {
+        // A record follows the roster's newest one: read what is new first.
+        self.sync(space)?;
         let (state, keys, roster) = self.context(space)?;
         let target = roster.device(device).cloned().ok_or_else(|| state_error("no such device in the space"))?;
         if target.id == keys.verifying().id() {
@@ -958,6 +1033,8 @@ impl Streams {
     /// Removes a person with all its devices; every stream this device knows gets a new generation before it is
     /// written again.
     pub fn remove_person(&mut self, space: &SpaceId, person: &PersonId) -> Result<(), SyncError> {
+        // A record follows the roster's newest one: read what is new first.
+        self.sync(space)?;
         let (state, keys, roster) = self.context(space)?;
         if roster.device(&keys.verifying().id()).is_some_and(|d| d.person == *person) {
             return Err(state_error("this device cannot remove its own person"));

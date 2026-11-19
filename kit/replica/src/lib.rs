@@ -150,13 +150,25 @@ struct Client<'a> {
     founder: Option<&'a str>,
 }
 
+/// An HTTP agent for a relay: rustls on AWS-LC with post-quantum key exchange preferred and the system's trust store.
+pub(crate) fn agent(timeout: Duration) -> ureq::Agent {
+    use ureq::tls::{RootCerts, TlsConfig, TlsProvider};
+    let tls = TlsConfig::builder()
+        .provider(TlsProvider::Rustls)
+        .root_certs(RootCerts::PlatformVerifier)
+        .unversioned_rustls_crypto_provider(std::sync::Arc::new(rustls::crypto::aws_lc_rs::default_provider()))
+        .build();
+    ureq::Agent::config_builder()
+        .http_status_as_error(false)
+        .timeout_global(Some(timeout))
+        .tls_config(tls)
+        .build()
+        .into()
+}
+
 impl<'a> Client<'a> {
     fn new(base: &str, keys: &'a MemberKeys) -> Self {
-        let agent: ureq::Agent = ureq::Agent::config_builder()
-            .http_status_as_error(false)
-            .timeout_global(Some(Duration::from_secs(120)))
-            .build()
-            .into();
+        let agent = agent(Duration::from_secs(120));
         Client { agent, base: base.trim_end_matches('/').to_owned(), keys, founder: None }
     }
 

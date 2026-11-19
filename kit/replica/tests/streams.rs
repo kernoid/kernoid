@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 //! Spaces of streams through kernoid's relay, end to end (RFC 0012; `scripts/client-check.sh` names the relay in
 //! `KERNOID_TEST_RELAY`). Alice founds a space and adds her phone; Bob joins as a new person; a folder for everyone, a
-//! document for Alice alone, an original in parts; Bob is removed and what is written after is out of his reach;
+//! document for Alice alone, an original in parts; Carol added with a recovery code; Bob is removed and what is written after is out of his reach;
 //! Alice's devices are lost and the recovery code brings her back. Without `KERNOID_TEST_RELAY` it does nothing.
 
 use kernoid_crypt::{Domain, stream::StreamId};
@@ -67,6 +67,21 @@ fn persons_devices_streams_and_a_removal() {
     assert_eq!(bob.original(&space, &folder, &parts).unwrap().len(), 20 * 1024 * 1024);
     assert!(!bob.streams(&space).unwrap().iter().any(|s| s.stream == private));
     assert_eq!(titles(&phone, &space, &private), ["Diary"]);
+
+    // Carol is added without asking: her recovery code reaches her another way (kernoid's vaults: sealed to her
+    // account's key), and her first device comes in with it – a moved document is reached through its new folder.
+    let (carol_person, carol_code) = laptop.add_person(&space, Some("Carol"), &[]).unwrap();
+    let mut carol = device("carol-laptop");
+    carol.recover(&url, &space, &carol_code, Some("Laptop")).unwrap();
+    assert_eq!(carol.person(&space).unwrap(), carol_person);
+    assert_eq!(titles(&carol, &space, &folder), ["Minutes"]);
+    assert!(carol.remove_person(&space, &bob_person).is_err(), "Carol may only write");
+    let archive = laptop.new_stream(&space, &Parent::Stream(space_stream.clone())).unwrap();
+    let moved = laptop.new_stream(&space, &Parent::Stream(folder.clone())).unwrap();
+    laptop.write(&space, &moved, &json!({"kind": "note", "title": "Moved"})).unwrap();
+    laptop.link_below(&space, &moved, &archive).unwrap();
+    carol.sync(&space).unwrap();
+    assert_eq!(titles(&carol, &space, &moved), ["Moved"]);
 
     // Sharing the document with Bob, then removing Bob: what is written after is out of his reach.
     laptop.share(&space, &private, &bob_person).unwrap();
