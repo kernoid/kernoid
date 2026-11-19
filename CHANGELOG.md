@@ -11,6 +11,9 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 - **Relay quota** per tenant (`tenant.relay_quota_set`, migration 0055): REST `/v1/relay/quota`, GraphQL `relayQuota`
   and `setRelayQuota`, `kernoid relay quota`; an envelope beyond it is refused.
+- **Mail without the service mail:** `[mail.notification_relay]` sends kernoid's own messages (registration codes)
+  through the operator's relay where kernoid keeps no mail – identity alone can register people by email. The SMTP
+  client is a crate of its own (`kernoid-smtp-client`).
 - **kernoid-auth:** sessions in PostgreSQL (`PgSessions`, feature `postgres`, on by default) – a table in the program's
   database with migrations of their own; ids stored only as hashes.
 

@@ -8,7 +8,6 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-#[cfg(feature = "data")]
 use jiff::Timestamp;
 use kernoid_identity::{IdentityError, registration::NewRegistration};
 use serde::{Deserialize, Serialize};
@@ -61,7 +60,6 @@ pub(crate) struct RegistrationStarted {
     id: String,
 }
 
-#[cfg(feature = "data")]
 /// The message with the code.
 fn code_message(from: &str, to: &str, code: &str) -> Vec<u8> {
     let date =
@@ -113,32 +111,48 @@ pub(crate) async fn begin(
     new: NewRegistration<'_>,
     client: Option<std::net::IpAddr>,
 ) -> Result<Uuid, IdentityError> {
-    #[cfg(not(feature = "data"))]
-    {
-        let _ = (state, instance, new, client);
-        Err(IdentityError::Refused("registering by email is not possible here".into()))
+    if !state.sends_mail() {
+        return Err(IdentityError::Refused("registering by email is not possible here".into()));
     }
+    let from = state.notification_from.clone().unwrap_or_default();
+    let started = state.identity.start_registration(instance, new, client).await?;
+    let message = code_message(&from, &started.email, &started.code);
+    // Through the queue of the mail store where kernoid keeps mail, else straight through the operator's relay.
     #[cfg(feature = "data")]
-    {
-        let (Some(from), Some(jmap)) = (state.notification_from.clone(), state.jmap.clone()) else {
-            return Err(IdentityError::Refused("registering by email is not possible here".into()));
-        };
-        let started = state.identity.start_registration(instance, new, client).await?;
+    if let Some(jmap) = &state.jmap {
         let recipients = [started.email.clone()];
         let outgoing = kernoid_mail::Outgoing {
             tenant: started.tenant,
             account: None,
             from: &from,
             recipients: &recipients,
-            raw: code_message(&from, &started.email, &started.code).into(),
+            raw: message.into(),
             lifetime: jiff::SignedDuration::from_hours(24),
         };
         if let Err(error) = jmap.mail().enqueue(outgoing).await {
             tracing::error!(%error, "queueing a registration code");
             return Err(IdentityError::Refused("the code could not be sent; try again later".into()));
         }
-        Ok(started.id)
+        return Ok(started.id);
     }
+    let Some(relay) = &state.notification_relay else {
+        return Err(IdentityError::Refused("registering by email is not possible here".into()));
+    };
+    let hostname = from.rsplit_once('@').map_or("kernoid", |(_, domain)| domain);
+    let sent = kernoid_smtp_client::submit(
+        relay,
+        hostname,
+        &from,
+        std::slice::from_ref(&started.email),
+        &message,
+        std::time::Duration::from_secs(30),
+    )
+    .await;
+    if let Err(error) = sent {
+        tracing::error!(%error, "sending a registration code through the relay");
+        return Err(IdentityError::Refused("the code could not be sent; try again later".into()));
+    }
+    Ok(started.id)
 }
 
 #[derive(Debug, Deserialize, utoipa::ToSchema)]

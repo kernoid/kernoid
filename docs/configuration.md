@@ -95,6 +95,7 @@ kind = "database"
 | `oidc.retired_key_days` | `30` | a key that no longer signs stays published this long (at least an hour) |
 | `mail.max_message_size` | `52428800` | largest message accepted, in bytes (50 MiB) |
 | `mail.notification_from` | – | the sender of kernoid's own messages – registration codes – on a domain kernoid sends for; without it, people register only with identity providers |
+| `mail.notification_relay.host`, `.port` (`587`), `.implicit_tls`, `.username`, `.password` | – | without `services.mail` (identity alone): the relay kernoid's own messages go out through, over TLS with a valid certificate; with the service `mail` they go through its queue |
 | `mail.tls.certificate`, `mail.tls.key` | – | PEM files for SMTP, submission, IMAP and POP3, e.g. those of a reverse proxy such as Caddy; read again within a minute when they change. Without them: ACME's certificates, else `http.tls` |
 | `mail.changes_kept_days` | `30` | how long the journal of mail changes is kept; a client away longer (JMAP, IMAP) loads the mailbox anew – the journals of calendars, contacts and files as well |
 | `files.max_file_size` | `10737418240` | largest file accepted, in bytes (10 GiB); content streams to object storage in parts |

@@ -74,9 +74,10 @@ crates on crates.io).
   by the program through `Identity`), its roles are the program's roles, and a `Session` checks them. Tenant roles
   (`tenant_admin` …) keep their meaning.
 - **Jobs** (clean-up of sessions, key rotation, ACME) run in the program's process, as the role `worker` would.
-- **Mail kernoid sends** (codes for registration, links) needs a way out: with the service `mail` off, kernoid sends
-  through an SMTP server the operator names (`[mail.relay]` of RFC 0002, 10.4) – OPEN: a submission client without the
-  queue of the mail store, section 7.
+- **Mail kernoid sends** (codes for registration) needs a way out: with the service `mail` off, kernoid submits it
+  straight to an SMTP relay the operator names (`[mail.notification_relay]`, over TLS, with or without login) through
+  `kernoid-smtp-client` – the client of the queue, a crate of its own so that identity alone builds without the mail
+  crates. Without a queue there is no retry: a code that cannot be sent is an error the person sees.
 
 The program's routes and kernoid's share one origin; kernoid's paths are fixed (`/login`, `/app`, `/v1`, `/graphql`,
 `/oauth/v2`, `/oidc/v1`, `/idp`, `/scim/v2`, `/.well-known/…`) and a program must not use them.
@@ -113,7 +114,5 @@ A program under another licence uses kernoid **beside** it, over OpenID Connect 
 
 - **OPEN:** the steps to take a built-in identity over into a kernoid of its own (dump the schema, restore it, point the
   program at the kernoid with `kernoid-auth`).
-- **OPEN:** sending kernoid's mail without the service `mail` – a small SMTP submission client, or through the
-  program.
 - **OPEN:** whether `kernoid-auth` becomes MIT once an app needs it – today no app does; apps log in with
   `kernoid-client` (`oidc`).

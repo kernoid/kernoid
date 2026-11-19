@@ -130,6 +130,8 @@ pub struct AppState {
     pub mail_events: Option<kernoid_mail::MailEvents>,
     /// The sender of kernoid's own messages (`mail.notification_from`).
     pub notification_from: Option<String>,
+    /// The operator's relay for them where kernoid keeps no mail (`mail.notification_relay`).
+    pub notification_relay: Option<Arc<kernoid_smtp_client::Relay>>,
     /// Where mail programs connect (`smtp.hostname`), for their autoconfiguration; None without `[smtp]`.
     pub mail_host: Option<String>,
     /// Whether kernoid serves IMAP too.
@@ -158,6 +160,7 @@ impl AppState {
             #[cfg(feature = "data")]
             mail_events: None,
             notification_from: None,
+            notification_relay: None,
             mail_host: None,
             imap: false,
             services: Services::default(),
@@ -208,12 +211,28 @@ impl AppState {
         self
     }
 
-    /// Whether kernoid can send its own messages (registration codes): a sender, and the queue of the mail store.
+    /// Sends them through the operator's relay instead, where kernoid keeps no mail (`mail.notification_relay`).
+    pub fn with_notification_relay(mut self, relay: &kernoid_config::SmtpRelay) -> Self {
+        self.notification_relay = Some(Arc::new(kernoid_smtp_client::Relay {
+            host: relay.host.clone(),
+            port: relay.port,
+            implicit_tls: relay.implicit_tls,
+            credentials: relay
+                .username
+                .clone()
+                .map(|username| (username, relay.password.as_ref().map(|p| p.expose().to_owned()).unwrap_or_default())),
+        }));
+        self
+    }
+
+    /// Whether kernoid can send its own messages (registration codes): a sender, and the queue of the mail store or a
+    /// relay.
     pub fn sends_mail(&self) -> bool {
         #[cfg(feature = "data")]
-        return self.notification_from.is_some() && self.jmap.is_some();
+        let queue = self.jmap.is_some();
         #[cfg(not(feature = "data"))]
-        false
+        let queue = false;
+        self.notification_from.is_some() && (queue || self.notification_relay.is_some())
     }
 
     /// Tells mail programs to connect to `host` (autoconfiguration), for IMAP too if `imap`.

@@ -933,6 +933,10 @@ async fn serve(config: Config) -> anyhow::Result<()> {
     if let Some(from) = &config.mail.notification_from {
         state = state.with_notifications(from.clone());
     }
+    // Without the service mail, kernoid's own messages go through the operator's relay.
+    if let (false, Some(relay)) = (services.mail, &config.mail.notification_relay) {
+        state = state.with_notification_relay(relay);
+    }
     if let Some(smtp) = &config.smtp {
         state = state.with_mail_host(smtp.hostname.clone(), config.imap.is_some());
     }

@@ -3566,6 +3566,7 @@ dependencies = [
  "kernoid-oidc",
  "kernoid-relay",
  "kernoid-smtp",
+ "kernoid-smtp-client",
  "kernoid-store",
  "mail-builder 2.0.0",
  "metrics",
@@ -3616,6 +3617,7 @@ dependencies = [
  "kernoid-identity",
  "kernoid-mail",
  "kernoid-oidc",
+ "kernoid-smtp-client",
  "kernoid-store",
  "mail-auth",
  "mail-builder 2.0.0",
@@ -3636,6 +3638,20 @@ dependencies = [
  "webpki-roots",
  "x509-cert",
  "zeroize",
+]
+
+[[package]]
+name = "kernoid-smtp-client"
+version = "0.5.0"
+dependencies = [
+ "base64 0.22.1",
+ "rcgen",
+ "rustls",
+ "smtp-proto",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-rustls",
+ "webpki-roots",
 ]
 
 [[package]]

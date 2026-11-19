@@ -237,6 +237,9 @@ pub struct Mail {
     /// The sender of kernoid's own messages – registration codes (RFC 0003, 5) – on a domain kernoid sends for;
     /// without it, people register only with identity providers.
     pub notification_from: Option<String>,
+    /// Where kernoid's own messages go out when it keeps no mail itself (`services.mail` off, e.g. identity alone): a
+    /// relay of the operator's, reached over TLS (RFC 0009, 3). With the service `mail`, they go through its queue.
+    pub notification_relay: Option<SmtpRelay>,
 }
 
 impl Default for Mail {
@@ -246,6 +249,7 @@ impl Default for Mail {
             changes_kept_days: default_changes_kept_days(),
             tls: None,
             notification_from: None,
+            notification_relay: None,
         }
     }
 }

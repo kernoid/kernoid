@@ -71,6 +71,12 @@ impl Embedded {
         let mut state =
             AppState::new(db.clone(), blobs, Identity::with_secrets(events.clone(), main_keys), oidc.clone())
                 .with_services(config.services);
+        if let Some(from) = &config.mail.notification_from {
+            state = state.with_notifications(from.clone());
+        }
+        if let Some(relay) = &config.mail.notification_relay {
+            state = state.with_notification_relay(relay);
+        }
         if let Ok(dns) = crate::DnsResolver::from_system() {
             state = state.with_dns(dns);
         }

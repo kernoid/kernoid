@@ -2,7 +2,8 @@
 //! kernoid as the MX of its tenants' domains (RFC 0002, 9): an SMTP server that accepts mail for their addresses,
 //! checks it (iprev, SPF, DKIM, ARC, DMARC, a basic spam filter) and stores it at once. It relays nothing.
 
-mod client;
+/// The client, kernoid-smtp-client (derived from Stalwart's).
+pub use kernoid_smtp_client as client;
 pub mod dane;
 pub mod dkim;
 pub mod dns;

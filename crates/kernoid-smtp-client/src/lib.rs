@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
 // SPDX-License-Identifier: AGPL-3.0-only
-//! The SMTP client that delivers the queue (RFC 0002, 10.2). Derived from Stalwart's client
+//! kernoid's SMTP client: it delivers the queue of the mail store (RFC 0002, 10.2, in kernoid-smtp) and submits
+//! kernoid's own messages – registration codes – through the operator's relay where kernoid runs no mail
+//! (`mail.notification_relay`, RFC 0009, 3; [`submit`]). Derived from Stalwart's client
 //! (`crates/smtp/src/outbound/client.rs`, v0.16.27): responses read with smtp-proto's parser, `STARTTLS`, the
 //! transparency procedure for the data. One command at a time, no pipelining.
 
@@ -19,10 +21,12 @@ use tokio::{
 };
 use tokio_rustls::TlsConnector;
 
-use crate::session::Io;
+/// A connection the client talks over: TCP, or TLS on it.
+pub trait Io: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send {}
+impl<T: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send> Io for T {}
 
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum ClientError {
+pub enum ClientError {
     #[error("{0}")]
     Io(#[from] std::io::Error),
     #[error("timed out")]
@@ -50,11 +54,17 @@ impl ClientError {
     }
 }
 
-pub(crate) type ClientResult<T> = Result<T, ClientError>;
+pub type ClientResult<T> = Result<T, ClientError>;
 
-pub(crate) struct Client {
+pub struct Client {
     stream: Box<dyn Io>,
     timeout: Duration,
+}
+
+impl std::fmt::Debug for Client {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Client").field("timeout", &self.timeout).finish_non_exhaustive()
+    }
 }
 
 impl Client {
@@ -231,7 +241,7 @@ fn provider() -> Arc<rustls::crypto::CryptoProvider> {
 }
 
 /// TLS that checks the certificate against the web's root certificates (MTA-STS, the relay).
-pub(crate) fn verified_tls() -> Arc<ClientConfig> {
+pub fn verified_tls() -> Arc<ClientConfig> {
     let roots = rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
     Arc::new(
         ClientConfig::builder_with_provider(provider())
@@ -245,7 +255,7 @@ pub(crate) fn verified_tls() -> Arc<ClientConfig> {
 /// TLS that takes any certificate: opportunistic TLS (RFC 7435) – better than plain text, and no worse when the
 /// certificate is not checked, since nothing published says what it should be. DANE checks the certificate itself,
 /// after the handshake, against the TLSA records.
-pub(crate) fn unverified_tls() -> Arc<ClientConfig> {
+pub fn unverified_tls() -> Arc<ClientConfig> {
     Arc::new(
         ClientConfig::builder_with_provider(provider())
             .with_safe_default_protocol_versions()
@@ -303,4 +313,74 @@ impl ServerCertVerifier for AnyCertificate {
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
         self.0.signature_verification_algorithms.supported_schemes()
     }
+}
+
+/// A relay (smarthost) to submit through.
+#[derive(Debug, Clone)]
+pub struct Relay {
+    pub host: String,
+    pub port: u16,
+    /// TLS from the start (port 465) instead of `STARTTLS`.
+    pub implicit_tls: bool,
+    pub credentials: Option<(String, String)>,
+}
+
+/// Submits one message through `relay` – always over TLS with a certificate valid for the relay's host – and logs in
+/// if there are credentials. `hostname` is said in `EHLO`.
+pub async fn submit(
+    relay: &Relay,
+    hostname: &str,
+    from: &str,
+    to: &[String],
+    message: &[u8],
+    timeout: Duration,
+) -> ClientResult<()> {
+    submit_with(verified_tls(), relay, hostname, from, to, message, timeout).await
+}
+
+/// [`submit`] with a TLS configuration of one's own – for a relay with a certificate of a private CA, and for tests.
+#[allow(clippy::too_many_arguments)]
+pub async fn submit_with(
+    tls: Arc<ClientConfig>,
+    relay: &Relay,
+    hostname: &str,
+    from: &str,
+    to: &[String],
+    message: &[u8],
+    timeout: Duration,
+) -> ClientResult<()> {
+    let name = ServerName::try_from(relay.host.clone()).map_err(|error| ClientError::Tls(error.to_string()))?;
+    // Each of the relay's addresses in turn, until one answers.
+    let mut connected = Err(ClientError::Io(std::io::Error::other(format!("{} has no address", relay.host))));
+    for address in tokio::net::lookup_host((relay.host.as_str(), relay.port)).await? {
+        connected = Client::connect(address, timeout).await;
+        if connected.is_ok() {
+            break;
+        }
+    }
+    let mut client = connected?;
+    if relay.implicit_tls {
+        client = client.into_tls(tls, name).await?.0;
+        client.greeting().await?;
+        client.ehlo(hostname).await?;
+    } else {
+        client.greeting().await?;
+        client.ehlo(hostname).await?;
+        client = client.start_tls(tls, name).await?.0;
+        client.ehlo(hostname).await?;
+    }
+    if let Some((username, password)) = &relay.credentials {
+        client.auth_plain(username, password).await?;
+    }
+    let utf8 = !from.is_ascii() || to.iter().any(|to| !to.is_ascii());
+    client.mail_from(from, message.len(), utf8).await?;
+    for recipient in to {
+        let reply = client.rcpt_to(recipient).await?;
+        if reply.code >= 400 {
+            return Err(ClientError::Reply(reply));
+        }
+    }
+    client.data(message).await?;
+    client.quit().await;
+    Ok(())
 }

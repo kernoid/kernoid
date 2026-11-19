@@ -30,6 +30,7 @@ mail-parser = { version = "1.0.0", features = ["full_encoding"] }
 rustls = { version = "0.23.46", default-features = false, features = ["aws-lc-rs", "prefer-post-quantum", "std", "tls12"] }
 rustls-webpki = { version = "0.103.16", default-features = false, features = ["aws-lc-rs", "std"] }
 sha2 = "0.11.1"
+kernoid-smtp-client = { version = "0.5.0", path = "../kernoid-smtp-client" }
 smtp-proto = "0.2.5"
 thiserror = "2.0.21"
 tokio = { version = "1.54.1", features = ["net", "io-util", "time", "sync", "rt", "macros"] }
