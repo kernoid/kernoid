@@ -113,7 +113,8 @@ impl Mail {
         let address = without_subaddress(address);
         let row = sqlx::query!(
             r#"SELECT ad.account_id, ad.group_id, ad.tenant_id, t.active AS tenant_active, a.active AS "account_active?",
-                      EXISTS (SELECT 1 FROM account_services s WHERE s.account_id = ad.account_id AND s.service = 'mail' AND s.state = 'on') AS "has_mail!"
+                      (EXISTS (SELECT 1 FROM account_services s WHERE s.account_id = ad.account_id AND s.service = 'mail' AND s.state = 'on')
+                       AND NOT 'mail' = ANY(t.services_off)) AS "has_mail!"
                FROM addresses ad JOIN tenants t ON t.id = ad.tenant_id LEFT JOIN accounts a ON a.id = ad.account_id
                WHERE ad.address = $1"#,
             address,
@@ -145,7 +146,8 @@ impl Mail {
             (None, Some(group)) => {
                 let members = sqlx::query_scalar!(
                     "SELECT m.account_id FROM group_members m JOIN accounts a ON a.id = m.account_id
-                     WHERE m.group_id = $1 AND a.active
+                       JOIN tenants t ON t.id = a.tenant_id
+                     WHERE m.group_id = $1 AND a.active AND NOT 'mail' = ANY(t.services_off)
                        AND EXISTS (SELECT 1 FROM account_services s WHERE s.account_id = a.id AND s.service = 'mail' AND s.state = 'on')
                      ORDER BY m.account_id",
                     group,

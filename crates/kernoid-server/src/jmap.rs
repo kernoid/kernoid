@@ -118,6 +118,16 @@ where
             }
             Err(error) => return Err(crate::sessions::problem(error)),
         }
+        // CalDAV and CardDAV are the service `calendars`, which the tenant may be without (RFC 0008, 4).
+        match state.identity.account_services_off(account.id).await {
+            Ok(off) if off.iter().any(|service| service == "calendars") => {
+                return Err(Problem::new(StatusCode::FORBIDDEN)
+                    .detail("this account has no calendars")
+                    .into_response());
+            }
+            Ok(_) => {}
+            Err(error) => return Err(crate::sessions::problem(error)),
+        }
         Ok(Self { account })
     }
 }
@@ -141,15 +151,33 @@ where
             (Err(error), _) | (_, Err(error)) => return Err(crate::sessions::problem(error)),
         };
         // What the account has, as far as the installation runs it (RFC 0008, 4).
+        // and gives the tenant.
+        let off = match state.identity.account_services_off(account.id).await {
+            Ok(off) => off,
+            Err(error) => return Err(crate::sessions::problem(error)),
+        };
+        let on = |service: &str| !off.iter().any(|name| name == service);
         let services = state.services;
-        let (calendars, mail, files) = (mail && services.calendars, mail && services.mail, files && services.files);
+        let (calendars, mail, files, shared_files) = (
+            mail && services.calendars && on("calendars"),
+            mail && services.mail && on("mail"),
+            files && services.files && on("files"),
+            services.files && on("files"),
+        );
         if !mail && !calendars && !files {
             return Err(Problem::new(StatusCode::FORBIDDEN)
                 .detail("this account has no mail, calendars or files")
                 .into_response());
         }
-        let caller =
-            Caller { account: account.id, tenant: account.tenant, username: account.address, mail, calendars, files };
+        let caller = Caller {
+            account: account.id,
+            tenant: account.tenant,
+            username: account.address,
+            mail,
+            calendars,
+            files,
+            shared_files,
+        };
         Ok(Self(caller, base))
     }
 }

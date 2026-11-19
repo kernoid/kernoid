@@ -186,10 +186,13 @@ impl Identity {
             .collect())
     }
 
-    /// Whether an account has `service` on.
+    /// Whether an account has `service` on – and its tenant has it (RFC 0008, 4).
     pub async fn has_service(&self, account: Uuid, service: Service) -> Result<bool> {
         sqlx::query_scalar!(
-            r#"SELECT EXISTS (SELECT 1 FROM account_services WHERE account_id = $1 AND service = $2 AND state = 'on')
+            r#"SELECT EXISTS (SELECT 1 FROM account_services s JOIN accounts a ON a.id = s.account_id
+                                JOIN tenants t ON t.id = a.tenant_id
+                              WHERE s.account_id = $1 AND s.service = $2 AND s.state = 'on'
+                                AND s.service <> ALL(t.services_off))
                AS "on!""#,
             account,
             service.as_str(),
@@ -252,6 +255,63 @@ impl Identity {
     pub async fn admin_set_service_policy(&self, admin: &Admin, service: Service, rule: ServicePolicy) -> Result<()> {
         admin.require(Permission::PoliciesManage)?;
         self.set_service_policy(admin.tenant(), service, rule, &admin.creator()).await
+    }
+}
+
+/// The installation's services a tenant can be without (RFC 0008, 4).
+pub const TENANT_SERVICES: [&str; 4] = ["mail", "calendars", "files", "relay"];
+
+impl Identity {
+    /// Switches one of the installation's services on or off for a tenant. Off, the tenant's accounts do not see it:
+    /// its methods are missing from their JMAP session, its routes refuse them, the relay founds no space for them.
+    /// What they keep there stays.
+    pub async fn switch_tenant_service(&self, tenant: Uuid, service: &str, on: bool, creator: &str) -> Result<()> {
+        if !TENANT_SERVICES.contains(&service) {
+            return Err(IdentityError::Refused(format!("{service} is not a service of kernoid")));
+        }
+        let instance = self.tenant_instance(tenant).await?;
+        self.tenant_command(instance, tenant, creator, None, |state| {
+            if !state.exists {
+                return Err(IdentityError::NotFound("the tenant"));
+            }
+            if state.services_off.contains(service) != on {
+                return Ok(Vec::new());
+            }
+            Ok(vec![TenantEvent::ServiceSwitched { service: service.to_owned(), on }])
+        })
+        .await
+    }
+
+    /// The installation's services the tenant does not get.
+    pub async fn tenant_services_off(&self, tenant: Uuid) -> Result<Vec<String>> {
+        sqlx::query_scalar!("SELECT services_off FROM tenants WHERE id = $1", tenant)
+            .fetch_optional(self.pool())
+            .await
+            .map_err(store_error)?
+            .ok_or(IdentityError::NotFound("the tenant"))
+    }
+
+    /// The services the tenant of `account` does not get.
+    pub async fn account_services_off(&self, account: Uuid) -> Result<Vec<String>> {
+        sqlx::query_scalar!(
+            "SELECT t.services_off FROM accounts a JOIN tenants t ON t.id = a.tenant_id WHERE a.id = $1",
+            account
+        )
+        .fetch_optional(self.pool())
+        .await
+        .map_err(store_error)?
+        .ok_or(IdentityError::NotFound("the account"))
+    }
+
+    pub async fn admin_tenant_services_off(&self, admin: &Admin) -> Result<Vec<String>> {
+        admin.require(Permission::DirectoryRead)?;
+        self.tenant_services_off(admin.tenant()).await
+    }
+
+    /// Only the operator of the instance decides which services a tenant gets.
+    pub async fn admin_switch_tenant_service(&self, admin: &Admin, service: &str, on: bool) -> Result<()> {
+        admin.require(Permission::InstanceManage)?;
+        self.switch_tenant_service(admin.tenant(), service, on, &admin.creator()).await
     }
 }
 

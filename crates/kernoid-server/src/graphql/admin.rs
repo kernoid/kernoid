@@ -123,7 +123,7 @@ fn e2e_rule(value: &str) -> async_graphql::Result<kernoid_identity::tenant::E2eR
 #[derive(Debug, SimpleObject)]
 pub struct TenantModule {
     name: String,
-    /// Whether the tenant uses it.
+    /// Whether the tenant uses it (a module) or gets it (a service).
     enabled: bool,
 }
 
@@ -686,6 +686,17 @@ impl AdminQuery {
             .collect())
     }
 
+    /// The services the installation runs and whether the tenant gets each (needs `directory.read`; RFC 0008, 4).
+    async fn tenant_services(&self, context: &Context<'_>) -> async_graphql::Result<Vec<TenantModule>> {
+        let (identity, admin) = admin(context).await?;
+        let off = identity.admin_tenant_services_off(&admin).await.map_err(error)?;
+        let services = context.data::<AppState>()?.services;
+        Ok(crate::admin::tenant::installed(services)
+            .into_iter()
+            .map(|name| TenantModule { name: name.to_owned(), enabled: !off.iter().any(|service| service == name) })
+            .collect())
+    }
+
     /// The tenant's verified domains as mail domains: the DNS records to publish and whether they are published
     /// (reads DNS, changes nothing).
     async fn mail_dns(&self, context: &Context<'_>) -> async_graphql::Result<Vec<MailDns>> {
@@ -1070,6 +1081,21 @@ impl AdminMutation {
         let (identity, admin) = admin(context).await?;
         let modules = &context.data::<AppState>()?.modules;
         identity.admin_set_module(&admin, &module, enabled, modules).await.map_err(error)?;
+        Ok(true)
+    }
+
+    /// Switches one of the installation's services on or off for the tenant (needs `instance.manage`).
+    async fn set_tenant_service(
+        &self,
+        context: &Context<'_>,
+        service: String,
+        enabled: bool,
+    ) -> async_graphql::Result<bool> {
+        let (identity, admin) = admin(context).await?;
+        if !crate::admin::tenant::installed(context.data::<AppState>()?.services).contains(&service.as_str()) {
+            return Err(crate::graphql::service_off(&service));
+        }
+        identity.admin_switch_tenant_service(&admin, &service, enabled).await.map_err(error)?;
         Ok(true)
     }
 

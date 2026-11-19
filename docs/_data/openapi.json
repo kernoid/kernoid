@@ -10102,6 +10102,117 @@
         }
       }
     },
+    "/v1/tenant/services": {
+      "get": {
+        "tags": [
+          "tenant"
+        ],
+        "summary": "The services the installation runs and whether the tenant gets each (needs `directory.read`; RFC 0008, 4).",
+        "operationId": "get_v1_tenant_services",
+        "parameters": [
+          {
+            "name": "kernoid-tenant",
+            "in": "header",
+            "description": "The tenant to act on – for instance administrators; the caller's own tenant if left out.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TenantServiceView"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "needs directory.read",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tenant/services/{service}": {
+      "put": {
+        "tags": [
+          "tenant"
+        ],
+        "summary": "Switches one of the installation's services on or off for the tenant (needs `instance.manage`: the operator\ndecides). Off, the tenant's accounts do not see it; what they keep there stays.",
+        "operationId": "put_v1_tenant_services_service",
+        "parameters": [
+          {
+            "name": "kernoid-tenant",
+            "in": "header",
+            "description": "The tenant to act on – for instance administrators; the caller's own tenant if left out.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "service",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Switch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "description": "no such service",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "needs instance.manage",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/version": {
       "get": {
         "tags": [
@@ -13718,6 +13829,23 @@
           },
           "mfa_required": {
             "type": "boolean"
+          }
+        }
+      },
+      "TenantServiceView": {
+        "type": "object",
+        "required": [
+          "name",
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether the tenant gets it – the installation runs it and the operator did not switch it off for the tenant."
+          },
+          "name": {
+            "type": "string",
+            "description": "`mail`, `calendars`, `files` or `relay`."
           }
         }
       },

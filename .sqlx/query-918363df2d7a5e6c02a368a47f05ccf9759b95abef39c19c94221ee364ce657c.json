@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE tenants SET services_off = array_append(array_remove(services_off, $2), $2) WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "918363df2d7a5e6c02a368a47f05ccf9759b95abef39c19c94221ee364ce657c"
+}

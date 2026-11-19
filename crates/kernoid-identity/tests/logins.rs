@@ -57,6 +57,37 @@ async fn services_follow_the_tenants_rules(pool: PgPool) {
 }
 
 #[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
+async fn a_tenant_can_be_without_a_service(pool: PgPool) {
+    let identity = identity(pool);
+    let (instance, tenant) = tenant_with(&identity, "login.firma.de", &["firma.de"]).await;
+    let alice = identity.add_account(tenant, &address("alice@firma.de"), "Alice", WHO).await.unwrap();
+    identity.set_password(alice, PASSWORD, WHO).await.unwrap();
+    let (_, secret) = identity.add_app_password(alice, "Thunderbird", WHO).await.unwrap();
+    assert!(identity.has_service(alice, Service::Mail).await.unwrap());
+    assert!(identity.tenant_services_off(tenant).await.unwrap().is_empty());
+
+    // Off for the tenant: the account keeps its service, but neither has it nor logs in with it.
+    identity.switch_tenant_service(tenant, "mail", false, WHO).await.unwrap();
+    identity.switch_tenant_service(tenant, "mail", false, WHO).await.unwrap();
+    assert_eq!(identity.tenant_services_off(tenant).await.unwrap(), ["mail"]);
+    assert_eq!(identity.account_services_off(alice).await.unwrap(), ["mail"]);
+    assert_eq!(identity.services(alice).await.unwrap(), [(Service::Mail, ServiceState::On)]);
+    assert!(!identity.has_service(alice, Service::Mail).await.unwrap());
+    assert!(matches!(
+        identity.mail_login("alice@firma.de", &secret, None).await,
+        Err(IdentityError::InvalidCredentials)
+    ));
+    // The account itself still logs in.
+    assert_eq!(identity.authenticate(instance, "alice@firma.de", PASSWORD).await.unwrap().id, alice);
+
+    // On again: everything is back.
+    identity.switch_tenant_service(tenant, "mail", true, WHO).await.unwrap();
+    assert!(identity.has_service(alice, Service::Mail).await.unwrap());
+    assert_eq!(identity.mail_login("alice@firma.de", &secret, None).await.unwrap().id, alice);
+    assert!(matches!(identity.switch_tenant_service(tenant, "fax", false, WHO).await, Err(IdentityError::Refused(_))));
+}
+
+#[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
 async fn logins_by_address_username_and_contact_address(pool: PgPool) {
     let identity = identity(pool);
     let (instance, tenant) = tenant_with(&identity, "login.firma.de", &["firma.de"]).await;

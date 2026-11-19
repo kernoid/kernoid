@@ -213,7 +213,7 @@
     {:else}
       {#key `${worked()}/${page}`}
         {#if page === "settings"}
-          <Settings />
+          <Settings instance={access.value?.instance ?? false} />
         {:else if page === "domains"}
           <Domains />
         {:else if page === "accounts"}

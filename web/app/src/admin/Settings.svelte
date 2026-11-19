@@ -15,6 +15,9 @@
   import Select from "./ui/Select.svelte";
   import EndToEnd from "./EndToEnd.svelte";
 
+  // Instance administrators switch the installation's services for the tenant; others see them.
+  const { instance = false }: { instance?: boolean } = $props();
+
   const action = new Action();
   const tenant = loaded(() => need(admin.GET("/v1/tenant")));
   const login = loaded(() => need(admin.GET("/v1/tenant/login-policy")));
@@ -24,9 +27,18 @@
   const filesQuota = loaded(() => need(admin.GET("/v1/tenant/files-quota")));
   const retention = loaded(() => need(admin.GET("/v1/tenant/mail-retention")));
   const modules = loaded(() => need(admin.GET("/v1/tenant/modules")));
+  const tenantServices = loaded(() => need(admin.GET("/v1/tenant/services")));
   const filesRetention = loaded(() => need(admin.GET("/v1/tenant/files-retention")));
   const language = loaded(() => need(admin.GET("/v1/tenant/language")));
   const days = (text: string) => (text ? Number.parseInt(text, 10) : null);
+
+  function serviceName(name: string): string {
+    if (name === "mail") return t("Mail");
+    if (name === "calendars") return t("Calendars and contacts");
+    if (name === "files") return t("Files");
+    if (name === "relay") return t("Relay for end-to-end encrypted spaces");
+    return name;
+  }
 
   function moduleName(name: string): string {
     if (name === "clamav") return t("Virus scan (ClamAV)");
@@ -169,6 +181,37 @@
     </Form>
   {/each}
 </section>
+
+{#if (tenantServices.value ?? []).length > 0}
+  <section>
+    <h2>{t("Services")}</h2>
+    <p class="muted">
+      {t("What the installation runs and the tenant gets. Switched off, its accounts no longer see it; what they keep there stays.")}
+    </p>
+    <Form
+      class="stack"
+      submit={(_, all) =>
+        void action.run(async () => {
+          const on = all("service");
+          for (const service of tenantServices.value ?? []) {
+            if (on.includes(service.name) !== service.enabled) {
+              await need(admin.PUT("/v1/tenant/services/{service}", { params: { path: { service: service.name } }, body: { enabled: on.includes(service.name) } }));
+            }
+          }
+          await tenantServices.refetch();
+        }, t("Saved."))}
+    >
+      {#each tenantServices.value ?? [] as service (service.name)}
+        <Check label={serviceName(service.name)} name="service" value={service.name} checked={service.enabled} disabled={!instance} />
+      {/each}
+      {#if instance}
+        <Buttons busy={action.busy} />
+      {:else}
+        <p class="muted">{t("Only the operator of the instance changes them.")}</p>
+      {/if}
+    </Form>
+  </section>
+{/if}
 
 {#if (modules.value ?? []).length > 0}
   <section>

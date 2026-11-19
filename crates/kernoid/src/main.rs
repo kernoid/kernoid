@@ -718,6 +718,14 @@ enum TenantCommand {
         #[arg(long, action = clap::ArgAction::Set)]
         enabled: bool,
     },
+    /// The installation's services the tenant gets; with SERVICE and --enabled, switch one on or off (RFC 0008, 4).
+    Service {
+        tenant: Uuid,
+        /// `mail`, `calendars`, `files` or `relay`.
+        service: Option<String>,
+        #[arg(long, action = clap::ArgAction::Set, requires = "service")]
+        enabled: Option<bool>,
+    },
     /// Require (or stop requiring) a second factor for logins to applications by the tenant's accounts.
     RequireMfa {
         tenant: Uuid,
@@ -2027,6 +2035,18 @@ async fn tenant(config: &Config, command: TenantCommand) -> anyhow::Result<()> {
         TenantCommand::Module { tenant, module, enabled } => {
             let known: Vec<&str> = MODULES.iter().map(|module| module.name()).collect();
             identity.set_tenant_module(instance_of(tenant).await?, tenant, &module, enabled, &known, OPERATOR).await?;
+        }
+        TenantCommand::Service { tenant, service, enabled } => {
+            if let (Some(service), Some(enabled)) = (&service, enabled) {
+                identity.switch_tenant_service(tenant, service, enabled, OPERATOR).await?;
+            }
+            let off = identity.tenant_services_off(tenant).await?;
+            for name in kernoid_identity::services::TENANT_SERVICES {
+                if service.as_deref().is_none_or(|service| service == name) {
+                    let state = if off.iter().any(|service| service == name) { "off" } else { "on" };
+                    println!("{name}\t{state}");
+                }
+            }
         }
         TenantCommand::Grant { tenant, principal, role } => {
             identity.grant_role(tenant, principal.principal(), &AccessRole::parse(&role)?, OPERATOR).await?;

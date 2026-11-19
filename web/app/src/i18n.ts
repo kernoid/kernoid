@@ -288,6 +288,11 @@ const de: Record<string, string> = {
   "The second factors are removed.": "Die zweiten Faktoren sind entfernt.",
   "Reset second factors": "Zweite Faktoren zurücksetzen",
   Services: "Dienste",
+  "Calendars and contacts": "Kalender und Kontakte",
+  "Relay for end-to-end encrypted spaces": "Relay für Ende-zu-Ende-verschlüsselte Räume",
+  "What the installation runs and the tenant gets. Switched off, its accounts no longer see it; what they keep there stays.":
+    "Was die Installation betreibt und der Mandant bekommt. Abgeschaltet sehen seine Konten es nicht mehr; was dort liegt, bleibt.",
+  "Only the operator of the instance changes them.": "Nur der Betreiber der Instanz ändert sie.",
   Approve: "Freigeben",
   "Switch on": "Einschalten",
   "Switch off": "Ausschalten",

@@ -63,6 +63,7 @@ as their creator. Secrets – passwords, keys – are read from standard input, 
 | `kernoid tenant verify-domain <TENANT> <DOMAIN> [--trust]` | looks the record up; `--trust` marks the domain verified without DNS |
 | `kernoid tenant remove-domain <TENANT> <DOMAIN>` | unless addresses use it |
 | `kernoid tenant module <TENANT> <MODULE> --enabled <true\|false>` | switches a compiled-in module on or off for the tenant |
+| `kernoid tenant service <TENANT> [<SERVICE> --enabled <true\|false>]` | the installation's services the tenant gets (`mail`, `calendars`, `files`, `relay`); switches one on or off for it – its accounts keep what they have |
 | `kernoid tenant require-mfa <TENANT> --required <true\|false>` | requires a second factor for logins to applications |
 | `kernoid tenant mfa-grace <TENANT> <DAYS>` | accounts without a second factor may log in without one for DAYS |
 | `kernoid tenant login-policy <TENANT> --usernames <true\|false> --email-login <true\|false>` | how the tenant's accounts log in |

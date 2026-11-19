@@ -62,7 +62,11 @@ pub struct Caller {
     /// Calendars and contacts: the account has the service `mail` and the installation the service `calendars`; they
     /// live in the account's mail store (RFC 0004).
     pub calendars: bool,
+    /// The own file store: the account has the service `files`, and the installation and its tenant have it.
     pub files: bool,
+    /// Stores of others shared with the caller: off when the installation or the tenant is without files (RFC 0008,
+    /// 4) – the grants stay.
+    pub shared_files: bool,
 }
 
 /// JMAP for one installation.
@@ -203,7 +207,11 @@ impl Jmap {
                     primary.insert(FILE_LINKS.into(), json!(own));
                 }
             }
-            for store in files.shared_with(caller.account).await? {
+            let shared = match caller.shared_files {
+                true => files.shared_with(caller.account).await?,
+                false => Vec::new(),
+            };
+            for store in shared {
                 let access = files.access(caller.account, store.owner).await?;
                 let entry = accounts.entry(store.owner.to_string()).or_insert_with(|| {
                     json!({ "name": store.name, "isPersonal": false, "isReadOnly": true, "accountCapabilities": {} })
@@ -264,7 +272,7 @@ impl Jmap {
                 capabilities[capability] = json!({});
             }
         }
-        if self.files.is_some() {
+        if self.files.is_some() && (caller.files || caller.shared_files) {
             capabilities[FILENODE] = json!({});
             capabilities[FILE_VERSIONS] = json!({});
             if self.identity.is_some() {
@@ -341,7 +349,9 @@ impl Jmap {
         if caller.mail {
             accounts.extend(self.mail.shared_with(caller.account).await?.into_iter().map(|store| store.owner));
         }
-        if let Some(files) = &self.files {
+        if let Some(files) = &self.files
+            && caller.shared_files
+        {
             for store in files.shared_with(caller.account).await? {
                 if !accounts.contains(&store.owner) {
                     accounts.push(store.owner);
@@ -379,7 +389,8 @@ impl Jmap {
                 }
             }
             if let Some(files) = &self.files
-                && (own && caller.files || !own && files.access(caller.account, *account).await?.any())
+                && (own && caller.files
+                    || !own && caller.shared_files && files.access(caller.account, *account).await?.any())
             {
                 types.insert("FileNode".into(), json!(files.state(*account).await?.to_string()));
             }

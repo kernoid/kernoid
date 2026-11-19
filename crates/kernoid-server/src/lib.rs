@@ -301,6 +301,8 @@ fn rest() -> OpenApiRouter<AppState> {
         .routes(routes!(admin::tenant::set_policy))
         .routes(routes!(admin::tenant::modules))
         .routes(routes!(admin::tenant::set_module))
+        .routes(routes!(admin::tenant::services))
+        .routes(routes!(admin::tenant::set_service))
         .routes(routes!(admin::tenant::permissions))
         .routes(routes!(admin::tenant::add_domain))
         .routes(routes!(admin::tenant::verify_domain))

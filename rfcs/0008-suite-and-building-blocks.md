@@ -84,6 +84,15 @@ off:
 Per tenant and account, what RFC 0003 says still holds (services of an account, the tenant's rules); a service that
 is off for the installation is off for every tenant.
 
+**Per tenant**, the operator can switch off a service the installation runs (event `tenant.service_switched`,
+`tenants.services_off`; REST `PUT /v1/tenant/services/{service}` and GraphQL `setTenantService` with `instance.manage`,
+`kernoid tenant service`) – a hosting plan without files, a tenant that uses only identity. For the tenant's accounts
+it is then as if the installation did not run it: its JMAP capabilities and the stores of others shared with them are
+missing from the session, CalDAV and CardDAV refuse them (`calendars`), mail programs cannot log in and nothing is
+delivered to them (`mail`), the relay founds no space for them (`relay`). Nothing is removed: the accounts keep their
+services and their content, and switching the service on again brings everything back. Tenant administrators read the
+state (`GET /v1/tenant/services`), they do not change it (implemented in 0.5.0).
+
 **Calendars** need the store of mail (RFC 0004 keeps them in the account's mail store), not the mail service: with
 `mail = false` and `calendars = true`, accounts have a mail store without mailboxes, SMTP or IMAP.
 
@@ -134,6 +143,4 @@ kernoid 0.5.0 is done when:
 ## 8. Open
 
 - **OPEN:** Flutter packages on pub.dev, or only by a git reference ([0011](0011-app-kit.md)).
-- **OPEN:** a service per tenant that the installation leaves on but a tenant cannot see at all (today: the
-  services of RFC 0003 per account).
 - **OPEN:** identity on SQLite for very small servers ([0009](0009-kernoid-in-other-servers.md), section 6).

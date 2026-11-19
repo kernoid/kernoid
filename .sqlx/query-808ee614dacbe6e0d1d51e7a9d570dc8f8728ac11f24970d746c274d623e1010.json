@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT t.instance_id, a.id, a.tenant_id\n                   FROM accounts a JOIN tenants t ON t.id = a.tenant_id\n                   WHERE a.id = $1\n                     AND (cardinality($2::text[]) = 0\n                          OR EXISTS (SELECT 1 FROM account_services s\n                                     WHERE s.account_id = a.id AND s.service = ANY($2) AND s.state = 'on'))",
+  "query": "SELECT t.instance_id, a.id, a.tenant_id\n                   FROM accounts a JOIN tenants t ON t.id = a.tenant_id\n                   WHERE a.id = $1\n                     AND (cardinality($2::text[]) = 0\n                          OR EXISTS (SELECT 1 FROM account_services s\n                                     WHERE s.account_id = a.id AND s.service = ANY($2) AND s.state = 'on'\n                                       AND s.service <> ALL(t.services_off)))",
   "describe": {
     "columns": [
       {
@@ -49,5 +49,5 @@
       false
     ]
   },
-  "hash": "560292857e913573c7c44c8bd2069fad4345a204f12b54b9c225cdd380c2f09b"
+  "hash": "808ee614dacbe6e0d1d51e7a9d570dc8f8728ac11f24970d746c274d623e1010"
 }

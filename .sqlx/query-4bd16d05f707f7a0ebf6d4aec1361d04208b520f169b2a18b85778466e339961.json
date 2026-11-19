@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (SELECT 1 FROM account_services s JOIN accounts a ON a.id = s.account_id\n                                JOIN tenants t ON t.id = a.tenant_id\n                              WHERE s.account_id = $1 AND s.service = $2 AND s.state = 'on'\n                                AND s.service <> ALL(t.services_off))\n               AS \"on!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "on!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "4bd16d05f707f7a0ebf6d4aec1361d04208b520f169b2a18b85778466e339961"
+}

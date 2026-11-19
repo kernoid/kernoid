@@ -81,7 +81,15 @@ impl Setup {
         if !mail {
             self.identity.revoke_service(account, Service::Mail, WHO).await.unwrap();
         }
-        Caller { account, tenant: self.tenant, username: address, mail, calendars: mail, files: true }
+        Caller {
+            account,
+            tenant: self.tenant,
+            username: address,
+            mail,
+            calendars: mail,
+            files: true,
+            shared_files: true,
+        }
     }
 
     async fn one(&self, caller: &Caller, name: &str, args: Value) -> (String, Value) {

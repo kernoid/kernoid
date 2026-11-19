@@ -232,7 +232,8 @@ impl Identity {
                    WHERE a.id = $1
                      AND (cardinality($2::text[]) = 0
                           OR EXISTS (SELECT 1 FROM account_services s
-                                     WHERE s.account_id = a.id AND s.service = ANY($2) AND s.state = 'on'))"#,
+                                     WHERE s.account_id = a.id AND s.service = ANY($2) AND s.state = 'on'
+                                       AND s.service <> ALL(t.services_off)))"#,
                 account,
                 &services,
             )
@@ -326,7 +327,8 @@ impl Identity {
                WHERE k.token_hash = $1 AND k.expires_at > now() AND $2 = ANY(k.scopes) AND a.active AND t.active
                  AND (k.session_id IS NULL OR (s.terminated_at IS NULL AND s.expires_at > now()))
                  AND EXISTS (SELECT 1 FROM account_services v
-                             WHERE v.account_id = a.id AND v.service = 'mail' AND v.state = 'on')"#,
+                             WHERE v.account_id = a.id AND v.service = 'mail' AND v.state = 'on')
+                 AND NOT 'mail' = ANY(t.services_off)"#,
             &Sha256::digest(token.as_bytes())[..],
             MAIL_SCOPE,
         )

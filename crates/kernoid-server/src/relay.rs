@@ -33,6 +33,11 @@ impl Founders for AccountFounders {
             let token = headers.get(FOUNDER_HEADER)?.to_str().ok()?;
             let instance = crate::instance::of_request(&self.identity, extensions.get::<Client>()).await.ok()??;
             let account = self.identity.settings_account(instance.id, token, true).await.ok()?;
+            // A tenant without the relay founds no spaces (RFC 0008, 4).
+            let off = self.identity.tenant_services_off(account.tenant).await.ok()?;
+            if off.iter().any(|service| service == "relay") {
+                return None;
+            }
             Some(Founder { tenant: account.tenant, account: account.id })
         })
     }

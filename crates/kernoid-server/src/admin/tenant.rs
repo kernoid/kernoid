@@ -204,6 +204,59 @@ pub(crate) async fn set_module(
     respond(state.identity.admin_set_module(&admin, &module, body.enabled, &state.modules).await, no_content)
 }
 
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub(crate) struct TenantServiceView {
+    /// `mail`, `calendars`, `files` or `relay`.
+    name: String,
+    /// Whether the tenant gets it – the installation runs it and the operator did not switch it off for the tenant.
+    enabled: bool,
+}
+
+/// The services the installation runs and whether the tenant gets each (needs `directory.read`; RFC 0008, 4).
+#[utoipa::path(get, path = "/v1/tenant/services", tag = "tenant", params(TenantHeader), responses(
+    (status = 200, body = [TenantServiceView]),
+    (status = 403, description = "needs directory.read", body = Problem),
+))]
+pub(crate) async fn services(State(state): State<AppState>, AdminSession(admin): AdminSession) -> Response {
+    respond(state.identity.admin_tenant_services_off(&admin).await, |off| {
+        let views: Vec<TenantServiceView> = installed(state.services)
+            .into_iter()
+            .map(|name| TenantServiceView {
+                name: name.to_owned(),
+                enabled: !off.iter().any(|service| service == name),
+            })
+            .collect();
+        Json(views).into_response()
+    })
+}
+
+/// The services of `services` the installation runs.
+pub(crate) fn installed(services: kernoid_config::Services) -> Vec<&'static str> {
+    [("mail", services.mail), ("calendars", services.calendars), ("files", services.files), ("relay", services.relay)]
+        .into_iter()
+        .filter_map(|(name, on)| on.then_some(name))
+        .collect()
+}
+
+/// Switches one of the installation's services on or off for the tenant (needs `instance.manage`: the operator
+/// decides). Off, the tenant's accounts do not see it; what they keep there stays.
+#[utoipa::path(put, path = "/v1/tenant/services/{service}", tag = "tenant", params(TenantHeader), request_body = Switch,
+    responses((status = 204), (status = 400, description = "no such service", body = Problem),
+        (status = 403, description = "needs instance.manage", body = Problem)))]
+pub(crate) async fn set_service(
+    State(state): State<AppState>,
+    AdminSession(admin): AdminSession,
+    Path(service): Path<String>,
+    Json(body): Json<Switch>,
+) -> Response {
+    if !installed(state.services).contains(&service.as_str()) {
+        return Problem::new(StatusCode::BAD_REQUEST)
+            .detail("this installation does not run that service")
+            .into_response();
+    }
+    respond(state.identity.admin_switch_tenant_service(&admin, &service, body.enabled).await, no_content)
+}
+
 #[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
 pub(crate) struct TenantLanguage {
     /// The language of the emails kernoid writes to accounts that chose none – `en` or `de`; null for English.

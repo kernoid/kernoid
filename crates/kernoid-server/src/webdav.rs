@@ -163,7 +163,11 @@ async fn stores(state: &AppState, caller: &Caller) -> Result<(Files, Vec<Store>)
             access: FileAccess::own(caller.account),
         });
     }
-    for shared in files.shared_with(caller.account).await? {
+    let shared = match caller.shared_files {
+        true => files.shared_with(caller.account).await?,
+        false => Vec::new(),
+    };
+    for shared in shared {
         let access = files.access(caller.account, shared.owner).await?;
         let mut name = shared.name.replace('/', "-");
         let mut number = 2;

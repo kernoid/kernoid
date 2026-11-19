@@ -2222,6 +2222,64 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/relay/quota": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The tenant's relay quota and what its spaces take (needs `directory.read`). */
+        get: operations["get_v1_relay_quota"];
+        /** Sets the tenant's relay quota (needs `tenant.manage`); what is there stays, what would exceed it is refused. */
+        put: operations["put_v1_relay_quota"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/relay/spaces": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The tenant's end-to-end encrypted spaces on this relay, newest first (needs `directory.read`). kernoid sees who
+         *     founded them and how large they are – never what is in them.
+         */
+        get: operations["get_v1_relay_spaces"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/relay/spaces/{space}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Removes a space of the tenant with everything it holds (needs `tenant.manage`). Its members' devices keep their
+         *     copies.
+         */
+        delete: operations["delete_v1_relay_spaces_space"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/roles": {
         parameters: {
             query?: never;
@@ -2305,6 +2363,23 @@ export interface paths {
         post?: never;
         /** Revokes a SCIM token (needs `provisioning.manage`). */
         delete: operations["delete_v1_scim_tokens_id"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/services": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The services this installation runs; anyone may ask. */
+        get: operations["get_v1_services"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2894,6 +2969,43 @@ export interface paths {
         get?: never;
         /** Sets who gets a service when an account is created, and whether it needs approval (needs `policies.manage`). */
         put: operations["put_v1_tenant_service_policies_service"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tenant/services": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The services the installation runs and whether the tenant gets each (needs `directory.read`; RFC 0008, 4). */
+        get: operations["get_v1_tenant_services"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tenant/services/{service}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Switches one of the installation's services on or off for the tenant (needs `instance.manage`: the operator
+         *     decides). Off, the tenant's accounts do not see it; what they keep there stays.
+         */
+        put: operations["put_v1_tenant_services_service"];
         post?: never;
         delete?: never;
         options?: never;
@@ -3855,6 +3967,29 @@ export interface components {
             /** @description Verified domains of the tenant on which new accounts may take an address – a mailbox. */
             domains: string[];
         };
+        RelayQuotaView: {
+            /**
+             * Format: int64
+             * @description What the tenant's spaces may take together, in bytes; null for no limit.
+             */
+            bytes?: number | null;
+        };
+        RelaySpaceView: {
+            /**
+             * Format: int64
+             * @description What its envelopes take, in bytes – encrypted.
+             */
+            bytes: number;
+            /** Format: date-time */
+            created_at: string;
+            /** @description The program whose space it is: `kernoid`, `aktujo` … */
+            domain: string;
+            /** @description The account that founded it. */
+            founder?: string | null;
+            space: string;
+            /** Format: date-time */
+            written_at: string;
+        };
         Retention: {
             /**
              * Format: int32
@@ -3938,6 +4073,17 @@ export interface components {
             service: string;
             /** @description `on`, or `requested` – waiting for an administrator. */
             state: string;
+        };
+        /** @description The services of this installation; identity is always there. */
+        ServicesView: {
+            /** @description Calendars and contacts: JMAP, CalDAV, CardDAV. */
+            calendars: boolean;
+            /** @description Files: JMAP FileNode, WebDAV, links. */
+            files: boolean;
+            /** @description Mail: JMAP Mail, SMTP, IMAP. */
+            mail: boolean;
+            /** @description The relay of end-to-end encrypted spaces, below `/relay/<program>/v1/`. */
+            relay: boolean;
         };
         SessionCreated: {
             account: components["schemas"]["AccountView"];
@@ -4028,6 +4174,12 @@ export interface components {
              */
             mfa_grace_days?: number | null;
             mfa_required: boolean;
+        };
+        TenantServiceView: {
+            /** @description Whether the tenant gets it – the installation runs it and the operator did not switch it off for the tenant. */
+            enabled: boolean;
+            /** @description `mail`, `calendars`, `files` or `relay`. */
+            name: string;
         };
         TenantSummary: {
             active: boolean;
@@ -9494,6 +9646,128 @@ export interface operations {
             };
         };
     };
+    get_v1_relay_quota: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The tenant to act on – for instance administrators; the caller's own tenant if left out. */
+                "kernoid-tenant"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RelayQuotaView"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    put_v1_relay_quota: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The tenant to act on – for instance administrators; the caller's own tenant if left out. */
+                "kernoid-tenant"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RelayQuotaView"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_v1_relay_spaces: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The tenant to act on – for instance administrators; the caller's own tenant if left out. */
+                "kernoid-tenant"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RelaySpaceView"][];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    delete_v1_relay_spaces_space: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The tenant to act on – for instance administrators; the caller's own tenant if left out. */
+                "kernoid-tenant"?: string | null;
+            };
+            path: {
+                space: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     get_v1_roles: {
         parameters: {
             query?: never;
@@ -9717,6 +9991,25 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    get_v1_services: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServicesView"];
+                };
             };
         };
     };
@@ -10966,6 +11259,81 @@ export interface operations {
                 content?: never;
             };
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_v1_tenant_services: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The tenant to act on – for instance administrators; the caller's own tenant if left out. */
+                "kernoid-tenant"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantServiceView"][];
+                };
+            };
+            /** @description needs directory.read */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    put_v1_tenant_services_service: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The tenant to act on – for instance administrators; the caller's own tenant if left out. */
+                "kernoid-tenant"?: string | null;
+            };
+            path: {
+                service: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Switch"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description no such service */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description needs instance.manage */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

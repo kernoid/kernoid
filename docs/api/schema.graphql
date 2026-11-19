@@ -568,6 +568,10 @@ type MutationRoot {
 	"""
 	setTenantModule(module: String!, enabled: Boolean!): Boolean!
 	"""
+	Switches one of the installation's services on or off for the tenant (needs `instance.manage`).
+	"""
+	setTenantService(service: String!, enabled: Boolean!): Boolean!
+	"""
 	Claims a mail domain; returns the TXT record that proves it (needs `domains.manage`).
 	"""
 	addTenantDomain(domain: String!): TenantDomain!
@@ -1054,6 +1058,10 @@ type QueryRoot {
 	"""
 	tenantModules: [TenantModule!]!
 	"""
+	The services the installation runs and whether the tenant gets each (needs `directory.read`; RFC 0008, 4).
+	"""
+	tenantServices: [TenantModule!]!
+	"""
 	The tenant's verified domains as mail domains: the DNS records to publish and whether they are published
 	(reads DNS, changes nothing).
 	"""
@@ -1509,7 +1517,7 @@ type TenantDomain {
 type TenantModule {
 	name: String!
 	"""
-	Whether the tenant uses it.
+	Whether the tenant uses it (a module) or gets it (a service).
 	"""
 	enabled: Boolean!
 }

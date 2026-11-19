@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT services_off FROM tenants WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "services_off",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "tenants",
+            "name": "services_off"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b47d7a3ce538b6cce2ef0ccb217092ad2f6e0cb908e190584f19a5f350a40e0c"
+}

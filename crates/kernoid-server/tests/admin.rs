@@ -157,6 +157,13 @@ async fn tenants_are_administered_over_rest(pool: PgPool) {
     assert_eq!(alice.status("PATCH", "/v1/tenant", Some(json!({ "name": "Firma GmbH" }))).await, 204);
     assert_eq!(alice.status("PUT", "/v1/tenant/modules/jitsi", Some(json!({ "enabled": true }))).await, 204);
     assert_eq!(alice.status("PUT", "/v1/tenant/modules/nope", Some(json!({ "enabled": true }))).await, 400);
+    // The services: a tenant administrator sees them; only the instance's operator switches them.
+    let (status, services) = alice.get("/v1/tenant/services").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(services.as_array().unwrap().iter().all(|service| service["enabled"] == true), "{services}");
+    let off = Some(json!({ "enabled": false }));
+    assert_eq!(alice.status("PUT", "/v1/tenant/services/files", off.clone()).await, 403);
+    assert_eq!(alice.status("PUT", "/v1/tenant/services/fax", off).await, 400);
     let (status, claimed) = alice.send("POST", "/v1/tenant/domains", Some(json!({ "domain": "firma.example" }))).await;
     assert_eq!(status, StatusCode::CREATED);
     assert_eq!(claimed["record"]["name"], "_kernoid-challenge.firma.example");
@@ -388,6 +395,11 @@ async fn instance_administrators(pool: PgPool) {
     assert_eq!(created["domain"], "other.example");
     let trust = Some(json!({ "trust": true }));
     assert_eq!(other.status("POST", "/v1/tenant/domains/other.example/verify", trust).await, 204);
+    // Which services the tenant gets is the operator's decision.
+    assert_eq!(other.status("PUT", "/v1/tenant/services/files", Some(json!({ "enabled": false }))).await, 204);
+    let (_, services) = other.get("/v1/tenant/services").await;
+    let files = services.as_array().unwrap().iter().find(|service| service["name"] == "files").unwrap().clone();
+    assert_eq!(files["enabled"], false);
 
     // Instance roles, domains and signing keys.
     let (_, roles) = bob.get("/v1/instance/roles").await;

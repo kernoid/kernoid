@@ -371,7 +371,7 @@ impl Jmap {
     /// What the caller may do in `owner`'s file store: its own (with the service `files`), or what it was granted.
     pub async fn file_access(&self, caller: &Caller, owner: Uuid) -> Result<Option<FileAccess>, FilesError> {
         let Some(files) = &self.files else { return Ok(None) };
-        if owner == caller.account && !caller.files {
+        if owner == caller.account && !caller.files || owner != caller.account && !caller.shared_files {
             return Ok(None);
         }
         let access = files.access(caller.account, owner).await?;

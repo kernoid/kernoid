@@ -36,14 +36,18 @@ async fn app(pool: &PgPool) -> (Router, String) {
     identity.set_password(alice, PASSWORD, "test").await.unwrap();
     let (_, app_password) = identity.add_app_password(alice, "Mail", "test").await.unwrap();
     let keys = Arc::new(TenantKeys::new(pool.clone(), Key::random().unwrap()));
-    let blobs = BlobStore::from_config(&Blob::Memory, keys).unwrap();
+    let blobs = BlobStore::from_config(&Blob::Memory, keys.clone()).unwrap();
     let oidc = kernoid_oidc::Oidc::new(
         EventStore::new(pool.clone()),
         kernoid_store::MainKeys::new(Key::random().unwrap(), Vec::new()),
         "https",
     );
     let mail = kernoid_mail::Mail::new(pool.clone(), blobs.clone(), kernoid_mail::Limits::default());
-    let jmap = kernoid_jmap::Jmap::new(mail, 1_000_000, jiff::SignedDuration::from_hours(24 * 5));
+    let files = kernoid_files::Files::new(pool.clone(), blobs.clone(), kernoid_files::Limits::default());
+    let jmap = kernoid_jmap::Jmap::new(mail.clone(), 1_000_000, jiff::SignedDuration::from_hours(24 * 5))
+        .with_files(files)
+        .with_groupware(kernoid_groupware::Groupware::new(mail, keys))
+        .with_identity(Identity::new(EventStore::new(pool.clone())));
     // Changes reach the push streams as in the server: through PostgreSQL's notifications.
     let events = kernoid_mail::MailEvents::default();
     tokio::spawn(events.clone().listen(pool.clone(), tokio_util::sync::CancellationToken::new()));
@@ -311,4 +315,42 @@ async fn an_email_is_viewed_as_laid_out_in_a_sandbox(pool: PgPool) {
     let image = part.rsplit_once('-').map(|(email, _)| format!("{email}-2")).unwrap();
     let (status, _, _) = send(&app, get(&format!("/jmap/view/{account}/{image}"), Some(&auth))).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
+async fn the_session_shows_only_the_services_of_the_tenant(pool: PgPool) {
+    let (app, app_password) = app(&pool).await;
+    let identity = Identity::new(EventStore::new(pool.clone()));
+    let info = identity.account_by_address(&Address::parse("alice@firma.de").unwrap()).await.unwrap().unwrap();
+    let (alice, tenant) = (info.id, info.tenant);
+    identity.grant_service(alice, kernoid_identity::services::Service::Files, "test").await.unwrap();
+    let auth = basic("alice@firma.de", &app_password);
+    let capabilities = |body: &str| -> Vec<String> {
+        let session: Value = serde_json::from_str(body).unwrap();
+        session["capabilities"].as_object().unwrap().keys().cloned().collect()
+    };
+
+    let (status, _, body) = send(&app, get("/jmap/session", Some(&auth))).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let all = capabilities(&body);
+    assert!(
+        all.iter().any(|c| c == kernoid_jmap::CALENDARS) && all.iter().any(|c| c == kernoid_jmap::FILENODE),
+        "{all:?}"
+    );
+
+    // Without files and calendars for the tenant: mail only, and no CalDAV.
+    identity.switch_tenant_service(tenant, "files", false, "test").await.unwrap();
+    identity.switch_tenant_service(tenant, "calendars", false, "test").await.unwrap();
+    let (status, _, body) = send(&app, get("/jmap/session", Some(&auth))).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let some = capabilities(&body);
+    assert!(some.iter().any(|c| c == "urn:ietf:params:jmap:mail"));
+    assert!(!some.iter().any(|c| c == kernoid_jmap::CALENDARS || c == kernoid_jmap::FILENODE), "{some:?}");
+    let (status, _, _) = send(&app, get("/dav/cal/", Some(&auth))).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    // Without mail too, the app password of a mail program finds nothing.
+    identity.switch_tenant_service(tenant, "mail", false, "test").await.unwrap();
+    let (status, _, _) = send(&app, get("/jmap/session", Some(&auth))).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
 }
