@@ -201,5 +201,15 @@
         "type": "String"
       }
     }
-  }
+  },
+  "vaultWaiting": "No member has given you access to this vault yet. Once one shares it with you again, it opens here.",
+  "vaultMoveOnto": "Move onto a space",
+  "vaultMoveOntoConfirm": "Copy this vault into a new one beside it, kept end to end with post-quantum keys? The old vault stays until you remove it.",
+  "vaultMoved": "Copied into a new vault. Check it, then remove the old one.",
+  "vaultTrash": "Trash of the vault",
+  "vaultTrashHide": "Back to the vault",
+  "vaultRestore": "Restore",
+  "vaultMoveTo": "Move to …",
+  "vaultTop": "Top of the vault",
+  "vaultOpening": "Opening the vault …"
 }

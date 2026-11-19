@@ -233,6 +233,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<Principal> dco_decode_list_principal(dynamic raw);
 
   @protected
+  List<VaultEntry> dco_decode_list_vault_entry(dynamic raw);
+
+  @protected
   MailAccount dco_decode_mail_account(dynamic raw);
 
   @protected
@@ -291,6 +294,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   VacationResponse dco_decode_vacation_response(dynamic raw);
+
+  @protected
+  VaultEntry dco_decode_vault_entry(dynamic raw);
 
   @protected
   WindowsFilesStatus dco_decode_windows_files_status(dynamic raw);
@@ -512,6 +518,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<Principal> sse_decode_list_principal(SseDeserializer deserializer);
 
   @protected
+  List<VaultEntry> sse_decode_list_vault_entry(SseDeserializer deserializer);
+
+  @protected
   MailAccount sse_decode_mail_account(SseDeserializer deserializer);
 
   @protected
@@ -570,6 +579,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   VacationResponse sse_decode_vacation_response(SseDeserializer deserializer);
+
+  @protected
+  VaultEntry sse_decode_vault_entry(SseDeserializer deserializer);
 
   @protected
   WindowsFilesStatus sse_decode_windows_files_status(SseDeserializer deserializer);
@@ -797,6 +809,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_list_principal(List<Principal> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_vault_entry(List<VaultEntry> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_mail_account(MailAccount self, SseSerializer serializer);
 
   @protected
@@ -855,6 +870,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_vacation_response(VacationResponse self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_vault_entry(VaultEntry self, SseSerializer serializer);
 
   @protected
   void sse_encode_windows_files_status(WindowsFilesStatus self, SseSerializer serializer);

@@ -29,6 +29,19 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   `/relay/<scheme>/v2/` (migration 0057), `kernoid_space_store::streams` (schema version 2) and
   `kernoid_replica::streams::Streams` (found, invite, join, follow, write, share, renew when due, originals in parts,
   remove devices and persons, recover, purge). Protocol 1 stays beside it.
+- **Vaults on spaces** (RFC 0010, 5): a new vault is a space of the relay's protocol 2, kept end to end through streams
+  – `kernoid_client::e2e::Vaults` (make, enter with the account's recovery code of it, directories and files as streams,
+  move, rename, versions, trash, share, remove members, move an OpenPGP vault onto a space). The file store keeps only
+  its directory, naming the space (`kernoid:space`, migration 0058); destroyed, the worker removes the space. The JMAP
+  session names the relay (`https://kernoid.dev/jmap/space-vaults`). The replica adds persons with a recovery code
+  (`Streams::add_person`) and links a stream below another (`link_below`).
+
+### Changed
+
+- **The relay follows files:** `[services] relay` is on wherever files are unless set – vaults live there. An account
+  that founds a space on an open relay is recorded as its founder.
+- **The replica talks TLS with rustls on AWS-LC**, post-quantum key exchange preferred and the system's trust store –
+  no longer ring and webpki-roots.
 - **kernoid-auth:** sessions in PostgreSQL (`PgSessions`, feature `postgres`, on by default) – a table in the program's
   database with migrations of their own; ids stored only as hashes.
 

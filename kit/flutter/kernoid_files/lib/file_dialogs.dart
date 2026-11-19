@@ -102,12 +102,22 @@ class _ShareDialogState extends State<_ShareDialog> {
     try {
       await widget.account.shareDirectory(accountId: widget.accountId, id: widget.directory.id, shares: _shares);
       // A vault's key goes to everyone it is shared with, wrapped for their own key (RFC 0006, 6).
+      // A vault on a space makes them members, each with a code sealed to their key (RFC 0010, 5).
       if (widget.directory.isVault && _shares.isNotEmpty) {
-        final waiting = await widget.account.giveVaultKeys(
-          accountId: widget.accountId,
-          vaultId: widget.directory.id,
-          principalIds: [for (final s in _shares) s.principalId],
-        );
+        final ids = [for (final s in _shares) s.principalId];
+        final space = widget.directory.space;
+        final waiting = space != null
+            ? await widget.account.shareSpaceVault(
+                accountId: widget.accountId,
+                vaultId: widget.directory.id,
+                space: space,
+                principalIds: ids,
+              )
+            : await widget.account.giveVaultKeys(
+                accountId: widget.accountId,
+                vaultId: widget.directory.id,
+                principalIds: ids,
+              );
         if (waiting.isNotEmpty && mounted) {
           final l = AppLocalizations.of(context);
           await showNote(

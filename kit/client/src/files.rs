@@ -12,7 +12,7 @@ use serde_json::{Value, json};
 use crate::{Client, Error, FILE_LINKS, FILE_VERSIONS, FILENODE, PRINCIPALS, Result, ids_of};
 
 const USING: [&str; 3] = [FILENODE, FILE_VERSIONS, PRINCIPALS];
-const PROPERTIES: [&str; 12] = [
+const PROPERTIES: [&str; 13] = [
     "parentId",
     "name",
     "role",
@@ -25,6 +25,7 @@ const PROPERTIES: [&str; 12] = [
     "kernoid:vault",
     "kernoid:vaultKey",
     "kernoid:encryptedName",
+    "kernoid:space",
 ];
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
@@ -70,6 +71,9 @@ pub struct FileNode {
     /// The real name, encrypted to the vault's key (base64); `name` is then an id.
     #[serde(rename = "kernoid:encryptedName", default)]
     pub encrypted_name: Option<String>,
+    /// A vault on a space (RFC 0010, 5): the space, on its directory – see [`crate::e2e::Vaults`].
+    #[serde(rename = "kernoid:space", default)]
+    pub space: Option<String>,
     /// In a vault whose key is not at hand: `name` is still the id.
     #[serde(skip)]
     pub locked: bool,
@@ -247,6 +251,12 @@ pub async fn changes(client: &Client, account: &str, since: &str, max: u64) -> R
         changed,
         destroyed,
     })
+}
+
+/// One node of the store, by its id.
+pub async fn get(client: &Client, account: &str, id: &str) -> Result<FileNode> {
+    let result = client.call(&USING, "FileNode/get", json!({ "accountId": account, "ids": [id] })).await?;
+    list::<FileNode>(Some(&result))?.into_iter().next().ok_or_else(|| Error::Protocol(format!("no node {id}")))
 }
 
 /// The directory with the role `trash`, if the store has one.
@@ -713,6 +723,7 @@ mod tests {
             vault: None,
             vault_key: None,
             encrypted_name: None,
+            space: None,
             locked: false,
         };
         let mut nodes = vec![node("File", "b"), node("Directory", "z"), node("File", "A")];

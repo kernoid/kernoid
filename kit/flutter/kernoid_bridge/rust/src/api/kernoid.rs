@@ -62,6 +62,8 @@ pub struct Kernoid {
     opened: Arc<Mutex<HashMap<String, Vec<u8>>>>,
     /// For a login with OpenID Connect: its tokens and the task that renews them before the access token expires.
     login: Option<Arc<Login>>,
+    /// Vaults on spaces (RFC 0010, 5), once the app opened their store on this device ([`Kernoid::open_vaults`]).
+    vaults: Arc<std::sync::Mutex<Option<client::e2e::Vaults>>>,
 }
 
 /// A login with OpenID Connect while the app runs: the server, the tokens – renewed in the background –, and who
@@ -236,6 +238,21 @@ pub struct FileNode {
     pub is_vault: bool,
     /// In a vault whose key is not at hand here: the name is an id.
     pub locked: bool,
+    /// A vault on a space (RFC 0010, 5): its space – what is in it lives there, listed with [`Kernoid::vault_entries`].
+    pub space: Option<String>,
+}
+
+/// Something in a directory of a vault on a space.
+#[derive(Debug, Clone)]
+pub struct VaultEntry {
+    pub id: String,
+    pub name: String,
+    pub is_directory: bool,
+    /// In the vault's trash (still shown in its directory there).
+    pub trashed: bool,
+    pub size: i64,
+    pub media_type: Option<String>,
+    pub modified: Option<String>,
 }
 
 /// A person or group a directory is shared with, and how far: `read`, `edit` or `full` (edit and share).
@@ -578,6 +595,7 @@ fn file_node(n: files::FileNode) -> FileNode {
         is_vault,
         vault: n.vault,
         locked: n.locked,
+        space: n.space,
     }
 }
 
@@ -598,6 +616,7 @@ fn vault_node(vault: String, id: String, blob_id: Option<String>) -> files::File
         vault: Some(vault),
         vault_key: None,
         encrypted_name: None,
+        space: None,
         locked: false,
     }
 }
@@ -761,7 +780,13 @@ impl Kernoid {
             Ok((client, e2e))
         })
         .await?;
-        Ok(Kernoid { client, e2e: Arc::new(Mutex::new(e2e)), opened: Arc::default(), login: None })
+        Ok(Kernoid {
+            client,
+            e2e: Arc::new(Mutex::new(e2e)),
+            opened: Arc::default(),
+            login: None,
+            vaults: Arc::default(),
+        })
     }
 
     /// Begins a login with OpenID Connect at `server`: kernoid's login page in the system's browser, with a passkey,
@@ -817,7 +842,13 @@ impl Kernoid {
         if let Ok(mut renewal) = login.renewal.lock() {
             *renewal = Some(task);
         }
-        Ok(Kernoid { client, e2e: Arc::new(Mutex::new(e2e)), opened: Arc::default(), login: Some(login) })
+        Ok(Kernoid {
+            client,
+            e2e: Arc::new(Mutex::new(e2e)),
+            opened: Arc::default(),
+            login: Some(login),
+            vaults: Arc::default(),
+        })
     }
 
     /// What to keep in the system's key store to stay signed in – none for a login with an app password.
@@ -2326,6 +2357,310 @@ async fn unique_path(directory: &std::path::Path, name: &str) -> std::path::Path
         n += 1;
     }
     path
+}
+
+/// What the SDK needs of a vault on a space to act in it.
+fn space_vault(vault_id: String, space: String) -> files::FileNode {
+    files::FileNode { space: Some(space), ..vault_node(vault_id.clone(), vault_id, None) }
+}
+
+fn vault_entry(e: client::e2e::Entry) -> VaultEntry {
+    VaultEntry {
+        id: e.id,
+        name: e.name,
+        is_directory: e.directory,
+        trashed: e.trashed,
+        size: count(e.size),
+        media_type: e.media_type,
+        modified: e.modified,
+    }
+}
+
+/// Vaults on spaces (RFC 0010, 5): what lies in one is kept end to end through the foundation's streams.
+impl Kernoid {
+    /// Opens this account's store of vaults on spaces on this device – `path`, a file in the app's own directory, one
+    /// per account – with `device` (e.g. the host's name) as the start of this device's name in them.
+    pub fn open_vaults(&self, path: String, device: String) -> Result<(), KernoidError> {
+        let vaults = client::e2e::Vaults::open(std::path::Path::new(&path), &device)?;
+        *self.vaults.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(vaults);
+        Ok(())
+    }
+
+    /// Whether new vaults are made on spaces: the server names a relay for them, the login is by token and the store
+    /// is open.
+    #[frb(sync)]
+    pub fn space_vaults(&self) -> bool {
+        client::e2e::relay_url(&self.client).is_some()
+            && self.login.is_some()
+            && self.vaults.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).is_some()
+    }
+
+    fn vaults(&self) -> Result<client::e2e::Vaults, KernoidError> {
+        self.vaults
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
+            .ok_or_else(|| KernoidError { unauthorized: false, message: "the vaults' store is not open".into() })
+    }
+
+    /// Makes a vault on a space in a directory – `None`: the top of the store. Needs the account's key unlocked.
+    pub async fn create_space_vault(
+        &self,
+        account_id: String,
+        parent_id: Option<String>,
+        name: String,
+    ) -> Result<String, KernoidError> {
+        let (client, e2e, vaults) = (self.client.clone(), self.e2e.clone(), self.vaults()?);
+        run(async move {
+            let mut e2e = e2e.lock().await;
+            vaults.create(&client, &mut e2e, &account_id, parent_id.as_deref(), name.trim()).await
+        })
+        .await
+    }
+
+    /// Brings this device into a vault on a space (with the account's code of it, opened with its key) or reads what
+    /// is new there. False while no member made the account one.
+    pub async fn enter_vault(&self, account_id: String, vault_id: String, space: String) -> Result<bool, KernoidError> {
+        let (client, e2e, vaults) = (self.client.clone(), self.e2e.clone(), self.vaults()?);
+        run(async move {
+            let mut e2e = e2e.lock().await;
+            vaults.enter(&client, &mut e2e, &account_id, &space_vault(vault_id, space)).await
+        })
+        .await
+    }
+
+    /// The name of a vault on a space this device has.
+    pub async fn vault_name(&self, vault_id: String, space: String) -> Result<Option<String>, KernoidError> {
+        let vaults = self.vaults()?;
+        run(async move { vaults.name(&space_vault(vault_id, space)).await }).await
+    }
+
+    /// What lies in a directory of a vault on a space – `None`: its top.
+    pub async fn vault_entries(
+        &self,
+        vault_id: String,
+        space: String,
+        directory: Option<String>,
+    ) -> Result<Vec<VaultEntry>, KernoidError> {
+        let vaults = self.vaults()?;
+        let entries =
+            run(async move { vaults.list(&space_vault(vault_id, space), directory.as_deref()).await }).await?;
+        Ok(entries.into_iter().map(vault_entry).collect())
+    }
+
+    /// A directory in a directory of a vault on a space; returns its id.
+    pub async fn vault_make_directory(
+        &self,
+        vault_id: String,
+        space: String,
+        parent: Option<String>,
+        name: String,
+    ) -> Result<String, KernoidError> {
+        let vaults = self.vaults()?;
+        run(async move { vaults.make_directory(&space_vault(vault_id, space), parent.as_deref(), name.trim()).await })
+            .await
+    }
+
+    /// Uploads files and whole directories into a directory of a vault on a space; a file of the same name gets a
+    /// new version. Progress as for [`Kernoid::upload_files`] (whole files: sent once done).
+    pub fn vault_upload(
+        &self,
+        vault_id: String,
+        space: String,
+        parent: Option<String>,
+        paths: Vec<String>,
+        sink: StreamSink<UploadProgress>,
+    ) {
+        let vaults = match self.vaults() {
+            Ok(vaults) => vaults,
+            Err(error) => {
+                let _ = sink.add_error(error);
+                return;
+            }
+        };
+        RUNTIME.spawn(async move {
+            let node = space_vault(vault_id, space);
+            let result = async {
+                let mut plan = Vec::new();
+                for path in &paths {
+                    walk(std::path::Path::new(path), &[], &mut plan)?;
+                }
+                let mut dirs: HashMap<Vec<String>, Option<String>> = HashMap::from([(Vec::new(), parent.clone())]);
+                let mut index = 0u32;
+                for step in plan {
+                    let names = match &step {
+                        Step::Directory(names) | Step::File(names, _) => names.clone(),
+                    };
+                    // The directories on the way, found or made.
+                    for depth in 1..=names.len() {
+                        let key = names[..depth].to_vec();
+                        if dirs.contains_key(&key) {
+                            continue;
+                        }
+                        let above = dirs[&names[..depth - 1].to_vec()].clone();
+                        let here = vaults.list(&node, above.as_deref()).await?;
+                        let id = match here.iter().find(|e| e.directory && !e.trashed && e.name == names[depth - 1]) {
+                            Some(found) => found.id.clone(),
+                            None => vaults.make_directory(&node, above.as_deref(), &names[depth - 1]).await?,
+                        };
+                        dirs.insert(key, Some(id));
+                    }
+                    if let Step::File(names, path) = step {
+                        let parent = dirs[&names].clone();
+                        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or_default().to_owned();
+                        let shown = names.iter().chain([&name]).cloned().collect::<Vec<_>>().join("/");
+                        let data = tokio::fs::read(&path).await?;
+                        let total = count(data.len() as u64);
+                        let _ = sink.add(UploadProgress { index, name: shown.clone(), sent: 0, total });
+                        let same = vaults.list(&node, parent.as_deref()).await?;
+                        let same = same.into_iter().find(|e| !e.directory && e.name == name).map(|e| e.id);
+                        let modified = tokio::fs::metadata(&path)
+                            .await?
+                            .modified()
+                            .ok()
+                            .and_then(|time| jiff::Timestamp::try_from(time).ok())
+                            .map(|time| format!("{time:.0}"));
+                        let kind = files::media_type(&name);
+                        vaults
+                            .put_file(
+                                &node,
+                                parent.as_deref(),
+                                &name,
+                                data,
+                                Some(kind),
+                                modified.as_deref(),
+                                same.as_deref(),
+                            )
+                            .await?;
+                        let _ = sink.add(UploadProgress { index, name: shown, sent: total, total });
+                        index = index.saturating_add(1);
+                    }
+                }
+                client::Result::Ok(())
+            }
+            .await;
+            if let Err(error) = result {
+                let _ = sink.add_error(KernoidError::from(error));
+            }
+        });
+    }
+
+    /// Saves a file of a vault on a space, decrypted here, into `directory` under `name` (made unique); returns the
+    /// path.
+    pub async fn vault_save(
+        &self,
+        vault_id: String,
+        space: String,
+        entry: String,
+        name: String,
+        directory: String,
+    ) -> Result<String, KernoidError> {
+        let vaults = self.vaults()?;
+        run(async move {
+            let data = vaults.read_file(&space_vault(vault_id, space), &entry).await?;
+            write(&directory, &name, data).await
+        })
+        .await
+    }
+
+    /// Renames something in a directory of a vault on a space.
+    pub async fn vault_rename(
+        &self,
+        vault_id: String,
+        space: String,
+        parent: Option<String>,
+        entry: String,
+        name: String,
+    ) -> Result<(), KernoidError> {
+        let vaults = self.vaults()?;
+        run(async move { vaults.rename(&space_vault(vault_id, space), parent.as_deref(), &entry, name.trim()).await })
+            .await
+    }
+
+    /// Moves something into another directory of the same vault on a space (`to` `None`: its top).
+    pub async fn vault_move(
+        &self,
+        vault_id: String,
+        space: String,
+        from: Option<String>,
+        entry: String,
+        to: Option<String>,
+    ) -> Result<(), KernoidError> {
+        let vaults = self.vaults()?;
+        run(async move { vaults.move_to(&space_vault(vault_id, space), from.as_deref(), &entry, to.as_deref()).await })
+            .await
+    }
+
+    /// Moves something of a vault on a space into its trash, or back.
+    pub async fn vault_set_trashed(
+        &self,
+        vault_id: String,
+        space: String,
+        parent: Option<String>,
+        entry: String,
+        trashed: bool,
+    ) -> Result<(), KernoidError> {
+        let vaults = self.vaults()?;
+        run(async move { vaults.set_trashed(&space_vault(vault_id, space), parent.as_deref(), &entry, trashed).await })
+            .await
+    }
+
+    /// Removes something of a vault on a space for good.
+    pub async fn vault_remove(
+        &self,
+        vault_id: String,
+        space: String,
+        parent: Option<String>,
+        entry: String,
+    ) -> Result<(), KernoidError> {
+        let vaults = self.vaults()?;
+        run(async move { vaults.remove(&space_vault(vault_id, space), parent.as_deref(), &entry).await }).await
+    }
+
+    /// After sharing a vault on a space: makes those shared with members. Returns those who wait – groups, and
+    /// people without a key.
+    pub async fn share_space_vault(
+        &self,
+        account_id: String,
+        vault_id: String,
+        space: String,
+        principal_ids: Vec<String>,
+    ) -> Result<Vec<Principal>, KernoidError> {
+        let (client, e2e, vaults) = (self.client.clone(), self.e2e.clone(), self.vaults()?);
+        let waiting = run(async move {
+            let ids: Vec<&str> = principal_ids.iter().map(String::as_str).collect();
+            let people = files::principals(&client, &ids).await?;
+            let mut e2e = e2e.lock().await;
+            vaults.share(&client, &mut e2e, &account_id, &space_vault(vault_id, space), &people).await
+        })
+        .await?;
+        Ok(waiting.into_iter().map(principal).collect())
+    }
+
+    /// Ends a member's membership of a vault on a space: what is written from now on is out of their reach.
+    pub async fn remove_vault_member(
+        &self,
+        account_id: String,
+        vault_id: String,
+        space: String,
+        member: String,
+    ) -> Result<(), KernoidError> {
+        let (client, vaults) = (self.client.clone(), self.vaults()?);
+        run(async move { vaults.remove_member(&client, &account_id, &space_vault(vault_id, space), &member).await })
+            .await
+    }
+
+    /// Copies an OpenPGP vault onto a space beside it (name, directories, files, members); returns the new vault's
+    /// id. The old one stays until it is removed.
+    pub async fn move_vault(&self, account_id: String, vault_id: String) -> Result<String, KernoidError> {
+        let (client, e2e, vaults) = (self.client.clone(), self.e2e.clone(), self.vaults()?);
+        run(async move {
+            let old = files::get(&client, &account_id, &vault_id).await?;
+            let mut e2e = e2e.lock().await;
+            vaults.move_vault(&client, &mut e2e, &account_id, &old).await
+        })
+        .await
+    }
 }
 
 #[cfg(test)]

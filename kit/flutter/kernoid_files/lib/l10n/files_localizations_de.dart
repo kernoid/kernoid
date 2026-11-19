@@ -328,4 +328,36 @@ class FilesLocalizationsDe extends FilesLocalizations {
   String fileProviderShown(String stores) {
     return 'Angezeigt: $stores';
   }
+
+  @override
+  String get vaultWaiting =>
+      'Noch hat dir kein Mitglied Zugang zu diesem Tresor gegeben. Sobald es ihn erneut mit dir teilt, öffnet er sich hier.';
+
+  @override
+  String get vaultMoveOnto => 'Auf einen Space umziehen';
+
+  @override
+  String get vaultMoveOntoConfirm =>
+      'Diesen Tresor in einen neuen daneben kopieren, Ende zu Ende mit Post-Quanten-Schlüsseln? Der alte bleibt, bis du ihn entfernst.';
+
+  @override
+  String get vaultMoved => 'In einen neuen Tresor kopiert. Prüfe ihn und entferne dann den alten.';
+
+  @override
+  String get vaultTrash => 'Papierkorb des Tresors';
+
+  @override
+  String get vaultTrashHide => 'Zurück zum Tresor';
+
+  @override
+  String get vaultRestore => 'Wiederherstellen';
+
+  @override
+  String get vaultMoveTo => 'Verschieben nach …';
+
+  @override
+  String get vaultTop => 'Oberste Ebene des Tresors';
+
+  @override
+  String get vaultOpening => 'Tresor wird geöffnet …';
 }

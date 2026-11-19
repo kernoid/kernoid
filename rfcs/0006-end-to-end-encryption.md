@@ -190,6 +190,11 @@ encrypted search index kept by the app.
 
 ## 6. Files: vaults
 
+> **Moving onto spaces** ([0010](0010-foundation.md), 5): a new vault is a space of the relay's protocol 2, kept end
+> to end by the apps through streams ([0012](0012-streams.md)); its directory in the file store only names the space
+> (`kernoid:space`). What follows describes the OpenPGP vaults kept until every one moved; `VaultKey/*` stays – for a
+> vault on a space it carries each member's recovery code of the space, encrypted to the member account's key.
+
 A **vault** is a directory whose content only its members can read – chosen when it is made (a setting of the
 directory, not of the account; it cannot be switched later: making a new vault and moving files into it does that).
 

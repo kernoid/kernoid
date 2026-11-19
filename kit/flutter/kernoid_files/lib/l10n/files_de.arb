@@ -94,5 +94,15 @@
   "fileProviderOn": "Einschalten",
   "fileProviderUpdate": "Speicher aktualisieren",
   "fileProviderOff": "Ausschalten",
-  "fileProviderShown": "Angezeigt: {stores}"
+  "fileProviderShown": "Angezeigt: {stores}",
+  "vaultWaiting": "Noch hat dir kein Mitglied Zugang zu diesem Tresor gegeben. Sobald es ihn erneut mit dir teilt, öffnet er sich hier.",
+  "vaultMoveOnto": "Auf einen Space umziehen",
+  "vaultMoveOntoConfirm": "Diesen Tresor in einen neuen daneben kopieren, Ende zu Ende mit Post-Quanten-Schlüsseln? Der alte bleibt, bis du ihn entfernst.",
+  "vaultMoved": "In einen neuen Tresor kopiert. Prüfe ihn und entferne dann den alten.",
+  "vaultTrash": "Papierkorb des Tresors",
+  "vaultTrashHide": "Zurück zum Tresor",
+  "vaultRestore": "Wiederherstellen",
+  "vaultMoveTo": "Verschieben nach …",
+  "vaultTop": "Oberste Ebene des Tresors",
+  "vaultOpening": "Tresor wird geöffnet …"
 }

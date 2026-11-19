@@ -326,6 +326,11 @@ impl Client {
         *self.authorization.write().unwrap_or_else(|poisoned| poisoned.into_inner()) = format!("Bearer {access_token}");
     }
 
+    /// The access token of a login by token – what the relay takes from an account (not an app password).
+    pub(crate) fn bearer(&self) -> Option<String> {
+        self.authorization().strip_prefix("Bearer ").map(str::to_owned)
+    }
+
     fn authorization(&self) -> String {
         self.authorization.read().unwrap_or_else(|poisoned| poisoned.into_inner()).clone()
     }
@@ -387,7 +392,7 @@ impl Client {
 
     /// A URL of the session on the origin the session came from – the credentials go nowhere else. A server that
     /// serves its API on another host is not supported (OPEN).
-    fn here(&self, url: &str) -> String {
+    pub(crate) fn here(&self, url: &str) -> String {
         match split_origin(url) {
             Some((_, rest)) => format!("{}{rest}", self.origin),
             None if url.starts_with('/') => format!("{}{url}", self.origin),

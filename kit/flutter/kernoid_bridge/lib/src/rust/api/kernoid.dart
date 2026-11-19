@@ -7,9 +7,9 @@ import '../frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `account`, `addresses`, `children`, `count`, `directory`, `draft`, `event_form`, `event`, `file_node`, `html_of`, `identity`, `kept`, `link_mode_name`, `mail_account`, `options`, `own_addresses`, `principal`, `recipients`, `renew`, `run`, `sdk_client`, `signed_in`, `status`, `stop_renewing`, `unique_path`, `vault_node`, `walk`, `write`
+// These functions are ignored because they are not marked as `pub`: `account`, `addresses`, `children`, `count`, `directory`, `draft`, `event_form`, `event`, `file_node`, `html_of`, `identity`, `kept`, `link_mode_name`, `mail_account`, `options`, `own_addresses`, `principal`, `recipients`, `renew`, `run`, `sdk_client`, `signed_in`, `space_vault`, `status`, `stop_renewing`, `unique_path`, `vault_entry`, `vault_node`, `vaults`, `walk`, `write`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Kept`, `Login`, `Step`, `Target`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `drop`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `drop`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<Kernoid>>
 abstract class Kernoid implements RustOpaqueInterface {
@@ -68,6 +68,10 @@ abstract class Kernoid implements RustOpaqueInterface {
 
   /// Makes a folder – in `parent_id`, or at the top – and returns its id.
   Future<String> createMailbox({String? accountId, required String name, String? parentId});
+
+  /// Makes a vault on a space in a directory – `None`: the top of the store. Needs the account's key unlocked.
+  /// Vaults on spaces (RFC 0010, 5): what lies in one is kept end to end through the foundation's streams.
+  Future<String> createSpaceVault({required String accountId, String? parentId, required String name});
 
   /// Makes a vault (RFC 0006, 6) in a directory – `None`: the top of the store. Needs the account's key unlocked.
   Future<String> createVault({required String accountId, String? parentId, required String name});
@@ -128,6 +132,11 @@ abstract class Kernoid implements RustOpaqueInterface {
 
   /// Removes every email of a folder for good – the Trash, Junk – and returns how many.
   Future<PlatformInt64> emptyMailbox({String? accountId, required String id});
+
+  /// Brings this device into a vault on a space (with the account's code of it, opened with its key) or reads what
+  /// is new there. False while no member made the account one.
+  /// Vaults on spaces (RFC 0010, 5): what lies in one is kept end to end through the foundation's streams.
+  Future<bool> enterVault({required String accountId, required String vaultId, required String space});
 
   /// An event as a draft, to change it: for an instance of a recurring event, the event as a whole.
   Future<EventDraft> eventDraft({required String accountId, required String eventId});
@@ -200,9 +209,19 @@ abstract class Kernoid implements RustOpaqueInterface {
   /// Moves a folder into `parent_id`, or to the top.
   Future<void> moveMailbox({String? accountId, required String id, String? parentId});
 
+  /// Copies an OpenPGP vault onto a space beside it (name, directories, files, members); returns the new vault's
+  /// id. The old one stays until it is removed.
+  /// Vaults on spaces (RFC 0010, 5): what lies in one is kept end to end through the foundation's streams.
+  Future<String> moveVault({required String accountId, required String vaultId});
+
   /// Whether the account's server offers a capability of JMAP – for the account itself or one shared with it (RFC
   /// 0011, 3: the app shows what the server offers).
   bool offers({required String capability});
+
+  /// Opens this account's store of vaults on spaces on this device – `path`, a file in the app's own directory, one
+  /// per account – with `device` (e.g. the host's name) as the start of this device's name in them.
+  /// Vaults on spaces (RFC 0010, 5): what lies in one is kept end to end through the foundation's streams.
+  Future<void> openVaults({required String path, required String device});
 
   /// The account's own picture, or none.
   Future<Uint8List?> ownAvatar();
@@ -219,6 +238,15 @@ abstract class Kernoid implements RustOpaqueInterface {
   Future<void> removeFileLink({required String accountId, required String id});
 
   Future<void> removeOwnAvatar();
+
+  /// Ends a member's membership of a vault on a space: what is written from now on is out of their reach.
+  /// Vaults on spaces (RFC 0010, 5): what lies in one is kept end to end through the foundation's streams.
+  Future<void> removeVaultMember({
+    required String accountId,
+    required String vaultId,
+    required String space,
+    required String member,
+  });
 
   Future<void> renameFile({required String accountId, required String id, required String name});
 
@@ -308,8 +336,23 @@ abstract class Kernoid implements RustOpaqueInterface {
   /// Sets with whom a directory is shared, replacing what was.
   Future<void> shareDirectory({required String accountId, required String id, required List<FileShare> shares});
 
+  /// After sharing a vault on a space: makes those shared with members. Returns those who wait – groups, and
+  /// people without a key.
+  /// Vaults on spaces (RFC 0010, 5): what lies in one is kept end to end through the foundation's streams.
+  Future<List<Principal>> shareSpaceVault({
+    required String accountId,
+    required String vaultId,
+    required String space,
+    required List<String> principalIds,
+  });
+
   /// Signs out: a login with OpenID Connect is revoked at the server – the browser's session there stays.
   Future<void> signOut();
+
+  /// Whether new vaults are made on spaces: the server names a relay for them, the login is by token and the store
+  /// is open.
+  /// Vaults on spaces (RFC 0010, 5): what lies in one is kept end to end through the foundation's streams.
+  bool spaceVaults();
 
   /// One round of keeping a folder of the device in step with a store (kernoid-sync): what changed on both sides is
   /// carried over, conflicts keep both versions. `state` is the round's database, outside the folder and one per
@@ -334,6 +377,78 @@ abstract class Kernoid implements RustOpaqueInterface {
 
   /// The vacation response; none when the server has none for the user.
   Future<VacationResponse?> vacation();
+
+  /// What lies in a directory of a vault on a space – `None`: its top.
+  /// Vaults on spaces (RFC 0010, 5): what lies in one is kept end to end through the foundation's streams.
+  Future<List<VaultEntry>> vaultEntries({required String vaultId, required String space, String? directory});
+
+  /// A directory in a directory of a vault on a space; returns its id.
+  /// Vaults on spaces (RFC 0010, 5): what lies in one is kept end to end through the foundation's streams.
+  Future<String> vaultMakeDirectory({
+    required String vaultId,
+    required String space,
+    String? parent,
+    required String name,
+  });
+
+  /// Moves something into another directory of the same vault on a space (`to` `None`: its top).
+  /// Vaults on spaces (RFC 0010, 5): what lies in one is kept end to end through the foundation's streams.
+  Future<void> vaultMove({
+    required String vaultId,
+    required String space,
+    String? from,
+    required String entry,
+    String? to,
+  });
+
+  /// The name of a vault on a space this device has.
+  /// Vaults on spaces (RFC 0010, 5): what lies in one is kept end to end through the foundation's streams.
+  Future<String?> vaultName({required String vaultId, required String space});
+
+  /// Removes something of a vault on a space for good.
+  /// Vaults on spaces (RFC 0010, 5): what lies in one is kept end to end through the foundation's streams.
+  Future<void> vaultRemove({required String vaultId, required String space, String? parent, required String entry});
+
+  /// Renames something in a directory of a vault on a space.
+  /// Vaults on spaces (RFC 0010, 5): what lies in one is kept end to end through the foundation's streams.
+  Future<void> vaultRename({
+    required String vaultId,
+    required String space,
+    String? parent,
+    required String entry,
+    required String name,
+  });
+
+  /// Saves a file of a vault on a space, decrypted here, into `directory` under `name` (made unique); returns the
+  /// path.
+  /// Vaults on spaces (RFC 0010, 5): what lies in one is kept end to end through the foundation's streams.
+  Future<String> vaultSave({
+    required String vaultId,
+    required String space,
+    required String entry,
+    required String name,
+    required String directory,
+  });
+
+  /// Moves something of a vault on a space into its trash, or back.
+  /// Vaults on spaces (RFC 0010, 5): what lies in one is kept end to end through the foundation's streams.
+  Future<void> vaultSetTrashed({
+    required String vaultId,
+    required String space,
+    String? parent,
+    required String entry,
+    required bool trashed,
+  });
+
+  /// Uploads files and whole directories into a directory of a vault on a space; a file of the same name gets a
+  /// new version. Progress as for [`Kernoid::upload_files`] (whole files: sent once done).
+  /// Vaults on spaces (RFC 0010, 5): what lies in one is kept end to end through the foundation's streams.
+  Stream<UploadProgress> vaultUpload({
+    required String vaultId,
+    required String space,
+    String? parent,
+    required List<String> paths,
+  });
 
   /// Tells which types changed at the server (`FileNode`, `Email` …), as kernoid pushes them (EventSource), until
   /// the stream is no longer listened to; after a break it connects again by itself.
@@ -1083,6 +1198,9 @@ class FileNode {
   /// In a vault whose key is not at hand here: the name is an id.
   final bool locked;
 
+  /// A vault on a space (RFC 0010, 5): its space – what is in it lives there, listed with [`Kernoid::vault_entries`].
+  final String? space;
+
   const FileNode({
     required this.id,
     this.parentId,
@@ -1104,6 +1222,7 @@ class FileNode {
     this.vault,
     required this.isVault,
     required this.locked,
+    this.space,
   });
 
   @override
@@ -1127,7 +1246,8 @@ class FileNode {
       shares.hashCode ^
       vault.hashCode ^
       isVault.hashCode ^
-      locked.hashCode;
+      locked.hashCode ^
+      space.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1153,7 +1273,8 @@ class FileNode {
           shares == other.shares &&
           vault == other.vault &&
           isVault == other.isVault &&
-          locked == other.locked;
+          locked == other.locked &&
+          space == other.space;
 }
 
 /// A person or group a directory is shared with, and how far: `read`, `edit` or `full` (edit and share).
@@ -1634,4 +1755,50 @@ class VacationResponse {
           until == other.until &&
           subject == other.subject &&
           text == other.text;
+}
+
+/// Something in a directory of a vault on a space.
+class VaultEntry {
+  final String id;
+  final String name;
+  final bool isDirectory;
+
+  /// In the vault's trash (still shown in its directory there).
+  final bool trashed;
+  final PlatformInt64 size;
+  final String? mediaType;
+  final String? modified;
+
+  const VaultEntry({
+    required this.id,
+    required this.name,
+    required this.isDirectory,
+    required this.trashed,
+    required this.size,
+    this.mediaType,
+    this.modified,
+  });
+
+  @override
+  int get hashCode =>
+      id.hashCode ^
+      name.hashCode ^
+      isDirectory.hashCode ^
+      trashed.hashCode ^
+      size.hashCode ^
+      mediaType.hashCode ^
+      modified.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is VaultEntry &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          name == other.name &&
+          isDirectory == other.isDirectory &&
+          trashed == other.trashed &&
+          size == other.size &&
+          mediaType == other.mediaType &&
+          modified == other.modified;
 }

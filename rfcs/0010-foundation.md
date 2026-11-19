@@ -75,25 +75,40 @@ kernoid's is the one for servers.
 ## 5. Files and vaults
 
 Files stay as RFC 0005 says – data in tables, the server reads them, WebDAV and JMAP FileNode on top. This is the
-**managed** way of keeping files. Vaults (RFC 0006, 6) stay OpenPGP in 0.5.0.
+**managed** way of keeping files. Vaults (RFC 0006, 6) were OpenPGP in 0.5.0.
 
 The **end-to-end** way is spaces. Once streams exist (aktujo RFC 0009: a log per folder and document, keys in a tree),
 vaults move onto them and kernoid has one end-to-end design for files, documents and everything else: a vault becomes
-a space shown as a folder of the file store. Until then, a vault and a space are two things – OPEN, to be closed in
-the step after 0.5.0.
+a space shown as a folder of the file store.
 
-With streams in place ([0012](0012-streams.md)), the move is planned as follows (**OPEN**, needs the maintainer's go
-ahead, since it changes stored data):
+With streams in place ([0012](0012-streams.md)), the maintainer gave the go ahead on 2026-11-19 ("Yes, start"). The
+move, as built so far:
 
-1. A vault is a space of protocol 2 at the account's kernoid; its directories and files are streams (a directory's
-   stream links the streams of what lies in it), names and versions are events, contents are originals in parts. The
-   file store keeps only a directory node that names the space (`kernoid:space`) – the server sees no names any more.
-2. The SDK (`kernoid-client`) and `kernoid-sync` reach vaults through `kernoid_replica::streams`; the apps through the
-   bridge; the terminal app through the SDK.
-3. The web app needs streams in the browser: `kernoid-crypt` built for WebAssembly as `kernoid-e2e` is, requests and a
-   store of its own in TypeScript (IndexedDB).
-4. Existing OpenPGP vaults are copied into spaces by a member's app, then removed – a migration of stored data, run
-   per vault, with the OpenPGP vault kept until the copy is checked.
+1. **A vault is a space of protocol 2 at the account's kernoid** (`kernoid_client::e2e::Vaults`). Its root directory
+   is the space stream; every directory and file is a stream linked below its directory. A directory's events name what
+   lies in it (`entry`: stream, name, directory or file, in the vault's trash or not; `gone`), the space stream also the
+   vault's name (`vault`); a file's events are its versions (`version`: the parts of its original, size, type, time);
+   contents are originals in parts of 16 MiB. Moving links the stream below its new directory and leaves the old one.
+   Removing for good purges the streams where the device may (`purge`).
+2. **The file store keeps only the vault's directory**, naming the space (`kernoid:space`, migration 0058); it holds
+   nothing, its name is an id, and the server checks that the space is one the creator founded at this relay. When the
+   directory is destroyed, the worker removes the space (`relay_space_removals`). The relay is on wherever files are
+   unless `[services] relay` says otherwise; the JMAP session names it (`https://kernoid.dev/jmap/space-vaults`,
+   `relayUrl`).
+3. **Members are accounts.** Each is a person of the space named by the account's id. Making a vault and sharing it
+   give the account a recovery code of its person (`Streams::add_person`), encrypted to the account's OpenPGP key and
+   kept by the server where the OpenPGP vault's wrapped key was (`VaultKey/set`, `file_vault_keys`); every device of the
+   account comes in with it (`Vaults::enter`, `Streams::recover`). Whoever added a person knew its code, as whoever
+   wrapped an OpenPGP vault's key knew that key. Ending a membership removes the person – what is written afterwards
+   is out of its reach – and its code.
+4. **Existing OpenPGP vaults** are copied into a new vault beside them by a member's app (`Vaults::move_vault`: name,
+   directories, files, members); the OpenPGP vault stays until whoever moved it checked the copy and removes it. The
+   server keeps taking OpenPGP vaults until every client moved.
+
+**OPEN:** `kernoid-sync`, the apps (through the bridge), the terminal app and the web app – the web app needs streams in
+the browser (`kernoid-crypt` built for WebAssembly as `kernoid-e2e` is, requests and a store in TypeScript on
+IndexedDB); making a vault needs a login by token (the relay takes no app passwords); members' permissions follow the
+grant only when they are made (`members` for everyone shared with), not when it changes; groups as members.
 
 ## 6. Post-quantum
 

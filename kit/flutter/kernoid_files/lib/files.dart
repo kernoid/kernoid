@@ -17,6 +17,7 @@ import 'package:kernoid_shell/widgets/e2e.dart';
 import 'package:kernoid_shell/widgets/states.dart';
 
 import 'file_dialogs.dart';
+import 'space_vault.dart';
 
 import 'package:kernoid_shell/pages/home.dart';
 
@@ -70,6 +71,15 @@ class _FilesPageState extends State<FilesPage> {
   /// Where end-to-end encryption stands: vaults need the account's key unlocked.
   E2eStatus? _e2e;
 
+  /// A vault on a space opened (RFC 0010, 5): shown by [SpaceVaultView] instead of the list.
+  FileNode? _spaceVault;
+
+  /// The names of vaults on spaces this device has, by their directory's id – the store knows only ids.
+  final Map<String, String> _spaceNames = {};
+
+  /// New vaults are made on spaces: the server names a relay for them and the login is by token.
+  bool _spaceVaults = false;
+
   /// The vault the directory shown lies in, if any.
   String? get _vaultHere => _path.lastOrNull?.vault;
 
@@ -90,6 +100,31 @@ class _FilesPageState extends State<FilesPage> {
   Future<void> _loadKey() async {
     final status = await widget.account.keyStatus();
     if (mounted) setState(() => _e2e = status);
+    try {
+      await openVaults(widget.account);
+      if (mounted) setState(() => _spaceVaults = widget.account.spaceVaults());
+    } catch (_) {
+      // Without the vaults' store, vaults stay OpenPGP here.
+    }
+  }
+
+  /// The names of the vaults on spaces among `nodes`, as far as this device has them.
+  Future<void> _loadSpaceNames(List<FileNode> nodes) async {
+    for (final n in nodes.where((n) => n.space != null && !_spaceNames.containsKey(n.id))) {
+      try {
+        await openVaults(widget.account);
+        var name = await widget.account.vaultName(vaultId: n.id, space: n.space!);
+        if (name == null && (_e2e?.unlocked ?? false)) {
+          final store = _store!;
+          if (await widget.account.enterVault(accountId: store.accountId, vaultId: n.id, space: n.space!)) {
+            name = await widget.account.vaultName(vaultId: n.id, space: n.space!);
+          }
+        }
+        if (name != null && mounted) setState(() => _spaceNames[n.id] = name!);
+      } catch (_) {
+        // Shown as a locked vault until it opens.
+      }
+    }
   }
 
   /// Asks for the recovery code; with the key unlocked, the vaults' names are shown again.
@@ -123,6 +158,7 @@ class _FilesPageState extends State<FilesPage> {
         // The trash at the end, after what the user made.
         final ordered = [...nodes.where((n) => n.role != 'trash'), ...nodes.where((n) => n.role == 'trash')];
         if (mounted && _store == store) setState(() => _nodes = ordered);
+        unawaited(_loadSpaceNames(ordered));
       }
     } catch (error) {
       if (mounted) setState(() => _error = error);
@@ -142,7 +178,12 @@ class _FilesPageState extends State<FilesPage> {
 
   void _open(FileStore store, List<FileNode> path) {
     final other = store.accountId != _store?.accountId;
+    if (path.lastOrNull?.space != null) {
+      setState(() => _spaceVault = path.last);
+      return;
+    }
     setState(() {
+      _spaceVault = null;
       _store = store;
       _path
         ..clear()
@@ -234,9 +275,29 @@ class _FilesPageState extends State<FilesPage> {
     );
     if (name == null) return;
     final store = _store!;
+    final parent = _path.lastOrNull?.id;
     await _run(
-      () => widget.account.createVault(accountId: store.accountId, parentId: _path.lastOrNull?.id, name: name),
+      () => _spaceVaults
+          ? widget.account.createSpaceVault(accountId: store.accountId, parentId: parent, name: name)
+          : widget.account.createVault(accountId: store.accountId, parentId: parent, name: name),
     );
+  }
+
+  /// Copies an OpenPGP vault into a new vault on a space beside it; the old one stays until it is removed.
+  Future<void> _moveOnto(FileNode node) async {
+    final l = AppLocalizations.of(context);
+    final messenger = KToast.of(context);
+    final sure = await confirmAction(
+      context,
+      text: l.filesText.vaultMoveOntoConfirm,
+      confirm: l.filesText.vaultMoveOnto,
+    );
+    if (!sure) return;
+    final store = _store!;
+    await _run(() async {
+      await widget.account.moveVault(accountId: store.accountId, vaultId: node.id);
+      messenger.show(l.filesText.vaultMoved);
+    });
   }
 
   Future<void> _upload() async {
@@ -433,6 +494,7 @@ class _FilesPageState extends State<FilesPage> {
     // In a vault: no links, versions or copies (RFC 0006, 6); a vault is shared as a whole; locked, only deleting.
     final plain = node.vault == null;
     final open = !node.locked;
+    final onSpace = node.space != null;
     final choice = await showPointMenu<String>(
       context,
       position: position,
@@ -444,7 +506,9 @@ class _FilesPageState extends State<FilesPage> {
         if (_links && rights.share && node.role == null && plain) ('link', LucideIcons.link, l.filesText.link, false),
         if (!node.isDirectory && plain) ('versions', LucideIcons.history, l.filesText.versions, false),
         if (node.role == null && plain) ('copy', LucideIcons.copy, l.filesText.copyOrMove, false),
-        if (rights.rename && node.role == null && open) ('rename', LucideIcons.pencil, l.rename, false),
+        if (node.isVault && !onSpace && _spaceVaults && open && (_e2e?.unlocked ?? false))
+          ('moveOnto', LucideIcons.folderSync, l.filesText.vaultMoveOnto, false),
+        if (rights.rename && node.role == null && open && !onSpace) ('rename', LucideIcons.pencil, l.rename, false),
         if (rights.delete && node.role == null)
           ('delete', LucideIcons.trash2, deleteForGood ? l.filesText.deleteFileForGood : l.delete, true),
       ],
@@ -463,6 +527,8 @@ class _FilesPageState extends State<FilesPage> {
         if (await versionsDialog(context, widget.account, store.accountId, node)) await _load();
       case 'copy':
         await _copy(node);
+      case 'moveOnto':
+        await _moveOnto(node);
       case 'rename':
         await _rename(node);
       case 'delete':
@@ -510,47 +576,59 @@ class _FilesPageState extends State<FilesPage> {
       ],
       KIconButton(icon: LucideIcons.refreshCw, tooltip: l.filesText.refresh, onPressed: _load),
     ];
-    final main = Column(
-      children: [
-        if (wide || _path.isNotEmpty)
-          _Trail(
-            store: store,
-            path: _path,
-            trash: _trash,
-            onOpen: (path) => _open(store, path),
-            onDropNode: _dragging && _query.isEmpty ? _moveInto : null,
-            actions: wide ? actions : const [],
-          ),
-        KSearchField(
-          fieldKey: const ValueKey('files-search'),
-          controller: _search,
-          onSubmitted: _runSearch,
-          hint: l.filesText.searchFiles,
-        ),
-        if (_uploads.isNotEmpty) _Uploads(uploads: _uploads),
-        if (!(_e2e?.unlocked ?? false) && (_vaultHere != null || (_nodes ?? const []).any((n) => n.locked)))
-          _LockedNote(text: l.filesText.vaultLocked, action: l.unlock, onPressed: _unlock),
-        Expanded(
-          child: DropTarget(
-            enable: here.add && !_inTrash && _query.isEmpty,
-            onDragEntered: (_) => setState(() => _dropping = true),
-            onDragExited: (_) => setState(() => _dropping = false),
-            onDragDone: _drop,
-            child: Stack(
-              children: [
-                Positioned.fill(child: _list(l, k)),
-                if (_dropping) Positioned.fill(child: _DropHint(text: l.filesText.dropToUpload)),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
+    final vault = _spaceVault;
+    final Widget main = vault != null
+        ? SpaceVaultView(
+            key: ValueKey('space-vault-${vault.id}'),
+            account: widget.account,
+            accountId: store.accountId,
+            vault: vault,
+            onClose: () {
+              setState(() => _spaceVault = null);
+              _load();
+            },
+          )
+        : Column(
+            children: [
+              if (wide || _path.isNotEmpty)
+                _Trail(
+                  store: store,
+                  path: _path,
+                  trash: _trash,
+                  onOpen: (path) => _open(store, path),
+                  onDropNode: _dragging && _query.isEmpty ? _moveInto : null,
+                  actions: wide ? actions : const [],
+                ),
+              KSearchField(
+                fieldKey: const ValueKey('files-search'),
+                controller: _search,
+                onSubmitted: _runSearch,
+                hint: l.filesText.searchFiles,
+              ),
+              if (_uploads.isNotEmpty) _Uploads(uploads: _uploads),
+              if (!(_e2e?.unlocked ?? false) && (_vaultHere != null || (_nodes ?? const []).any((n) => n.locked)))
+                _LockedNote(text: l.filesText.vaultLocked, action: l.unlock, onPressed: _unlock),
+              Expanded(
+                child: DropTarget(
+                  enable: here.add && !_inTrash && _query.isEmpty,
+                  onDragEntered: (_) => setState(() => _dropping = true),
+                  onDragExited: (_) => setState(() => _dropping = false),
+                  onDragDone: _drop,
+                  child: Stack(
+                    children: [
+                      Positioned.fill(child: _list(l, k)),
+                      if (_dropping) Positioned.fill(child: _DropHint(text: l.filesText.dropToUpload)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          );
     if (!wide) {
       return KScaffold(
         topBar: KTopBar(
           leading: const SizedBox(width: 6),
-          actions: actions,
+          actions: vault != null ? const [] : actions,
           titleWidget: Align(
             alignment: Alignment.centerLeft,
             child: KMenuButton<FileStore>(
@@ -686,6 +764,8 @@ class _FilesPageState extends State<FilesPage> {
               child: Text(
                 n.role == 'trash'
                     ? l.trash
+                    : n.space != null
+                    ? (_spaceNames[n.id] ?? l.filesText.lockedVault)
                     : n.locked
                     ? (n.isVault
                           ? l.filesText.lockedVault
@@ -723,7 +803,11 @@ class _FilesPageState extends State<FilesPage> {
     if (n.isDirectory) {
       target = DragTarget<FileNode>(
         onWillAcceptWithDetails: (d) =>
-            d.data.id != n.id && n.mayAddChildren && !n.locked && (d.data.vault == n.vault || n.role == 'trash'),
+            d.data.id != n.id &&
+            n.mayAddChildren &&
+            !n.locked &&
+            n.space == null &&
+            (d.data.vault == n.vault || n.role == 'trash'),
         onAcceptWithDetails: (d) => _moveInto(d.data, n),
         builder: (context, candidates, _) => candidates.isEmpty
             ? row

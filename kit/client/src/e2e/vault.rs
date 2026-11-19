@@ -50,7 +50,7 @@ impl E2e {
         self.available && self.settings.policy.vaults != "forbidden"
     }
 
-    fn need_unlocked(&self) -> Result<&SecretKey> {
+    pub(crate) fn need_unlocked(&self) -> Result<&SecretKey> {
         self.current.as_ref().ok_or_else(|| Error::E2e("unlock your key first".into()))
     }
 

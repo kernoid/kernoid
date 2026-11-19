@@ -325,4 +325,36 @@ class FilesLocalizationsEn extends FilesLocalizations {
   String fileProviderShown(String stores) {
     return 'Shown: $stores';
   }
+
+  @override
+  String get vaultWaiting =>
+      'No member has given you access to this vault yet. Once one shares it with you again, it opens here.';
+
+  @override
+  String get vaultMoveOnto => 'Move onto a space';
+
+  @override
+  String get vaultMoveOntoConfirm =>
+      'Copy this vault into a new one beside it, kept end to end with post-quantum keys? The old vault stays until you remove it.';
+
+  @override
+  String get vaultMoved => 'Copied into a new vault. Check it, then remove the old one.';
+
+  @override
+  String get vaultTrash => 'Trash of the vault';
+
+  @override
+  String get vaultTrashHide => 'Back to the vault';
+
+  @override
+  String get vaultRestore => 'Restore';
+
+  @override
+  String get vaultMoveTo => 'Move to …';
+
+  @override
+  String get vaultTop => 'Top of the vault';
+
+  @override
+  String get vaultOpening => 'Opening the vault …';
 }

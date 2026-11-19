@@ -5,7 +5,7 @@
 # checkout's binary, serving a fresh database in the PostgreSQL of DATABASE_URL (a role that may create databases),
 # objects in memory, on http://clients.localhost:$PORT (18380 unless set). An instance, a tenant and the account
 # alice@firma.test with mail and files are made with the CLI; the tests log in with its password. kernoid-sync's vault
-# test takes bob@firma.test, who has no end-to-end key yet (the SDK's tests make alice's).
+# test takes bob@firma.test, who has no end-to-end key yet (the SDK's tests make alice's and carol@firma.test's).
 #
 #   scripts/client-check.sh [BINARY]
 #
@@ -63,6 +63,9 @@ cli tenant verify-domain "$tenant" firma.test --trust >/dev/null
 account=$(cli account add "$tenant" alice@firma.test --name Alice)
 cli account grant-service "$account" files >/dev/null
 printf '%s\n' "$password" | "$binary" --config "$work/config.toml" account password "$account" >/dev/null
+carol=$(cli account add "$tenant" carol@firma.test --name Carol)
+cli account grant-service "$carol" files >/dev/null
+printf '%s\n' "$password" | "$binary" --config "$work/config.toml" account password "$carol" >/dev/null
 bob=$(cli account add "$tenant" bob@firma.test --name Bob)
 cli account grant-service "$bob" files >/dev/null
 printf '%s\n' "$password" | "$binary" --config "$work/config.toml" account password "$bob" >/dev/null
@@ -86,6 +89,8 @@ curl -fsS "http://127.0.0.1:$port/readyz" >/dev/null || { tail -n 30 "$work/serv
 
 export KERNOID_TEST_SERVER="http://$host:$port" KERNOID_TEST_ADDRESS=alice@firma.test KERNOID_TEST_PASSWORD="$password"
 export KERNOID_TEST_VAULT_ADDRESS=bob@firma.test KERNOID_TEST_VAULT_PASSWORD="$password"
+# Vaults on spaces (RFC 0010, 5): Carol is made a member of Alice's vault.
+export KERNOID_TEST_SPACE_ADDRESS=carol@firma.test
 (cd "$root/kit/client" && cargo test --locked --test server -- --test-threads 1) || { tail -n 30 "$work/server.log"; fail "the SDK"; }
 (cd "$root/kit/sync" && cargo test --locked --test server -- --test-threads 1) || { tail -n 30 "$work/server.log"; fail "kernoid-sync"; }
 KERNOID_TEST_RELAY="http://127.0.0.1:$port/relay/kernoid" \

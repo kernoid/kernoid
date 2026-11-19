@@ -288,4 +288,105 @@ async fn a_vault_keeps_names_and_contents_from_the_server() {
     let moved = files::move_to(&client, &account, &file.id, None).await;
     assert!(moved.is_err(), "{moved:?}");
     tokio::fs::remove_dir_all(&dir).await.unwrap();
+
+    let old = top.into_iter().find(|n| n.id == vault).unwrap();
+    vaults_on_spaces(&mut e2e, &account, &old).await;
+}
+
+/// A client logged in by a session token – what the relay takes to found a space.
+async fn by_token(address: &str) -> Client {
+    let server = std::env::var("KERNOID_TEST_SERVER").unwrap();
+    let password = std::env::var("KERNOID_TEST_PASSWORD").unwrap();
+    let http = reqwest::Client::builder()
+        .resolve(
+            url::Url::parse(&server).unwrap().host_str().unwrap(),
+            std::net::SocketAddr::from(([127, 0, 0, 1], url::Url::parse(&server).unwrap().port().unwrap_or(443))),
+        )
+        .build()
+        .unwrap();
+    let session: serde_json::Value = http
+        .post(format!("{server}/v1/sessions"))
+        .json(&serde_json::json!({ "address": address, "password": password }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let token = session["token"].as_str().unwrap_or_else(|| panic!("no session: {session}"));
+    let url = kernoid_client::session_url(Some(&server), address).unwrap();
+    Client::connect_with_token(&url, token, &Options::default()).await.unwrap()
+}
+
+/// Vaults on spaces (RFC 0010, 5): the OpenPGP vault moves onto a space, Alice's second device comes in with her
+/// code, Carol is made a member and removed again.
+async fn vaults_on_spaces(e2e: &mut kernoid_client::e2e::E2e, account: &str, old: &files::FileNode) {
+    use kernoid_client::e2e::{E2e, Vaults, relay_url};
+    let address = std::env::var("KERNOID_TEST_ADDRESS").unwrap();
+    let Ok(carol_address) = std::env::var("KERNOID_TEST_SPACE_ADDRESS") else { return };
+    let alice = by_token(&address).await;
+    assert!(relay_url(&alice).is_some(), "the server names the relay of vaults");
+    let laptop = Vaults::in_memory("Alice's laptop").unwrap();
+
+    // The OpenPGP vault, copied onto a space beside it: names, directories, contents.
+    let moved = laptop.move_vault(&alice, e2e, account, old).await.unwrap();
+    let node = files::children(&alice, account, None).await.unwrap().into_iter().find(|n| n.id == moved).unwrap();
+    assert!(node.space.is_some() && node.name.starts_with("k-") && node.encrypted_name.is_none(), "{node:?}");
+    assert_eq!(laptop.name(&node).await.unwrap().as_deref(), Some("Geheim"));
+    let top = laptop.list(&node, None).await.unwrap();
+    let names: Vec<(&str, bool)> = top.iter().map(|e| (e.name.as_str(), e.directory)).collect();
+    assert_eq!(names, [("Verträge", true), ("Antwort.txt", false)]);
+    let letter = top.iter().find(|e| !e.directory).unwrap().clone();
+    assert_eq!(laptop.read_file(&node, &letter.id).await.unwrap(), "nur für Mitglieder".as_bytes());
+    assert!(files::children(&alice, account, Some(&node.id)).await.unwrap().is_empty(), "the store sees nothing in it");
+
+    // Directories, a move, a rename, a new version, the trash.
+    let archive = laptop.make_directory(&node, None, "Archiv").await.unwrap();
+    laptop.move_to(&node, None, &letter.id, Some(&archive)).await.unwrap();
+    laptop.rename(&node, Some(&archive), &letter.id, "Brief 2026.txt").await.unwrap();
+    laptop
+        .put_file(&node, Some(&archive), "", b"neu".to_vec(), Some("text/plain"), None, Some(&letter.id))
+        .await
+        .unwrap();
+    let note = laptop.put_file(&node, None, "Notiz.md", b"# Notiz".to_vec(), None, None, None).await.unwrap();
+    laptop.set_trashed(&node, None, &note, true).await.unwrap();
+
+    // Alice's phone: in with her code, sealed to her key.
+    let phone = Vaults::in_memory("Alice's phone").unwrap();
+    assert!(phone.enter(&alice, e2e, account, &node).await.unwrap());
+    let in_archive = phone.list(&node, Some(&archive)).await.unwrap();
+    assert_eq!((in_archive[0].name.as_str(), in_archive[0].size), ("Brief 2026.txt", 3));
+    assert_eq!(phone.read_file(&node, &letter.id).await.unwrap(), b"neu");
+    assert!(phone.list(&node, None).await.unwrap().iter().any(|e| e.name == "Notiz.md" && e.trashed));
+
+    // Carol: shared with in the store, then made a member with a code sealed to her new key.
+    let carol = by_token(&carol_address).await;
+    let mut carol_e2e = E2e::load(&carol).await.unwrap();
+    if !carol_e2e.has_key() {
+        carol_e2e.setup(&carol, kernoid_e2e::Kind::Pqc).await.unwrap();
+    }
+    let principal =
+        files::find_principals(&alice, "carol").await.unwrap().into_iter().find(|p| p.kind == "individual").unwrap();
+    files::share(&alice, account, &node.id, &[(principal.id.clone(), files::Level::Edit)]).await.unwrap();
+    let waiting = laptop.share(&alice, e2e, account, &node, std::slice::from_ref(&principal)).await.unwrap();
+    assert!(waiting.is_empty());
+    assert!(laptop.members(&node).await.unwrap().contains(&principal.id));
+    let carols = Vaults::in_memory("Carol's laptop").unwrap();
+    let seen = files::children(&carol, account, None).await.unwrap();
+    let shared = seen.into_iter().find(|n| n.id == node.id).expect("the vault, shared");
+    assert!(carols.enter(&carol, &mut carol_e2e, account, &shared).await.unwrap());
+    assert_eq!(carols.read_file(&shared, &letter.id).await.unwrap(), b"neu");
+    carols.make_directory(&shared, None, "Von Carol").await.unwrap();
+    laptop.sync(&node).await.unwrap();
+    assert!(laptop.list(&node, None).await.unwrap().iter().any(|e| e.name == "Von Carol"));
+
+    // Carol leaves: the relay serves her nothing more.
+    laptop.remove_member(&alice, account, &node, &principal.id).await.unwrap();
+    assert!(carols.sync(&shared).await.is_err());
+    laptop.put_file(&node, None, "Danach.txt", b"ohne Carol".to_vec(), None, None, None).await.unwrap();
+    phone.sync(&node).await.unwrap();
+    assert!(phone.list(&node, None).await.unwrap().iter().any(|e| e.name == "Danach.txt"));
+
+    // Removed for good: the store's directory goes, its space with it (by the worker).
+    files::destroy(&alice, account, &node.id).await.unwrap();
 }

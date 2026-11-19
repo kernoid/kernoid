@@ -72,6 +72,21 @@ allow it (Administration → Settings; `required` means nothing may be kept outs
 OPEN: links to files in vaults, groups as members, a new vault key when someone leaves, very large files (encrypted
 in the browser in one piece for now).
 
+### Vaults on spaces
+
+Vaults are moving onto **spaces** of kernoid's relay ([RFC 0010](https://github.com/kernoid/kernoid/blob/main/rfcs/0010-foundation.md),
+5): the vault's directory in the file store only names its space (`kernoid:space`) and holds nothing; directories,
+files, names and versions live in the space, end to end encrypted with post-quantum keys, and kernoid does not even see
+how many files there are or how they are named. Each member account gets a recovery code of the space, encrypted to
+its key; every device of the account comes in with it. Ending someone's membership keeps what is written afterwards
+out of their reach. The SDK (`kernoid_client::e2e::Vaults`) makes such vaults and moves an existing one onto a space
+beside it, keeping the old one until it is removed. The relay must be on (`services.relay`, on wherever files are);
+making a vault needs a login by token, not an app password.
+
+{: .note }
+OPEN: the apps, the terminal app, the web app and the file sync on vaults on spaces – until then they keep making
+OpenPGP vaults.
+
 ## Search and the trash
 
 - **Search:** the web app's search box finds files and folders of a store by name and – for text files up to 1 MiB

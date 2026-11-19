@@ -661,6 +661,66 @@ abstract class FilesLocalizations {
   /// In en, this message translates to:
   /// **'Shown: {stores}'**
   String fileProviderShown(String stores);
+
+  /// No description provided for @vaultWaiting.
+  ///
+  /// In en, this message translates to:
+  /// **'No member has given you access to this vault yet. Once one shares it with you again, it opens here.'**
+  String get vaultWaiting;
+
+  /// No description provided for @vaultMoveOnto.
+  ///
+  /// In en, this message translates to:
+  /// **'Move onto a space'**
+  String get vaultMoveOnto;
+
+  /// No description provided for @vaultMoveOntoConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy this vault into a new one beside it, kept end to end with post-quantum keys? The old vault stays until you remove it.'**
+  String get vaultMoveOntoConfirm;
+
+  /// No description provided for @vaultMoved.
+  ///
+  /// In en, this message translates to:
+  /// **'Copied into a new vault. Check it, then remove the old one.'**
+  String get vaultMoved;
+
+  /// No description provided for @vaultTrash.
+  ///
+  /// In en, this message translates to:
+  /// **'Trash of the vault'**
+  String get vaultTrash;
+
+  /// No description provided for @vaultTrashHide.
+  ///
+  /// In en, this message translates to:
+  /// **'Back to the vault'**
+  String get vaultTrashHide;
+
+  /// No description provided for @vaultRestore.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore'**
+  String get vaultRestore;
+
+  /// No description provided for @vaultMoveTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Move to …'**
+  String get vaultMoveTo;
+
+  /// No description provided for @vaultTop.
+  ///
+  /// In en, this message translates to:
+  /// **'Top of the vault'**
+  String get vaultTop;
+
+  /// No description provided for @vaultOpening.
+  ///
+  /// In en, this message translates to:
+  /// **'Opening the vault …'**
+  String get vaultOpening;
 }
 
 class _FilesLocalizationsDelegate extends LocalizationsDelegate<FilesLocalizations> {
