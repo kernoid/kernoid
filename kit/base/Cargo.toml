@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: MIT
+# Canonical JSON, hashes, identities of spaces – part of kernoid's foundation (RFC 0010), taken over from aktujo's core at aktujo 0.4.1 (commit fdf967f,
+# the maintainer holds the rights). In the kit (MIT): the apps of every program built on kernoid use it on the device.
+[package]
+name = "kernoid-base"
+description = "The base of kernoid's foundation: canonical JSON, hashes, identities of spaces"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+keywords = ["canonical-json", "rfc8785", "sha256", "kernoid"]
+categories = ["encoding", "cryptography"]
+
+[lints]
+workspace = true
+
+[dependencies]
+base64 = "0.23.1"
+getrandom = "0.4.3"
+hex = "0.4.3"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+sha2 = "0.11.1"
+thiserror = "2.0.21"

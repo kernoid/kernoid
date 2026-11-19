@@ -32,6 +32,9 @@ confidence-threshold = 0.93
 # Permissive licences, so that the kit stays usable under MIT – and MPL-2.0, whose copyleft covers only its own files
 # (option-ext, through dirs); they stay under the MPL.
 allow = ["0BSD", "MPL-2.0", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "BSL-1.0", "CC0-1.0", "CDLA-Permissive-2.0", "ISC", "MIT", "MIT-0", "Unicode-3.0", "Unlicense", "Zlib"]
+# SQLCipher as its own crate since libsqlite3-sys 0.40 (before, it was bundled there under MIT): SQLite's blessing (public
+# domain) and libtomcrypt's WTFPL, both permissive – for this crate only (as in aktujo, whose store came with it).
+exceptions = [{ crate = "sqlcipher-src", allow = ["blessing", "WTFPL"] }]
 
 [bans]
 multiple-versions = "allow"

@@ -32,6 +32,11 @@ SECURITY_FIXES = {
     ("jiff-tzdb", "1.0.0"): "RUSTSEC-2026-0543",
     ("jiff-tzdb-platform", "1.0.0"): "RUSTSEC-2026-0543",
     ("jiff-sqlx", "1.0.0"): "RUSTSEC-2026-0543",
+    # SQLite 3.54 in SQLCipher too comes only with libsqlite3-sys 0.40 (sqlcipher-src 420); rusqlite 0.42 is the first on
+    # it and asks for sqlite-wasm-rs 0.6.3 or later (WebAssembly only) – the kit's store, taken over from aktujo.
+    ("libsqlite3-sys", "0.40.0"): "RUSTSEC-2026-0459",
+    ("rusqlite", "0.42.0"): "RUSTSEC-2026-0459",
+    ("sqlite-wasm-rs", "0.6.3"): "RUSTSEC-2026-0459",
 }
 HEADERS = {"User-Agent": "kernoid-tui check-age (https://github.com/kernoid/kernoid)"}
 

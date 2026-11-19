@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: MIT
+# Originals by their hash – part of kernoid's foundation (RFC 0010), taken over from aktujo's core at aktujo 0.4.1 (commit fdf967f,
+# the maintainer holds the rights). In the kit (MIT): the apps of every program built on kernoid use it on the device.
+[package]
+name = "kernoid-blob"
+description = "Originals stored by their hash, in memory, in a folder or in S3 – part of kernoid's foundation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+keywords = ["content-addressed", "storage", "s3", "sha256", "kernoid"]
+categories = ["filesystem", "database"]
+
+[lints]
+workspace = true
+
+[features]
+# Originals in any object store of the crate object_store (in memory, local files, and what its features add).
+object = ["dep:object_store", "dep:futures-util", "dep:tokio", "dep:bytes"]
+# Originals in S3 and S3-compatible storage (Garage, MinIO, Ceph).
+s3 = ["object", "object_store/aws"]
+
+[dependencies]
+bytes = { version = "1.11.0", optional = true }
+futures-util = { version = "0.3.34", default-features = false, optional = true }
+kernoid-base = { version = "0.4.0", path = "../base" }
+object_store = { version = "0.14.2", default-features = false, optional = true }
+sha2 = "0.11.1"
+thiserror = "2.0.21"
+tokio = { version = "1.53.3", features = ["rt-multi-thread", "macros", "fs", "io-util"], optional = true }
+
+[package.metadata.docs.rs]
+all-features = true
