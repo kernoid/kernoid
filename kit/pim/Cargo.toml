@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: MIT
+# kernoid-pim: iCalendar (RFC 5545) with recurrences and time zones, vCard (RFC 6350, 3.0 read), JSCalendar and
+# JSContact (RFC 8984, RFC 9553) with the conversions between them, and the JMAP object helpers (JSON Pointer,
+# PatchObject) – kernoid's own library, part of the kit (MIT, RFC 0008): the server stores and schedules with it, the
+# SDK reads and writes files with it. Its requirements are minimum versions, the kit's Cargo.lock pins them, each at
+# least two weeks old when taken (`../tui/scripts/check-age.py --dir=kit`).
+[package]
+name = "kernoid-pim"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "iCalendar, vCard, JSCalendar and JSContact: parsing, writing, recurrences, time zones and conversions"
+keywords = ["kernoid", "icalendar", "vcard", "jscalendar", "jscontact"]
+categories = ["date-and-time", "parser-implementations", "email"]
+homepage.workspace = true
+readme = "README.md"
+
+[dependencies]
+# Dates, times and the IANA time zones (Unlicense OR MIT).
+jiff = "1.0.1"
+# JSCalendar and JSContact objects are JSON.
+serde_json = "1.0.151"
+
+[lints]
+workspace = true

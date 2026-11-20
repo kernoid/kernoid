@@ -11,7 +11,7 @@ kernoid's Rust SDK: the protocols of [kernoid](https://kernoid.dev) for clients,
 - **Logging in** with an app password, or with OpenID Connect as kernoid's apps do (`oidc`): PKCE, kernoid's
   built-in client of the apps, the scope `urn:kernoid:data`, renewing the access token with the refresh token.
 - **Finding a server** of a domain through `_jmap._tcp` SRV records.
-- **iCalendar and vCard files** to and from JSCalendar and JSContact, through calcard.
+- **iCalendar and vCard files** to and from JSCalendar and JSContact, through [`kernoid-pim`](../pim).
 
 It sends the credentials – HTTP Basic, or the access token – only to the origin it logged in to; plain HTTP only to this
 machine unless asked for. TLS through rustls on AWS-LC with the system's trust store, the post-quantum key exchange
