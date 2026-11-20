@@ -295,6 +295,11 @@ async fn a_vault_keeps_names_and_contents_from_the_server() {
 
 /// A client logged in by a session token – what the relay takes to found a space.
 async fn by_token(address: &str) -> Client {
+    session(address).await.0
+}
+
+/// The same, with the token – for kernoid's own REST API.
+async fn session(address: &str) -> (Client, String) {
     let server = std::env::var("KERNOID_TEST_SERVER").unwrap();
     let password = std::env::var("KERNOID_TEST_PASSWORD").unwrap();
     let http = reqwest::Client::builder()
@@ -313,9 +318,26 @@ async fn by_token(address: &str) -> Client {
         .json()
         .await
         .unwrap();
-    let token = session["token"].as_str().unwrap_or_else(|| panic!("no session: {session}"));
+    let token = session["token"].as_str().unwrap_or_else(|| panic!("no session: {session}")).to_owned();
     let url = kernoid_client::session_url(Some(&server), address).unwrap();
-    Client::connect_with_token(&url, token, &Options::default()).await.unwrap()
+    (Client::connect_with_token(&url, &token, &Options::default()).await.unwrap(), token)
+}
+
+/// A request to kernoid's REST API with a session token.
+async fn rest(token: &str, method: reqwest::Method, path: &str, body: Option<serde_json::Value>) -> serde_json::Value {
+    let server = std::env::var("KERNOID_TEST_SERVER").unwrap();
+    let host = url::Url::parse(&server).unwrap();
+    let http = reqwest::Client::builder()
+        .resolve(host.host_str().unwrap(), std::net::SocketAddr::from(([127, 0, 0, 1], host.port().unwrap_or(443))))
+        .build()
+        .unwrap();
+    let mut request = http.request(method, format!("{server}{path}")).bearer_auth(token);
+    if let Some(body) = body {
+        request = request.json(&body);
+    }
+    let response = request.send().await.unwrap();
+    assert!(response.status().is_success(), "{path}: {}", response.status());
+    response.json().await.unwrap_or(serde_json::Value::Null)
 }
 
 /// Vaults on spaces (RFC 0010, 5): the OpenPGP vault moves onto a space, Alice's second device comes in with her
@@ -351,13 +373,19 @@ async fn vaults_on_spaces(e2e: &mut kernoid_client::e2e::E2e, account: &str, old
     let note = laptop.put_file(&node, None, "Notiz.md", b"# Notiz".to_vec(), None, None, None).await.unwrap();
     laptop.set_trashed(&node, None, &note, true).await.unwrap();
 
-    // Alice's phone: in with her code, sealed to her key.
-    let phone = Vaults::in_memory("Alice's phone").unwrap();
+    // Alice's phone: in with her code, sealed to her key; its vaults kept sealed in a file.
+    let sealed = std::env::temp_dir().join(format!("kernoid-vaults-{}.sealed", std::process::id()));
+    let phone = Vaults::open_sealed(&sealed, [9u8; 32], "Alice's phone").unwrap();
     assert!(phone.enter(&alice, e2e, account, &node).await.unwrap());
     let in_archive = phone.list(&node, Some(&archive)).await.unwrap();
     assert_eq!((in_archive[0].name.as_str(), in_archive[0].size), ("Brief 2026.txt", 3));
     assert_eq!(phone.read_file(&node, &letter.id).await.unwrap(), b"neu");
     assert!(phone.list(&node, None).await.unwrap().iter().any(|e| e.name == "Notiz.md" && e.trashed));
+    // Opened again from its file – with the key only.
+    assert!(Vaults::open_sealed(&sealed, [8u8; 32], "x").is_err());
+    let again = Vaults::open_sealed(&sealed, [9u8; 32], "x").unwrap();
+    assert_eq!(again.name(&node).await.unwrap().as_deref(), Some("Geheim"));
+    drop(again);
 
     // Carol: shared with in the store, then made a member with a code sealed to her new key.
     let carol = by_token(&carol_address).await;
@@ -392,6 +420,37 @@ async fn vaults_on_spaces(e2e: &mut kernoid_client::e2e::E2e, account: &str, old
     laptop.rename_vault(&node, "Geheim 2").await.unwrap();
     phone.sync(&node).await.unwrap();
     assert_eq!(phone.name(&node).await.unwrap().as_deref(), Some("Geheim 2"));
+
+    // A grant changed elsewhere – in the store, the vault untouched –: reconciling brings Carol back to editing.
+    files::share(&alice, account, &node.id, &[(principal.id.clone(), files::Level::Edit)]).await.unwrap();
+    laptop.reconcile(&alice, e2e, account, &node).await.unwrap();
+    assert!(carols.enter(&carol, &mut carol_e2e, account, &shared).await.unwrap());
+    carols.make_directory(&shared, None, "Wieder da").await.unwrap();
+
+    // A group: Dave, in the group "Team", becomes a member through it at its level.
+    if let Ok(dave_address) = std::env::var("KERNOID_TEST_GROUP_ADDRESS") {
+        let (_, token) = session(&address).await;
+        let dave = by_token(&dave_address).await;
+        let mut dave_e2e = E2e::load(&dave).await.unwrap();
+        if !dave_e2e.has_key() {
+            dave_e2e.setup(&dave, kernoid_e2e::Kind::Pqc).await.unwrap();
+        }
+        let dave_id = dave.primary(FILENODE).unwrap();
+        let group =
+            rest(&token, reqwest::Method::POST, "/v1/groups", Some(serde_json::json!({ "name": "Team" }))).await;
+        let group = group["id"].as_str().unwrap().to_owned();
+        rest(&token, reqwest::Method::PUT, &format!("/v1/groups/{group}/members/{dave_id}"), None).await;
+        let shares = [(principal.id.clone(), files::Level::Edit), (group.clone(), files::Level::Read)];
+        files::share(&alice, account, &node.id, &shares).await.unwrap();
+        assert!(laptop.reconcile(&alice, e2e, account, &node).await.unwrap().is_empty(), "nobody waits");
+        assert!(laptop.members(&node).await.unwrap().contains(&dave_id));
+        let daves = Vaults::in_memory("Dave's laptop").unwrap();
+        let seen = files::children(&dave, account, None).await.unwrap().into_iter().find(|n| n.id == node.id);
+        let seen = seen.expect("the vault, shared with the group");
+        assert!(daves.enter(&dave, &mut dave_e2e, account, &seen).await.unwrap());
+        assert_eq!(daves.level(&seen).await.unwrap(), kernoid_client::e2e::Level::Read);
+        assert_eq!(daves.read_file(&seen, &letter.id).await.unwrap(), b"neu");
+    }
 
     // Carol leaves: the relay serves her nothing more.
     laptop.remove_member(&alice, account, &node, &principal.id).await.unwrap();

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! JMAP Sharing's principals (RFC 9670, 2; RFC 0005, 11): the people and groups of the caller's tenant, so that a
-//! program can find whom to share with. Read-only: `Principal/get` and `Principal/query`.
+//! program can find whom to share with. Read-only: `Principal/get` and `Principal/query`. A group names its members'
+//! accounts in kernoid's `kernoid:members` – what an app needs to make each of them a member of a vault on a space
+//! (RFC 0010, 5).
 
 use kernoid_identity::Identity;
 use serde_json::{Map, Value, json};
@@ -17,6 +19,8 @@ struct Principal {
     kind: &'static str,
     name: String,
     email: Option<String>,
+    /// A group's members, by their accounts' ids.
+    members: Option<Vec<String>>,
 }
 
 impl Principal {
@@ -30,6 +34,7 @@ impl Principal {
             "timeZone": null,
             "capabilities": {},
             "accounts": null,
+            "kernoid:members": self.members,
         })
     }
 }
@@ -47,6 +52,7 @@ async fn principals(identity: &Identity, tenant: uuid::Uuid) -> Result<Vec<Princ
             kind: "individual",
             name: account.display_name,
             email: Some(account.address).filter(|address| !address.is_empty()),
+            members: None,
         })
         .collect();
     out.extend(identity.groups(tenant).await.map_err(MethodError::server_fail)?.into_iter().map(|group| Principal {
@@ -54,6 +60,7 @@ async fn principals(identity: &Identity, tenant: uuid::Uuid) -> Result<Vec<Princ
         kind: "group",
         name: group.name,
         email: group.addresses.first().cloned(),
+        members: Some(group.members.iter().map(ToString::to_string).collect()),
     }));
     out.sort_by_key(|principal| principal.name.to_lowercase());
     Ok(out)

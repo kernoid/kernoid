@@ -14,6 +14,7 @@
 //! Everything here is synchronous: the relay's requests and the store block. `kernoid-client` runs it off its async
 //! runtime; the web app (the feature `wasm`, [`wasm`]) in a worker.
 
+pub mod sealed;
 #[cfg(feature = "wasm")]
 pub mod wasm;
 
@@ -360,7 +361,7 @@ pub fn members(streams: &Streams, space: &SpaceId) -> Result<Vec<String>> {
 }
 
 /// How far a member may go – as the file store's grant says: read, edit, or edit and share.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Level {
     /// Reading only: the relay takes nothing written.
@@ -417,6 +418,14 @@ pub fn member_levels(streams: &Streams, space: &SpaceId) -> Result<Vec<(String, 
         out.push((name.clone(), level));
     }
     Ok(out)
+}
+
+/// How far this device may go in the vault – its own permissions, as the relay enforces them.
+pub fn my_level(streams: &Streams, space: &SpaceId) -> Result<Level> {
+    let me = streams.device_id(space)?;
+    let roster = streams.roster(space)?;
+    let device = roster.device(&me).ok_or_else(|| invalid("this device is not in the vault"))?;
+    Ok(Level::from_permissions(|p| device.may(p)))
 }
 
 /// Makes an account a member at `level`: a person named by its id, and its recovery code – for the caller to hand to

@@ -58,6 +58,8 @@ export interface Principal {
   type: string;
   name: string;
   email: string | null;
+  /** A group's members, by their accounts' ids (kernoid's `kernoid:members`). */
+  "kernoid:members"?: string[] | null;
 }
 
 const PROPERTIES = [

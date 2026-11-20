@@ -60,6 +60,8 @@ fn space_id(node: &FileNode) -> Result<kernoid_base::SpaceId> {
 #[derive(Clone)]
 pub struct Vaults {
     streams: Arc<Mutex<Streams>>,
+    /// Kept sealed in a file under a key of the system's key store, written after each change.
+    sealed: Option<Arc<Mutex<kernoid_vault::sealed::Sealed>>>,
 }
 
 impl std::fmt::Debug for Vaults {
@@ -75,8 +77,17 @@ pub fn relay_url(client: &Client) -> Option<String> {
 }
 
 impl Vaults {
-    /// The vaults kept in `path` (a SQLite file of this account on this device), made there the first time; this
-    /// device's name in the spaces is made once and kept with them – `name` (e.g. the host name) and a random part.
+    /// The vaults kept sealed in `path` under `key` – 32 bytes the program keeps in the system's key store (the
+    /// apps' secure storage, a keyring) –, made there the first time; this device's name in the spaces is made once
+    /// and kept with them – `name` (e.g. the host name) and a random part. What is in the file – keys of streams and
+    /// persons, names, what was read – opens only with the key.
+    pub fn open_sealed(path: &Path, key: [u8; 32], name: &str) -> Result<Self> {
+        let (streams, sealed) = kernoid_vault::sealed::Sealed::open(path, key, name, None).map_err(vault_error)?;
+        Ok(Self { streams: Arc::new(Mutex::new(streams)), sealed: Some(Arc::new(Mutex::new(sealed))) })
+    }
+
+    /// The vaults kept in `path`, a SQLite file as it is – the keys in it readable by whoever reads the file; prefer
+    /// [`Vaults::open_sealed`].
     pub fn open(path: &Path, name: &str) -> Result<Self> {
         Self::with(Store::open(path).map_err(|error| Error::E2e(format!("the vaults' store: {error}")))?, name)
     }
@@ -88,7 +99,7 @@ impl Vaults {
 
     fn with(store: Store, name: &str) -> Result<Self> {
         let streams = kernoid_vault::open(store, name, None).map_err(vault_error)?;
-        Ok(Self { streams: Arc::new(Mutex::new(streams)) })
+        Ok(Self { streams: Arc::new(Mutex::new(streams)), sealed: None })
     }
 
     /// Runs `work` on the spaces, off the async runtime (the relay's requests and the store block).
@@ -96,10 +107,16 @@ impl Vaults {
         &self,
         work: impl FnOnce(&mut Streams) -> kernoid_vault::Result<T> + Send + 'static,
     ) -> Result<T> {
-        let streams = self.streams.clone();
+        let (streams, sealed) = (self.streams.clone(), self.sealed.clone());
         tokio::task::spawn_blocking(move || {
             let mut streams = streams.lock().map_err(|_| Error::E2e("the vaults' store is poisoned".into()))?;
-            work(&mut streams).map_err(vault_error)
+            let result = work(&mut streams).map_err(vault_error);
+            // What changed goes to the sealed file, also when the work failed halfway.
+            if let Some(sealed) = sealed {
+                let mut sealed = sealed.lock().map_err(|_| Error::E2e("the vaults' store is poisoned".into()))?;
+                sealed.save(&mut streams).map_err(vault_error)?;
+            }
+            result
         })
         .await
         .map_err(|error| Error::E2e(error.to_string()))?
@@ -157,19 +174,42 @@ impl Vaults {
             .await?
         };
         if !known {
-            let relay = relay_url(client).ok_or_else(|| Error::E2e("this server keeps no vaults on spaces".into()))?;
-            let wrapped = wrapped(client, account, &node.id).await?;
-            let Some(sealed) = wrapped.sealed else { return Ok(false) };
-            e2e.need_unlocked()?;
-            let opened = message::decrypt(&decode(&sealed)?, &e2e.secrets(), &[])
-                .map_err(|_| Error::E2e("the vault's code is not for your key".into()))?;
-            let code: [u8; 32] = opened.data.try_into().map_err(|_| Error::E2e("not a recovery code".into()))?;
-            let name = client.session.username.clone();
-            self.run(move |streams| streams.recover(&relay, &space, &RecoveryCode(code), Some(&name)).map(drop))
-                .await?;
-            return Ok(true);
+            let Some(code) = Self::code(client, e2e, account, node).await? else { return Ok(false) };
+            self.enter_with_code(client, node, code).await?;
         }
         Ok(true)
+    }
+
+    /// The account's recovery code of the vault, opened with its key – `None` while no member gave it one. For
+    /// handing to another program of the account on this device (the system's file manager), which comes in with it.
+    pub async fn code(client: &Client, e2e: &mut E2e, account: &str, node: &FileNode) -> Result<Option<[u8; 32]>> {
+        let wrapped = wrapped(client, account, &node.id).await?;
+        let Some(sealed) = wrapped.sealed else { return Ok(None) };
+        e2e.need_unlocked()?;
+        let opened = message::decrypt(&decode(&sealed)?, &e2e.secrets(), &[])
+            .map_err(|_| Error::E2e("the vault's code is not for your key".into()))?;
+        let code: [u8; 32] = opened.data.try_into().map_err(|_| Error::E2e("not a recovery code".into()))?;
+        Ok(Some(code))
+    }
+
+    /// Brings this device into the vault with a recovery code of the account's person – no key of the account needed.
+    pub async fn enter_with_code(&self, client: &Client, node: &FileNode, code: [u8; 32]) -> Result<()> {
+        let space = space_id(node)?;
+        let relay = relay_url(client).ok_or_else(|| Error::E2e("this server keeps no vaults on spaces".into()))?;
+        let name = client.session.username.clone();
+        self.run(move |streams| streams.recover(&relay, &space, &RecoveryCode(code), Some(&name)).map(drop)).await
+    }
+
+    /// Whether this device has the vault (it may then be read without the account's key).
+    pub async fn has(&self, node: &FileNode) -> Result<bool> {
+        let space = space_id(node)?;
+        self.run(move |streams| streams.has_space(&space)).await
+    }
+
+    /// How far this device may go in the vault: reading, editing, or editing and sharing on.
+    pub async fn level(&self, node: &FileNode) -> Result<Level> {
+        let space = space_id(node)?;
+        self.run(move |streams| kernoid_vault::my_level(streams, &space)).await
     }
 
     /// Renames the vault itself.
@@ -286,9 +326,26 @@ impl Vaults {
             .await?
         };
         let mut waiting = Vec::new();
-        let mut wanted = Vec::new();
+        let mut wanted: Vec<(String, Level)> = Vec::new();
         let mut keys_of = std::collections::BTreeMap::new();
-        for (person, level) in people {
+        // A group's members each become a member at the group's level – or higher, where shared with them too.
+        let mut people: Vec<(Principal, Level)> = people.to_vec();
+        let groups: Vec<(Vec<String>, Level)> = people
+            .iter()
+            .filter(|(p, _)| p.kind == "group")
+            .map(|(p, level)| (p.members.clone().unwrap_or_default(), *level))
+            .collect();
+        people.retain(|(p, _)| p.kind != "group");
+        for (members, level) in groups {
+            let ids: Vec<&str> = members.iter().map(String::as_str).collect();
+            for member in crate::files::principals(client, &ids).await? {
+                match people.iter_mut().find(|(p, _)| p.id == member.id) {
+                    Some((_, known)) => *known = (*known).max(level),
+                    None => people.push((member, level)),
+                }
+            }
+        }
+        for (person, level) in &people {
             let keys: Vec<PublicKey> = match (person.kind.as_str(), &person.email) {
                 ("individual", Some(email)) => {
                     e2e.lookup(client, std::slice::from_ref(email)).await?.into_values().flatten().collect()
@@ -321,6 +378,34 @@ impl Vaults {
             client.set(&USING, "VaultKey", account, change, json!({})).await?;
         }
         Ok(waiting)
+    }
+
+    /// Brings the members in line with whom the vault's directory is shared with now – after a grant changed
+    /// elsewhere (the administration, another app). Only a device that may add members does it; others leave it.
+    /// Returns those who wait, as [`Vaults::share`].
+    pub async fn reconcile(
+        &self,
+        client: &Client,
+        e2e: &mut E2e,
+        account: &str,
+        node: &FileNode,
+    ) -> Result<Vec<Principal>> {
+        if self.level(node).await? != Level::Full {
+            return Ok(Vec::new());
+        }
+        let fresh = crate::files::get(client, account, &node.id).await?;
+        let shares = fresh.share_with.unwrap_or_default();
+        let ids: Vec<&str> = shares.keys().map(String::as_str).collect();
+        let people: Vec<(Principal, Level)> = crate::files::principals(client, &ids)
+            .await?
+            .into_iter()
+            .filter_map(|p| {
+                let rights = shares.get(&p.id)?;
+                let level = Level::of(rights.may_share, rights.may_modify_content || rights.may_add_children);
+                Some((p, level))
+            })
+            .collect();
+        self.share(client, e2e, account, node, &people).await
     }
 
     /// Ends an account's membership: its person leaves the space – what is written from now on is out of its reach –

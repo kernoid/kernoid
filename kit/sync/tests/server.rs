@@ -328,4 +328,16 @@ async fn space_vault_in_step(
     assert!(!a.join("Raum/plan.txt").exists());
     let node = files::get(client, store, &vault).await.unwrap();
     assert!(here.list(&node, None).await.unwrap().iter().any(|e| e.name == "plan.txt" && e.trashed));
+
+    // The vault's folder moved and renamed there: moved in the store, renamed in the space.
+    std::fs::create_dir_all(b.join("Archiv")).unwrap();
+    std::fs::rename(b.join("Raum"), b.join("Archiv/Raum alt")).unwrap();
+    let report = two.sync_all(client, Some(e2e), Some(&there)).await.unwrap();
+    assert_eq!((report.moved, report.failed.len()), (1, 0), "{report:?}");
+    let node = files::get(client, store, &vault).await.unwrap();
+    assert!(node.parent_id.is_some(), "moved in the store");
+    assert_eq!(there.name(&node).await.unwrap().as_deref(), Some("Raum alt"));
+    let report = one.sync_all(client, Some(e2e), Some(&here)).await.unwrap();
+    assert_eq!(report.failed.len(), 0, "{report:?}");
+    assert!(a.join("Archiv/Raum alt/Plan").is_dir(), "{report:?}");
 }

@@ -267,7 +267,7 @@ impl Folder {
             .and_then(|vault| spaces.get(&vault).map(|space| (vault, space.clone())));
             let result = match (in_space, vaults) {
                 (Some((vault, space)), Some(vaults)) => {
-                    self.run_in_space(vaults, &vault, &space, &action, &remote, &mut base).await
+                    self.run_in_space(client, vaults, &vault, &space, &action, &remote, &mut base).await
                 }
                 _ => self.run(client, e2e.as_deref_mut(), &action, &remote, &mut base, &mut trash, &mut touched).await,
             };
@@ -509,8 +509,10 @@ impl Folder {
     }
 
     /// An action on what lies in a vault on a space – or on the vault's directory itself, which the store keeps.
+    #[allow(clippy::too_many_arguments, reason = "one action with all it needs")]
     async fn run_in_space(
         &self,
+        client: &Client,
         vaults: &Vaults,
         vault: &str,
         space: &str,
@@ -591,13 +593,16 @@ impl Folder {
                 }
                 plan::rename(base, from, to);
             }
-            Action::MoveRemote { from, to, .. } => {
-                // The vault's directory: its name is in the space. Moving it elsewhere in the store is left to the
-                // apps (**OPEN**).
+            Action::MoveRemote { from, to, id } => {
+                // The vault's directory: moved in the store (its name there stays an id), renamed in the space.
                 if plan::parent(from) != plan::parent(to) {
-                    return Err(Error::State(format!("{to}: a vault on a space is moved in an app, not here")));
+                    let (parent, _) = self.parent_and_name(to, remote, base)?;
+                    let update = json!({ "update": { id.as_str(): { "parentId": parent } } });
+                    client.set(&[FILENODE], "FileNode", &self.store, update, json!({})).await?;
                 }
-                vaults.rename_vault(&node, &name_of(to)).await?;
+                if name_of(from) != name_of(to) {
+                    vaults.rename_vault(&node, &name_of(to)).await?;
+                }
                 plan::rename(base, from, to);
             }
             // What happens here only is the same as elsewhere.

@@ -566,7 +566,7 @@ pub async fn find_principals(client: &Client, text: &str) -> Result<Vec<Principa
 }
 
 /// A person or group of the tenant (RFC 9670).
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 pub struct Principal {
     pub id: String,
     #[serde(rename = "type", default)]
@@ -575,6 +575,9 @@ pub struct Principal {
     pub name: String,
     #[serde(default)]
     pub email: Option<String>,
+    /// A group's members, by their accounts' ids (kernoid's `kernoid:members`).
+    #[serde(rename = "kernoid:members", default)]
+    pub members: Option<Vec<String>>,
 }
 
 /// The people and groups named – those a directory is shared with.

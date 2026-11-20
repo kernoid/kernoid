@@ -24,6 +24,8 @@
   const here = $derived(path.at(-1)?.id ?? null);
   let entered = $state<boolean | undefined>();
   let name = $state<string | undefined>();
+  /** Reading only: nothing is offered that the relay would refuse. */
+  let reader = $state(false);
   let entries = $state<spaces.Entry[] | undefined>();
   let showTrash = $state(false);
   let busy = $state(false);
@@ -43,6 +45,9 @@
       entered = await spaces.enter(jmap, account, vault);
       if (entered) {
         name = await spaces.name(jmap, vault);
+        reader = (await spaces.level(jmap, vault)) === "read";
+        // Shares changed elsewhere reach the members – where this page may add members.
+        void spaces.reconcile(jmap, account, vault).catch(() => undefined);
         await load();
       }
     } catch (failure) {
@@ -133,7 +138,7 @@
   </nav>
   <span class="grow"></span>
   {#if entered}
-    {#if !showTrash}
+    {#if !showTrash && !reader}
       <button type="button" disabled={busy} onclick={newDirectory}><FolderPlus size={17} />{t("New folder")}</button>
       <label class="button primary" class:disabled={busy}>
         <Upload size={17} />{t("Upload")}
@@ -177,7 +182,9 @@
         <td class="muted small">{entry.directory ? "" : formatSize(entry.size, locale)}</td>
         <td class="muted small">{entry.modified ? when(entry.modified) : ""}</td>
         <td class="end">
-          {#if entry.trashed}
+          {#if reader}
+            <!-- Reading only. -->
+          {:else if entry.trashed}
             <button type="button" class="quiet icon small" disabled={busy} aria-label={t("Restore")} data-tip={t("Restore")} onclick={() => void run(() => spaces.setTrashed(jmap, vault, here, entry.id, false))}><Undo2 size={17} /></button>
             <button
               type="button"

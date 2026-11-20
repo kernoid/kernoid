@@ -63,6 +63,14 @@ cli tenant verify-domain "$tenant" firma.test --trust >/dev/null
 account=$(cli account add "$tenant" alice@firma.test --name Alice)
 cli account grant-service "$account" files >/dev/null
 printf '%s\n' "$password" | "$binary" --config "$work/config.toml" account password "$account" >/dev/null
+erin=$(cli account add "$tenant" erin@firma.test --name Erin)
+cli account grant-service "$erin" files >/dev/null
+printf '%s\n' "$password" | "$binary" --config "$work/config.toml" account password "$erin" >/dev/null
+dave=$(cli account add "$tenant" dave@firma.test --name Dave)
+cli account grant-service "$dave" files >/dev/null
+printf '%s\n' "$password" | "$binary" --config "$work/config.toml" account password "$dave" >/dev/null
+# Alice manages groups: the vault test shares with one.
+cli tenant grant "$tenant" --account "$account" --role user_manager >/dev/null
 carol=$(cli account add "$tenant" carol@firma.test --name Carol)
 cli account grant-service "$carol" files >/dev/null
 printf '%s\n' "$password" | "$binary" --config "$work/config.toml" account password "$carol" >/dev/null
@@ -90,10 +98,14 @@ curl -fsS "http://127.0.0.1:$port/readyz" >/dev/null || { tail -n 30 "$work/serv
 export KERNOID_TEST_SERVER="http://$host:$port" KERNOID_TEST_ADDRESS=alice@firma.test KERNOID_TEST_PASSWORD="$password"
 export KERNOID_TEST_VAULT_ADDRESS=bob@firma.test KERNOID_TEST_VAULT_PASSWORD="$password"
 # Vaults on spaces (RFC 0010, 5): Carol is made a member of Alice's vault.
-export KERNOID_TEST_SPACE_ADDRESS=carol@firma.test
+export KERNOID_TEST_SPACE_ADDRESS=carol@firma.test KERNOID_TEST_GROUP_ADDRESS=dave@firma.test
+# The system's file manager on a vault on a space: Erin's.
+export KERNOID_TEST_SHELL_ADDRESS=erin@firma.test
 (cd "$root/kit/client" && cargo test --locked --test server -- --test-threads 1) || { tail -n 30 "$work/server.log"; fail "the SDK"; }
 (cd "$root/kit/sync" && cargo test --locked --test server -- --test-threads 1) || { tail -n 30 "$work/server.log"; fail "kernoid-sync"; }
+(cd "$root/kit/flutter/kernoid_bridge/rust" && cargo test --locked --test provider -- a_vault_on_a_space) \
+    || { tail -n 30 "$work/server.log"; fail "the file shells' core"; }
 KERNOID_TEST_RELAY="http://127.0.0.1:$port/relay/kernoid" \
     cargo test --manifest-path "$root/kit/Cargo.toml" --locked -p kernoid-replica --test server --test streams \
     || { tail -n 30 "$work/server.log"; fail "the replica through the relay"; }
-echo "the SDK, kernoid-sync and the replica work against kernoid"
+echo "the SDK, kernoid-sync, the file shells' core and the replica work against kernoid"

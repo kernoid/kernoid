@@ -226,6 +226,16 @@ impl WebVaults {
         serde_json::to_string(&members).map_err(|error| JsError::new(&error.to_string()))
     }
 
+    /// How far this browser may go in the vault: `read`, `edit` or `full`.
+    #[wasm_bindgen(js_name = myLevel)]
+    pub fn my_level(&self, space_id: &str) -> Result<String, JsError> {
+        let level = crate::my_level(&self.streams, &space(space_id)?).map_err(js)?;
+        serde_json::to_value(level)
+            .ok()
+            .and_then(|v| v.as_str().map(str::to_owned))
+            .ok_or_else(|| JsError::new("a level"))
+    }
+
     /// The members with their levels, as JSON: `[[account, "read" | "edit" | "full"]]`.
     #[wasm_bindgen(js_name = memberLevels)]
     pub fn member_levels(&self, space_id: &str) -> Result<String, JsError> {

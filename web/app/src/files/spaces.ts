@@ -7,7 +7,7 @@
 
 import { base64, e2e, lookup, OPENPGP, unlockedRing } from "../e2e/e2e.svelte.js";
 import { FILENODE, type Jmap, JmapError } from "../jmap.js";
-import { children, type FileNode, type Principal } from "./model.js";
+import { children, type FileNode, level as levelOf, type Principal, principals } from "./model.js";
 import { openContent, openNames } from "./vault.js";
 
 const USING = [FILENODE, OPENPGP];
@@ -120,6 +120,12 @@ export async function enter(jmap: Jmap, accountId: string, node: FileNode): Prom
   return true;
 }
 
+/** How far this page may go in the vault. */
+export async function level(jmap: Jmap, node: FileNode): Promise<Level> {
+  await vaults(jmap);
+  return call<Level>("myLevel", spaceOf(node));
+}
+
 /** The vault's name, once this page has it. */
 export async function name(jmap: Jmap, node: FileNode): Promise<string | undefined> {
   await vaults(jmap);
@@ -207,7 +213,17 @@ export async function share(jmap: Jmap, accountId: string, node: FileNode, peopl
   const waitingFor: Principal[] = [];
   const wanted: [string, Level][] = [];
   const keysOf = new Map<string, string[]>();
-  for (const { principal, level } of people) {
+  // A group's members each become a member at the group's level – or higher, where shared with them too.
+  const rank: Record<Level, number> = { read: 0, edit: 1, full: 2 };
+  const persons = people.filter(({ principal }) => principal.type !== "group").map((entry) => ({ ...entry }));
+  for (const { principal: group, level } of people.filter(({ principal }) => principal.type === "group")) {
+    for (const member of await principals(jmap, group["kernoid:members"] ?? [])) {
+      const known = persons.find(({ principal }) => principal.id === member.id);
+      if (!known) persons.push({ principal: member, level });
+      else if (rank[level] > rank[known.level]) known.level = level;
+    }
+  }
+  for (const { principal, level } of persons) {
     const keys = principal.type === "individual" && principal.email ? ((await lookup(jmap, [principal.email])).get(principal.email.toLowerCase()) ?? []) : [];
     if (keys.length === 0) {
       const now = current.find(([account]) => account === principal.id);
@@ -237,6 +253,19 @@ export async function share(jmap: Jmap, accountId: string, node: FileNode, peopl
     if (failed) throw new JmapError(failed.type, failed.description);
   }
   return waitingFor;
+}
+
+/** Brings the members in line with whom the vault's directory is shared with now – after a grant changed elsewhere
+ * (the administration, another app). Only a page that may add members does it. */
+export async function reconcile(jmap: Jmap, accountId: string, node: FileNode): Promise<Principal[]> {
+  if ((await level(jmap, node)) !== "full") return [];
+  const got = await jmap.call<{ list: FileNode[] }>([FILENODE], "FileNode/get", { accountId, ids: [node.id], properties: ["shareWith"] });
+  const shares = got.list[0]?.shareWith ?? {};
+  const people = (await principals(jmap, Object.keys(shares))).map((principal) => ({
+    principal,
+    level: levelOf(shares[principal.id]!) as Level,
+  }));
+  return share(jmap, accountId, node, people);
 }
 
 /** Renames the vault itself. */
