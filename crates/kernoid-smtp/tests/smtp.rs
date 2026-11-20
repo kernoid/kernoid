@@ -18,7 +18,7 @@ use kernoid_store::{
     crypto::Key,
     scan::{Scanner, Verdict},
 };
-use mail_auth::{ResolverCache, Txt, common::parse::TxtRecordParser, dmarc::Dmarc, spf::Spf};
+use mail_auth::{ResolverCache, TxtRecord, dmarc::DmarcRecord, dns::TxtRecordParser, spf::SpfRecord};
 use object_store::memory::InMemory;
 use sqlx::PgPool;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
@@ -152,7 +152,7 @@ fn message(from: &str, subject: &str, id: &str, extra: &str) -> String {
     )
 }
 
-fn txt<T: TxtRecordParser + Into<Txt>>(dns: &Dns, name: &str, record: &str) {
+fn txt<T: TxtRecordParser + Into<TxtRecord>>(dns: &Dns, name: &str, record: &str) {
     let value = T::parse(record.as_bytes()).unwrap().into();
     dns.txt.insert(name.into(), value, Instant::now() + FOREVER);
 }
@@ -316,10 +316,10 @@ async fn sieve_quota_junk_and_dmarc(pool: PgPool) {
     let alice = setup.account("alice").await;
     let dns = Dns::offline();
     // psd=n ends DMARC's walk up the tree here; the test resolver has no answers beyond the caches.
-    txt::<Spf>(&dns, "evil.example.", "v=spf1 -all");
-    txt::<Dmarc>(&dns, "_dmarc.evil.example.", "v=DMARC1; p=reject; psd=n");
-    txt::<Spf>(&dns, "shady.example.", "v=spf1 -all");
-    txt::<Dmarc>(&dns, "_dmarc.shady.example.", "v=DMARC1; p=quarantine; psd=n");
+    txt::<SpfRecord>(&dns, "evil.example.", "v=spf1 -all");
+    txt::<DmarcRecord>(&dns, "_dmarc.evil.example.", "v=DMARC1; p=reject; psd=n");
+    txt::<SpfRecord>(&dns, "shady.example.", "v=spf1 -all");
+    txt::<DmarcRecord>(&dns, "_dmarc.shady.example.", "v=DMARC1; p=quarantine; psd=n");
     let server = setup.server(dns, None);
     setup
         .mail
@@ -671,4 +671,79 @@ async fn malware_is_refused_before_it_is_accepted(pool: PgPool) {
     let junk = setup.messages(alice, Role::Junk).await;
     assert_eq!(inbox.len() + junk.len(), 1);
     assert!(inbox.iter().chain(&junk).all(|message| !message.contains("EICAR")));
+}
+
+/// The session's states: chunks that are refused are still read to their end, the order of a transaction holds, and
+/// a client that only sends nonsense or nothing is sent away.
+#[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
+async fn the_session_reads_what_it_refuses_and_keeps_its_order(pool: PgPool) {
+    let setup = setup(pool).await;
+    let alice = setup.account("alice").await;
+    let server = setup.server(Dns::offline(), None);
+    let mut client = connect(&server);
+    client.response().await;
+    assert_eq!(client.command("HELO sender.example").await, format!("250 {HOSTNAME} Hello sender.example"));
+    assert_eq!(client.command("FROB").await, "500 5.5.1 Command not recognized");
+    assert!(client.command("VRFY alice").await.starts_with("252 "));
+    // A chunk before MAIL: read and dropped, so that its bytes are not taken for commands.
+    client.send("BDAT 12\r\nNOOP\r\nNOOP\r\n").await;
+    assert_eq!(client.response().await, "503 5.5.1 MAIL is required first");
+    assert_eq!(client.command("NOOP").await, "250 2.0.0 OK");
+    // Too large in chunks: the chunk goes, the transaction too.
+    client.command("MAIL FROM:<bob@sender.example>").await;
+    client.command("RCPT TO:<alice@firma.example>").await;
+    client.send(&format!("BDAT 10001\r\n{}", "x".repeat(10_001))).await;
+    assert_eq!(client.response().await, "552 5.3.4 Message too big for system");
+    assert_eq!(client.command("RCPT TO:<alice@firma.example>").await, "503 5.5.1 MAIL is required first");
+    // DATA may not follow BDAT; RSET ends the transaction.
+    client.command("MAIL FROM:<bob@sender.example>").await;
+    client.command("RCPT TO:<alice@firma.example>").await;
+    client.send("BDAT 5\r\nFrom:").await;
+    assert_eq!(client.response().await, "250 2.6.0 Chunk accepted");
+    assert_eq!(client.command("DATA").await, "503 5.5.1 DATA cannot follow BDAT");
+    assert_eq!(client.command("RSET").await, "250 2.0.0 OK");
+    assert_eq!(client.command("DATA").await, "503 5.5.1 MAIL is required first");
+    // A message in an empty last chunk after a full one; the line with a dot alone ends DATA, a doubled dot stays one.
+    client.command("MAIL FROM:<bob@sender.example>").await;
+    client.command("RCPT TO:<alice@firma.example>").await;
+    let body = message("bob@sender.example", "Dots", "dots@sender.example", "");
+    let body = body.strip_suffix(".\r\n").unwrap();
+    client.send(&format!("BDAT {}\r\n{body}", body.len())).await;
+    assert_eq!(client.response().await, "250 2.6.0 Chunk accepted");
+    assert_eq!(client.command("BDAT 0 LAST").await, "250 2.0.0 Message accepted for delivery");
+    client.command("MAIL FROM:<bob@sender.example>").await;
+    client.command("RCPT TO:<alice@firma.example>").await;
+    client.command("DATA").await;
+    client
+        .send(&message("bob@sender.example", "Dots", "dots-2@sender.example", "").replace("Hello.", "..Hello."))
+        .await;
+    assert_eq!(client.response().await, "250 2.0.0 Message accepted for delivery");
+    let inbox = setup.messages(alice, Role::Inbox).await;
+    assert_eq!(inbox.len(), 2);
+    assert!(inbox.iter().any(|message| message.ends_with("\r\n.Hello.\r\n")), "{inbox:?}");
+    // Nonsense, again and again: sent away.
+    let mut answers = Vec::new();
+    while answers.len() < 10 {
+        let answer = client.command("FROB").await;
+        let closed = answer.contains("421 4.7.0");
+        answers.push(answer);
+        if closed {
+            break;
+        }
+    }
+    assert!(answers.len() < 10 && answers.last().unwrap().contains("421 4.7.0"), "{answers:?}");
+
+    // Silence: the command timeout closes the session.
+    let settings = Settings {
+        hostname: HOSTNAME.into(),
+        max_message_size: 10_000,
+        max_recipients: 5,
+        max_received: 50,
+        junk_score: 5.0,
+        timeout: Duration::from_millis(200),
+    };
+    let impatient = Server::new(settings, setup.mail.clone(), Dns::offline(), None);
+    let mut client = connect(&impatient);
+    client.response().await;
+    assert!(client.response().await.starts_with("421 4.4.2 "));
 }

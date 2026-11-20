@@ -35,7 +35,7 @@ kernoid-mail = { version = "0.5.1", path = "../kernoid-mail", optional = true }
 kernoid-oidc = { version = "0.5.1", path = "../kernoid-oidc", optional = true }
 kernoid-store = { version = "0.5.1", path = "../kernoid-store", optional = true }
 mail-builder = { version = "2.0.0", optional = true }
-mail-auth = { version = "0.13.3", default-features = false, features = ["aws-lc-rs", "arc"], optional = true }
+mail-auth = { version = "0.15.1", default-features = false, features = ["aws-lc-rs", "arc"], optional = true }
 mail-parser = { version = "1.0.0", features = ["full_encoding"], optional = true }
 rustls = { version = "0.23.46", default-features = false, features = ["aws-lc-rs", "prefer-post-quantum", "std", "tls12"] }
 rustls-webpki = { version = "0.103.16", default-features = false, features = ["aws-lc-rs", "std"], optional = true }
@@ -58,7 +58,7 @@ bytes = "1.12.1"
 futures-util = { version = "0.3.34", default-features = false }
 tokio-util = "0.7.20"
 kernoid-identity = { path = "../kernoid-identity" }
-mail-auth = { version = "0.13.3", default-features = false, features = ["aws-lc-rs", "arc"] }
+mail-auth = { version = "0.15.1", default-features = false, features = ["aws-lc-rs", "arc"] }
 rustls = { version = "0.23.46", default-features = false, features = ["aws-lc-rs", "prefer-post-quantum", "std", "tls12"] }
 tokio-rustls = { version = "0.26.6", default-features = false }
 kernoid-events = { path = "../kernoid-events" }

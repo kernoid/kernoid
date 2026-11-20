@@ -16,8 +16,7 @@ The model follows JMAP Mail ([RFC 8621](https://www.rfc-editor.org/rfc/rfc8621))
 ([RFC 8620](https://www.rfc-editor.org/rfc/rfc8620)), and keeps what IMAP4rev2
 ([RFC 9051](https://www.rfc-editor.org/rfc/rfc9051)) with CONDSTORE/QRESYNC
 ([RFC 7162](https://www.rfc-editor.org/rfc/rfc7162)) needs: UIDs per mailbox and modification sequences. Statements
-about Stalwart refer to its source as of v0.16.27 (`crates/email`); kernoid takes over its approach to threading,
-not its storage layer, which is built on Stalwart's own key-value store.
+about Stalwart refer to its source as of v0.16.27.
 
 ## 1. Mail is data, not events
 
@@ -106,14 +105,14 @@ does not exist: removing the last one destroys it.
 
 ## 5. Threads
 
-Threading works like Stalwart's (`crates/email/src/message/ingest.rs`): two emails are in one thread if their
+Two emails are in one thread if their
 **base subjects are the same** – the subject without `Re:`, `Fwd:` and the like, as mail-parser's `thread_name`
 gives it – **and they share a message id**: their own `Message-ID`, an `In-Reply-To`, a `References` or a
 `Resent-Message-ID`. Each email's ids are kept with a hash of its base subject (`email_thread_refs`); a new email
 joins the thread of the earliest email that matches, or starts a new one.
 
-Unlike Stalwart, kernoid does **not merge threads** when a new email matches emails of several: `threadId` would
-change, which RFC 8621 does not allow. The email joins the earliest of them. A thread ends when its last email is
+kernoid does **not merge threads** when a new email matches emails of several: `threadId` would change, which
+RFC 8621 does not allow. The email joins the thread of the one stored first. A thread ends when its last email is
 destroyed.
 
 ## 6. Changes and states
@@ -165,8 +164,8 @@ accepts mail for their addresses and stores it at once. It relays nothing: mail 
 ### 9.1 The server
 
 - Its own process role, `smtp`, part of `all`, on `smtp.listen` (port 25). Requests are parsed with
-  [smtp-proto](https://crates.io/crates/smtp-proto) (Apache-2.0 OR MIT, by Stalwart Labs); the session follows
-  Stalwart's (`crates/smtp/src/inbound`) and is marked as derived from it.
+  [smtp-proto](https://crates.io/crates/smtp-proto) (Apache-2.0 OR MIT, by Stalwart Labs); the session around it
+  is kernoid's own, written from RFC 5321 and its extensions.
 - **Extensions:** `PIPELINING`, `8BITMIME`, `SMTPUTF8`, `SIZE`, `ENHANCEDSTATUSCODES`, `CHUNKING` (`BDAT`) and
   `STARTTLS` when kernoid has certificates (its own, or from ACME – the same as for HTTPS). No `AUTH` on the MX: who
   logs in to send uses submission.
@@ -302,9 +301,9 @@ next keys – are part of the DNS check (10.5). **OPEN:** rotating on a schedule
   addresses only, like every outbound request) and kept in `mta_sts_policies` for its `max_age`. In `enforce` mode
   kernoid delivers only to MX hosts the policy names, over TLS with a certificate valid for that host.
 - **DANE** ([RFC 7672](https://www.rfc-editor.org/rfc/rfc7672)): when the MX host's TLSA records are signed
-  (DNSSEC), TLS is required and the certificate must match them; DANE goes before MTA-STS. The lookup of TLSA records
-  with DNSSEC and the matching of certificates are taken over from Stalwart
-  (`crates/smtp/src/outbound/dane`).
+  (DNSSEC), TLS is required and the certificate must match them; DANE goes before MTA-STS. Only DANE-EE and DANE-TA
+  records count (RFC 7672, 3.1); DNSSEC is validated by hickory's resolver, chains to a DANE-TA authority are
+  checked with rustls-webpki.
 - The relay is always reached over TLS with a valid certificate.
 - Every TLS connection – outgoing and incoming, SMTP, IMAP and POP3 alike – prefers a post-quantum key exchange
   (RFC 0006, 2).

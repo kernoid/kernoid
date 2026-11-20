@@ -18,6 +18,9 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   `environment`, `ihave` and others sieve-rs took – no longer compiles, and then every message is kept in the inbox;
   check scripts with `kernoid mail sieve put`. Vacation replies remember senders under new keys, so a sender answered
   just before the upgrade may be answered once more.
+- The SMTP session, the handling of received messages, the SMTP client of the queue, DANE, MTA-STS and threading are
+  kernoid's own code now (`AGPL-3.0-or-later`), written from the RFCs; replies and stored messages stay as they were.
+  mail-auth is at 0.15.1, on the server's mail-parser 1.0.
 
 ## [0.5.1] – 2026-11-20
 
