@@ -2669,7 +2669,6 @@ dependencies = [
  "serde",
  "thiserror",
  "toml 1.1.8+spec-1.1.0",
- "url",
 ]
 
 [[package]]
@@ -6047,7 +6046,6 @@ dependencies = [
  "idna",
  "percent-encoding",
  "serde",
- "serde_derive",
 ]
 
 [[package]]
