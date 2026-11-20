@@ -29,10 +29,7 @@ the Stalwart Enterprise License, which `scripts/check-sel.sh` enforces.
 
 | In kernoid | From Stalwart |
 |---|---|
-| `crates/kernoid-mail/src/thread.rs` | threading in `crates/email/src/message/ingest.rs` |
 | `crates/kernoid-imap/src/message.rs` | `FETCH` in `crates/imap/src/op/fetch.rs` |
-| `crates/kernoid-smtp/src/session.rs`, `message.rs` | the inbound session (`crates/smtp/src/inbound`) and `queue_message` |
-| `crates/kernoid-smtp/src/client.rs`, `crates/kernoid-smtp/src/mta_sts.rs`, `dane.rs` | the outbound client, MTA-STS and DANE (`crates/smtp/src/outbound`) |
 | `crates/kernoid-groupware/src/itip.rs` | receiving iTIP in `crates/groupware/src/calendar/itip.rs` |
 | `crates/kernoid-dav/src/query.rs` | calendar and contact queries in `crates/dav/src/calendar/query.rs`, `card/query.rs` |
 

@@ -419,9 +419,9 @@ impl Outbound {
         }
         let dns = &self.0.dns;
         let hosts: Vec<String> = match dns.authenticator.mx_lookup(domain, Some(&dns.mx)).await {
-            Ok(records) if records.rrset.is_empty() => vec![domain.to_owned()],
+            Ok(records) if records.records.is_empty() => vec![domain.to_owned()],
             Ok(records) => {
-                let mut records: Vec<_> = records.rrset.iter().collect();
+                let mut records: Vec<_> = records.records.iter().collect();
                 records.sort_by_key(|mx| mx.preference);
                 let hosts: Vec<String> = records
                     .iter()

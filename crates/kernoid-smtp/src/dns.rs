@@ -12,9 +12,12 @@ use std::{
 };
 
 use mail_auth::{
-    MX, MessageAuthenticator, Parameters, RecordSet, ResolverCache, Txt,
+    DnsCache, MessageAuthenticator, Mx, Negative, Parameters, RecordSet, ResolverCache, TxtRecord,
     hickory_resolver::config::{ResolverConfig, ResolverOpts},
 };
+
+/// A cached answer: records, or the negative answer (RFC 2308) mail-auth keeps as well.
+pub type Answer<T> = Result<RecordSet<T>, Negative>;
 
 /// Entries per cache; when full, expired entries go, and if that is not enough, all of them.
 const CAPACITY: usize = 10_000;
@@ -65,11 +68,39 @@ pub struct Dns {
     pub authenticator: MessageAuthenticator,
     /// A resolver that validates DNSSEC, for DANE (RFC 0002, 10.4); without it, DANE does not apply.
     pub dnssec: Option<MessageAuthenticator>,
-    pub txt: Cache<Box<str>, Txt>,
-    pub mx: Cache<Box<str>, RecordSet<MX>>,
-    pub ptr: Cache<IpAddr, RecordSet<Box<str>>>,
-    pub ipv4: Cache<Box<str>, RecordSet<Ipv4Addr>>,
-    pub ipv6: Cache<Box<str>, RecordSet<Ipv6Addr>>,
+    pub txt: Cache<Box<str>, TxtRecord>,
+    pub mx: Cache<Box<str>, Answer<Mx>>,
+    pub ptr: Cache<IpAddr, Answer<Box<str>>>,
+    pub ipv4: Cache<Box<str>, Answer<Ipv4Addr>>,
+    pub ipv6: Cache<Box<str>, Answer<Ipv6Addr>>,
+}
+
+impl DnsCache for Dns {
+    type Txt = Cache<Box<str>, TxtRecord>;
+    type Mx = Cache<Box<str>, Answer<Mx>>;
+    type Ipv4 = Cache<Box<str>, Answer<Ipv4Addr>>;
+    type Ipv6 = Cache<Box<str>, Answer<Ipv6Addr>>;
+    type Ptr = Cache<IpAddr, Answer<Box<str>>>;
+
+    fn txt(&self) -> Option<&Self::Txt> {
+        Some(&self.txt)
+    }
+
+    fn mx(&self) -> Option<&Self::Mx> {
+        Some(&self.mx)
+    }
+
+    fn ipv4(&self) -> Option<&Self::Ipv4> {
+        Some(&self.ipv4)
+    }
+
+    fn ipv6(&self) -> Option<&Self::Ipv6> {
+        Some(&self.ipv6)
+    }
+
+    fn ptr(&self) -> Option<&Self::Ptr> {
+        Some(&self.ptr)
+    }
 }
 
 impl std::fmt::Debug for Dns {
@@ -81,15 +112,6 @@ impl std::fmt::Debug for Dns {
 /// How long answers put into the caches by hand (tests) stay.
 pub const FOREVER: Duration = Duration::from_secs(365 * 24 * 60 * 60);
 
-type AuthParameters<'x, P> = Parameters<
-    'x,
-    P,
-    Cache<Box<str>, Txt>,
-    Cache<Box<str>, RecordSet<MX>>,
-    Cache<Box<str>, RecordSet<Ipv4Addr>>,
-    Cache<Box<str>, RecordSet<Ipv6Addr>>,
-    Cache<IpAddr, RecordSet<Box<str>>>,
->;
 
 impl Dns {
     /// The system's resolvers (`/etc/resolv.conf`).
@@ -126,12 +148,7 @@ impl Dns {
     }
 
     /// The parameters for a check, with the caches.
-    pub(crate) fn parameters<P>(&self, params: P) -> AuthParameters<'_, P> {
-        Parameters::new(params)
-            .with_txt_cache(&self.txt)
-            .with_mx_cache(&self.mx)
-            .with_ptr_cache(&self.ptr)
-            .with_ipv4_cache(&self.ipv4)
-            .with_ipv6_cache(&self.ipv6)
+    pub(crate) fn parameters<P>(&self, input: P) -> Parameters<'_, P, Self> {
+        Parameters::new(input).with_cache(self)
     }
 }

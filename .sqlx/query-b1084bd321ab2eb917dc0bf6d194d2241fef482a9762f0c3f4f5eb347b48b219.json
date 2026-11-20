@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO mta_sts_policies (domain, policy_id, mode, mx, expires_at) VALUES ($1, $2, $3, $4, $5)\n         ON CONFLICT (domain) DO UPDATE\n         SET policy_id = EXCLUDED.policy_id, mode = EXCLUDED.mode, mx = EXCLUDED.mx, fetched_at = now(),\n             expires_at = EXCLUDED.expires_at",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "TextArray",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b1084bd321ab2eb917dc0bf6d194d2241fef482a9762f0c3f4f5eb347b48b219"
+}

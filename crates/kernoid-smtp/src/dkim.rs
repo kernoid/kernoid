@@ -15,7 +15,7 @@ use aws_lc_rs::{
 use base64::Engine;
 use kernoid_store::{MainKeys, PgPool};
 use mail_auth::{
-    common::crypto::{Ed25519Key, RsaKey, Sha256},
+    crypto::{Ed25519Key, RsaKey, Sha256},
     dkim::DkimSigner,
 };
 
@@ -266,7 +266,7 @@ pub async fn public_records(pool: &PgPool, domain: &str) -> Result<Vec<PublicKey
 
 /// The `DKIM-Signature` headers for `raw`, one per active key of `domain`; none if the domain has no key.
 pub async fn sign(pool: &PgPool, main: &MainKeys, domain: &str, raw: &[u8]) -> Result<Vec<String>, DkimError> {
-    use mail_auth::common::headers::HeaderWriter;
+    use mail_auth::headers::HeaderWriter;
     let rows = sqlx::query!(
         "SELECT selector, algorithm, private_sealed FROM dkim_keys
          WHERE domain = $1 AND state = 'active' ORDER BY algorithm DESC",

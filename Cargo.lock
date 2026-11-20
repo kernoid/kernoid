@@ -1278,15 +1278,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fd121741cf3eb82c08dd3023eb55bf2665e5f60ec20f89760cf836ae4562e6a0"
 
 [[package]]
-name = "crc32fast"
-version = "1.5.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b929dd2a135771f40afabd1073f85eed59c800b7c61901e5c254270497dad64"
-dependencies = [
- "cfg-if",
-]
-
-[[package]]
 name = "critical-section"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1968,8 +1959,6 @@ version = "1.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6e634e2e0ebac1ee034020da1ca582e17ffe4e0f5e985823721e168928136dcb"
 dependencies = [
- "crc32fast",
- "miniz_oxide",
  "zlib-rs",
 ]
 
@@ -3307,7 +3296,7 @@ dependencies = [
  "kernoid-identity",
  "kernoid-mail",
  "kernoid-store",
- "mail-builder 2.0.0",
+ "mail-builder",
  "mail-parser 1.0.0",
  "object_store",
  "percent-encoding",
@@ -3420,7 +3409,7 @@ dependencies = [
  "kernoid-identity",
  "kernoid-mail",
  "kernoid-store",
- "mail-builder 2.0.0",
+ "mail-builder",
  "mail-parser 1.0.0",
  "object_store",
  "serde",
@@ -3595,7 +3584,7 @@ dependencies = [
  "kernoid-relay",
  "kernoid-smtp",
  "kernoid-store",
- "mail-builder 2.0.0",
+ "mail-builder",
  "metrics",
  "metrics-exporter-prometheus",
  "percent-encoding",
@@ -3646,7 +3635,7 @@ dependencies = [
  "kernoid-oidc",
  "kernoid-store",
  "mail-auth",
- "mail-builder 2.0.0",
+ "mail-builder",
  "mail-parser 1.0.0",
  "object_store",
  "rcgen",
@@ -3832,33 +3821,25 @@ checksum = "4050469837a6ff301cd14c1f8f24f88549e6d548f24f64e2148eb0f72cebc51f"
 
 [[package]]
 name = "mail-auth"
-version = "0.13.3"
+version = "0.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8505122ba86e1f4adeb664196c1e787c3f29bb6e7c128e4a366d47d209911440"
+checksum = "a3a38e106bc724fb87601fce70bef65c12498b19cdb320994330eae1080d035f"
 dependencies = [
  "aws-lc-rs",
- "flate2",
+ "aws-lc-sys",
+ "encodify",
  "getrandom 0.2.17",
  "getrandom 0.4.3",
- "hashify 0.2.9",
+ "hashify 0.3.1",
  "hickory-resolver",
  "idna",
- "mail-builder 1.0.0",
- "mail-parser 0.11.9",
+ "mail-parser 1.0.0",
  "memchr",
  "rustls-pki-types",
  "serde",
  "serde_json",
+ "simdutf8",
  "similar",
-]
-
-[[package]]
-name = "mail-builder"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ccbc27cb02a58a311a404769a22f5abf63fe3173b290d80be7c534f9c7023151"
-dependencies = [
- "gethostname",
 ]
 
 [[package]]
@@ -3877,9 +3858,7 @@ version = "0.11.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4ec00bda90c6e645a54506c630c2820cd6b1890cfd2b0a169b50f74b2b8c7c86"
 dependencies = [
- "encoding_rs",
  "hashify 0.2.9",
- "memchr",
 ]
 
 [[package]]
@@ -4008,7 +3987,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b63fbc4a50860e98e7b2aa7804ded1db5cbc3aff9193adaff57a6931bf7c4b4c"
 dependencies = [
  "adler2",
- "simd-adler32",
 ]
 
 [[package]]
@@ -5906,7 +5884,7 @@ dependencies = [
  "fancy-regex",
  "hashbrown 0.17.1",
  "hashify 0.3.1",
- "mail-builder 2.0.0",
+ "mail-builder",
  "mail-parser 1.0.0",
  "memchr",
  "serde",
@@ -5941,12 +5919,6 @@ checksum = "28d567dcbaf0049cb8ac2608a76cd95ff9e4412e1899d389ee400918ca7537f5"
 dependencies = [
  "digest 0.11.3",
 ]
-
-[[package]]
-name = "simd-adler32"
-version = "0.3.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3a219298ac11a56ea9a6d2120044824d6f01aeb034955e7af7bc16858527deea"
 
 [[package]]
 name = "simd_cesu8"

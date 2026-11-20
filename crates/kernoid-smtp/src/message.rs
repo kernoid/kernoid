@@ -1,18 +1,19 @@
-// SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-// SPDX-License-Identifier: AGPL-3.0-only
-//! What happens after the data of a message (RFC 0002, 9.3 and 9.4). Derived from Stalwart's `queue_message`
-//! (`crates/smtp/src/inbound/data.rs`, v0.16.27): the loop check, DKIM, ARC and DMARC, the `Received`,
-//! `Authentication-Results` and `Received-SPF` headers. kernoid then scores the message and delivers it to each
-//! recipient's account at once – there is no queue for incoming mail.
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//! What happens to a message once its data is read (RFC 0002, 9.3 and 9.4). On the MX: the loop check, DKIM, ARC
+//! and DMARC through mail-auth (SPF and iprev were checked with `MAIL FROM` and `EHLO`), a refusal for DMARC
+//! `p=reject`, the malware scan, the basic spam filter, and then the headers kernoid adds in front – `Received`
+//! (RFC 5321, 4.4), `Authentication-Results` (RFC 8601), `Received-SPF` (RFC 7208, 9.1) and `X-Spam-Status`. The
+//! message goes to every recipient's account at once – there is no queue for incoming mail, and `250` means stored.
 
 use std::collections::BTreeSet;
 
 use bytes::Bytes;
 use kernoid_mail::{Delivered, Delivery, MailError};
 use mail_auth::{
-    AuthenticatedMessage, AuthenticationResults, DkimResult, DmarcResult, ReceivedSpf, SpfOutput, SpfResult,
-    common::headers::HeaderWriter, dmarc::Policy, dmarc::verify::DmarcParameters,
+    AuthenticatedMessage, AuthenticationResults, dkim::VerifySignature, DkimResult, DmarcResult, IprevResult, ReceivedSpf, SpfOutput,
+    SpfResult, dmarc::Policy, dmarc::verify::DmarcParameters, headers::HeaderWriter, spf::verify::SpfParameters,
 };
+use uuid::Uuid;
 
 use crate::{
     session::Session,
@@ -26,245 +27,275 @@ pub(crate) async fn scan(
     tenants: &[uuid::Uuid],
     raw: &[u8],
 ) -> Result<(), String> {
-    match mail.scan_message(accounts, tenants, &Bytes::copy_from_slice(raw)).await {
+    let content = Bytes::copy_from_slice(raw);
+    match mail.scan_message(accounts, tenants, &content).await {
         Ok(()) => Ok(()),
         Err(MailError::Refused(kernoid_store::scan::Refused::Infected(name))) => {
-            // The scanner's name for it, as far as it is safe in a reply line.
-            let name: String = name.chars().filter(|c| c.is_ascii_graphic() || *c == ' ').take(100).collect();
+            let name: String = name.chars().filter(|c| !c.is_control()).collect();
             Err(format!("554 5.7.1 Rejected: the message contains malware ({name})"))
         }
-        Err(error) => {
-            if !matches!(error, MailError::Refused(_)) {
-                tracing::warn!(%error, "checking a message for malware");
-            }
+        Err(MailError::Refused(kernoid_store::scan::Refused::Unavailable)) => {
             Err("451 4.7.1 The message could not be checked for malware, try again later".into())
         }
+        Err(error) => {
+            tracing::warn!(%error, "scanning a message for malware");
+            Err("451 4.3.0 Temporary failure, try again later".into())
+        }
     }
+}
+
+/// What the checks found about a message on the MX.
+struct Checked {
+    /// The headers to put in front of the message, with their line ends.
+    headers: String,
+    junk: bool,
+    dmarc_pass: bool,
 }
 
 impl Session {
     /// The response to `DATA` (or the last `BDAT`): the message read goes in, by MX or by submission.
     pub(crate) async fn finish(&mut self) -> String {
-        if self.inner.submission.is_some() { self.finish_submission().await } else { self.finish_message().await }
+        if self.inner.submission.is_some() {
+            self.finish_submission().await
+        } else {
+            self.finish_message().await
+        }
     }
 
     /// Checks, scores and delivers the message read.
     pub(crate) async fn finish_message(&mut self) -> String {
-        let raw = std::mem::take(&mut self.message);
-        let Some(message) = AuthenticatedMessage::parse(&raw) else {
-            return "550 5.7.7 Failed to parse the message".into();
-        };
-        if message.received_headers_count() > self.inner.settings.max_received {
-            return "450 4.4.6 Too many Received headers. Possible loop detected".into();
+        let raw = without_own_results(&std::mem::take(&mut self.message), &self.inner.settings.hostname);
+        if self.mail_from.is_none() || self.rcpts.is_empty() {
+            return "503 5.5.1 RCPT is required first".into();
         }
-        let dns = &self.inner.dns;
-        let hostname = self.inner.settings.hostname.as_str();
-        let helo = self.helo.clone().unwrap_or_default();
-        let (from_address, from_domain, spf_mail_from) = match &self.mail_from {
-            Some(from) => (from.address.clone(), from.domain.clone(), from.spf.clone()),
-            None => (String::new(), String::new(), None),
+        let checked = match self.check(&raw).await {
+            Ok(checked) => checked,
+            Err(reply) => return reply,
         };
 
-        let dkim = dns.authenticator.verify_dkim(dns.parameters(&message)).await;
-        let arc = dns.authenticator.verify_arc(dns.parameters(&message)).await;
-        let none = SpfOutput::new(String::new()).with_result(SpfResult::None);
-        let spf_for_dmarc = spf_mail_from.as_ref().unwrap_or(&none);
-        let dmarc = dns
-            .authenticator
-            .verify_dmarc(dns.parameters(DmarcParameters {
-                message: &message,
-                dkim_output: &dkim,
-                dkim2_output: None,
-                rfc5321_mail_from_domain: if from_domain.is_empty() { &helo } else { &from_domain },
-                spf_output: spf_for_dmarc,
-            }))
-            .await;
-        let dmarc_result = dmarc.result();
-        let dmarc_failed = matches!(dmarc_result, DmarcResult::Fail(_));
-        if dmarc_failed && dmarc.policy() == Policy::Reject {
-            return "550 5.7.1 Rejected by the sender's DMARC policy".into();
-        }
-        let quarantine = dmarc_failed && dmarc.policy() == Policy::Quarantine;
-        let accounts: Vec<uuid::Uuid> = self.rcpts.iter().flat_map(|rcpt| rcpt.accounts.iter().copied()).collect();
-        let tenants: Vec<uuid::Uuid> =
-            self.rcpts.iter().filter_map(|rcpt| rcpt.bounce_to.as_ref()).map(|(_, tenant)| *tenant).collect();
+        let accounts: Vec<Uuid> = self.rcpts.iter().flat_map(|rcpt| rcpt.accounts.iter().copied()).collect();
+        let tenants: Vec<Uuid> =
+            self.rcpts.iter().filter_map(|rcpt| rcpt.bounce_to.as_ref().map(|(_, tenant)| *tenant)).collect();
         if let Err(reply) = scan(&self.inner.mail, &accounts, &tenants, &raw).await {
             return reply;
         }
 
-        let mut results = AuthenticationResults::new(hostname);
-        if !dkim.is_empty() {
-            results = results.with_dkim_results(&dkim, message.from());
-        }
-        if let Some(spf) = &self.spf_ehlo {
-            results = results.with_spf_ehlo_result(spf, self.remote, &helo);
-        }
-        if let Some(spf) = &spf_mail_from {
-            results = results.with_spf_mailfrom_result(spf, self.remote, &from_address, &helo);
-        }
-        if let Some(iprev) = &self.iprev {
-            results = results.with_iprev_result(iprev, self.remote);
-        }
-        if !matches!(arc.result(), DkimResult::None) {
-            results = results.with_arc_result(&arc, self.remote);
-        }
-        results = results.with_dmarc_result(&dmarc);
+        let mut full = checked.headers.into_bytes();
+        full.extend_from_slice(&raw);
+        let full = Bytes::from(full);
+        let from = self.mail_from.as_ref().map(|from| from.address.clone()).unwrap_or_default();
+        let mail = &self.inner.mail;
 
-        // A message claiming a domain kernoid serves, without anything that shows it comes from there.
-        let header_from_domain = message.from().rsplit_once('@').map(|(_, domain)| domain.to_lowercase());
-        let spoofs_local_domain = match &header_from_domain {
-            Some(domain) if self.inner.mail.serves_domain(domain).await.unwrap_or(false) => {
-                let dkim_aligned = dkim.iter().any(|output| {
-                    *output.result() == DkimResult::Pass
-                        && output.signature().is_some_and(|signature| signature.d.eq_ignore_ascii_case(domain))
-                });
-                let spf_aligned = spf_mail_from.as_ref().is_some_and(|spf| spf.result() == SpfResult::Pass)
-                    && from_domain.eq_ignore_ascii_case(domain);
-                dmarc_result != DmarcResult::Pass && !dkim_aligned && !spf_aligned
+        // An account in several recipients – an address and a group – gets the message once.
+        let mut delivered = BTreeSet::new();
+        for rcpt in &self.rcpts {
+            if let Some((to, tenant)) = &rcpt.bounce_to {
+                if let Err(error) = mail.forward_bounce(*tenant, to, full.clone()).await {
+                    tracing::warn!(%error, "sending a bounce on to the original sender");
+                    return "451 4.3.0 Temporary failure, try again later".into();
+                }
+                continue;
             }
-            _ => false,
+            for account in &rcpt.accounts {
+                if !delivered.insert(*account) {
+                    continue;
+                }
+                let delivery = Delivery { from: &from, to: &rcpt.address, junk: checked.junk };
+                match mail.deliver(*account, full.clone(), delivery).await {
+                    Ok(Delivered::Stored(_)) => {
+                        // Invitations count only when the `From` is shown to be the sender's (RFC 0004, 7).
+                        if let Some(groupware) = &self.inner.groupware {
+                            groupware.receive_imip(*account, &full, checked.dmarc_pass).await;
+                        }
+                    }
+                    Ok(Delivered::Duplicate | Delivered::Discarded) => {}
+                    // The sending server tries again; whoever has it by then skips it as a duplicate.
+                    Err(MailError::OverQuota) => return "452 4.2.2 Mailbox full, try again later".into(),
+                    Err(MailError::TooLarge { .. }) => return "552 5.3.4 Message too big for system".into(),
+                    Err(error) => {
+                        tracing::warn!(%error, "delivering a message");
+                        return "451 4.3.0 Temporary failure, try again later".into();
+                    }
+                }
+            }
+        }
+        "250 2.0.0 Message accepted for delivery".into()
+    }
+
+    /// The checks of RFC 0002, 9.3 on `raw`: the headers to add, or the reply that refuses the message.
+    async fn check(&mut self, raw: &[u8]) -> Result<Checked, String> {
+        let settings = &self.inner.settings;
+        let hostname = settings.hostname.as_str();
+        let Some(message) = AuthenticatedMessage::parse(raw) else {
+            return Err("550 5.6.0 The message could not be parsed".into());
         };
-        let verdict = spam::score(&Signals {
-            spf_mail_from: spf_mail_from.as_ref().map(SpfOutput::result),
+        if message.received_headers_count() >= settings.max_received {
+            return Err("554 5.4.6 Too many Received headers, the message is looping".into());
+        }
+        let Some(mail_from) = self.mail_from.as_ref() else {
+            return Err("503 5.5.1 MAIL is required first".into());
+        };
+        let helo = self.helo.clone().unwrap_or_default();
+        let dns = &self.inner.dns;
+        let spf_params = SpfParameters::mail_from(self.remote, &helo, hostname, &mail_from.address);
+        let spf = mail_from.spf.clone().unwrap_or_else(|| SpfOutput::new(mail_from.domain.clone()));
+
+        let dkim = dns.authenticator.verify_dkim(dns.parameters(&message)).await;
+        let arc = dns.authenticator.verify_arc(dns.parameters(&message)).await;
+        let dmarc = dns
+            .authenticator
+            .verify_dmarc(dns.parameters(DmarcParameters::new(&message, &dkim, &mail_from.domain, &spf)))
+            .await;
+        let dmarc_result = dmarc.result();
+        let dmarc_failed = matches!(dmarc_result, DmarcResult::Fail(_));
+        if dmarc_failed && dmarc.policy() == Policy::Reject {
+            return Err("550 5.7.1 Rejected by the sender's DMARC policy".into());
+        }
+
+        let header_from = message.first_from_address().to_lowercase();
+        let from_domain = header_from.rsplit_once('@').map(|(_, domain)| domain.to_owned()).unwrap_or_default();
+        let dmarc_pass = dmarc_result == DmarcResult::Pass;
+        let dkim_pass_for_from = dkim.iter().any(|output| {
+            output.result() == &DkimResult::Pass
+                && output.signature().is_some_and(|signature| signature.domain().eq_ignore_ascii_case(&from_domain))
+        });
+        let spf_pass_for_from = spf.result() == SpfResult::Pass && mail_from.domain.eq_ignore_ascii_case(&from_domain);
+        let local_from = !from_domain.is_empty() && self.inner.mail.serves_domain(&from_domain).await.unwrap_or(false);
+        let headers_of = |name: &str| message.headers().iter().any(|(field, _)| field.eq_ignore_ascii_case(name.as_bytes()));
+        let signals = Signals {
+            spf_mail_from: Some(spf.result()),
             spf_ehlo: self.spf_ehlo.as_ref().map(SpfOutput::result),
             dkim: dkim.iter().map(|output| output.result().clone()).collect(),
             dmarc: Some(dmarc_result.clone()),
             iprev: self.iprev.as_ref().map(|iprev| iprev.result.clone()),
-            has_message_id: message.has_message_id_header(),
-            has_date: message.has_date_header(),
-            has_from: !message.from().is_empty(),
-            spoofs_local_domain,
-        });
-        let threshold = self.inner.settings.junk_score;
-        let junk = quarantine || verdict.is_spam(threshold);
+            has_message_id: headers_of("Message-ID"),
+            has_date: headers_of("Date"),
+            has_from: !header_from.is_empty(),
+            spoofs_local_domain: local_from && !dmarc_pass && !dkim_pass_for_from && !spf_pass_for_from,
+        };
+        let verdict = spam::score(&signals);
+        let junk = verdict.is_spam(settings.junk_score) || (dmarc_failed && dmarc.policy() == Policy::Quarantine);
 
-        let mut headers = Vec::with_capacity(1024);
-        self.write_received(&mut headers, &helo);
-        results.write_header(&mut headers);
-        if let Some(spf) = &spf_mail_from {
-            ReceivedSpf::new(spf, self.remote, &helo, &from_address, hostname).write_header(&mut headers);
+        let mut results = AuthenticationResults::new(hostname);
+        if let Some(iprev) = &self.iprev {
+            results = results.with_iprev_result(iprev, self.remote);
         }
-        headers.extend_from_slice(verdict.header(threshold).as_bytes());
-        headers.extend_from_slice(&without_own_results(&raw, hostname));
-        drop(message);
-        let full = Bytes::from(headers);
-
-        // Each account once, under the first address that reached it.
-        let mut seen = BTreeSet::new();
-        let mut temporary = 0;
-        let mut full_mailboxes = 0;
-        for rcpt in &self.rcpts {
-            for account in &rcpt.accounts {
-                if !seen.insert(*account) {
-                    continue;
-                }
-                let delivery = Delivery { from: &from_address, to: &rcpt.address, junk };
-                match self.inner.mail.deliver(*account, full.clone(), delivery).await {
-                    Ok(Delivered::Stored(_)) => {
-                        // An invitation counts only from whom DMARC shows it is (RFC 0004, 7).
-                        if let Some(groupware) = &self.inner.groupware {
-                            groupware.receive_imip(*account, &full, dmarc_result == DmarcResult::Pass).await;
-                        }
-                    }
-                    Ok(Delivered::Duplicate | Delivered::Discarded) => {}
-                    Err(MailError::OverQuota) => full_mailboxes += 1,
-                    Err(error) => {
-                        tracing::warn!(%error, %account, "delivering a message");
-                        temporary += 1;
-                    }
-                }
-            }
-        }
-        // Bounces to SRS addresses go on to the original sender (RFC 0002, 10.6).
-        for (to, tenant) in self.rcpts.iter().filter_map(|rcpt| rcpt.bounce_to.as_ref()) {
-            if let Err(error) = self.inner.mail.forward_bounce(*tenant, to, full.clone()).await {
-                tracing::warn!(%error, "sending a bounce on to the original sender");
-                temporary += 1;
-            }
-        }
-        // Retrying is safe: the recipients that have it skip it as a duplicate (RFC 0002, 9.4).
-        if temporary > 0 {
-            "451 4.3.0 Temporary failure, try again later".into()
-        } else if full_mailboxes > 0 {
-            "452 4.2.2 Mailbox full, try again later".into()
-        } else {
-            "250 2.0.0 Message accepted for delivery".into()
-        }
+        let results = results
+            .with_spf_result(&spf, &spf_params)
+            .with_dkim_results(&dkim, &header_from)
+            .with_arc_result(&arc, self.remote)
+            .with_dmarc_result(&dmarc);
+        let mut headers = self.received(&helo);
+        headers.push_str(&results.to_header());
+        headers.push_str(&ReceivedSpf::new(&spf, &spf_params).to_header());
+        headers.push_str(&verdict.header(settings.junk_score));
+        Ok(Checked { headers, junk, dmarc_pass })
     }
 
-    fn write_received(&self, headers: &mut Vec<u8>, helo: &str) {
-        let ptr = self
-            .iprev
-            .as_ref()
-            .and_then(|iprev| iprev.ptr.as_ref())
-            .and_then(|ptr| ptr.first().map(|name| name.strip_suffix('.').unwrap_or(name).to_owned()))
-            .unwrap_or_else(|| "unknown".into());
-        let tls = self.tls.as_ref().map(|tls| format!("(using {tls})\r\n\t")).unwrap_or_default();
-        let with = if self.tls.is_some() { "ESMTPS" } else { "ESMTP" };
-        let received = format!(
-            "Received: from {helo} ({ptr} [{remote}])\r\n\t{tls}by {hostname} (kernoid) with {with};\r\n\t{date}\r\n",
-            remote = self.remote,
-            hostname = self.inner.settings.hostname,
-            date = date_now(),
-        );
-        headers.extend_from_slice(received.as_bytes());
+    /// The `Received` header of the MX (RFC 5321, 4.4): the client's name and address, and how it came.
+    fn received(&self, helo: &str) -> String {
+        let name = match &self.iprev {
+            Some(iprev) if iprev.result == IprevResult::Pass => {
+                iprev.ptr.as_ref().and_then(|names| names.first()).map(|name| name.trim_end_matches('.').to_owned())
+            }
+            _ => None,
+        };
+        let name = name.unwrap_or_else(|| "unknown".into());
+        let helo: String = helo.chars().filter(|c| !c.is_control() && !matches!(c, '(' | ')')).collect();
+        let mut header = format!("Received: from {helo} ({name} [{}])\r\n", self.remote);
+        let protocol = match &self.tls {
+            Some(tls) => {
+                header.push_str(&format!("\t(using {tls})\r\n"));
+                "ESMTPS"
+            }
+            None => "ESMTP",
+        };
+        header.push_str(&format!(
+            "\tby {} (kernoid) with {protocol};\r\n\t{}\r\n",
+            self.inner.settings.hostname,
+            date_now()
+        ));
+        header
     }
 }
 
 /// The message without `Authentication-Results` headers that claim kernoid's host name – only kernoid may write
 /// those (RFC 8601, 5).
 pub(crate) fn without_own_results(raw: &[u8], hostname: &str) -> Vec<u8> {
-    let mut out = Vec::with_capacity(raw.len());
-    let mut rest = raw;
-    let mut dropping = false;
-    while !rest.is_empty() {
-        let end = rest.iter().position(|&b| b == b'\n').map_or(rest.len(), |i| i + 1);
-        let (line, tail) = rest.split_at(end);
-        if line == b"\r\n" || line == b"\n" {
-            // The end of the headers: the rest is the body.
-            out.extend_from_slice(rest);
-            return out;
+    let body_start = header_end(raw);
+    let (header, body) = raw.split_at(body_start);
+    let mut kept = Vec::with_capacity(raw.len());
+    let mut skipping = false;
+    for line in header.split_inclusive(|byte| *byte == b'\n') {
+        let continues = matches!(line.first(), Some(b' ' | b'\t'));
+        if !continues {
+            skipping = is_own_result(line, hostname);
         }
-        let continuation = matches!(line.first(), Some(b' ' | b'\t'));
-        if !continuation {
-            dropping = is_own_result(line, hostname);
+        if !skipping {
+            kept.extend_from_slice(line);
         }
-        if !dropping {
-            out.extend_from_slice(line);
-        }
-        rest = tail;
     }
-    out
+    kept.extend_from_slice(body);
+    kept
 }
 
+/// Where the header section ends: after its empty line, or at the end of a message without a body.
+fn header_end(raw: &[u8]) -> usize {
+    let mut position = 0;
+    for line in raw.split_inclusive(|byte| *byte == b'\n') {
+        position += line.len();
+        if line == b"\r\n" || line == b"\n" {
+            return position - line.len();
+        }
+    }
+    raw.len()
+}
+
+/// Whether a header line starts an `Authentication-Results` field whose authserv-id is `hostname`.
 fn is_own_result(line: &[u8], hostname: &str) -> bool {
-    let Some(colon) = line.iter().position(|&b| b == b':') else { return false };
+    let Some(colon) = line.iter().position(|byte| *byte == b':') else { return false };
     let (name, value) = line.split_at(colon);
-    if !name.trim_ascii().eq_ignore_ascii_case(b"authentication-results") {
+    if !name.trim_ascii().eq_ignore_ascii_case(b"Authentication-Results") {
         return false;
     }
     let value = String::from_utf8_lossy(&value[1..]);
-    let id = value.trim_start().split(|c: char| c == ';' || c.is_whitespace()).next().unwrap_or_default();
-    id.eq_ignore_ascii_case(hostname)
+    let id = value.trim_start().split([';', ' ', '\t', '\r', '\n', '(']).next().unwrap_or_default();
+    id.trim_end_matches('.').eq_ignore_ascii_case(hostname)
 }
 
 /// Now as the date of a header (RFC 5322, 3.3), in UTC with the offset `+0000`.
 pub(crate) fn date_now() -> String {
-    let now = jiff::Timestamp::now().to_zoned_datetime(jiff::tz::TimeZone::UTC);
-    jiff::fmt::rfc2822::to_string(&now).unwrap_or_default()
+    jiff::Timestamp::now().strftime("%a, %d %b %Y %H:%M:%S +0000").to_string()
 }
 
 #[cfg(test)]
 mod tests {
-    use super::without_own_results;
+    use super::*;
 
     #[test]
-    fn forged_results_of_this_host_are_removed() {
-        let raw = b"Authentication-Results: mx.kernoid.example;\r\n\tspf=pass\r\nAuthentication-Results: other.example; dkim=pass\r\nSubject: Hi\r\n\r\nAuthentication-Results: mx.kernoid.example; in the body\r\n";
+    fn results_claiming_this_host_are_removed_with_their_continuations() {
+        let raw = b"Received: from a\r\nAuthentication-Results: MX.kernoid.example;\r\n\tdkim=pass header.d=bank.example\r\n\
+                    Authentication-Results: mx.other.example; spf=pass\r\nSubject: hi\r\n\r\n\
+                    Authentication-Results: mx.kernoid.example; in the body stays\r\n";
         let cleaned = String::from_utf8(without_own_results(raw, "mx.kernoid.example")).unwrap();
-        assert_eq!(
-            cleaned,
-            "Authentication-Results: other.example; dkim=pass\r\nSubject: Hi\r\n\r\nAuthentication-Results: mx.kernoid.example; in the body\r\n"
-        );
+        assert!(!cleaned.contains("bank.example"));
+        assert!(cleaned.contains("Authentication-Results: mx.other.example; spf=pass\r\n"));
+        assert!(cleaned.starts_with("Received: from a\r\nAuthentication-Results: mx.other"));
+        assert!(cleaned.ends_with("\r\n\r\nAuthentication-Results: mx.kernoid.example; in the body stays\r\n"));
+        // A message with headers only, and one where the id has no separator.
+        let raw = b"Authentication-Results: mx.kernoid.example\r\nSubject: x\r\n";
+        assert_eq!(without_own_results(raw, "mx.kernoid.example"), b"Subject: x\r\n");
+        let raw = b"Authentication-Results: mx.kernoid.example.evil; dkim=pass\r\n\r\nx";
+        assert_eq!(without_own_results(raw, "mx.kernoid.example"), raw);
+    }
+
+    #[test]
+    fn dates_are_written_as_rfc_5322_has_them() {
+        let date = date_now();
+        assert!(date.ends_with(" +0000"), "{date}");
+        assert!(mail_parser::MessageParser::new()
+            .parse_headers(format!("Date: {date}\r\n\r\n").as_bytes())
+            .and_then(|message| message.date())
+            .is_some());
     }
 }
