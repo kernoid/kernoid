@@ -588,7 +588,7 @@ pub struct SendPlan {
     pub reason: Option<String>,
 }
 
-/// The width HTML is set to as text: wide, so that the app wraps it, not html2text.
+/// The width HTML is set to as text: wide, so that the app wraps it, not the SDK.
 const TEXT_WIDTH: usize = 10_000;
 
 fn addresses(list: Option<Vec<mail::EmailAddress>>) -> Vec<Address> {

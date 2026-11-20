@@ -31,10 +31,11 @@ rusqlite = { version = "0.42.0", features = ["bundled"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 thiserror = "2.0.21"
-# HTTPS to the relay: rustls on AWS-LC, post-quantum key exchange preferred, the system's trust store (RFC 0006, 2) –
-# not ureq's default of ring and webpki-roots.
+# HTTPS to the relay through the SDK's HTTP client (one stack in the kit): rustls on AWS-LC, post-quantum key exchange
+# preferred, the system's trust store (RFC 0006, 2); its requests on a runtime of the transport's own.
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls", "http2"], optional = true }
 rustls = { version = "0.23.46", default-features = false, features = ["aws-lc-rs", "prefer-post-quantum", "std", "tls12"], optional = true }
-ureq = { version = "3.4.2", default-features = false, features = ["rustls-no-provider", "platform-verifier", "gzip"], optional = true }
+tokio = { version = "1.53.3", features = ["rt-multi-thread", "time", "net"], optional = true }
 
 [target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
 # The browser's clock (`now_ms`).
@@ -42,8 +43,8 @@ js-sys = "0.3.91"
 
 [features]
 default = ["native"]
-# Reaching relays through ureq; without it, the program gives a transport of its own (a web page's worker).
-native = ["dep:rustls", "dep:ureq"]
+# Reaching relays through reqwest; without it, the program gives a transport of its own (a web page's worker).
+native = ["dep:reqwest", "dep:rustls", "dep:tokio"]
 # The store encrypted as a whole: SQLCipher (BSD-3-Clause) with OpenSSL (Apache-2.0) built in, instead of SQLite.
 sqlcipher = ["rusqlite/bundled-sqlcipher-vendored-openssl"]
 # The store as bytes and back (`Store::to_bytes`, `from_bytes`), for a store kept elsewhere than in a file.

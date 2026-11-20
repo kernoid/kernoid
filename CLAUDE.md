@@ -48,7 +48,7 @@ dependencies (pnpm's default).
 `kit/client` (MIT) is kernoid's Rust SDK `kernoid-client`, async on tokio with reqwest (rustls on AWS-LC, post-quantum
 key exchange preferred): the session, method calls, uploads, downloads and push (`lib.rs`, `push.rs`); mail with
 threads, files with versions, sharing and links, calendars with scheduling, contacts (`mail`, `files`, `calendars`,
-`contacts`); the account's everyday settings over kernoid's own API (`account`); end-to-end encrypted mail and vaults on `kernoid-e2e` (`e2e`, `e2e/vault.rs`), vaults on spaces through the foundation's streams (`e2e/spaces.rs`, `Vaults`: their store on the device, members by a recovery code sealed to the account's key, moving an OpenPGP vault onto a space); finding the server through `_jmap._tcp` (`srv`, DNS
+`contacts`); HTML mail as text by kernoid's own converter (`html`, from the HTML standard, linear on any input); the account's everyday settings over kernoid's own API (`account`); end-to-end encrypted mail and vaults on `kernoid-e2e` (`e2e`, `e2e/vault.rs`), vaults on spaces through the foundation's streams (`e2e/spaces.rs`, `Vaults`: their store on the device, members by a recovery code sealed to the account's key, moving an OpenPGP vault onto a space); finding the server through `_jmap._tcp` (`srv`, DNS
 messages by hickory-proto, over tokio's sockets); iCalendar and vCard files through kernoid-pim (`transfer`); logging in with OpenID Connect as kernoid's apps do –
 PKCE, the built-in client of the apps, the scope `urn:kernoid:data`, refresh (`oidc`; `Client::connect_with_token`,
 `set_access_token`). Tests run
@@ -77,7 +77,7 @@ version (`[workspace.package] version` in `kit/Cargo.toml`) – CI's job `crates
 
 `kit/vault` (MIT) is `kernoid-vault`, kernoid's vaults on spaces (RFC 0010, 5) on the foundation's streams: the model
 (directories and files as streams, `entry`/`gone`/`version` events) and its operations, synchronous. The SDK runs it
-off its runtime; with `--features wasm` (and `--no-default-features`: no ureq) it is the web app's `WebVaults`, which
+off its runtime; with `--features wasm` (and `--no-default-features`: no reqwest) it is the web app's `WebVaults`, which
 `scripts/build-wasm.sh` turns into `web/vault/dist` (`@kernoid/vault`, not checked in) – SQLite is compiled for the
 browser by sqlite-wasm-rs, which needs a clang that knows wasm32 and llvm-ar (Apple's ar writes no WebAssembly objects;
 the script takes Homebrew's LLVM on macOS). The web app runs it in a worker (`web/app/src/files/space.worker.ts`):
@@ -103,7 +103,7 @@ editor – messages (`src/compose.rs`), events and contacts (`src/forms.rs`) –
 (`kernoid_tui::RUNTIME`): the screen waits for each with `block`, the push stream and transfers run on it in the
 background. A **Cargo workspace of its own** like the kit – its dependencies are its own (and stay out of the server's
 image: `.dockerignore`), and CI checks it in a job of its own. The password comes from `KERNOID_PASSWORD`, a command or
-a prompt, never an argument. Dependencies are exact (`=` in `Cargo.toml`) and at least two weeks old when taken –
+a prompt (read without echo, `src/system.rs`), never an argument. What it asks of the system is its own code in `src/system.rs` – the key store (the Keychain through security-framework, the Credential Manager through windows-sys, elsewhere the Secret Service through kernoid's own synchronous D-Bus client `src/dbus.rs`, tested alone against GNOME Keyring with `rustc --test src/dbus.rs`), the terminal's echo (termios through libc, the console's mode), the download directory; the app's only unsafe code is there (`unsafe_code` is denied elsewhere). Dependencies are exact (`=` in `Cargo.toml`) and at least two weeks old when taken –
 `tui/scripts/check-age.py [--fix]` lists the younger ones in `Cargo.lock` (and sets them back); run it after
 changing the lock file.
 

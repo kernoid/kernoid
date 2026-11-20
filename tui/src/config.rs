@@ -50,9 +50,7 @@ pub fn load(path: Option<&Path>) -> Result<File, String> {
 
 /// The download directory: the configured one, the user's, or the current one.
 pub fn downloads(configured: Option<PathBuf>) -> PathBuf {
-    configured
-        .or_else(|| directories::UserDirs::new().and_then(|dirs| dirs.download_dir().map(Path::to_path_buf)))
-        .unwrap_or_else(|| PathBuf::from("."))
+    configured.or_else(crate::system::download_dir).unwrap_or_else(|| PathBuf::from("."))
 }
 
 /// The password: `KERNOID_PASSWORD`, the output of `command` (its first line), or asked for on the terminal.
@@ -74,7 +72,7 @@ pub fn password(command: Option<&str>, address: &str) -> Result<String, String> 
         }
         return Ok(password);
     }
-    rpassword::prompt_password(format!("App password for {address}: ")).map_err(|error| error.to_string())
+    crate::system::read_hidden(&format!("App password for {address}: "))
 }
 
 /// The recovery code that unlocks the account's key for end-to-end encryption (RFC 0006, 4.2), from

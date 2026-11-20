@@ -21,7 +21,6 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { version = "=4.6.7", features = ["derive", "env"] }
-directories = "=6.0.0"
 # The vaults' sealing key, made from the system's random numbers.
 getrandom = "=0.3.4"
 # Dates and times in the system's time zone (Unlicense OR MIT) – in place of chrono (RUSTSEC-2026-0543).
@@ -29,15 +28,23 @@ jiff = "=1.0.1"
 # kernoid's Rust SDK (MIT): JMAP, push, end-to-end encryption, DNS, iCalendar and vCard files – async; the app waits for
 # it on a runtime of its own (`block`).
 kernoid-client = { path = "../kit/client" }
-# The key the vaults on spaces are sealed with on this computer, kept in the system's key store: Keychain, Windows
-# Credential Manager, Secret Service (pure Rust over D-Bus) – MIT OR Apache-2.0.
-keyring = { version = "=3.6.3", features = ["apple-native", "windows-native", "linux-native-async-persistent", "tokio", "crypto-rust"] }
 ratatui = "=0.30.2"
-rpassword = "=7.5.4"
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.154"
 tokio = { version = "=1.53.3", features = ["fs", "rt-multi-thread"] }
 toml = { version = "=1.1.6", default-features = false, features = ["parse", "serde"] }
+
+# The system's key store, the terminal's echo and the console (`src/system.rs`): the Keychain through security-framework
+# (MIT OR Apache-2.0), termios through libc, the Credential Manager and the console through windows-sys (both MIT OR
+# Apache-2.0) – the Secret Service elsewhere is kernoid's own D-Bus client (`src/dbus.rs`).
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = "=3.7.0"
+
+[target.'cfg(unix)'.dependencies]
+libc = "=0.2.191"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_Security_Credentials", "Win32_System_Console"] }
 
 # Argon2 (unlocking the key) and the post-quantum algorithms are slow without optimisation; tests build dependencies
 # optimised, as the end-to-end library does.
@@ -45,7 +52,8 @@ toml = { version = "=1.1.6", default-features = false, features = ["parse", "ser
 opt-level = 2
 
 [lints.rust]
-unsafe_code = "forbid"
+# Denied, not forbidden: `src/system.rs` alone allows it, for the C interfaces of termios and Windows.
+unsafe_code = "deny"
 missing_debug_implementations = "warn"
 
 [lints.clippy]

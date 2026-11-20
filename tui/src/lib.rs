@@ -5,7 +5,10 @@
 
 pub mod compose;
 pub mod config;
+#[cfg(unix)]
+pub mod dbus;
 pub mod forms;
+pub mod system;
 
 pub use kernoid_client as jmap;
 
