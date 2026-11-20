@@ -17,6 +17,16 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 ### Changed
 
+- **SAML's XML signatures and encryption are kernoid's own** (`crates/kernoid-oidc/src/saml/`, AGPL-3.0-or-later),
+  written from W3C XML Signature 1.1, Exclusive XML Canonicalization 1.0, XML Encryption 1.1 and SAML 2.0; they
+  replace bergshamra (and with it uppsala, tsp-ltv and chrono in the server's lock file). The profile is strict:
+  exactly one enveloped signature per signed element, referencing that element; Exclusive XML Canonicalization;
+  SHA-256 or more; RSA (2048 bits or more) or ECDSA; keys only from the configured certificates; no DTDs, entities or
+  processing instructions; every signature present must verify. **Upgrading:** a provider that signs with SHA-1, with
+  an RSA key below 2048 bits, with other transforms than enveloped-signature and Exclusive XML Canonicalization, or
+  that encrypts with AES-CBC without signing the whole Response (AD FS signs only the Assertion by default – set
+  `SamlResponseSignature` to `MessageAndAssertion`, or encrypt with AES-GCM) is refused – check the providers'
+  settings before upgrading.
 - **Sieve has kernoid's own interpreter** (`crates/kernoid-sieve`, AGPL-3.0-or-later), written from the RFCs; it
   replaces Stalwart's sieve-rs, which used unsafe code. A script that does not compile is refused with the line and
   column of the error; a run is bounded in work, actions, redirects and variables. Capabilities: `fileinto`,

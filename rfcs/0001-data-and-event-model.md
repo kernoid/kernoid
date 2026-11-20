@@ -514,23 +514,30 @@ As in ZITADEL, a project is "the vessel that holds your Applications and Roles"
 - **SAML 2.0:** a provider with SAML settings – SSO URL, signing certificates, optionally the attributes for address
   and name – gets an AuthnRequest (HTTP-Redirect binding, `RelayState` as the state) and posts its Response
   to `https://<instance>/idp/saml/acs` (HTTP-POST binding). kernoid's entity ID is `https://<instance>/idp/saml`, its
-  metadata at `/idp/saml/metadata`. XML signatures are verified by **bergshamra** (pure Rust, BSD-2-Clause, AWS-LC as
-  the backend, without legacy algorithms) with its SAML defaults: only the configured certificates, references only
-  where the signature can cover them (against XML signature wrapping), duplicate IDs refused, every reference digest
-  verified. kernoid refuses DTDs before parsing, parses once and reads from the tree it verified, takes the one
-  Assertion only if a valid signature references it or the Response around it, and checks issuer, `InResponseTo`,
-  destination, recipient, time windows and audience. The NameID is the subject; an `AuthnContextClassRef` for more
+  metadata at `/idp/saml/metadata`. XML signatures are verified by **kernoid's own code** (`kernoid_oidc::saml`, written
+  from W3C XML Signature 1.1, Exclusive XML Canonicalization 1.0, XML Encryption 1.1 and SAML 2.0; aws-lc-rs for the
+  cryptography, x509-cert for certificates) in a strict profile: exactly one enveloped `ds:Signature` as a child of
+  the element it signs, with one reference to exactly that element's `ID`; the transforms enveloped-signature and
+  Exclusive XML Canonicalization (with a PrefixList), digests SHA-256/384/512, signatures RSA-SHA256/384/512 or
+  ECDSA-SHA256/384; no `ds:Object`; only the configured certificates, never a key from the message. The parser
+  refuses DTDs, entities other than the predefined ones, processing instructions and duplicate IDs, bounds size and
+  depth, and drops comments, so that what kernoid reads is what was signed. kernoid parses once and reads from the
+  very element it verified, takes the one Assertion only if a valid signature covers it or the Response around it
+  (every signature present must verify), and checks issuer, `InResponseTo`, destination, recipient, time windows and
+  audience. The NameID is the subject; an `AuthnContextClassRef` for more
   than one factor counts as `idp_mfa`. An address the tenant's own SAML provider asserts on a verified domain of the
-  tenant counts as verified. bergshamra has had no external audit yet; kernoid's audit before 1.0 includes this path.
+  tenant counts as verified. This code has had no external audit yet; kernoid's audit before 1.0 includes it.
 - **kernoid's SAML key** of an instance (`saml_sp_keys`): RSA 2048, made at first use by rcgen, sealed with the main
   key, with a self-signed certificate (ten years) that the metadata publishes for signing and encryption – providers
   trust it because it is in the metadata. With `sign_requests`, AuthnRequests are signed (redirect binding:
-  RSA-SHA256 over the URL-encoded query, SAML Bindings 3.4.4.1); the signature is made and checked through
-  bergshamra's algorithm registry, no own cryptography.
-- **Encrypted assertions:** an `EncryptedAssertion` (XML Encryption, e.g. AES-GCM with RSA-OAEP) is decrypted by
-  bergshamra with kernoid's key; then the same checks apply. A signature over the Response counts when it verifies on
-  the Response as received; otherwise the decrypted Assertion must carry a valid signature of its own. Exactly one
-  assertion – plain or encrypted – is accepted. Legacy algorithms (RSA PKCS #1 v1.5 key transport) are not built in.
+  RSA-SHA256 over the URL-encoded query, SAML Bindings 3.4.4.1); the signature is made and checked with aws-lc-rs.
+- **Encrypted assertions:** an `EncryptedAssertion` (XML Encryption, e.g. AES-GCM with RSA-OAEP) is decrypted
+  with kernoid's key – key transport RSA-OAEP (`rsa-oaep-mgf1p`, or `xmlenc11#rsa-oaep` with SHA-1 or the same SHA-2
+  for digest and mask), data AES-128/256-GCM, or AES-128/256-CBC only when a verified signature over the Response
+  covers the ciphertext (unauthenticated CBC would be a decryption oracle); then the same checks apply. A signature
+  over the Response counts when it verifies on the Response as received; otherwise the decrypted Assertion must carry
+  a valid signature of its own, and every failure from unwrapping the key to that signature gives the same error.
+  Exactly one assertion – plain or encrypted – is accepted. Legacy algorithms (RSA PKCS #1 v1.5 key transport) are not built in.
 - **Single logout** (HTTP-Redirect binding, `/idp/saml/slo`, in the metadata): a session from a SAML login keeps its
   NameID and SessionIndex (`idp_sessions`). Logging out at kernoid (`POST /v1/sessions/current/logout`, GraphQL
   `logout`) ends the session and, if the provider has an `slo_url`, answers with the provider's address and kernoid's
@@ -548,10 +555,10 @@ As in ZITADEL, a project is "the vessel that holds your Applications and Roles"
   (in the metadata for signing and encryption, decrypting, not signing), `active` (signing; one) and `retired` (no
   longer in the metadata, still decrypting what a provider encrypts for it). A new key waits until an administrator
   activates it – once the providers have the new metadata, which kernoid cannot see; activating retires the key
-  before, in one transaction. Decrypting tries each key, since bergshamra takes the first RSA key it has.
+  before, in one transaction. Decrypting tries each key.
 - **Single logout in the HTTP-POST binding:** `/idp/saml/slo` also takes a posted `SAMLRequest` or `SAMLResponse`;
   a LogoutRequest must then carry an XML signature by one of the provider's certificates over its root element
-  (verified by bergshamra, as for Responses). kernoid answers in the HTTP-Redirect binding.
+  (verified as for Responses). kernoid answers in the HTTP-Redirect binding.
 - **Single logout at OpenID Connect end-session:** when an application logs out a session that came from a SAML
   provider with single logout, the browser goes to the provider with kernoid's LogoutRequest first; the provider's
   answer sends it on to the application's `post_logout_redirect_uri` (kept with the request in `saml_logouts`).

@@ -68,12 +68,15 @@ multi-factor SAML authentication context), it counts as two – and satisfies a 
 
 - **OpenID Connect:** authorization code with PKCE, `state` and `nonce`; the ID token is verified against the
   provider's published keys (RS256/384/512, PS256, ES256/384) – issuer, audience, expiry, nonce.
-- **SAML:** XML signatures are verified by [bergshamra](https://github.com/kushaldas/bergshamra) with its SAML
-  defaults – only the configured certificates count, references must sit where the signature covers them (against
-  XML signature wrapping), duplicate IDs are refused. kernoid accepts no DTDs, takes the one Assertion only if it is
-  signed, and checks issuer, `InResponseTo`, destination, recipient, time windows and audience. An encrypted Assertion
-  is decrypted with kernoid's key of the instance (made at first use, sealed with the main key), then checked the
-  same way.
+- **SAML:** XML signatures are verified by kernoid's own code in a strict profile – one enveloped signature per
+  signed element (the Response or the Assertion), referencing exactly that element; Exclusive XML Canonicalization;
+  SHA-256 or more; RSA (2048 bits or more) or ECDSA; only the configured certificates count, never a key in the
+  message. Duplicate IDs, DTDs, entities and processing instructions are refused, and kernoid reads the very element
+  whose signature it verified (against XML signature wrapping). Every signature present must verify, and one must
+  cover the Assertion. kernoid checks issuer, `InResponseTo`, destination, recipient, time windows and audience. An
+  encrypted Assertion (RSA-OAEP with AES-GCM; AES-CBC only when the provider signs the whole Response – AD FS:
+  `SamlResponseSignature` `MessageAndAssertion`) is decrypted with kernoid's key of the instance (made at first use,
+  sealed with the main key), then checked the same way.
 - **No session token in a URL:** after the provider's answer, the login UI receives a one-time code in the URL
   fragment and exchanges it for the session.
 - **Outbound requests** go only to public addresses over HTTPS – checked for the URL, every address DNS gives and every

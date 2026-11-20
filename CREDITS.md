@@ -39,6 +39,10 @@ that source would be marked as derived and be `AGPL-3.0-only`.
 
 - **Specifications** kernoid implements are cited where they are used: the RFCs of the IETF, the JMAP drafts, OpenID
   and SAML.
+- **[bergshamra](https://github.com/kushaldas/bergshamra)** (BSD-2-Clause) verified and decrypted kernoid's SAML
+  messages until 2026-11-20. kernoid's own XML signatures and encryption (`crates/kernoid-oidc/src/saml/`) replaced
+  it; they were written from the W3C Recommendations and SAML 2.0, without reading bergshamra's source – nothing of it
+  was taken over.
 - **IBM Plex** (SIL OFL 1.1) is the typeface of the brand, the documentation and the web app.
 - **[falkoss/starterpack](https://github.com/falkoss/starterpack)** gave the repository its shape (REUSE, DCO,
   documentation).

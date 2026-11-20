@@ -18,8 +18,9 @@ ignore = [
     { id = "RUSTSEC-2026-0387", reason = "no secret key of kernoid's is on a curve crypto-bigint 0.5 computes" },
     # ml-dsa 0.0.4 signs in variable time; rpgp 0.21 requires it. The server never signs with ML-DSA.
     { id = "RUSTSEC-2025-0144", reason = "ML-DSA signs only in the user's client, never as a service anyone can time" },
-    # RSA decryption is not constant-time (Marvin), with no fixed version; kernoid never uses an RSA secret key.
-    { id = "RUSTSEC-2023-0071", reason = "no RSA secret key is ever used; only public RSA operations" },
+    # RSA decryption is not constant-time (Marvin), with no fixed version; the rsa crate (through rpgp) never holds a
+    # secret key of kernoid's – kernoid's SAML key decrypts and signs through aws-lc-rs.
+    { id = "RUSTSEC-2023-0071", reason = "the rsa crate is used only with public keys; secret RSA keys go through aws-lc-rs" },
 ]
 
 [licenses]

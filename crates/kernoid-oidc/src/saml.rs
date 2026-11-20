@@ -3,29 +3,42 @@
 //! if the provider wants it), the Response it accepts (HTTP-POST binding, the Assertion possibly encrypted), and single
 //! logout both ways (HTTP-Redirect binding).
 //!
-//! XML signatures are checked by bergshamra – never by kernoid – with its SAML defaults: only the provider's
-//! configured certificates count (no keys from the document), references must sit where the signature can cover them
-//! (against XML signature wrapping), duplicate IDs are refused, every reference digest is verified. On top of that,
-//! kernoid
-//! - refuses documents with a DTD before parsing them;
-//! - parses once and reads everything from the same tree it verified, so that no second parser can see a different
-//!   document;
-//! - takes only the one Assertion of the Response, and only if a valid signature references exactly that Assertion or
-//!   the Response around it;
-//! - checks the issuer, `InResponseTo`, destination and recipient, the time windows and the audience.
+//! XML is kernoid's own, written from the W3C Recommendations and the SAML 2.0 specifications in a strict profile –
+//! this is the part of logging in where signatures are most easily got wrong, and part of the external audit before
+//! 1.0:
+//! - [`dom`]: the tree, on quick-xml – no DTD, no entities but the predefined ones, no processing instructions,
+//!   unique IDs, bounded size and depth; comments are dropped, so the text kernoid reads is the text that was signed;
+//! - [`c14n`]: Exclusive XML Canonicalization without comments;
+//! - [`xmldsig`]: enveloped signatures – one per signed element, as its child, one reference to exactly that element,
+//!   SHA-2 digests, RSA or ECDSA, the key only from the provider's configured certificates (never from the message);
+//! - [`xmlenc`]: EncryptedAssertion with RSA-OAEP and AES-GCM (AES-CBC only inside a signed Response);
+//! - [`keys`]: certificates, the algorithms, signing.
 //!
-//! An encrypted Assertion is decrypted by bergshamra with kernoid's SAML key; then the same checks apply. A signature
-//! over the Response counts when it verifies on the Response as received, before decryption.
+//! On top of that, kernoid parses once and reads from the very element whose signature it verified (against XML
+//! signature wrapping); takes only the one Assertion of the Response, and only if a valid signature covers it or the
+//! Response around it – every signature present must verify; and checks the issuer, `InResponseTo`, destination and
+//! recipient, the time windows and the audience.
+//!
+//! An encrypted Assertion is decrypted with kernoid's SAML key; then the same checks apply. A signature over the
+//! Response counts when it verifies on the Response as received, before decryption; otherwise the decrypted Assertion
+//! must be signed itself, and every failure from decryption to that signature is one error.
 //!
 //! Redirect-binding signatures (RFC: SAML Bindings 3.4.4.1) are not XML signatures: they sign the URL-encoded query
-//! itself. kernoid signs and verifies them through bergshamra's algorithm registry too, RSA and ECDSA with SHA-256 or
-//! more – no SHA-1.
+//! itself. kernoid signs and verifies them with the same keys, RSA and ECDSA with SHA-256 or more – no SHA-1.
 use std::collections::BTreeMap;
 
 use base64::{Engine, engine::general_purpose::STANDARD};
-use bergshamra::{DsigContext, EncContext, KeysManager, VerifyResult, dsig::verify::verify_all_document};
 use jiff::Timestamp;
-use uppsala::{Document, NodeId};
+
+pub(crate) mod c14n;
+pub mod dom;
+pub mod keys;
+pub mod xmldsig;
+pub mod xmlenc;
+
+use dom::{Document, NodeId};
+use keys::{PublicKey, SignatureAlgorithm, SigningKey};
+use xmldsig::Outcome;
 
 const PROTOCOL: &str = "urn:oasis:names:tc:SAML:2.0:protocol";
 const ASSERTION: &str = "urn:oasis:names:tc:SAML:2.0:assertion";
@@ -36,21 +49,12 @@ const MAX_RESPONSE: usize = 256 * 1024;
 /// Seconds of clock difference accepted.
 const LEEWAY: i64 = 120;
 /// The signature algorithm kernoid signs with.
-const RSA_SHA256: &str = "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256";
-/// Signature algorithms kernoid accepts on redirect-binding messages.
-const ACCEPTED_SIGNATURES: [&str; 6] = [
-    RSA_SHA256,
-    "http://www.w3.org/2001/04/xmldsig-more#rsa-sha384",
-    "http://www.w3.org/2001/04/xmldsig-more#rsa-sha512",
-    "http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha256",
-    "http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha384",
-    "http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha512",
-];
+const RSA_SHA256: &str = SignatureAlgorithm::RSA_SHA256;
 const LOGOUT_USER: &str = "urn:oasis:names:tc:SAML:2.0:logout:user";
 
 #[derive(Debug, thiserror::Error)]
 #[error("{0}")]
-pub struct SamlError(String);
+pub struct SamlError(pub(crate) String);
 
 fn fail<T>(message: impl Into<String>) -> Result<T, SamlError> {
     Err(SamlError(message.into()))
@@ -71,8 +75,7 @@ pub fn certificate(text: &str) -> Result<Vec<u8>, SamlError> {
         .filter(|c| !c.is_whitespace())
         .collect();
     let der = STANDARD.decode(body).map_err(|_| SamlError("a certificate is not base64".into()))?;
-    bergshamra::keys::loader::load_x509_cert_der(&der)
-        .map_err(|e| SamlError(format!("not a usable certificate: {e}")))?;
+    PublicKey::from_certificate(&der).map_err(|e| SamlError(format!("not a usable certificate: {e}")))?;
     Ok(der)
 }
 
@@ -109,25 +112,14 @@ impl SpKey {
         Ok(Self { private: zeroize::Zeroizing::new(key.serialize_der()), certificate: certificate.der().to_vec() })
     }
 
-    /// The key as bergshamra uses it.
-    fn key(&self) -> Result<bergshamra::Key, SamlError> {
-        // PEM: base64 in lines of 64 characters.
-        let encoded = zeroize::Zeroizing::new(STANDARD.encode(self.private.as_slice()));
-        let mut pem = zeroize::Zeroizing::new(String::from("-----BEGIN PRIVATE KEY-----\n"));
-        for line in encoded.as_bytes().chunks(64) {
-            pem.push_str(std::str::from_utf8(line).unwrap_or_default());
-            pem.push('\n');
-        }
-        pem.push_str("-----END PRIVATE KEY-----\n");
-        bergshamra::keys::loader::load_rsa_private_pem(pem.as_bytes())
-            .map_err(|e| SamlError(format!("kernoid's SAML key is not usable: {e}")))
-    }
-
     /// Signs the octets of a redirect-binding message with RSA-SHA256.
     fn sign(&self, octets: &[u8]) -> Result<Vec<u8>, SamlError> {
-        let failed = |e: bergshamra::Error| SamlError(format!("cannot sign: {e}"));
-        let key = self.key()?.software_key().map_err(failed)?.ok_or_else(|| SamlError("no signing key".into()))?;
-        bergshamra::crypto::sign::from_uri(RSA_SHA256).map_err(failed)?.sign(&key, octets).map_err(failed)
+        let key = SigningKey::from_pkcs8(&self.private)
+            .map_err(|e| SamlError(format!("kernoid's SAML key is not usable: {e}")))?;
+        if key.algorithm() != SignatureAlgorithm::RsaSha256 {
+            return fail("kernoid's SAML key is not an RSA key");
+        }
+        key.sign(octets)
     }
 }
 
@@ -356,44 +348,26 @@ impl SloMessage {
             Signed::Xml => return verify_root(&self.xml, certificates),
             Signed::None => return fail("the message is not signed"),
         };
-        if !ACCEPTED_SIGNATURES.contains(&algorithm.as_str()) {
+        let Some(algorithm) = SignatureAlgorithm::for_redirect(algorithm) else {
             return fail(format!("the signature algorithm {algorithm} is not accepted"));
-        }
-        let verifier = bergshamra::crypto::sign::from_uri(algorithm).map_err(|e| SamlError(e.to_string()))?;
-        for certificate in certificates {
-            let Ok(key) = bergshamra::keys::loader::load_x509_cert_der(certificate) else { continue };
-            let Ok(Some(key)) = key.software_key() else { continue };
-            if verifier.verify(&key, octets.as_bytes(), signature).unwrap_or(false) {
-                return Ok(());
-            }
-        }
-        fail("the signature does not verify with the provider's certificates")
+        };
+        let verified = certificates
+            .iter()
+            .filter_map(|certificate| PublicKey::from_certificate(certificate).ok())
+            .any(|key| key.verify(algorithm, octets.as_bytes(), signature));
+        if verified { Ok(()) } else { fail("the signature does not verify with the provider's certificates") }
     }
 }
 
 /// Whether a valid XML signature by one of `certificates` covers the root element of `xml`.
 fn verify_root(xml: &str, certificates: &[Vec<u8>]) -> Result<(), SamlError> {
     let doc = parse_message(xml)?;
-    let root = doc.document_element().ok_or_else(|| SamlError("the message is empty".into()))?;
-    let mut keys = KeysManager::new();
-    for certificate in certificates {
-        if let Ok(key) = bergshamra::keys::loader::load_x509_cert_der(certificate) {
-            keys.add_key(key);
-        }
+    let keys: Vec<PublicKey> =
+        certificates.iter().filter_map(|certificate| PublicKey::from_certificate(certificate).ok()).collect();
+    match xmldsig::verify(&doc, doc.root(), &keys)? {
+        Outcome::Valid => Ok(()),
+        Outcome::Unsigned => fail("the message is not signed"),
     }
-    let results = match verify_all_document(&DsigContext::new(keys), &doc) {
-        Ok(results) => results,
-        Err(bergshamra::Error::MissingElement(element)) if element.contains("Signature") => {
-            return fail("the message is not signed");
-        }
-        Err(e) => return Err(SamlError(format!("the signature cannot be verified: {e}"))),
-    };
-    let covered = results.iter().any(|result| {
-        result.all_reference_digests_verified()
-            && matches!(result, VerifyResult::Valid { references, .. }
-                if references.iter().any(|reference| reference.resolved_node == Some(root)))
-    });
-    if covered { Ok(()) } else { fail("the signature does not verify with the provider's certificates") }
 }
 
 /// What kernoid takes from a provider's LogoutRequest.
@@ -406,29 +380,26 @@ pub struct LogoutRequestIn {
     pub session_indexes: Vec<String>,
 }
 
-fn parse_message(xml: &str) -> Result<Document<'_>, SamlError> {
-    if xml.to_ascii_uppercase().contains("<!DOCTYPE") {
-        return fail("the message contains a DTD");
-    }
-    uppsala::parse(xml).map_err(|_| SamlError("the message is not well-formed XML".into()))
+fn parse_message(xml: &str) -> Result<Document, SamlError> {
+    Document::parse(xml)
 }
 
 /// Reads a LogoutRequest (after its signature was verified); checks destination and validity.
 pub fn read_logout_request(xml: &str, slo_url: &str, now: Timestamp) -> Result<LogoutRequestIn, SamlError> {
     let doc = parse_message(xml)?;
-    let root = doc.document_element().ok_or_else(|| SamlError("the message is empty".into()))?;
+    let root = doc.root();
     if !element_named(&doc, root, PROTOCOL, "LogoutRequest") {
         return fail("this is not a LogoutRequest");
     }
-    if doc.get_attribute(root, "Destination").is_some_and(|destination| destination != slo_url) {
+    if doc.attribute(root, "Destination").is_some_and(|destination| destination != slo_url) {
         return fail("the request is meant for another service");
     }
-    if time(doc.get_attribute(root, "NotOnOrAfter"))?
+    if time(doc.attribute(root, "NotOnOrAfter"))?
         .is_some_and(|end| end + jiff::SignedDuration::from_secs(LEEWAY) <= now)
     {
         return fail("the request has expired");
     }
-    let id = doc.get_attribute(root, "ID").ok_or_else(|| SamlError("the request has no ID".into()))?.to_owned();
+    let id = doc.attribute(root, "ID").ok_or_else(|| SamlError("the request has no ID".into()))?.to_owned();
     let issuer = text(&doc, only_child(&doc, root, ASSERTION, "Issuer")?);
     let name_id = text(&doc, only_child(&doc, root, ASSERTION, "NameID")?);
     let session_indexes = children(&doc, root, PROTOCOL, "SessionIndex").map(|index| text(&doc, index)).collect();
@@ -438,16 +409,16 @@ pub fn read_logout_request(xml: &str, slo_url: &str, now: Timestamp) -> Result<L
 /// What kernoid takes from a provider's LogoutResponse: whom it answers, from whom, and whether it succeeded.
 pub fn read_logout_response(xml: &str) -> Result<(String, String, bool), SamlError> {
     let doc = parse_message(xml)?;
-    let root = doc.document_element().ok_or_else(|| SamlError("the message is empty".into()))?;
+    let root = doc.root();
     if !element_named(&doc, root, PROTOCOL, "LogoutResponse") {
         return fail("this is not a LogoutResponse");
     }
     let in_response_to =
-        doc.get_attribute(root, "InResponseTo").ok_or_else(|| SamlError("the response answers nothing".into()))?;
+        doc.attribute(root, "InResponseTo").ok_or_else(|| SamlError("the response answers nothing".into()))?;
     let issuer = text(&doc, only_child(&doc, root, ASSERTION, "Issuer")?);
     let status = only_child(&doc, root, PROTOCOL, "Status")?;
     let code = only_child(&doc, status, PROTOCOL, "StatusCode")?;
-    Ok((in_response_to.to_owned(), issuer, doc.get_attribute(code, "Value") == Some(SUCCESS)))
+    Ok((in_response_to.to_owned(), issuer, doc.attribute(code, "Value") == Some(SUCCESS)))
 }
 
 /// kernoid's service provider metadata for an instance – to give a provider's administrator: its keys (for signed
@@ -518,20 +489,20 @@ pub struct SamlLogin {
     pub session_index: Option<String>,
 }
 
-fn element_named(doc: &Document<'_>, id: NodeId, namespace: &str, local: &str) -> bool {
-    doc.element(id).is_some_and(|element| element.matches_name_ns(namespace, local))
+fn element_named(doc: &Document, id: NodeId, namespace: &str, local: &str) -> bool {
+    doc.is(id, namespace, local)
 }
 
 fn children<'d>(
-    doc: &'d Document<'_>,
+    doc: &'d Document,
     parent: NodeId,
     namespace: &'d str,
     local: &'d str,
 ) -> impl Iterator<Item = NodeId> + 'd {
-    doc.children(parent).into_iter().filter(move |child| element_named(doc, *child, namespace, local))
+    doc.children_named(parent, namespace, local)
 }
 
-fn only_child(doc: &Document<'_>, parent: NodeId, namespace: &str, local: &str) -> Result<NodeId, SamlError> {
+fn only_child(doc: &Document, parent: NodeId, namespace: &str, local: &str) -> Result<NodeId, SamlError> {
     let mut found = children(doc, parent, namespace, local);
     match (found.next(), found.next()) {
         (Some(one), None) => Ok(one),
@@ -540,8 +511,8 @@ fn only_child(doc: &Document<'_>, parent: NodeId, namespace: &str, local: &str) 
     }
 }
 
-fn text(doc: &Document<'_>, id: NodeId) -> String {
-    doc.text_content_deep(id).trim().to_owned()
+fn text(doc: &Document, id: NodeId) -> String {
+    doc.text(id).trim().to_owned()
 }
 
 fn time(value: Option<&str>) -> Result<Option<Timestamp>, SamlError> {
@@ -559,25 +530,25 @@ pub fn verify_response(encoded: &str, expected: Expected<'_>) -> Result<SamlLogi
     }
     let bytes = STANDARD.decode(compact).map_err(|_| SamlError("the response is not base64".into()))?;
     let xml = String::from_utf8(bytes).map_err(|_| SamlError("the response is not UTF-8".into()))?;
-    if xml.to_ascii_uppercase().contains("<!DOCTYPE") {
-        return fail("the response contains a DTD");
-    }
-    let doc = uppsala::parse(&xml).map_err(|_| SamlError("the response is not well-formed XML".into()))?;
-    let response = doc.document_element().ok_or_else(|| SamlError("the response is empty".into()))?;
+    let doc = Document::parse(&xml).map_err(|e| match e.0.contains("DTD") {
+        true => SamlError("the response contains a DTD".into()),
+        false => e,
+    })?;
+    let response = doc.root();
     if !element_named(&doc, response, PROTOCOL, "Response") {
         return fail("this is not a SAML Response");
     }
-    if let Some(destination) = doc.get_attribute(response, "Destination")
+    if let Some(destination) = doc.attribute(response, "Destination")
         && destination != expected.acs_url
     {
         return fail("the response is meant for another service");
     }
-    if doc.get_attribute(response, "InResponseTo") != Some(expected.request_id) {
+    if doc.attribute(response, "InResponseTo") != Some(expected.request_id) {
         return fail("the response answers another request");
     }
     let status = only_child(&doc, response, PROTOCOL, "Status")?;
     let code = only_child(&doc, status, PROTOCOL, "StatusCode")?;
-    if doc.get_attribute(code, "Value") != Some(SUCCESS) {
+    if doc.attribute(code, "Value") != Some(SUCCESS) {
         return fail("the provider did not log the person in");
     }
     for issuer in children(&doc, response, ASSERTION, "Issuer") {
@@ -586,80 +557,107 @@ pub fn verify_response(encoded: &str, expected: Expected<'_>) -> Result<SamlLogi
         }
     }
 
-    let mut keys = KeysManager::new();
+    let mut keys = Vec::new();
     for certificate in expected.certificates {
-        let key = bergshamra::keys::loader::load_x509_cert_der(certificate)
-            .map_err(|e| SamlError(format!("a configured certificate is not usable: {e}")))?;
-        keys.add_key(key);
+        keys.push(
+            PublicKey::from_certificate(certificate)
+                .map_err(|e| SamlError(format!("a configured certificate is not usable: {e}")))?,
+        );
     }
-    let context = DsigContext::new(keys);
-    // Whether a valid signature covers one of `nodes`.
-    let covers = |doc: &Document<'_>, nodes: &[NodeId]| -> Result<bool, SamlError> {
-        let results = match verify_all_document(&context, doc) {
-            Ok(results) => results,
-            // No signature in the document: nothing covered.
-            Err(bergshamra::Error::MissingElement(element)) if element.contains("Signature") => return Ok(false),
-            Err(e) => return Err(SamlError(format!("the signature cannot be verified: {e}"))),
-        };
-        Ok(results.iter().any(|result| {
-            result.all_reference_digests_verified()
-                && matches!(result, VerifyResult::Valid { references, .. }
-                    if references.iter().any(|reference| reference.resolved_node.is_some_and(|node| nodes.contains(&node))))
-        }))
-    };
+    // Every signature present must verify; a Response signature covers everything in it, the ciphertext of an
+    // encrypted Assertion included.
+    let response_signed = xmldsig::verify(&doc, response, &keys)
+        .map_err(|e| SamlError(format!("the response is not signed by the provider: {e}")))?
+        == Outcome::Valid;
 
     let plain: Vec<NodeId> = children(&doc, response, ASSERTION, "Assertion").collect();
     let encrypted: Vec<NodeId> = children(&doc, response, ASSERTION, "EncryptedAssertion").collect();
     match (plain.as_slice(), encrypted.as_slice()) {
         // The signature must cover this Assertion, or the Response around it.
         ([assertion], []) => {
-            if !covers(&doc, &[*assertion, response])? {
+            let assertion_signed = xmldsig::verify(&doc, *assertion, &keys)
+                .map_err(|e| SamlError(format!("the assertion is not signed by the provider: {e}")))?
+                == Outcome::Valid;
+            if !response_signed && !assertion_signed {
                 return fail("the assertion is not signed by the provider");
             }
+            // Read from exactly the element that was verified (or that the verified Response holds).
             read_assertion(&doc, *assertion, &expected)
         }
-        ([], [_]) => {
+        ([], [wrapper]) => {
             if expected.decryption_keys.is_empty() {
                 return fail("the assertion is encrypted, but kernoid has no SAML key");
             }
-            let response_signed = covers(&doc, &[response])?;
-            // bergshamra takes the first RSA key it has: each key is tried on its own.
-            let mut decrypted = Err(SamlError("the assertion cannot be decrypted".into()));
-            for key in expected.decryption_keys {
-                let mut keys = KeysManager::new();
-                keys.add_key(key.key()?);
-                decrypted = bergshamra::decrypt(&EncContext::new(keys), &xml)
-                    .map_err(|e| SamlError(format!("the assertion cannot be decrypted: {e}")));
-                if decrypted.is_ok() {
-                    break;
+            if !response_signed && xmlenc::is_cbc(&doc, *wrapper) {
+                return fail(
+                    "the assertion is encrypted with AES-CBC, which kernoid accepts only when the provider signs the \
+                     Response – sign the Response or use AES-GCM",
+                );
+            }
+            let opened = open_assertion(&doc, *wrapper, &keys, expected.decryption_keys, response_signed);
+            let (fragment, assertion) = match opened {
+                Ok(opened) => opened,
+                // Without a signature around the ciphertext, every failure looks the same: no oracle.
+                Err(_) if !response_signed => {
+                    return fail("the encrypted assertion cannot be decrypted, or it is not signed by the provider");
                 }
+                Err(error) => return Err(error),
+            };
+            if doc.ids().any(|id| fragment.attribute(assertion, "ID") == Some(id)) {
+                return fail("two elements of the message have the same ID");
             }
-            let decrypted = decrypted?;
-            let doc = parse_message(&decrypted)?;
-            let response = doc.document_element().ok_or_else(|| SamlError("the response is empty".into()))?;
-            let wrapper = only_child(&doc, response, ASSERTION, "EncryptedAssertion")?;
-            let assertion = only_child(&doc, wrapper, ASSERTION, "Assertion")?;
-            if !response_signed && !covers(&doc, &[assertion])? {
-                return fail("the assertion is not signed by the provider");
-            }
-            read_assertion(&doc, assertion, &expected)
+            read_assertion(&fragment, assertion, &expected)
         }
         _ => fail("the response must carry exactly one assertion"),
     }
 }
 
+/// Decrypts the Assertion of an EncryptedAssertion and parses it in the namespaces in scope there; unless the
+/// Response was signed, the Assertion must carry a valid signature itself (and any signature it carries must verify).
+fn open_assertion(
+    doc: &Document,
+    wrapper: NodeId,
+    keys: &[PublicKey],
+    decryption_keys: &[SpKey],
+    response_signed: bool,
+) -> Result<(Document, NodeId), SamlError> {
+    let plaintext = xmlenc::decrypt(doc, wrapper, decryption_keys, response_signed)?;
+    let plaintext = String::from_utf8(plaintext).map_err(|_| SamlError("the assertion is not UTF-8".into()))?;
+    // The fragment is parsed on its own inside an element that declares what is in scope where it stood, so that it
+    // can never be anything but content of that element.
+    let mut declarations = String::new();
+    for (prefix, uri) in doc.in_scope(wrapper) {
+        let name = if prefix.is_empty() { "xmlns".to_owned() } else { format!("xmlns:{prefix}") };
+        declarations.push_str(&format!(" {name}=\"{}\"", escape(&uri)));
+    }
+    let fragment = Document::parse(&format!("<fragment{declarations}>{plaintext}</fragment>"))?;
+    let root = fragment.root();
+    let parts: Vec<NodeId> = fragment.child_elements(root).collect();
+    let [assertion] = parts.as_slice() else { return fail("the encrypted data is not one Assertion") };
+    if !fragment.has_only_space_text(root) || !element_named(&fragment, *assertion, ASSERTION, "Assertion") {
+        return fail("the encrypted data is not one Assertion");
+    }
+    let assertion_signed = xmldsig::verify(&fragment, *assertion, keys)
+        .map_err(|e| SamlError(format!("the assertion is not signed by the provider: {e}")))?
+        == Outcome::Valid;
+    if !response_signed && !assertion_signed {
+        return fail("the assertion is not signed by the provider");
+    }
+    Ok((fragment, *assertion))
+}
+
 /// The checks of an Assertion whose signature was verified, and what kernoid takes from it.
-fn read_assertion(doc: &Document<'_>, assertion: NodeId, expected: &Expected<'_>) -> Result<SamlLogin, SamlError> {
+fn read_assertion(doc: &Document, assertion: NodeId, expected: &Expected<'_>) -> Result<SamlLogin, SamlError> {
     let issuer = only_child(doc, assertion, ASSERTION, "Issuer")?;
     if text(doc, issuer) != expected.idp_entity_id {
         return fail("the assertion comes from another provider");
     }
     let leeway = jiff::SignedDuration::from_secs(LEEWAY);
     let conditions = only_child(doc, assertion, ASSERTION, "Conditions")?;
-    if time(doc.get_attribute(conditions, "NotBefore"))?.is_some_and(|not_before| not_before - leeway > expected.now) {
+    if time(doc.attribute(conditions, "NotBefore"))?.is_some_and(|not_before| not_before - leeway > expected.now) {
         return fail("the assertion is not valid yet");
     }
-    if time(doc.get_attribute(conditions, "NotOnOrAfter"))?.is_none_or(|end| end + leeway <= expected.now) {
+    if time(doc.attribute(conditions, "NotOnOrAfter"))?.is_none_or(|end| end + leeway <= expected.now) {
         return fail("the assertion has expired");
     }
     let audiences: Vec<String> = children(doc, conditions, ASSERTION, "AudienceRestriction")
@@ -677,13 +675,10 @@ fn read_assertion(doc: &Document<'_>, assertion: NodeId, expected: &Expected<'_>
         let Some(data) = children(doc, confirmation, ASSERTION, "SubjectConfirmationData").next() else {
             return false;
         };
-        doc.get_attribute(confirmation, "Method") == Some(BEARER)
-            && doc.get_attribute(data, "Recipient") == Some(expected.acs_url)
-            && doc.get_attribute(data, "InResponseTo").is_none_or(|request| request == expected.request_id)
-            && time(doc.get_attribute(data, "NotOnOrAfter"))
-                .ok()
-                .flatten()
-                .is_some_and(|end| end + leeway > expected.now)
+        doc.attribute(confirmation, "Method") == Some(BEARER)
+            && doc.attribute(data, "Recipient") == Some(expected.acs_url)
+            && doc.attribute(data, "InResponseTo").is_none_or(|request| request == expected.request_id)
+            && time(doc.attribute(data, "NotOnOrAfter")).ok().flatten().is_some_and(|end| end + leeway > expected.now)
     });
     if !confirmed {
         return fail("the assertion's subject is not confirmed for this service");
@@ -696,13 +691,13 @@ fn read_assertion(doc: &Document<'_>, assertion: NodeId, expected: &Expected<'_>
     let mut attributes: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for statement in children(doc, assertion, ASSERTION, "AttributeStatement") {
         for attribute in children(doc, statement, ASSERTION, "Attribute") {
-            let Some(name) = doc.get_attribute(attribute, "Name") else { continue };
+            let Some(name) = doc.attribute(attribute, "Name") else { continue };
             let values = children(doc, attribute, ASSERTION, "AttributeValue").map(|value| text(doc, value));
             attributes.entry(name.to_owned()).or_default().extend(values);
         }
     }
     let session_index = children(doc, assertion, ASSERTION, "AuthnStatement")
-        .find_map(|statement| doc.get_attribute(statement, "SessionIndex"))
+        .find_map(|statement| doc.attribute(statement, "SessionIndex"))
         .filter(|index| index.len() <= 255)
         .map(str::to_owned);
     let multi_factor = children(doc, assertion, ASSERTION, "AuthnStatement").any(|statement| {
@@ -717,7 +712,7 @@ fn read_assertion(doc: &Document<'_>, assertion: NodeId, expected: &Expected<'_>
     });
     Ok(SamlLogin {
         subject: subject_value,
-        name_id_format: doc.get_attribute(name_id, "Format").map(str::to_owned),
+        name_id_format: doc.attribute(name_id, "Format").map(str::to_owned),
         attributes,
         multi_factor,
         session_index,
