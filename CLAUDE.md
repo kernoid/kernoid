@@ -38,7 +38,7 @@ can run on its own.
 dependencies), the login UI (`web/login`) and the web app (`web/app`: mail, calendar, contacts and files over JMAP; the
 account and the administration over the REST API, typed from `docs/_data/openapi.json` with openapi-typescript and
 openapi-fetch – `pnpm --filter @kernoid/app run api`, checked in CI), both Vite + Svelte 5 without SvelteKit. kernoid
-embeds the builds (rust-embed, `login_ui.rs`) and serves them at `/login` and `/app`; `http.login_ui`/`http.web_app`
+embeds the builds (`include_bytes!` from `crates/kernoid-server/build.rs`, served by `login_ui.rs`) and serves them at `/login` and `/app`; `http.login_ui`/`http.web_app`
 name a directory to serve instead (development). The image builds them in a Node stage before the binary. They talk to the server only through the API – never import
 server code, and keep dependencies exact (`package.json` without ranges, `pnpm-lock.yaml`), at least two weeks old
 (`minimumReleaseAge` in `pnpm-workspace.yaml`) – except the smallest version that fixes a security advisory, taken at

@@ -29,23 +29,27 @@ const APP_CONTENT_SECURITY_POLICY: &str = "default-src 'none'; script-src 'self'
      img-src 'self' data: blob:; font-src 'self'; media-src 'self' blob:; frame-src 'self'; connect-src 'self'; \
      manifest-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'";
 
-/// The login UI, built by `pnpm build` in `web/`; a build of kernoid without it answers 404 at `/login`.
-#[derive(rust_embed::Embed)]
-#[folder = "../../web/login/dist"]
-#[allow_missing = true]
-struct LoginUi;
+/// The builds made into the binary by `build.rs`: the login UI and the web app from `pnpm build` in `web/` (empty in
+/// a build of kernoid without them, which answers 404 at `/login` and `/app`), and the tests' fixture.
+mod builds {
+    include!(concat!(env!("OUT_DIR"), "/builds.rs"));
+}
 
-/// The web app, built the same way.
-#[derive(rust_embed::Embed)]
-#[folder = "../../web/app/dist"]
-#[allow_missing = true]
-struct WebApp;
+/// The files of a build, by their path.
+#[derive(Debug, Clone, Copy)]
+struct Build(&'static [(&'static str, &'static [u8])]);
+
+impl Build {
+    fn get(self, path: &str) -> Option<&'static [u8]> {
+        self.0.binary_search_by(|(name, _)| (*name).cmp(path)).ok().map(|index| self.0[index].1)
+    }
+}
 
 /// The routes below `/login`.
 pub(crate) fn routes(directory: Option<&Path>) -> Router {
     match directory {
         Some(directory) => files(directory, "the login UI", "http.login_ui", CONTENT_SECURITY_POLICY),
-        None => embedded::<LoginUi>("the login UI", CONTENT_SECURITY_POLICY),
+        None => embedded(Build(builds::LOGIN_UI), "the login UI", CONTENT_SECURITY_POLICY),
     }
 }
 
@@ -53,7 +57,7 @@ pub(crate) fn routes(directory: Option<&Path>) -> Router {
 pub(crate) fn app_routes(directory: Option<&Path>) -> Router {
     match directory {
         Some(directory) => files(directory, "the web app", "http.web_app", APP_CONTENT_SECURITY_POLICY),
-        None => embedded::<WebApp>("the web app", APP_CONTENT_SECURITY_POLICY),
+        None => embedded(Build(builds::WEB_APP), "the web app", APP_CONTENT_SECURITY_POLICY),
     }
 }
 
@@ -65,24 +69,56 @@ fn not_installed(what: &'static str) -> Router {
 
 /// The files built into the binary; paths that are not files – /login/account, /app/… – get the page itself, which
 /// finds its way from the URL.
-fn embedded<Files: rust_embed::Embed>(what: &'static str, policy: &'static str) -> Router {
-    if Files::get("index.html").is_none() {
+fn embedded(files: Build, what: &'static str, policy: &'static str) -> Router {
+    if files.get("index.html").is_none() {
         tracing::warn!("this build of kernoid has no {what}; it answers 404");
         return not_installed(what);
     }
-    let serve = |uri: Uri| async move {
+    let serve = move |uri: Uri| async move {
         let path = uri.path().trim_start_matches('/');
         let path = if path.is_empty() || path.ends_with('/') {
             Cow::Owned(format!("{path}index.html"))
         } else {
             Cow::Borrowed(path)
         };
-        let Some(file) = Files::get(&path).or_else(|| Files::get("index.html")) else {
-            return StatusCode::NOT_FOUND.into_response();
+        let (path, data) = match files.get(&path) {
+            Some(data) => (path.as_ref(), data),
+            None => match files.get("index.html") {
+                Some(data) => ("index.html", data),
+                None => return StatusCode::NOT_FOUND.into_response(),
+            },
         };
-        ([(header::CONTENT_TYPE, file.metadata.mimetype().to_owned())], file.data).into_response()
+        ([(header::CONTENT_TYPE, content_type(path))], data).into_response()
     };
     Router::new().fallback(serve).layer(middleware::from_fn(move |request, next| headers(policy, request, next)))
+}
+
+/// The media type of a built file, by its extension – the kinds a build of the web apps holds.
+fn content_type(path: &str) -> &'static str {
+    let extension = path.rsplit_once('.').map(|(_, extension)| extension.to_ascii_lowercase()).unwrap_or_default();
+    match extension.as_str() {
+        "html" | "htm" => "text/html",
+        "js" | "mjs" => "text/javascript",
+        "css" => "text/css",
+        "json" | "map" => "application/json",
+        "webmanifest" => "application/manifest+json",
+        "wasm" => "application/wasm",
+        "svg" => "image/svg+xml",
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "avif" => "image/avif",
+        "ico" => "image/x-icon",
+        "woff" => "font/woff",
+        "woff2" => "font/woff2",
+        "ttf" => "font/ttf",
+        "otf" => "font/otf",
+        "txt" => "text/plain",
+        "xml" => "application/xml",
+        "pdf" => "application/pdf",
+        _ => "application/octet-stream",
+    }
 }
 
 /// A build in a directory (development).
@@ -124,14 +160,10 @@ mod tests {
 
     use super::*;
 
-    /// A build as `pnpm build` leaves it: an index page and one asset.
-    #[derive(rust_embed::Embed)]
-    #[folder = "src/testdata/login-ui"]
-    struct Fixture;
-
     #[tokio::test]
     async fn an_embedded_build_is_served_with_strict_headers() {
-        let app = embedded::<Fixture>("the login UI", CONTENT_SECURITY_POLICY);
+        // A build as `pnpm build` leaves it: an index page and one asset (`src/testdata/login-ui`).
+        let app = embedded(Build(builds::FIXTURE), "the login UI", CONTENT_SECURITY_POLICY);
         for path in ["/", "/index.html", "/account", "/idp"] {
             let response = app.clone().oneshot(Request::get(path).body(Body::empty()).unwrap()).await.unwrap();
             assert_eq!(response.status(), StatusCode::OK, "{path}");
@@ -146,5 +178,17 @@ mod tests {
         assert_eq!(asset.headers()[header::CONTENT_TYPE], "text/javascript");
         assert_eq!(asset.headers()[header::CACHE_CONTROL], "public, max-age=31536000, immutable");
         assert_eq!(asset.headers()[header::X_CONTENT_TYPE_OPTIONS], "nosniff");
+    }
+
+    #[test]
+    fn files_are_found_by_their_path_and_typed_by_their_extension() {
+        let fixture = Build(builds::FIXTURE);
+        assert!(fixture.get("index.html").is_some());
+        assert!(fixture.get("assets/app-1234.js").is_some());
+        assert!(fixture.get("assets").is_none());
+        assert!(builds::FIXTURE.windows(2).all(|pair| pair[0].0 < pair[1].0), "sorted for the search");
+        assert_eq!(content_type("assets/x.WOFF2"), "font/woff2");
+        assert_eq!(content_type("manifest.webmanifest"), "application/manifest+json");
+        assert_eq!(content_type("LICENSE"), "application/octet-stream");
     }
 }

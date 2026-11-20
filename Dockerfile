@@ -15,7 +15,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/kit/target \
     kit/e2e/scripts/build-wasm.sh && kit/vault/scripts/build-wasm.sh
 
-# The login UI and the web app (web/): built first, then built into the binary (rust-embed). Install scripts of
+# The login UI and the web app (web/): built first, then built into the binary (kernoid-server's build.rs). Install scripts of
 # dependencies do not run.
 FROM docker.io/library/node:26.11.1-trixie-slim AS web
 RUN npm install --global --ignore-scripts --no-audit --no-fund pnpm@12.12.0
