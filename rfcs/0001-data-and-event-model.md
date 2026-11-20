@@ -481,7 +481,7 @@ As in ZITADEL, a project is "the vessel that holds your Applications and Roles"
 - **Languages:** English and German, from catalogs in the UI (`web/login/src/i18n.ts`, the English text is the key);
   the browser's first language of the two, `?lang=` overrides. kernoid's error texts the UI knows are shown in its
   words; others as the server wrote them (English).
-- **TOTP setup** answers with a QR code drawn by the server (crate `qrcode`, SVG, error correction M) as a `data:`
+- **TOTP setup** answers with a QR code drawn by the server (kernoid's own encoder `kernoid_identity::mfa::qr`, byte mode, SVG, error correction M) as a `data:`
   URL – the UI shows it as an image (the CSP allows `img-src data:`) and needs neither a QR library nor markup.
 - **Passkeys in the autofill** (WebAuthn conditional mediation): the address field has `autocomplete="username
   webauthn"`; where the browser supports it, the page asks for a passkey with `mediation: "conditional"` as it shows,
@@ -522,7 +522,7 @@ As in ZITADEL, a project is "the vessel that holds your Applications and Roles"
   destination, recipient, time windows and audience. The NameID is the subject; an `AuthnContextClassRef` for more
   than one factor counts as `idp_mfa`. An address the tenant's own SAML provider asserts on a verified domain of the
   tenant counts as verified. bergshamra has had no external audit yet; kernoid's audit before 1.0 includes this path.
-- **kernoid's SAML key** of an instance (`saml_sp_keys`): RSA 2048, made at first use by rcgen, sealed with the main
+- **kernoid's SAML key** of an instance (`saml_sp_keys`): RSA 2048, made at first use (`kernoid_identity::certificate`: aws-lc-rs and x509-cert), sealed with the main
   key, with a self-signed certificate (ten years) that the metadata publishes for signing and encryption – providers
   trust it because it is in the metadata. With `sign_requests`, AuthnRequests are signed (redirect binding:
   RSA-SHA256 over the URL-encoded query, SAML Bindings 3.4.4.1); the signature is made and checked through
@@ -607,7 +607,7 @@ Third-party services integrate from outside. The shape follows ZITADEL's Actions
 - **TLS:** kernoid serves HTTPS itself (`[http.tls]`, or certificates from an ACME CA) or runs behind a reverse proxy
   such as Caddy, nginx or Traefik, whose forwarded headers it believes only from `trusted_proxies`. Mail protocols
   always use kernoid's own TLS.
-- **ACME** (RFC 8555, client: instant-acme with AWS-LC): the worker orders certificates for every instance domain with
+- **ACME** (RFC 8555, client: kernoid's own, `kernoid_server::acme::client`, ES256 through AWS-LC): the worker orders certificates for every instance domain with
   the HTTP-01 challenge – it needs no DNS access and works for any domain pointed at the installation, whereas DNS-01
   would need credentials for every DNS provider (left to the DNS automation module of 1.0) and TLS-ALPN-01 the TLS
   port of the very process the CA reaches. The account key, the certificates and their keys (sealed with the main

@@ -32,6 +32,16 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 - The server and the SDK read and write iCalendar and vCard with `kernoid-pim` instead of calcard and jmap-tools
   (Stalwart's, `AGPL-3.0-only`, removed); scheduling (iTIP) and the filters of CalDAV and CardDAV queries are kernoid's
   own now, no longer derived from Stalwart's. The SDK drops calcard 0.3.14 – `kernoid-client`'s API is unchanged.
+- **Fewer libraries in the server**, each replaced by kernoid's own code written from the specification: the ACME
+  client (RFC 8555; accounts stored before keep working), certificates and certificate requests
+  (`kernoid_identity::certificate`, in place of rcgen; stored SAML keys stay readable), OTLP traces (in place of
+  opentelemetry and tracing-opentelemetry; `log.otlp_endpoint` as before, `OTEL_RESOURCE_ATTRIBUTES` is read), the
+  Prometheus metrics (in place of metrics-exporter-prometheus), the TOTP QR codes (in place of qrcode; the same
+  symbols), the embedded web builds (a build script in place of rust-embed) and the password prompt (in place of
+  rpassword). **Upgrading:** `kernoid_http_request_duration_seconds` is a histogram now (buckets from 5 ms to 10 s),
+  no longer a summary with quantiles – queries on `quantile` become `histogram_quantile(…, rate(…_bucket[…]))`.
+  Debug builds embed the web builds too (they no longer read `web/*/dist` at run time; `http.login_ui` and
+  `http.web_app` still serve a directory).
 - JSCalendar as JMAP shows it: participants' ids come from their addresses (the same in a series and its overrides),
   overrides are written back as whole components, a zone only a calendar defines is shown in UTC.
 ### Changed

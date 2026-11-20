@@ -130,7 +130,7 @@ instance administrator). Its accounts then do not see it; what they keep there s
 | `ldap.max_entries` | `5000` | the most entries one search returns |
 | `log.filter` | – | e.g. `info,kernoid=debug` (syntax of `tracing_subscriber::EnvFilter`) |
 | `log.format` | `text` | `text` or `json` |
-| `log.otlp_endpoint` | – | send traces to an OpenTelemetry collector over OTLP/HTTP, e.g. `http://otel-collector:4318/v1/traces` |
+| `log.otlp_endpoint` | – | send traces to an OpenTelemetry collector over OTLP/HTTP (binary protobuf), e.g. `http://otel-collector:4318/v1/traces`; `OTEL_RESOURCE_ATTRIBUTES` adds to the resource |
 
 {: .warning }
 Without `encryption.main_key` the content in object storage cannot be read again. Keep a copy apart from the database
