@@ -406,7 +406,7 @@ mod tests {
         assert_eq!(
             body(schedule),
             "<C:schedule-response><C:response><C:recipient><D:href>mailto:a@b</D:href></C:recipient><C:request-status>2.0;Success\
-             </C:request-status><C:calendar-data>BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n</C:calendar-data></C:response></C:schedule-response>"
+             </C:request-status><C:calendar-data>BEGIN:VCALENDAR&#13;\nEND:VCALENDAR&#13;\n</C:calendar-data></C:response></C:schedule-response>"
         );
         assert_eq!(
             body(PrincipalSearchPropertySet(vec![(WebDavProperty::DisplayName.into(), "Name")])),
