@@ -1,10 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! IMAP4rev2 and IMAP4rev1 on the mail store (RFC 0002, 11.2), and POP3 for the inbox (11.3): the protocol taken
-//! over from Stalwart (`proto`), the servers kernoid's own. Accounts log in over TLS with an app password – or their
-//! password, if they need no second factor.
-
-#[allow(clippy::all, missing_debug_implementations, unused, reason = "taken over from Stalwart as it is")]
-pub mod proto;
+//! IMAP4rev2 and IMAP4rev1 on the mail store (RFC 0002, 11.2), and POP3 for the inbox (11.3) – the protocol, the
+//! sessions and the servers all kernoid's own. Accounts log in over TLS with an app password, an access token – or
+//! their password, if they need no second factor.
 
 mod acl;
 mod flags;
@@ -12,6 +9,7 @@ mod folders;
 mod mailboxes;
 mod message;
 pub mod pop3;
+mod proto;
 mod search;
 mod selected;
 mod session;
@@ -31,6 +29,7 @@ use tokio_util::sync::CancellationToken;
 
 /// A connection, plain or upgraded to TLS.
 pub trait Io: AsyncRead + AsyncWrite + Unpin + Send {}
+
 impl<T: AsyncRead + AsyncWrite + Unpin + Send> Io for T {}
 
 /// The server's settings, from `[imap]` and `[mail]`.
@@ -51,6 +50,7 @@ impl Settings {
     }
 }
 
+/// What every session of a listener shares.
 pub(crate) struct Inner {
     pub settings: Settings,
     pub mail: Mail,
@@ -93,42 +93,47 @@ impl Server {
 
     /// Accepts connections until `shutdown`, at most `max_connections` sessions at once.
     pub async fn serve(
-        self,
+        &self,
         protocol: Protocol,
         listener: TcpListener,
         max_connections: usize,
         shutdown: CancellationToken,
     ) {
-        let sessions = Arc::new(Semaphore::new(max_connections.max(1)));
+        let slots = Arc::new(Semaphore::new(max_connections.max(1)));
         loop {
-            let permit = tokio::select! {
+            let slot = tokio::select! {
                 () = shutdown.cancelled() => return,
-                permit = sessions.clone().acquire_owned() => permit.expect("the semaphore stays open"),
+                slot = slots.clone().acquire_owned() => match slot {
+                    Ok(slot) => slot,
+                    Err(_) => return,
+                },
             };
-            let accepted = tokio::select! {
+            let (stream, remote) = tokio::select! {
                 () = shutdown.cancelled() => return,
-                accepted = listener.accept() => accepted,
+                accepted = listener.accept() => match accepted {
+                    Ok(accepted) => accepted,
+                    Err(error) => {
+                        tracing::warn!(%error, ?protocol, "accepting a mail client");
+                        continue;
+                    }
+                },
             };
-            match accepted {
-                Ok((stream, remote)) => {
-                    let server = self.clone();
-                    let stop = shutdown.clone();
-                    tokio::spawn(async move {
-                        tokio::select! {
-                            () = stop.cancelled() => {}
-                            () = server.session(protocol, stream, remote.ip()) => {}
-                        }
-                        drop(permit);
-                    });
+            let _ = stream.set_nodelay(true);
+            let server = self.clone();
+            let stop = shutdown.clone();
+            tokio::spawn(async move {
+                tokio::select! {
+                    () = stop.cancelled() => {}
+                    () = server.session(protocol, stream, remote.ip()) => {}
                 }
-                Err(error) => tracing::warn!(%error, "accepting a mail client connection"),
-            }
+                drop(slot);
+            });
         }
     }
 
     /// One session on `stream` from `remote` – for the listener, and for tests over an in-memory stream.
     pub async fn session(&self, protocol: Protocol, stream: impl Io + 'static, remote: IpAddr) {
-        let stream = Box::new(stream);
+        let stream: Box<dyn Io> = Box::new(stream);
         match protocol {
             Protocol::Imap => session::Session::new(self.0.clone(), stream, remote).run().await,
             Protocol::Pop3 => pop3::Session::new(self.0.clone(), stream, remote).run().await,
@@ -138,19 +143,37 @@ impl Server {
 
 /// Upgrades a connection to TLS; `None` if the handshake fails or takes too long.
 pub(crate) async fn start_tls(inner: &Inner, plain: Box<dyn Io>) -> Option<Box<dyn Io>> {
-    match tokio::time::timeout(Duration::from_secs(60), inner.tls.accept(plain)).await {
+    match tokio::time::timeout(Duration::from_secs(30), inner.tls.accept(plain)).await {
         Ok(Ok(tls)) => Some(Box::new(tls)),
-        _ => None,
+        Ok(Err(error)) => {
+            tracing::debug!(%error, "TLS handshake of a mail client failed");
+            None
+        }
+        Err(_) => None,
     }
 }
 
 /// `authzid NUL authcid NUL password` (RFC 4616); an authzid must be the authcid or empty.
 pub(crate) fn sasl_plain(token: &[u8]) -> Option<(String, String)> {
-    let token = std::str::from_utf8(token).ok()?;
-    let mut parts = token.split('\0');
-    let (authzid, user, password) = (parts.next()?, parts.next()?, parts.next()?);
-    if parts.next().is_some() || (!authzid.is_empty() && authzid != user) {
+    let mut fields = token.split(|&b| b == 0);
+    let (authzid, authcid, password) = (fields.next()?, fields.next()?, fields.next()?);
+    if fields.next().is_some() || authcid.is_empty() || (!authzid.is_empty() && authzid != authcid) {
         return None;
     }
-    Some((user.to_owned(), password.to_owned()))
+    Some((String::from_utf8(authcid.to_vec()).ok()?, String::from_utf8(password.to_vec()).ok()?))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::sasl_plain;
+
+    #[test]
+    fn plain_responses() {
+        assert_eq!(sasl_plain(b"\0alice\0secret"), Some(("alice".into(), "secret".into())));
+        assert_eq!(sasl_plain(b"alice\0alice\0secret"), Some(("alice".into(), "secret".into())));
+        assert_eq!(sasl_plain(b"bob\0alice\0secret"), None);
+        assert_eq!(sasl_plain(b"\0\0secret"), None);
+        assert_eq!(sasl_plain(b"\0alice"), None);
+        assert_eq!(sasl_plain(b"\0alice\0a\0b"), None);
+    }
 }

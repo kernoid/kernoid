@@ -5,26 +5,37 @@
 
 use kernoid_mail::{Keyword, Rights};
 
-use crate::proto::protocol::Flag;
+/// The system flags kernoid keeps, by their keyword.
+const SYSTEM: [(&str, &str); 5] = [
+    ("$seen", "\\Seen"),
+    ("$answered", "\\Answered"),
+    ("$flagged", "\\Flagged"),
+    ("$deleted", "\\Deleted"),
+    ("$draft", "\\Draft"),
+];
+
+/// Keywords of the IANA registry, shown as registered.
+const REGISTERED: [&str; 6] = ["$Forwarded", "$MDNSent", "$Junk", "$NotJunk", "$Phishing", "$Important"];
 
 /// The keyword of a flag; `None` for `\Recent` and other system flags kernoid does not keep.
-pub(crate) fn keyword(flag: &Flag) -> Option<Keyword> {
-    let mut name = Vec::new();
-    flag.serialize(&mut name);
-    let name = String::from_utf8(name).ok()?.to_ascii_lowercase();
-    let name = match name.as_str() {
-        "\\seen" | "\\draft" | "\\flagged" | "\\answered" | "\\deleted" | "\\important" => format!("${}", &name[1..]),
-        system if system.starts_with('\\') => return None,
-        _ => name,
+pub(crate) fn keyword(flag: &str) -> Option<Keyword> {
+    let name = flag.to_ascii_lowercase();
+    let name = match name.strip_prefix('\\') {
+        Some(system @ ("seen" | "draft" | "flagged" | "answered" | "deleted" | "important")) => format!("${system}"),
+        Some(_) => return None,
+        None => name,
     };
     Keyword::parse(&name).ok()
 }
 
 /// The flag of a stored keyword.
-pub(crate) fn flag(keyword: &str) -> Flag {
-    match Flag::parse_jmap(keyword.to_owned()) {
-        Flag::Important => Flag::Keyword("$Important".into()),
-        flag => flag,
+pub(crate) fn flag(keyword: &str) -> String {
+    if let Some((_, system)) = SYSTEM.iter().find(|(stored, _)| *stored == keyword) {
+        return (*system).to_owned();
+    }
+    match REGISTERED.iter().find(|registered| registered.eq_ignore_ascii_case(keyword)) {
+        Some(registered) => (*registered).to_owned(),
+        None => keyword.to_owned(),
     }
 }
 
@@ -37,7 +48,7 @@ pub(crate) fn right(keyword: &str) -> Rights {
     }
 }
 
-pub(crate) fn flags(keywords: &[String]) -> Vec<Flag> {
+pub(crate) fn flags(keywords: &[String]) -> Vec<String> {
     keywords.iter().map(|keyword| flag(keyword)).collect()
 }
 
@@ -47,17 +58,15 @@ mod tests {
 
     #[test]
     fn system_flags_are_dollar_keywords() {
-        assert_eq!(keyword(&Flag::Seen).unwrap().as_str(), "$seen");
-        assert_eq!(keyword(&Flag::Deleted).unwrap().as_str(), "$deleted");
-        assert_eq!(keyword(&Flag::Forwarded).unwrap().as_str(), "$forwarded");
-        assert_eq!(keyword(&Flag::Keyword("Work".into())).unwrap().as_str(), "work");
-        assert_eq!(keyword(&Flag::Recent), None);
-        assert_eq!(keyword(&Flag::Important).unwrap().as_str(), "$important");
-        let mut out = Vec::new();
-        for flag in flags(&["$seen".into(), "$deleted".into(), "work".into()]) {
-            flag.serialize(&mut out);
-            out.push(b' ');
-        }
-        assert_eq!(out, b"\\Seen \\Deleted work ");
+        assert_eq!(keyword("\\Seen").unwrap().as_str(), "$seen");
+        assert_eq!(keyword("\\DELETED").unwrap().as_str(), "$deleted");
+        assert_eq!(keyword("$Forwarded").unwrap().as_str(), "$forwarded");
+        assert_eq!(keyword("Work").unwrap().as_str(), "work");
+        assert_eq!(keyword("\\Recent"), None);
+        assert_eq!(keyword("\\Important").unwrap().as_str(), "$important");
+        assert_eq!(
+            flags(&["$seen".into(), "$deleted".into(), "work".into(), "$junk".into(), "$important".into()]),
+            ["\\Seen", "\\Deleted", "work", "$Junk", "$Important"]
+        );
     }
 }

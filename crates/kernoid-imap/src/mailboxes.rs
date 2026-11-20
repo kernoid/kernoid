@@ -11,18 +11,21 @@ use crate::{
     flags,
     folders::{self, Folder, Folders, SEPARATOR, Store},
     proto::{
-        Command, ResponseCode, StatusResponse,
-        protocol::{
-            append,
-            list::{self, Attribute, ListItem, ReturnOption, SelectionOption},
-            status::{self, Status, StatusItem, StatusItemType},
-        },
+        request::{AppendMessage, List, StatusItem},
+        response::{self, Code, Status},
     },
     session::{Session, mail_error},
 };
 
-pub(crate) fn no_permission(what: &str) -> StatusResponse {
-    StatusResponse::no(format!("No right to {what}")).with_code(ResponseCode::NoPerm)
+pub(crate) fn no_permission(what: &str) -> Status {
+    Status::no(format!("No right to {what}")).with_code(Code::NoPerm)
+}
+
+/// `* LIST (attributes) "/" name`, or `* LSUB …`.
+pub(crate) fn list_line(out: &mut Vec<u8>, verb: &str, attributes: &[&str], name: &str, utf8: bool) {
+    out.extend_from_slice(format!("* {verb} ({}) \"{SEPARATOR}\" ", attributes.join(" ")).as_bytes());
+    response::mailbox(out, name, utf8);
+    out.extend_from_slice(b"\r\n");
 }
 
 impl Session {
@@ -32,7 +35,7 @@ impl Session {
 
     /// The user's mailboxes and those shared with them.
     #[allow(clippy::result_large_err, reason = "the error is the response, sent once")]
-    pub(crate) async fn folders(&mut self) -> Result<Folders, StatusResponse> {
+    pub(crate) async fn folders(&mut self) -> Result<Folders, Status> {
         let account = self.account();
         let mail = &self.inner.mail;
         let own = Store {
@@ -60,131 +63,130 @@ impl Session {
 
     /// The special use of a folder (RFC 6154) – for the user's own only: a client must not take a shared `Sent`
     /// for its own.
-    pub(crate) fn special_use(&self, folder: &Folder) -> Option<Attribute> {
+    pub(crate) fn special_use(&self, folder: &Folder) -> Option<&'static str> {
         if folder.owner == self.account() { folders::special_use(folder.info.role) } else { None }
     }
 
-    pub(crate) async fn list(&mut self, arguments: list::Arguments, is_lsub: bool) -> StatusResponse {
-        let command = if is_lsub { Command::Lsub } else { Command::List };
-        let (reference, patterns, selection, returns) = match arguments {
-            list::Arguments::Basic { reference_name, mailbox_name, .. } => {
-                (reference_name, vec![mailbox_name], Vec::new(), Vec::new())
-            }
-            list::Arguments::Extended { reference_name, mailbox_name, selection_options, return_options, .. } => {
-                (reference_name, mailbox_name, selection_options, return_options)
-            }
-        };
+    pub(crate) async fn list(&mut self, list: List) -> Status {
         // `LIST "" ""` asks for the separator.
-        if !is_lsub && patterns.iter().all(String::is_empty) {
+        if list.patterns.iter().all(String::is_empty) {
             self.write(b"* LIST (\\Noselect) \"/\" \"\"\r\n");
-            return StatusResponse::completed(command);
+            return Status::done();
         }
+        self.list_folders(list, false).await
+    }
+
+    pub(crate) async fn lsub(&mut self, reference: &str, pattern: &str) -> Status {
+        let list = List { reference: reference.to_owned(), patterns: vec![pattern.to_owned()], ..List::default() };
+        self.list_folders(list, true).await
+    }
+
+    async fn list_folders(&mut self, list: List, is_lsub: bool) -> Status {
         let folders = match self.folders().await {
             Ok(folders) => folders,
             Err(response) => return response,
         };
-        let subscribed_only = is_lsub || selection.contains(&SelectionOption::Subscribed);
-        let special_use_only = selection.contains(&SelectionOption::SpecialUse);
-        let show_subscribed = subscribed_only || returns.contains(&ReturnOption::Subscribed);
-        let statuses = returns.iter().find_map(|option| match option {
-            ReturnOption::Status(items) => Some(items.clone()),
-            _ => None,
-        });
-        let patterns: Vec<String> = patterns.iter().map(|pattern| format!("{reference}{pattern}")).collect();
+        let subscribed_only = is_lsub || list.subscribed_only;
+        let show_subscribed = subscribed_only || list.return_subscribed;
+        let reference = &list.reference;
+        let patterns: Vec<String> = list.patterns.iter().map(|pattern| format!("{reference}{pattern}")).collect();
         let mut out = Vec::new();
         for folder in folders.iter() {
             if !patterns.iter().any(|pattern| folders::matches(pattern, &folder.name))
                 || (subscribed_only && !self.subscribed(folder))
-                || (special_use_only && self.special_use(folder).is_none())
+                || (list.special_use_only && self.special_use(folder).is_none())
             {
                 continue;
             }
-            let mut item = ListItem::new(folder.name.clone());
+            let mut attributes = Vec::new();
             if !folder.selectable {
-                item.attributes.push(Attribute::NoSelect);
+                attributes.push("\\NoSelect");
             }
-            item.attributes.push(if folder.has_children { Attribute::HasChildren } else { Attribute::HasNoChildren });
-            item.attributes.extend(self.special_use(folder));
+            attributes.push(if folder.has_children { "\\HasChildren" } else { "\\HasNoChildren" });
+            attributes.extend(self.special_use(folder));
             if show_subscribed && self.subscribed(folder) {
-                item.attributes.push(Attribute::Subscribed);
+                attributes.push("\\Subscribed");
             }
-            item.serialize(&mut out, self.version.is_rev2(), self.is_utf8, is_lsub);
-            if let Some(items) = &statuses
+            list_line(&mut out, if is_lsub { "LSUB" } else { "LIST" }, &attributes, &folder.name, self.utf8);
+            if let Some(items) = &list.return_status
                 && folder.selectable
                 && folder.rights.contains(Rights::READ)
             {
-                match self.status_item(folder, items).await {
-                    Ok(status) => status.serialize(&mut out, self.is_utf8),
+                match self.status_line(folder, items).await {
+                    Ok(line) => out.extend_from_slice(&line),
                     Err(response) => return response,
                 }
             }
         }
         self.write(out);
-        StatusResponse::completed(command)
+        Status::done()
     }
 
+    /// `* STATUS name (…)` of a folder.
     #[allow(clippy::result_large_err, reason = "the error is the response, sent once")]
-    async fn status_item(&mut self, folder: &Folder, items: &[Status]) -> Result<StatusItem, StatusResponse> {
+    async fn status_line(&mut self, folder: &Folder, items: &[StatusItem]) -> Result<Vec<u8>, Status> {
         let owner = folder.owner;
-        let entries = if items.iter().any(|item| matches!(item, Status::Unseen | Status::Deleted | Status::Size)) {
-            self.inner.mail.mailbox_entries(owner, folder.info.id).await.map_err(mail_error)?
-        } else {
-            Vec::new()
-        };
+        let entries =
+            if items.iter().any(|item| matches!(item, StatusItem::Unseen | StatusItem::Deleted | StatusItem::Size)) {
+                self.inner.mail.mailbox_entries(owner, folder.info.id).await.map_err(mail_error)?
+            } else {
+                Vec::new()
+            };
         let has = |entry: &kernoid_mail::MailboxEntry, keyword: &str| entry.keywords.iter().any(|k| k == keyword);
         let mut values = Vec::new();
         for item in items {
             let value = match item {
-                Status::Messages => folder.info.total_emails,
-                Status::UidNext => u64::from(folder.info.uid_next),
-                Status::UidValidity => u64::from(folder.info.uid_validity),
-                Status::Unseen => entries.iter().filter(|entry| !has(entry, "$seen")).count() as u64,
-                Status::Deleted => entries.iter().filter(|entry| has(entry, "$deleted")).count() as u64,
-                Status::Size => entries.iter().map(|entry| entry.size).sum(),
-                Status::Recent => 0,
-                Status::HighestModSeq => self.inner.mail.state(owner).await.map_err(mail_error)?,
+                StatusItem::Messages => folder.info.total_emails,
+                StatusItem::UidNext => u64::from(folder.info.uid_next),
+                StatusItem::UidValidity => u64::from(folder.info.uid_validity),
+                StatusItem::Unseen => entries.iter().filter(|entry| !has(entry, "$seen")).count() as u64,
+                StatusItem::Deleted => entries.iter().filter(|entry| has(entry, "$deleted")).count() as u64,
+                StatusItem::Size => entries.iter().map(|entry| entry.size).sum(),
+                StatusItem::Recent => 0,
+                StatusItem::HighestModSeq => self.inner.mail.state(owner).await.map_err(mail_error)?,
                 // Not offered.
-                Status::ObjectId | Status::DeletedStorage => continue,
+                StatusItem::DeletedStorage => continue,
             };
-            values.push((*item, StatusItemType::Number(value)));
+            values.push(format!("{} {value}", item.name()));
         }
-        Ok(StatusItem { mailbox_name: folder.name.clone(), items: values })
+        let mut out = b"* STATUS ".to_vec();
+        response::mailbox(&mut out, &folder.name, self.utf8);
+        out.extend_from_slice(format!(" ({})\r\n", values.join(" ")).as_bytes());
+        Ok(out)
     }
 
-    pub(crate) async fn status(&mut self, arguments: status::Arguments) -> StatusResponse {
+    pub(crate) async fn status(&mut self, mailbox: &str, items: &[StatusItem]) -> Status {
         let folders = match self.folders().await {
             Ok(folders) => folders,
             Err(response) => return response,
         };
-        let Some(folder) = folders.find(&arguments.mailbox_name) else {
-            return StatusResponse::no("No such mailbox").with_code(ResponseCode::NonExistent);
+        let Some(folder) = folders.find(mailbox) else {
+            return Status::no("No such mailbox").with_code(Code::NonExistent);
         };
         if !folder.rights.contains(Rights::READ) {
             return no_permission("read this mailbox");
         }
-        match self.status_item(folder, &arguments.items).await {
-            Ok(item) => {
-                let mut out = Vec::new();
-                item.serialize(&mut out, self.is_utf8);
-                self.write(out);
-                StatusResponse::completed(Command::Status)
+        match self.status_line(folder, items).await {
+            Ok(line) => {
+                self.write(line);
+                Status::done()
             }
             Err(response) => response,
         }
     }
 
     /// Creates a mailbox and the parents it lacks (RFC 9051, 6.3.4), in the store the name leads to.
-    pub(crate) async fn create(&mut self, name: &str) -> StatusResponse {
+    pub(crate) async fn create(&mut self, name: &str) -> Status {
         let name = folders::normalize(name);
         if name.is_empty() {
-            return StatusResponse::no("A mailbox needs a name").with_code(ResponseCode::Cannot);
+            return Status::no("A mailbox needs a name").with_code(Code::Cannot);
         }
         let folders = match self.folders().await {
             Ok(folders) => folders,
             Err(response) => return response,
         };
         if folders.find_any(&name).is_some() {
-            return StatusResponse::no("The mailbox exists already").with_code(ResponseCode::AlreadyExists);
+            return Status::no("The mailbox exists already").with_code(Code::AlreadyExists);
         }
         let account = self.account();
         // Where the next mailbox goes: the store, the parent in it, and the rights there.
@@ -215,20 +217,20 @@ impl Session {
                 Err(error) => return mail_error(error),
             }
         }
-        StatusResponse::completed(Command::Create)
+        Status::done()
     }
 
     /// Deletes a mailbox and its emails; one with children or the inbox stays (RFC 9051, 6.3.5).
-    pub(crate) async fn delete(&mut self, name: &str) -> StatusResponse {
+    pub(crate) async fn delete(&mut self, name: &str) -> Status {
         let folders = match self.folders().await {
             Ok(folders) => folders,
             Err(response) => return response,
         };
         let Some(folder) = folders.find(name) else {
-            return StatusResponse::no("No such mailbox").with_code(ResponseCode::NonExistent);
+            return Status::no("No such mailbox").with_code(Code::NonExistent);
         };
         if folder.info.role == Some(Role::Inbox) {
-            return StatusResponse::no("The inbox cannot be deleted").with_code(ResponseCode::Cannot);
+            return Status::no("The inbox cannot be deleted").with_code(Code::Cannot);
         }
         if !folder.rights.contains(Rights::DELETE_MAILBOX) {
             return no_permission("delete this mailbox");
@@ -240,28 +242,28 @@ impl Session {
         if self.selected.as_ref().is_some_and(|selected| selected.id == id) {
             self.selected = None;
         }
-        StatusResponse::completed(Command::Delete)
+        Status::done()
     }
 
     /// Renames a mailbox, moving it in the tree of its store; its children go with it (RFC 9051, 6.3.6).
-    pub(crate) async fn rename(&mut self, from: &str, to: &str) -> StatusResponse {
+    pub(crate) async fn rename(&mut self, from: &str, to: &str) -> Status {
         let to = folders::normalize(to);
         let folders = match self.folders().await {
             Ok(folders) => folders,
             Err(response) => return response,
         };
         let Some(folder) = folders.find(from) else {
-            return StatusResponse::no("No such mailbox").with_code(ResponseCode::NonExistent);
+            return Status::no("No such mailbox").with_code(Code::NonExistent);
         };
         if folder.info.role == Some(Role::Inbox) {
             // OPEN (RFC 0002, 11.2): renaming INBOX moves its messages into a new mailbox.
-            return StatusResponse::no("Renaming INBOX is not supported").with_code(ResponseCode::Cannot);
+            return Status::no("Renaming INBOX is not supported").with_code(Code::Cannot);
         }
         if !folder.rights.contains(Rights::DELETE_MAILBOX) {
             return no_permission("rename this mailbox");
         }
         if folders.find_any(&to).is_some() {
-            return StatusResponse::no("The new name exists already").with_code(ResponseCode::AlreadyExists);
+            return Status::no("The new name exists already").with_code(Code::AlreadyExists);
         }
         let (id, owner, name) = (folder.info.id, folder.owner, folder.name.clone());
         let (parent_name, leaf) = match to.rsplit_once(SEPARATOR) {
@@ -271,11 +273,11 @@ impl Session {
         let parent = match parent_name {
             Some(parent_name) => {
                 if parent_name == name || parent_name.starts_with(&format!("{name}{SEPARATOR}")) {
-                    return StatusResponse::no("A mailbox cannot move below itself").with_code(ResponseCode::Cannot);
+                    return Status::no("A mailbox cannot move below itself").with_code(Code::Cannot);
                 }
                 if folders.find_any(&parent_name).is_none() {
                     let created = self.create(&parent_name).await;
-                    if created.rtype != crate::proto::ResponseType::Ok {
+                    if !created.is_ok() {
                         return created;
                     }
                 }
@@ -296,59 +298,58 @@ impl Session {
         };
         let update = MailboxUpdate { name: Some(leaf), parent_id: Some(parent), ..MailboxUpdate::default() };
         match self.inner.mail.update_mailbox(owner, id, update).await {
-            Ok(()) => StatusResponse::completed(Command::Rename),
+            Ok(()) => Status::done(),
             Err(error) => mail_error(error),
         }
     }
 
-    pub(crate) async fn subscribe(&mut self, name: &str, subscribe: bool) -> StatusResponse {
-        let command = if subscribe { Command::Subscribe } else { Command::Unsubscribe };
+    pub(crate) async fn subscribe(&mut self, name: &str, subscribe: bool) -> Status {
         let folders = match self.folders().await {
             Ok(folders) => folders,
             Err(response) => return response,
         };
         let Some(folder) = folders.find(name) else {
-            return StatusResponse::no("No such mailbox").with_code(ResponseCode::NonExistent);
+            return Status::no("No such mailbox").with_code(Code::NonExistent);
         };
         // A subscription is the owner's; others' mailboxes are always listed (OPEN: per-user subscriptions).
         if folder.owner != self.account() {
-            return StatusResponse::completed(command);
+            return Status::done();
         }
         let update = MailboxUpdate { is_subscribed: Some(subscribe), ..MailboxUpdate::default() };
         match self.inner.mail.update_mailbox(folder.owner, folder.info.id, update).await {
-            Ok(()) => StatusResponse::completed(command),
+            Ok(()) => Status::done(),
             Err(error) => mail_error(error),
         }
     }
 
     /// Stores messages in a mailbox (RFC 9051, 6.3.12; MULTIAPPEND, RFC 3502); answers with their UIDs (UIDPLUS).
-    pub(crate) async fn append(&mut self, arguments: append::Arguments) -> StatusResponse {
+    pub(crate) async fn append(&mut self, mailbox: &str, messages: Vec<AppendMessage>) -> Status {
         let folders = match self.folders().await {
             Ok(folders) => folders,
             Err(response) => return response,
         };
-        let Some(folder) = folders.find(&arguments.mailbox_name) else {
-            return StatusResponse::no("No such mailbox").with_code(ResponseCode::TryCreate);
+        let Some(folder) = folders.find(mailbox) else {
+            return Status::no("No such mailbox").with_code(Code::TryCreate);
         };
         if !folder.rights.contains(Rights::INSERT) {
             return no_permission("add messages to this mailbox");
         }
         let (mailbox, uid_validity, owner, rights) =
             (folder.info.id, folder.info.uid_validity, folder.owner, folder.rights);
-        let mut uids = Vec::with_capacity(arguments.messages.len());
-        for message in arguments.messages {
+        let mut uids = Vec::with_capacity(messages.len());
+        for message in messages {
             let new = NewEmail {
                 mailbox_ids: vec![mailbox],
                 // Flags the user may not set are dropped (RFC 4314, 4).
                 keywords: message
                     .flags
                     .iter()
-                    .filter_map(flags::keyword)
+                    .filter_map(|flag| flags::keyword(flag))
                     .filter(|keyword| rights.contains(flags::right(keyword.as_str())))
                     .collect(),
-                received_at: message.received_at.and_then(|at| jiff::Timestamp::from_second(at).ok()),
+                received_at: message.date.and_then(|at| jiff::Timestamp::from_second(at).ok()),
             };
-            let raw = Bytes::from(message.message);
+            let raw = Bytes::from(message.data);
             if let Err(error) = self.inner.mail.scan_message(&[owner], &[], &raw).await {
                 return mail_error(error);
             }
@@ -361,6 +362,6 @@ impl Session {
                 Err(error) => return mail_error(error),
             }
         }
-        StatusResponse::completed(Command::Append).with_code(ResponseCode::AppendUid { uid_validity, uids })
+        Status::done().with_code(Code::AppendUid { uid_validity, uids })
     }
 }

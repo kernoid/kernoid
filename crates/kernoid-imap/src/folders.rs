@@ -8,8 +8,6 @@ use std::collections::HashMap;
 use kernoid_mail::{Access, MailboxInfo, Rights, Role};
 use uuid::Uuid;
 
-use crate::proto::protocol::list::Attribute;
-
 pub(crate) const SEPARATOR: char = '/';
 
 /// The prefix of the shared namespace.
@@ -188,14 +186,14 @@ fn normalize_pattern(pattern: &str) -> String {
 }
 
 /// The special use of a role (RFC 6154).
-pub(crate) fn special_use(role: Option<Role>) -> Option<Attribute> {
+pub(crate) fn special_use(role: Option<Role>) -> Option<&'static str> {
     Some(match role? {
         Role::Inbox => return None,
-        Role::Drafts => Attribute::Drafts,
-        Role::Sent => Attribute::Sent,
-        Role::Archive => Attribute::Archive,
-        Role::Junk => Attribute::Junk,
-        Role::Trash => Attribute::Trash,
+        Role::Drafts => "\\Drafts",
+        Role::Sent => "\\Sent",
+        Role::Archive => "\\Archive",
+        Role::Junk => "\\Junk",
+        Role::Trash => "\\Trash",
     })
 }
 

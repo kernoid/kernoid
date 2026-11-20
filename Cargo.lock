@@ -3358,7 +3358,6 @@ version = "0.5.1"
 dependencies = [
  "base64 0.22.1",
  "bytes",
- "hashify 0.2.9",
  "jiff",
  "kernoid-config",
  "kernoid-events",

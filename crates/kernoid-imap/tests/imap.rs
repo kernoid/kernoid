@@ -465,3 +465,155 @@ async fn shared_mailboxes_and_acl(pool: PgPool) {
     assert!(alice.run("o DELETEACL INBOX bob@firma.example").await.starts_with("o OK"));
     assert!(!bob_client.run("e LIST \"\" \"*\"").await.contains("alice@firma.example"));
 }
+
+#[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
+async fn literals_names_and_sections(pool: PgPool) {
+    let setup = setup(pool).await;
+    let mut client = setup.logged_in(Protocol::Imap).await;
+    // A non-synchronizing literal (LITERAL+) and a synchronizing one in one command.
+    let user = "alice@firma.example";
+    client.send("a LOGOUT\r\n").await;
+    assert!(client.until("a").await.contains("* BYE"));
+    let (client_end, served) = tokio::io::duplex(1024 * 1024);
+    let server = setup.server(true);
+    tokio::spawn(async move { server.session(Protocol::Imap, served, "192.0.2.10".parse().unwrap()).await });
+    let connector = tokio_rustls::TlsConnector::from(setup.client_tls.clone());
+    let tls = connector.connect(HOSTNAME.try_into().unwrap(), client_end).await.unwrap();
+    let mut client = Client { stream: BufReader::new(tls) };
+    client.line().await;
+    client.send(&format!("b LOGIN {{{}+}}\r\n{user} {{{}}}\r\n", user.len(), setup.app_password.len())).await;
+    assert_eq!(client.line().await, "+ Ready for literal data\r\n");
+    client.send(&format!("{}\r\n", setup.app_password)).await;
+    assert!(client.until("b").await.contains("b OK [CAPABILITY "));
+
+    // MULTIAPPEND with a binary literal and a UTF-8 message (RFC 6855).
+    let first = "Subject: one\r\n\r\nFirst\r\n";
+    let second = "Subject: two\r\n\r\nSecond\r\n";
+    let third = "Subject: Grüße\r\n\r\nDritte\r\n";
+    client
+        .send(&format!(
+            "c APPEND INBOX (\\Seen) {{{}+}}\r\n{first} ~{{{}+}}\r\n{second} UTF8 (~{{{}+}}\r\n{third})\r\n",
+            first.len(),
+            second.len(),
+            third.len()
+        ))
+        .await;
+    let appended = client.until("c").await;
+    assert!(appended.contains("c OK [APPENDUID ") && appended.contains(" 1:3]"), "{appended}");
+    // A literal larger than a message may be is refused, and the session goes on.
+    client.send("d APPEND INBOX {100001}\r\n").await;
+    assert!(client.line().await.starts_with("d NO [TOOBIG]"));
+    assert!(client.run("e NOOP").await.starts_with("e OK"));
+
+    // Names in modified UTF-7 until UTF-8 is enabled.
+    assert!(client.run("f CREATE &AMQ-sterreich").await.starts_with("f OK"));
+    assert!(client.run("g LIST \"\" \"&AMQ-*\"").await.contains("\"&AMQ-sterreich\""));
+    assert!(client.run("h ENABLE UTF8=ACCEPT X-UNKNOWN").await.contains("* ENABLED UTF8=ACCEPT\r\n"));
+    assert!(client.run("i LIST \"\" \"Ä*\"").await.contains("\"Ästerreich\""));
+    assert!(client.run("j STATUS \"Ästerreich\" (MESSAGES)").await.contains("(MESSAGES 0)"));
+
+    // Sections, BINARY and partial fetches.
+    let multipart = "Subject: parts\r\nContent-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\n\
+        Content-Type: text/plain\r\n\r\nHello\r\n--b\r\nContent-Type: application/octet-stream\r\n\
+        Content-Transfer-Encoding: base64\r\n\r\nAAECAw==\r\n--b--\r\n";
+    client.send(&format!("k APPEND INBOX {{{}+}}\r\n{multipart}\r\n", multipart.len())).await;
+    assert!(client.until("k").await.starts_with("k OK"));
+    assert!(client.run("l SELECT INBOX").await.contains("* 4 EXISTS"));
+    let fetch = client
+        .run("m FETCH 4 (BINARY.PEEK[2] BINARY.SIZE[2] BODY.PEEK[1]<1.3> BODY.PEEK[HEADER.FIELDS (Subject)])")
+        .await;
+    assert!(fetch.contains("BINARY[2] ~{4}\r\n\0\x01\x02\x03 BINARY.SIZE[2] 4 BODY[1]<1> {3}\r\nell"), "{fetch:?}");
+    assert!(fetch.contains("BODY[HEADER.FIELDS (Subject)] {18}\r\nSubject: parts\r\n\r\n"), "{fetch:?}");
+    let structure = client.run("n FETCH 4 BODYSTRUCTURE").await;
+    assert!(structure.contains("(\"application\" \"octet-stream\" NIL NIL NIL \"base64\" 8"), "{structure}");
+    let threads = client.run("o THREAD ORDEREDSUBJECT UTF-8 ALL").await;
+    assert!(threads.contains("* THREAD (1)(2)(3)(4)\r\n"), "{threads}");
+    assert!(client.run("p UID SEARCH RETURN (MIN MAX) ALL").await.contains("UID MIN 1 MAX 4"));
+
+    // Bearer tokens that are not valid fail like passwords.
+    let mut other = Client { stream: BufReader::new(other_session(&setup).await) };
+    other.line().await;
+    let token = b64("user=alice@firma.example\x01auth=Bearer nonsense\x01\x01");
+    assert!(other.run(&format!("a AUTHENTICATE XOAUTH2 {token}")).await.starts_with("a NO [AUTHENTICATIONFAILED]"));
+    other.send("b AUTHENTICATE PLAIN\r\n").await;
+    assert_eq!(other.line().await, "+ \r\n");
+    other.send("*\r\n").await;
+    assert!(other.until("b").await.starts_with("b BAD"));
+}
+
+async fn other_session(setup: &Setup) -> tokio_rustls::client::TlsStream<tokio::io::DuplexStream> {
+    let (client_end, served) = tokio::io::duplex(1024 * 1024);
+    let server = setup.server(true);
+    tokio::spawn(async move { server.session(Protocol::Imap, served, "192.0.2.10".parse().unwrap()).await });
+    let connector = tokio_rustls::TlsConnector::from(setup.client_tls.clone());
+    connector.connect(HOSTNAME.try_into().unwrap(), client_end).await.unwrap()
+}
+
+/// Random bytes – and commands cut and changed at random – never bring a session down with a panic.
+#[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
+async fn random_input_does_not_panic(pool: PgPool) {
+    let setup = setup(pool).await;
+    setup.deliver("first", "Hello").await;
+    let commands = [
+        "SELECT INBOX",
+        "FETCH 1:* (UID FLAGS BODY.PEEK[HEADER.FIELDS (Subject)]<0.5> BODYSTRUCTURE BINARY[1])",
+        "UID SEARCH RETURN (SAVE MIN) OR SEEN (NOT DELETED) HEADER Subject first",
+        "STORE $ +FLAGS (\\Flagged)",
+        "SORT (REVERSE DATE) UTF-8 ALL",
+        "LIST (SUBSCRIBED) \"\" (\"*\" %) RETURN (STATUS (MESSAGES))",
+        "APPEND INBOX {5+}\r\nhello",
+        "IDLE",
+        "DONE",
+    ];
+    let mut state = 0x853c_49e6_748f_ea9bu64;
+    let mut random = move || {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        state
+    };
+    for round in 0..40 {
+        // Logged in over TLS, so that every state is reached.
+        let (client_end, served) = tokio::io::duplex(64 * 1024);
+        let server = setup.server(true);
+        let session =
+            tokio::spawn(async move { server.session(Protocol::Imap, served, "192.0.2.10".parse().unwrap()).await });
+        let connector = tokio_rustls::TlsConnector::from(setup.client_tls.clone());
+        let tls = connector.connect(HOSTNAME.try_into().unwrap(), client_end).await.unwrap();
+        let mut client = Client { stream: BufReader::new(tls) };
+        client.line().await;
+        assert!(client.run(&format!("l LOGIN alice@firma.example \"{}\"", setup.app_password)).await.contains("l OK"));
+        let client_end = client.stream.into_inner();
+        let mut input = Vec::new();
+        for index in 0..30 {
+            let mut command = format!("t{index} {}\r\n", commands[(random() as usize) % commands.len()]).into_bytes();
+            for _ in 0..(random() % 4) {
+                let position = (random() as usize) % command.len();
+                let bytes = b"(){}[]<>\" \\*%$:.,+-~0123456789\r\n\0\xff";
+                command[position] = bytes[(random() as usize) % bytes.len()];
+            }
+            if round % 5 == 0 {
+                command = (0..(random() % 200)).map(|_| (random() % 256) as u8).collect();
+            }
+            input.extend_from_slice(&command);
+        }
+        // The session answers as long as the client reads; drain its output meanwhile.
+        let reader = tokio::spawn({
+            let (mut read, mut write) = tokio::io::split(client_end);
+            async move {
+                let mut sink = Vec::new();
+                let _ = tokio::time::timeout(Duration::from_secs(2), async {
+                    let _ = write.write_all(&input).await;
+                    let _ = write.shutdown().await;
+                    let _ = read.read_to_end(&mut sink).await;
+                })
+                .await;
+            }
+        });
+        reader.await.unwrap();
+        // Dropping the connection ends the session; it must not have panicked.
+        if let Ok(result) = tokio::time::timeout(Duration::from_secs(5), session).await {
+            assert!(result.is_ok(), "the session panicked in round {round}");
+        }
+    }
+}

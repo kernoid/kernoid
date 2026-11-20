@@ -11,21 +11,18 @@ use uuid::Uuid;
 
 use crate::{
     flags,
-    mailboxes::no_permission,
+    mailboxes::{list_line, no_permission},
     message,
     proto::{
-        Command, ResponseCode, StatusResponse,
-        protocol::{
-            ImapResponse, Sequence, copy_move, expunge,
-            fetch::{self, Attribute, DataItem, FetchItem},
-            list::ListItem,
-            select::{self, HighestModSeq},
-            store::{self, Operation},
-        },
-        types::SliceRange,
+        request::{Fetch, FetchItem, QResync, Section, Store, StoreMode},
+        response::{self, Code, FetchResponse, Status},
+        sequence::{self, SequenceSet},
     },
     session::{Session, mail_error},
 };
+
+/// The flags kernoid keeps, for `FLAGS` and `PERMANENTFLAGS`.
+const SYSTEM_FLAGS: &str = "\\Answered \\Flagged \\Deleted \\Seen \\Draft";
 
 #[derive(Debug, Clone)]
 pub(crate) struct Selected {
@@ -42,24 +39,16 @@ pub(crate) struct Selected {
     pub saved: Vec<u32>,
 }
 
-pub(crate) fn in_set(sequence: &Sequence, value: u32, max: u32, saved: bool) -> bool {
-    match sequence {
-        Sequence::SavedSearch => saved,
-        Sequence::List { items } => items.iter().any(|item| in_set(item, value, max, saved)),
-        sequence => sequence.contains(value, max),
-    }
-}
-
 impl Selected {
     /// The positions of the emails a set names, by UID or sequence number.
-    pub fn resolve(&self, sequence: &Sequence, is_uid: bool) -> Vec<usize> {
+    pub fn resolve(&self, sequence: &SequenceSet, is_uid: bool) -> Vec<usize> {
         let max = if is_uid { self.entries.last().map_or(0, |entry| entry.uid) } else { self.entries.len() as u32 };
         self.entries
             .iter()
             .enumerate()
             .filter(|(position, entry)| {
                 let value = if is_uid { entry.uid } else { *position as u32 + 1 };
-                in_set(sequence, value, max, self.saved.contains(&entry.uid))
+                sequence.contains(value, max, self.saved.contains(&entry.uid))
             })
             .map(|(position, _)| position)
             .collect()
@@ -68,33 +57,83 @@ impl Selected {
 
 /// `* n FETCH (UID … FLAGS (…) [MODSEQ (…)])`: an email's flags, unasked.
 fn flag_update(out: &mut Vec<u8>, sequence: usize, entry: &MailboxEntry, uid: bool, modseq: bool) {
-    let mut items = Vec::new();
+    let mut fetch = FetchResponse::new(sequence as u32);
     if uid {
-        items.push(DataItem::Uid { uid: entry.uid });
+        fetch.item().extend_from_slice(format!("UID {}", entry.uid).as_bytes());
     }
-    items.push(DataItem::Flags { flags: flags::flags(&entry.keywords) });
+    let item = fetch.item();
+    item.extend_from_slice(b"FLAGS ");
+    response::flag_list(item, &flags::flags(&entry.keywords));
     if modseq {
-        items.push(DataItem::ModSeq { modseq: entry.modseq });
+        fetch.item().extend_from_slice(format!("MODSEQ ({})", entry.modseq).as_bytes());
     }
-    FetchItem { id: sequence as u32, is_uidonly: false, items }.serialize(out, false);
+    out.extend_from_slice(&fetch.finish());
+}
+
+/// `1.2.3`.
+fn part_name(part: &[u32]) -> String {
+    part.iter().map(u32::to_string).collect::<Vec<_>>().join(".")
+}
+
+/// `[1.2.HEADER.FIELDS (Subject)]` as the client asked for it.
+fn section_name(out: &mut Vec<u8>, section: &Section) {
+    use crate::proto::request::SectionText;
+    out.push(b'[');
+    out.extend_from_slice(part_name(&section.part).as_bytes());
+    if let Some(text) = &section.text {
+        if !section.part.is_empty() {
+            out.push(b'.');
+        }
+        match text {
+            SectionText::Header => out.extend_from_slice(b"HEADER"),
+            SectionText::Text => out.extend_from_slice(b"TEXT"),
+            SectionText::Mime => out.extend_from_slice(b"MIME"),
+            SectionText::Fields { not, names } => {
+                out.extend_from_slice(if *not { b"HEADER.FIELDS.NOT (" } else { b"HEADER.FIELDS (" });
+                for (index, name) in names.iter().enumerate() {
+                    if index > 0 {
+                        out.push(b' ');
+                    }
+                    if !name.is_empty() && name.bytes().all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b)) {
+                        out.extend_from_slice(name.as_bytes());
+                    } else {
+                        response::string(out, name.as_bytes(), false);
+                    }
+                }
+                out.push(b')');
+            }
+        }
+    }
+    out.push(b']');
+}
+
+/// `* VANISHED [(EARLIER)] uids` (RFC 7162, 3.2.10).
+fn vanished(out: &mut Vec<u8>, earlier: bool, uids: &[u32]) {
+    let earlier = if earlier { "(EARLIER) " } else { "" };
+    out.extend_from_slice(format!("* VANISHED {earlier}{}\r\n", sequence::compact(uids)).as_bytes());
 }
 
 impl Session {
-    pub(crate) async fn select(&mut self, arguments: select::Arguments, read_only: bool) -> StatusResponse {
-        let command = if read_only { Command::Examine } else { Command::Select };
+    pub(crate) async fn select(
+        &mut self,
+        mailbox: &str,
+        read_only: bool,
+        condstore: bool,
+        qresync: Option<QResync>,
+    ) -> Status {
         let closed_previous = self.selected.take().is_some();
-        if arguments.qresync.is_some() && !self.qresync {
-            return StatusResponse::bad("Enable QRESYNC first");
+        if qresync.is_some() && !self.qresync {
+            return Status::bad("Enable QRESYNC first");
         }
-        if arguments.condstore {
+        if condstore {
             self.condstore = true;
         }
         let folders = match self.folders().await {
             Ok(folders) => folders,
             Err(response) => return response,
         };
-        let Some(folder) = folders.find(&arguments.mailbox_name) else {
-            return StatusResponse::no("No such mailbox").with_code(ResponseCode::NonExistent);
+        let Some(folder) = folders.find(mailbox) else {
+            return Status::no("No such mailbox").with_code(Code::NonExistent);
         };
         if !folder.rights.contains(Rights::READ) {
             return no_permission("read this mailbox");
@@ -103,8 +142,8 @@ impl Session {
         let (account, rights) = (folder.owner, folder.rights);
         let changing = [Rights::SEEN, Rights::WRITE, Rights::INSERT, Rights::DELETE, Rights::EXPUNGE];
         let read_only = read_only || !changing.iter().any(|right| rights.contains(*right));
-        let mut item = ListItem::new(folder.name.clone());
-        item.attributes.extend(self.special_use(folder));
+        let name = folder.name.clone();
+        let special_use = self.special_use(folder);
         let modseq = match self.inner.mail.state(account).await {
             Ok(modseq) => modseq,
             Err(error) => return mail_error(error),
@@ -114,36 +153,47 @@ impl Session {
             Err(error) => return mail_error(error),
         };
         let unseen = entries.iter().position(|entry| !entry.keywords.iter().any(|k| k == "$seen"));
-        let response = select::Response {
-            mailbox: item,
-            total_messages: entries.len(),
-            recent_messages: 0,
-            unseen_seq: unseen.map_or(0, |position| position as u32 + 1),
-            uid_validity,
-            uid_next,
-            is_rev2: self.version.is_rev2(),
-            is_utf8: self.is_utf8,
-            closed_previous,
-            highest_modseq: self.condstore.then(|| HighestModSeq::new(modseq)),
-            objectid: None,
+        // RFC 9051, 6.3.2 (and RFC 3501, 6.3.1 for IMAP4rev1).
+        let mut out = if closed_previous {
+            Status::ok("Closed previous mailbox").with_code(Code::Closed).line(None)
+        } else {
+            Vec::new()
         };
-        self.write(response.serialize());
+        out.extend_from_slice(format!("* {} EXISTS\r\n* FLAGS ({SYSTEM_FLAGS})\r\n", entries.len()).as_bytes());
+        if self.rev2 {
+            list_line(&mut out, "LIST", &special_use.into_iter().collect::<Vec<_>>(), &name, self.utf8);
+        } else {
+            out.extend_from_slice(b"* 0 RECENT\r\n");
+            if let Some(unseen) = unseen {
+                out.extend_from_slice(
+                    &Status::ok("Unseen messages").with_code(Code::Unseen(unseen as u32 + 1)).line(None),
+                );
+            }
+        }
+        let permanent = if read_only { "" } else { "\\Deleted \\Seen \\Answered \\Flagged \\Draft \\*" };
+        out.extend_from_slice(&Status::ok("Flags that stay").with_code(Code::PermanentFlags(permanent)).line(None));
+        out.extend_from_slice(&Status::ok("UIDs valid").with_code(Code::UidValidity(uid_validity)).line(None));
+        out.extend_from_slice(&Status::ok("Next predicted UID").with_code(Code::UidNext(uid_next)).line(None));
+        if self.condstore {
+            out.extend_from_slice(&Status::ok("Highest modseq").with_code(Code::HighestModSeq(modseq)).line(None));
+        }
+        self.write(out);
         // QRESYNC (RFC 7162, 3.2.5): what left the mailbox and what changed since the client's last state.
-        if let Some(qresync) = arguments.qresync
+        if let Some(qresync) = qresync
             && qresync.uid_validity == uid_validity
         {
-            let vanished = match self.inner.mail.expunged_since(id, qresync.modseq).await {
-                Ok(vanished) => vanished,
+            let gone = match self.inner.mail.expunged_since(id, qresync.modseq).await {
+                Ok(gone) => gone,
                 Err(error) => return mail_error(error),
             };
             let max = uid_next.saturating_sub(1);
-            let vanished: Vec<u32> = vanished
+            let gone: Vec<u32> = gone
                 .into_iter()
-                .filter(|uid| qresync.known_uids.as_ref().is_none_or(|known| known.contains(*uid, max)))
+                .filter(|uid| qresync.known_uids.as_ref().is_none_or(|known| known.contains(*uid, max, false)))
                 .collect();
             let mut out = Vec::new();
-            if !vanished.is_empty() {
-                expunge::Vanished { earlier: true, ids: vanished }.serialize(&mut out);
+            if !gone.is_empty() {
+                vanished(&mut out, true, &gone);
             }
             for (position, entry) in entries.iter().enumerate() {
                 if entry.modseq > qresync.modseq {
@@ -153,8 +203,7 @@ impl Session {
             self.write(out);
         }
         self.selected = Some(Selected { id, owner: account, rights, read_only, entries, saved: Vec::new() });
-        let code = if read_only { ResponseCode::ReadOnly } else { ResponseCode::ReadWrite };
-        StatusResponse::completed(command).with_code(code)
+        Status::done().with_code(if read_only { Code::ReadOnly } else { Code::ReadWrite })
     }
 
     /// Tells the client what changed in the selected mailbox since it last heard.
@@ -178,8 +227,15 @@ impl Session {
             .filter(|(_, entry)| !by_uid.contains_key(&entry.uid))
             .map(|(position, entry)| if self.qresync { entry.uid } else { position as u32 + 1 })
             .collect();
-        if !gone.is_empty() {
-            expunge::Response { use_vanished: self.qresync, ids: gone }.serialize_to(&mut out);
+        if self.qresync {
+            if !gone.is_empty() {
+                vanished(&mut out, false, &gone);
+            }
+        } else {
+            // Each EXPUNGE moves the numbers after it down by one.
+            for (removed, number) in gone.iter().enumerate() {
+                out.extend_from_slice(format!("* {} EXPUNGE\r\n", number - removed as u32).as_bytes());
+            }
         }
         let known: Vec<&MailboxEntry> =
             selected.entries.iter().filter(|entry| by_uid.contains_key(&entry.uid)).collect();
@@ -198,60 +254,56 @@ impl Session {
         }
     }
 
-    pub(crate) async fn fetch(&mut self, arguments: fetch::Arguments, is_uid: bool) -> StatusResponse {
-        let command = Command::Fetch(is_uid);
-        let Some(selected) = self.selected.clone() else { return StatusResponse::bad("No mailbox selected") };
+    pub(crate) async fn fetch(&mut self, fetch: Fetch, is_uid: bool) -> Status {
+        let Some(selected) = self.selected.clone() else { return Status::bad("No mailbox selected") };
         let account = selected.owner;
-        let mut positions = selected.resolve(&arguments.sequence_set, is_uid);
-        let mut attributes = arguments.attributes;
-        if let Some(changed_since) = arguments.changed_since {
+        let mut positions = selected.resolve(&fetch.set, is_uid);
+        let mut items = fetch.items;
+        if let Some(changed_since) = fetch.changed_since {
             self.condstore = true;
             positions.retain(|&position| selected.entries[position].modseq > changed_since);
-            if arguments.include_vanished && is_uid {
-                let vanished = match self.inner.mail.expunged_since(selected.id, changed_since).await {
-                    Ok(vanished) => vanished,
+            if fetch.vanished {
+                if !is_uid || !self.qresync {
+                    return Status::bad("VANISHED needs UID FETCH and QRESYNC");
+                }
+                let gone = match self.inner.mail.expunged_since(selected.id, changed_since).await {
+                    Ok(gone) => gone,
                     Err(error) => return mail_error(error),
                 };
                 let max = selected.entries.last().map_or(0, |entry| entry.uid);
-                let vanished: Vec<u32> =
-                    vanished.into_iter().filter(|uid| in_set(&arguments.sequence_set, *uid, max, false)).collect();
-                if !vanished.is_empty() {
+                let gone: Vec<u32> = gone.into_iter().filter(|uid| fetch.set.contains(*uid, max, false)).collect();
+                if !gone.is_empty() {
                     let mut out = Vec::new();
-                    expunge::Vanished { earlier: true, ids: vanished }.serialize(&mut out);
+                    vanished(&mut out, true, &gone);
                     self.write(out);
                 }
             }
         }
-        if is_uid && !attributes.contains(&Attribute::Uid) {
-            attributes.insert(0, Attribute::Uid);
+        if is_uid && !items.contains(&FetchItem::Uid) {
+            items.insert(0, FetchItem::Uid);
         }
-        if self.condstore && !attributes.contains(&Attribute::ModSeq) {
-            attributes.push(Attribute::ModSeq);
+        if self.condstore && !items.contains(&FetchItem::ModSeq) {
+            items.push(FetchItem::ModSeq);
         }
-        let needs_message = attributes.iter().any(|attribute| {
+        let needs_message = items.iter().any(|item| {
             !matches!(
-                attribute,
-                Attribute::Flags
-                    | Attribute::InternalDate
-                    | Attribute::Rfc822Size
-                    | Attribute::Uid
-                    | Attribute::ModSeq
-                    | Attribute::Preview { .. }
-                    | Attribute::ObjectId
+                item,
+                FetchItem::Flags | FetchItem::InternalDate | FetchItem::Rfc822Size | FetchItem::Uid | FetchItem::ModSeq
             )
         });
         let marks_seen = !selected.read_only
             && selected.rights.contains(Rights::SEEN)
-            && attributes.iter().any(|attribute| {
+            && items.iter().any(|item| {
                 matches!(
-                    attribute,
-                    Attribute::BodySection { peek: false, .. }
-                        | Attribute::Binary { peek: false, .. }
-                        | Attribute::Rfc822
-                        | Attribute::Rfc822Text
+                    item,
+                    FetchItem::Section { peek: false, .. }
+                        | FetchItem::Binary { peek: false, .. }
+                        | FetchItem::Rfc822
+                        | FetchItem::Rfc822Text
                 )
             });
-        let seen = kernoid_mail::Keyword::parse("$seen").expect("a keyword");
+        let seen = Keyword::parse("$seen").expect("a keyword");
+        let utf8 = self.utf8;
         for position in positions {
             let mut entry = selected.entries[position].clone();
             let mut flags_changed = false;
@@ -279,95 +331,135 @@ impl Session {
                 None
             };
             let parsed = raw.as_deref().and_then(|raw| MessageParser::new().parse(raw));
-            let mut items = Vec::with_capacity(attributes.len() + 1);
-            for attribute in &attributes {
-                let item = match (attribute, &parsed, &raw) {
-                    (Attribute::Uid, _, _) => DataItem::Uid { uid: entry.uid },
-                    (Attribute::Flags, _, _) => DataItem::Flags { flags: flags::flags(&entry.keywords) },
-                    (Attribute::InternalDate, _, _) => DataItem::InternalDate { date: entry.received_at.as_second() },
-                    (Attribute::Rfc822Size, _, _) => DataItem::Rfc822Size { size: entry.size as usize },
-                    (Attribute::ModSeq, _, _) => DataItem::ModSeq { modseq: entry.modseq },
-                    (Attribute::Rfc822, _, Some(raw)) => DataItem::Rfc822 { contents: SliceRange::Single(raw) },
-                    (Attribute::Rfc822Header, Some(message), Some(raw)) => DataItem::Rfc822Header {
-                        contents: SliceRange::Single(
-                            &raw[..(message.root().root_part().offset_body() as usize).min(raw.len())],
-                        ),
-                    },
-                    (Attribute::Rfc822Text, Some(message), Some(raw)) => DataItem::Rfc822Text {
-                        contents: SliceRange::Single(
-                            raw.get(message.root().root_part().offset_body() as usize..).unwrap_or_default(),
-                        ),
-                    },
-                    (Attribute::Envelope, Some(message), _) => {
-                        DataItem::Envelope { envelope: message::envelope(message) }
+            let mut response = FetchResponse::new(position as u32 + 1);
+            for item in &items {
+                let message = parsed.as_ref();
+                let raw = raw.as_deref().unwrap_or_default();
+                match item {
+                    FetchItem::Uid => response.item().extend_from_slice(format!("UID {}", entry.uid).as_bytes()),
+                    FetchItem::Flags => {
+                        let out = response.item();
+                        out.extend_from_slice(b"FLAGS ");
+                        response::flag_list(out, &flags::flags(&entry.keywords));
                     }
-                    (Attribute::Body, Some(message), _) => {
-                        DataItem::Body { part: message::body_structure(message, false) }
+                    FetchItem::InternalDate => {
+                        let out = response.item();
+                        out.extend_from_slice(b"INTERNALDATE ");
+                        response::internal_date(out, entry.received_at);
                     }
-                    (Attribute::BodyStructure, Some(message), _) => {
-                        DataItem::BodyStructure { part: message::body_structure(message, true) }
+                    FetchItem::Rfc822Size => {
+                        response.item().extend_from_slice(format!("RFC822.SIZE {}", entry.size).as_bytes());
                     }
-                    (Attribute::BodySection { sections, partial, .. }, Some(message), _) => DataItem::BodySection {
-                        sections: sections.clone(),
-                        origin_octet: partial.map(|(start, _)| start),
-                        contents: message::body_section(message, sections, *partial).unwrap_or_default(),
-                    },
-                    (Attribute::Binary { sections, partial, .. }, Some(message), _) => {
-                        match message::binary(message, sections, *partial) {
-                            Ok(contents) => DataItem::Binary {
-                                sections: sections.clone(),
-                                offset: partial.map(|(start, _)| start),
-                                contents: contents.unwrap_or(fetch::BodyContents::Bytes(Default::default())),
-                            },
-                            Err(()) => {
-                                return StatusResponse::no("The part cannot be decoded")
-                                    .with_code(ResponseCode::UnknownCte);
-                            }
+                    FetchItem::ModSeq => {
+                        response.item().extend_from_slice(format!("MODSEQ ({})", entry.modseq).as_bytes());
+                    }
+                    FetchItem::Rfc822 => {
+                        let out = response.item();
+                        out.extend_from_slice(b"RFC822 ");
+                        response::literal(out, raw);
+                    }
+                    FetchItem::Rfc822Header | FetchItem::Rfc822Text => {
+                        let Some(message) = message else { continue };
+                        let body = (message.root().root_part().offset_body() as usize).min(raw.len());
+                        let (name, content) = if *item == FetchItem::Rfc822Header {
+                            ("RFC822.HEADER ", &raw[..body])
+                        } else {
+                            ("RFC822.TEXT ", &raw[body..])
+                        };
+                        let out = response.item();
+                        out.extend_from_slice(name.as_bytes());
+                        response::literal(out, content);
+                    }
+                    FetchItem::Envelope => {
+                        let Some(message) = message else { continue };
+                        let out = response.item();
+                        out.extend_from_slice(b"ENVELOPE ");
+                        message::envelope(out, message.root(), utf8);
+                    }
+                    FetchItem::Body | FetchItem::BodyStructure => {
+                        let Some(message) = message else { continue };
+                        let extended = *item == FetchItem::BodyStructure;
+                        let out = response.item();
+                        out.extend_from_slice(if extended { b"BODYSTRUCTURE " } else { b"BODY " });
+                        message::body_structure(out, message, extended, utf8);
+                    }
+                    FetchItem::Section { section, partial, .. } => {
+                        let Some(message) = message else { continue };
+                        let content = message::section(message, section).unwrap_or_default();
+                        let out = response.item();
+                        out.extend_from_slice(b"BODY");
+                        section_name(out, section);
+                        if let Some((start, _)) = partial {
+                            out.extend_from_slice(format!("<{start}>").as_bytes());
                         }
+                        out.push(b' ');
+                        response::literal(out, message::partial(&content, *partial));
                     }
-                    (Attribute::BinarySize { sections }, Some(message), _) => DataItem::BinarySize {
-                        sections: sections.clone(),
-                        size: message::binary_size(message, sections).unwrap_or(0),
-                    },
-                    // Not offered, or the message could not be read.
-                    _ => continue,
-                };
-                items.push(item);
+                    FetchItem::Binary { part, partial, .. } => {
+                        let Some(message) = message else { continue };
+                        let Ok(content) = message::binary(message, part) else {
+                            return Status::no("The part cannot be decoded").with_code(Code::UnknownCte);
+                        };
+                        let content = content.unwrap_or_default();
+                        let out = response.item();
+                        out.extend_from_slice(format!("BINARY[{}]", part_name(part)).as_bytes());
+                        if let Some((start, _)) = partial {
+                            out.extend_from_slice(format!("<{start}>").as_bytes());
+                        }
+                        out.push(b' ');
+                        response::literal8(out, message::partial(&content, *partial));
+                    }
+                    FetchItem::BinarySize { part } => {
+                        let Some(message) = message else { continue };
+                        let Ok(content) = message::binary(message, part) else {
+                            return Status::no("The part cannot be decoded").with_code(Code::UnknownCte);
+                        };
+                        let size = content.map_or(0, |content| content.len());
+                        response
+                            .item()
+                            .extend_from_slice(format!("BINARY.SIZE[{}] {size}", part_name(part)).as_bytes());
+                    }
+                }
             }
-            if flags_changed && !attributes.contains(&Attribute::Flags) {
-                items.push(DataItem::Flags { flags: flags::flags(&entry.keywords) });
+            if flags_changed && !items.contains(&FetchItem::Flags) {
+                let out = response.item();
+                out.extend_from_slice(b"FLAGS ");
+                response::flag_list(out, &flags::flags(&entry.keywords));
             }
-            let mut out = Vec::new();
-            FetchItem { id: position as u32 + 1, is_uidonly: false, items }.serialize(&mut out, self.is_utf8);
-            self.write(out);
+            self.write(response.finish());
+            // A broken connection shows at the next flush.
+            let _ = self.flush_if_large().await;
         }
-        StatusResponse::completed(command)
+        Status::done()
     }
 
-    pub(crate) async fn store(&mut self, arguments: store::Arguments, is_uid: bool) -> StatusResponse {
-        let command = Command::Store(is_uid);
-        let Some(selected) = self.selected.clone() else { return StatusResponse::bad("No mailbox selected") };
+    pub(crate) async fn store(&mut self, arguments: Store, is_uid: bool) -> Status {
+        let Some(selected) = self.selected.clone() else { return Status::bad("No mailbox selected") };
         let account = selected.owner;
         if selected.read_only {
-            return StatusResponse::no("The mailbox is read-only").with_code(ResponseCode::ReadOnly);
+            return Status::no("The mailbox is read-only").with_code(Code::ReadOnly);
         }
         if arguments.unchanged_since.is_some() {
             self.condstore = true;
         }
         // Flags the user may not change are left as they are (RFC 4314, 4).
         let may = |keyword: &str| selected.rights.contains(flags::right(keyword));
-        let keywords: Vec<Keyword> =
-            arguments.keywords.iter().filter_map(flags::keyword).filter(|keyword| may(keyword.as_str())).collect();
+        let keywords: Vec<Keyword> = arguments
+            .flags
+            .iter()
+            .filter_map(|flag| flags::keyword(flag))
+            .filter(|keyword| may(keyword.as_str()))
+            .collect();
         let mut modified = Vec::new();
         let mut touched = BTreeSet::new();
-        for position in selected.resolve(&arguments.sequence_set, is_uid) {
+        for position in selected.resolve(&arguments.set, is_uid) {
             let entry = &selected.entries[position];
             if arguments.unchanged_since.is_some_and(|since| entry.modseq > since) {
                 modified.push(if is_uid { entry.uid } else { position as u32 + 1 });
                 continue;
             }
-            let (add, remove): (Vec<Keyword>, Vec<Keyword>) = match arguments.operation {
-                Operation::Set => {
+            let (add, remove): (Vec<Keyword>, Vec<Keyword>) = match arguments.mode {
+                StoreMode::Replace => {
                     let removed = entry
                         .keywords
                         .iter()
@@ -376,8 +468,8 @@ impl Session {
                         .collect();
                     (keywords.clone(), removed)
                 }
-                Operation::Add => (keywords.clone(), Vec::new()),
-                Operation::Clear => (Vec::new(), keywords.clone()),
+                StoreMode::Add => (keywords.clone(), Vec::new()),
+                StoreMode::Remove => (Vec::new(), keywords.clone()),
             };
             match self.inner.mail.update_keywords(account, entry.email, &add, &remove).await {
                 Ok(()) => {
@@ -400,7 +492,7 @@ impl Session {
                 }
                 if let Some(now) = by_uid.get(&entry.uid) {
                     *entry = now.clone();
-                    if !arguments.is_silent || self.condstore {
+                    if !arguments.silent || self.condstore {
                         flag_update(&mut out, position + 1, entry, is_uid, self.condstore);
                     }
                 }
@@ -408,40 +500,33 @@ impl Session {
         }
         self.write(out);
         if modified.is_empty() {
-            StatusResponse::completed(command)
+            Status::done()
         } else {
-            modified.sort_unstable();
-            StatusResponse::ok("Conditional STORE failed").with_code(ResponseCode::Modified { ids: modified })
+            Status::ok("Conditional STORE failed").with_code(Code::Modified(modified))
         }
     }
 
-    pub(crate) async fn copy_move(
-        &mut self,
-        arguments: copy_move::Arguments,
-        is_uid: bool,
-        is_move: bool,
-    ) -> StatusResponse {
-        let command = if is_move { Command::Move(is_uid) } else { Command::Copy(is_uid) };
-        let Some(selected) = self.selected.clone() else { return StatusResponse::bad("No mailbox selected") };
+    pub(crate) async fn copy_move(&mut self, set: &SequenceSet, mailbox: &str, is_uid: bool, is_move: bool) -> Status {
+        let Some(selected) = self.selected.clone() else { return Status::bad("No mailbox selected") };
         if is_move && (selected.read_only || !selected.rights.contains(Rights::DELETE | Rights::EXPUNGE)) {
-            return StatusResponse::no("No right to remove messages here").with_code(ResponseCode::NoPerm);
+            return Status::no("No right to remove messages here").with_code(Code::NoPerm);
         }
         let folders = match self.folders().await {
             Ok(folders) => folders,
             Err(response) => return response,
         };
-        let Some(target) = folders.find(&arguments.mailbox_name) else {
-            return StatusResponse::no("No such mailbox").with_code(ResponseCode::TryCreate);
+        let Some(target) = folders.find(mailbox) else {
+            return Status::no("No such mailbox").with_code(Code::TryCreate);
         };
         if !target.rights.contains(Rights::INSERT) {
             return no_permission("add messages to that mailbox");
         }
         if is_move && target.info.id == selected.id {
-            return StatusResponse::no("The message is in this mailbox already").with_code(ResponseCode::Cannot);
+            return Status::no("The message is in this mailbox already").with_code(Code::Cannot);
         }
-        let positions = selected.resolve(&arguments.sequence_set, is_uid);
+        let positions = selected.resolve(set, is_uid);
         if positions.is_empty() {
-            return StatusResponse::completed(command);
+            return Status::done();
         }
         let emails: Vec<Uuid> = positions.iter().map(|&position| selected.entries[position].email).collect();
         let src_uids: Vec<u32> = positions.iter().map(|&position| selected.entries[position].uid).collect();
@@ -456,7 +541,7 @@ impl Session {
         let dest_uids = match placed {
             Ok(uids) => uids,
             Err(MailError::NotFound("the email")) => {
-                return StatusResponse::no("Some of the messages were expunged").with_code(ResponseCode::ExpungeIssued);
+                return Status::no("Some of the messages were expunged").with_code(Code::ExpungeIssued);
             }
             Err(error) => return mail_error(error),
         };
@@ -466,27 +551,24 @@ impl Session {
                 return mail_error(error);
             }
         }
-        let code = ResponseCode::CopyUid { uid_validity: target.info.uid_validity, src_uids, dest_uids };
+        let code = Code::CopyUid { uid_validity: target.info.uid_validity, source: src_uids, target: dest_uids };
         if is_move {
             // RFC 6851, 4.3: COPYUID in an untagged OK before the EXPUNGEs the sync sends.
-            self.write(StatusResponse::ok("Moved").with_code(code).into_bytes());
-            StatusResponse::completed(command)
+            self.write(Status::ok("Moved").with_code(code).line(None));
+            Status::done()
         } else {
-            StatusResponse::completed(command).with_code(code)
+            Status::done().with_code(code)
         }
     }
 
     /// `EXPUNGE`, `UID EXPUNGE` (UIDPLUS) and the silent one of `CLOSE`: the sync reports what went.
-    pub(crate) async fn expunge(&mut self, uids: Option<Sequence>, report: bool) -> StatusResponse {
-        let command = Command::Expunge(uids.is_some());
-        let Some(selected) = &self.selected else { return StatusResponse::bad("No mailbox selected") };
+    pub(crate) async fn expunge(&mut self, uids: Option<SequenceSet>, report: bool) -> Status {
+        let Some(selected) = &self.selected else { return Status::bad("No mailbox selected") };
         let account = selected.owner;
         if selected.read_only || !selected.rights.contains(Rights::EXPUNGE) {
             return match report {
-                false => StatusResponse::completed(command),
-                true if selected.read_only => {
-                    StatusResponse::no("The mailbox is read-only").with_code(ResponseCode::ReadOnly)
-                }
+                false => Status::done(),
+                true if selected.read_only => Status::no("The mailbox is read-only").with_code(Code::ReadOnly),
                 true => no_permission("expunge messages here"),
             };
         }
@@ -494,7 +576,7 @@ impl Session {
             selected.resolve(&uids, true).into_iter().map(|position| selected.entries[position].uid).collect()
         });
         match self.inner.mail.expunge(account, selected.id, only.as_ref()).await {
-            Ok(_) => StatusResponse::completed(command),
+            Ok(_) => Status::done(),
             Err(error) => mail_error(error),
         }
     }
