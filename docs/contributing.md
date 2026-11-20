@@ -20,6 +20,7 @@ may create databases; each test gets its own database:
 ```sh
 docker run -d --name kernoid-pg -e POSTGRES_USER=kernoid -e POSTGRES_PASSWORD=kernoid -p 5432:5432 postgres:18.6-alpine3.24
 export DATABASE_URL=postgres://kernoid:kernoid@localhost:5432/kernoid
+export KERNOID_DATABASE_URL=$DATABASE_URL   # what sqlx's macros check queries against (sqlx.toml)
 cargo test
 ```
 

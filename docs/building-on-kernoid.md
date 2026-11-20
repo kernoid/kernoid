@@ -72,8 +72,9 @@ after 0.5.1 (before, take them from git, `git = "https://github.com/kernoid/kern
 kernoid-server = { version = "<the release>", default-features = false }
 ```
 
-kernoid's crates carry their checked queries (sqlx's offline data). If the program's own build sets `DATABASE_URL`,
-build with `SQLX_OFFLINE=true`, or sqlx's macros check kernoid's queries against the program's database too.
+kernoid's crates carry their checked queries (sqlx's offline data) and read the database of their own build from
+`KERNOID_DATABASE_URL`, not `DATABASE_URL` – a program that sets `DATABASE_URL` for its own queries builds kernoid's
+crates from the offline data, untouched.
 
 ```rust
 use kernoid_server::embedded::{Embedded, Session};

@@ -171,7 +171,9 @@ the code.
 - **SQL only through sqlx's checked macros** (`query!`, `query_as!`, `query_scalar!`): literal statements, values
   only as bound parameters, checked against the schema at build time. The unchecked functions and `QueryBuilder` are
   forbidden in `clippy.toml`; tests that need them (tables that exist only in the test) allow it per file, with a
-  reason. After changing a query, run `cargo sqlx prepare --workspace -- --all-targets` and commit `.sqlx/` – then `scripts/sqlx-crates.sh` (same database) and commit `crates/*/.sqlx`: every crate
+  reason. The macros read the database from `KERNOID_DATABASE_URL` (every crate's `sqlx.toml`), not `DATABASE_URL` –
+  which the tests use at run time and programs building kernoid in may set for their own queries; without it they take
+  the offline data. After changing a query, run `cargo sqlx prepare --workspace -- --all-targets` and commit `.sqlx/` – then `scripts/sqlx-crates.sh` (same database) and commit `crates/*/.sqlx`: every crate
   goes to crates.io and builds there outside the workspace, so each carries the queries of its library (all features)
   in its own `.sqlx`; CI runs `scripts/sqlx-crates.sh --check`.
 - **Two database roles.** The owner runs migrations; the runtime role serves with only what

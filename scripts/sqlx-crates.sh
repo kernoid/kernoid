@@ -12,6 +12,8 @@
 set -eu
 cd "$(dirname "$0")/.."
 : "${DATABASE_URL:?set DATABASE_URL to a migrated database}"
+# The macros read KERNOID_DATABASE_URL (sqlx.toml of each crate).
+export KERNOID_DATABASE_URL="${KERNOID_DATABASE_URL:-$DATABASE_URL}"
 check=false
 if [ "${1-}" = --check ]; then
   check=true
