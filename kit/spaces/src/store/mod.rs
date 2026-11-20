@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-//! A device's spaces in SQLite – part of kernoid's foundation (RFC 0010): the events and member records of every space a
+//! The store: a device's spaces in SQLite – part of kernoid's foundation (RFC 0010): the events and member records of every space a
 //! device holds, which originals belong to it, its settings, and what it has sent to a relay. The bytes of originals are
 //! not here but in `kernoid-blob`.
 //!
@@ -337,7 +337,7 @@ mod tests {
 
     impl Scratch {
         fn new(name: &str) -> Self {
-            let path = std::env::temp_dir().join(format!("kernoid-space-store-{name}-{}", std::process::id()));
+            let path = std::env::temp_dir().join(format!("kernoid-spaces-store-{name}-{}", std::process::id()));
             let _ = std::fs::remove_dir_all(&path);
             std::fs::create_dir_all(&path).unwrap();
             Scratch(path)

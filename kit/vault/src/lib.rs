@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-//! kernoid's vaults on spaces (RFC 0010, 5), on the foundation's streams ([`kernoid_replica::streams`]).
+//! kernoid's vaults on spaces (RFC 0010, 5), on the foundation's streams ([`kernoid_spaces::streams`]).
 //!
 //! A vault is a space of the relay's protocol 2. Its root directory is the space stream; every directory and file is a
 //! stream of its own, linked below its directory. A directory's events say what lies in it ([`Event::Entry`],
@@ -23,8 +23,8 @@ use kernoid_crypt::{
     RecoveryCode,
     stream::{Permission, PersonId, StreamId},
 };
-use kernoid_replica::{SyncError, streams::Streams};
-use kernoid_space_store::streams::Parent;
+use kernoid_spaces::store::streams::Parent;
+use kernoid_spaces::{SyncError, streams::Streams};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -514,11 +514,11 @@ const DEVICE: &str = "vaults.device";
 /// The spaces of vaults kept in `store`, reaching relays through `transport` (`None`: the platform's). This device's
 /// name in them is made the first time – from `name` (e.g. the host's) and a random part – and kept in the store.
 pub fn open(
-    store: kernoid_space_store::Store,
+    store: kernoid_spaces::store::Store,
     name: &str,
-    transport: Option<std::sync::Arc<dyn kernoid_replica::transport::Transport>>,
+    transport: Option<std::sync::Arc<dyn kernoid_spaces::transport::Transport>>,
 ) -> Result<Streams> {
-    use kernoid_space_store::Backend;
+    use kernoid_spaces::store::Backend;
     let device = match store.setting(None, DEVICE)? {
         Some(device) => device,
         None => {

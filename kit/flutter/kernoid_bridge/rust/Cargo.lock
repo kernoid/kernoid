@@ -2063,8 +2063,7 @@ dependencies = [
  "kernoid-base",
  "kernoid-crypt",
  "kernoid-e2e",
- "kernoid-replica",
- "kernoid-space-store",
+ "kernoid-spaces",
  "kernoid-vault",
  "reqwest",
  "rustls",
@@ -2122,7 +2121,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "kernoid-replica"
+name = "kernoid-spaces"
 version = "0.5.0"
 dependencies = [
  "hex",
@@ -2131,23 +2130,12 @@ dependencies = [
  "kernoid-blob",
  "kernoid-crypt",
  "kernoid-log",
- "kernoid-space-store",
+ "rusqlite",
  "rustls",
  "serde",
  "serde_json",
  "thiserror",
  "ureq",
-]
-
-[[package]]
-name = "kernoid-space-store"
-version = "0.5.0"
-dependencies = [
- "kernoid-base",
- "kernoid-crypt",
- "kernoid-log",
- "rusqlite",
- "thiserror",
 ]
 
 [[package]]
@@ -2171,8 +2159,7 @@ dependencies = [
  "kernoid-base",
  "kernoid-crypt",
  "kernoid-log",
- "kernoid-replica",
- "kernoid-space-store",
+ "kernoid-spaces",
  "serde",
  "serde_json",
  "sqlite-wasm-rs",

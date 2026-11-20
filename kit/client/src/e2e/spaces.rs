@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //! Vaults on spaces (RFC 0010, 5): a vault is a space of the relay's protocol 2 at the account's kernoid, kept here
-//! through [`kernoid_replica::streams`]. Its root directory is the space stream, every directory and file a stream of
+//! through [`kernoid_spaces::streams`]. Its root directory is the space stream, every directory and file a stream of
 //! its own linked below its directory; names and moves are events of the directory, versions events of the file,
 //! contents originals in parts. The file store keeps only the vault's directory, which names the space
 //! (`kernoid:space`) and holds nothing – the server sees no names.
@@ -11,7 +11,7 @@
 //! kept by the server (`VaultKey/set`); any device of the account opens it with the account's key and comes in with it
 //! ([`Vaults::enter`]). Whoever added a person knew its code – as whoever wrapped an OpenPGP vault's key knew it.
 //!
-//! A [`Vaults`] keeps its spaces in a store of its own on the device (SQLite, `kernoid-space-store`): keys of streams
+//! A [`Vaults`] keeps its spaces in a store of its own on the device (SQLite, `kernoid_spaces::store`): keys of streams
 //! and persons are there, **not** yet in the system's key store (**OPEN**, RFC 0012, 11).
 
 use std::{
@@ -22,8 +22,8 @@ use std::{
 use base64::{Engine, engine::general_purpose::STANDARD};
 use kernoid_crypt::RecoveryCode;
 use kernoid_e2e::{PublicKey, message};
-use kernoid_replica::{SyncError, streams::Streams};
-use kernoid_space_store::Store;
+use kernoid_spaces::store::Store;
+use kernoid_spaces::{SyncError, streams::Streams};
 use kernoid_vault::{FileInfo, stream_id};
 use serde::Deserialize;
 use serde_json::{Value, json};

@@ -16,7 +16,7 @@ use kernoid_crypt::{
 use kernoid_log::Log;
 use rusqlite::{OptionalExtension, params};
 
-use crate::{Store, StoreError};
+use super::{Store, StoreError};
 
 pub(crate) const SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS roster (

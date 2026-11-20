@@ -14,8 +14,8 @@ use chacha20poly1305::{
     KeyInit, XChaCha20Poly1305, XNonce,
     aead::{Aead, Payload},
 };
-use kernoid_replica::{SyncError, streams::Streams, transport::Transport};
-use kernoid_space_store::Store;
+use kernoid_spaces::store::Store;
+use kernoid_spaces::{SyncError, streams::Streams, transport::Transport};
 
 use crate::Result;
 

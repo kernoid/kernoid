@@ -10,8 +10,8 @@ use std::sync::Arc;
 use js_sys::{Array, Function, Reflect, Uint8Array};
 use kernoid_base::SpaceId;
 use kernoid_crypt::RecoveryCode;
-use kernoid_replica::{SyncError, streams::Streams, transport::Transport};
-use kernoid_space_store::Store;
+use kernoid_spaces::store::Store;
+use kernoid_spaces::{SyncError, streams::Streams, transport::Transport};
 use wasm_bindgen::prelude::*;
 
 use crate::{FileInfo, stream_id};

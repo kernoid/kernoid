@@ -5,7 +5,7 @@
 # them (at least two weeks old, `tui/scripts/check-age.py --dir=kit`).
 [workspace]
 resolver = "3"
-members = ["client", "e2e", "sync", "base", "blob", "log", "crypt", "space-store", "replica", "vault"]
+members = ["client", "e2e", "sync", "base", "blob", "log", "crypt", "spaces", "vault"]
 
 [workspace.package]
 version = "0.5.0"

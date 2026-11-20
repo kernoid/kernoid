@@ -8,6 +8,10 @@
 
 use std::{collections::BTreeMap, sync::Arc};
 
+use crate::store::{
+    Backend, Store,
+    streams::{Parent, StreamState},
+};
 use kernoid_base::{Bytes, Sha256Hash, SpaceId, base64url, from_base64url, from_root, to_root};
 use kernoid_crypt::{
     Domain, EncryptionError, RecoveryCode,
@@ -19,10 +23,6 @@ use kernoid_crypt::{
     },
 };
 use kernoid_log::{Clock, DeviceId, EventHash, Log};
-use kernoid_space_store::{
-    Backend, Store,
-    streams::{Parent, StreamState},
-};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::{Value, json};
 

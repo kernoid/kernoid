@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: MIT
-# A device's replica of its spaces – part of kernoid's foundation (RFC 0010), taken over from aktujo's core at aktujo 0.4.1 (commit fdf967f,
-# the maintainer holds the rights). In the kit (MIT): the apps of every program built on kernoid use it on the device.
+# A device's spaces – its store in SQLite and their synchronisation through a relay – part of kernoid's foundation
+# (RFC 0010), taken over from aktujo's core at aktujo 0.4.1 (commit fdf967f, the maintainer holds the rights); until
+# 0.5.0 the crates kernoid-replica and kernoid-space-store. In the kit (MIT): the apps of every program built on kernoid
+# use it on the device.
 [package]
-name = "kernoid-replica"
-description = "A device's replica of its spaces, synchronised through a relay, end to end encrypted – part of kernoid's foundation"
+name = "kernoid-spaces"
+description = "A device's end-to-end encrypted spaces: their store in SQLite and their synchronisation through a relay – part of kernoid's foundation"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,8 +13,8 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 readme = "README.md"
-keywords = ["sync", "e2ee", "local-first", "replica", "kernoid"]
-categories = ["network-programming", "cryptography"]
+keywords = ["sync", "e2ee", "local-first", "sqlite", "kernoid"]
+categories = ["network-programming", "cryptography", "database"]
 
 [lints]
 workspace = true
@@ -23,7 +25,9 @@ kernoid-base = { version = "0.5.0", path = "../base" }
 kernoid-blob = { version = "0.5.0", path = "../blob" }
 kernoid-crypt = { version = "0.5.0", path = "../crypt" }
 kernoid-log = { version = "0.5.0", path = "../log" }
-kernoid-space-store = { version = "0.5.0", path = "../space-store" }
+# SQLite built in, 3.54.1 – the fix of RUSTSEC-2026-0459 that SQLCipher has too (one version for the kit: kernoid-sync
+# takes the same).
+rusqlite = { version = "0.42.0", features = ["bundled"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 thiserror = "2.0.21"
@@ -40,6 +44,10 @@ js-sys = "0.3.91"
 default = ["native"]
 # Reaching relays through ureq; without it, the program gives a transport of its own (a web page's worker).
 native = ["dep:rustls", "dep:ureq"]
+# The store encrypted as a whole: SQLCipher (BSD-3-Clause) with OpenSSL (Apache-2.0) built in, instead of SQLite.
+sqlcipher = ["rusqlite/bundled-sqlcipher-vendored-openssl"]
+# The store as bytes and back (`Store::to_bytes`, `from_bytes`), for a store kept elsewhere than in a file.
+serialize = ["rusqlite/serialize"]
 
 [dev-dependencies]
 serde_json = "1.0.154"

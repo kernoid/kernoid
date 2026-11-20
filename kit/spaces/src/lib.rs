@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 //! Synchronisation of spaces between the devices of their members through a relay, end-to-end encrypted.
 //!
-//! A [`Replica`] is what one device holds: the events and member records of its spaces (`kernoid-space-store`), their
+//! A [`Replica`] is what one device holds: the events and member records of its spaces ([`store`]), their
 //! originals (`kernoid-blob`) and its clock. Each space that is synchronised has, on the device, a member seed, the
 //! address of its relay and how far it has read there. The member list lives on the relay and is checked again here,
 //! record by record, before a key is used. Events and originals travel in envelopes; what was sent or received is
@@ -10,11 +10,13 @@
 //!
 //! OPEN: the seed is kept in the store beside the data; the key store of the operating system is not used yet.
 
+pub mod store;
 pub mod streams;
 pub mod transport;
 
 use std::{collections::BTreeMap, sync::Arc};
 
+use crate::store::{Backend, Store, StoreError};
 use kernoid_base::{Sha256Hash, SpaceId, base64url, from_base64url, from_root, to_root};
 use kernoid_blob::{BlobError, Blobs};
 use kernoid_crypt::{
@@ -22,7 +24,6 @@ use kernoid_crypt::{
     MemberRecord, MemberRole, RecoveryCode, Rights, SpaceKey, request_signature,
 };
 use kernoid_log::{Clock, DeviceId, EventError, EventHash, Log};
-use kernoid_space_store::{Backend, Store, StoreError};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::Value;
 

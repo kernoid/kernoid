@@ -5,8 +5,8 @@
 //! Alice's devices are lost and the recovery code brings her back. Without `KERNOID_TEST_RELAY` it does nothing.
 
 use kernoid_crypt::{Domain, stream::StreamId};
-use kernoid_replica::streams::Streams;
-use kernoid_space_store::{Store, streams::Parent};
+use kernoid_spaces::store::{Store, streams::Parent};
+use kernoid_spaces::streams::Streams;
 use serde_json::json;
 
 const D: Domain = Domain::KERNOID;

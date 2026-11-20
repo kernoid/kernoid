@@ -22,8 +22,8 @@ crate-type = ["cdylib", "rlib"]
 
 [features]
 default = ["native"]
-# Relays reached through ureq (kernoid-replica's `native`).
-native = ["kernoid-replica/native"]
+# Relays reached through ureq (kernoid-spaces' `native`).
+native = ["kernoid-spaces/native"]
 # The web app's bindings (`wasm-bindgen`), built with `scripts/build-wasm.sh`: the relay reached through a function of
 # the page's worker, the store kept as bytes by the page.
 wasm = ["dep:wasm-bindgen", "dep:js-sys"]
@@ -32,9 +32,8 @@ wasm = ["dep:wasm-bindgen", "dep:js-sys"]
 kernoid-base = { version = "0.5.0", path = "../base" }
 kernoid-crypt = { version = "0.5.0", path = "../crypt" }
 kernoid-log = { version = "0.5.0", path = "../log" }
-kernoid-replica = { version = "0.5.0", path = "../replica", default-features = false }
-# The store as bytes: sealed into a file on a device (`sealed`), kept in IndexedDB by the web app.
-kernoid-space-store = { version = "0.5.0", path = "../space-store", features = ["serialize"] }
+# The store as bytes (`serialize`): sealed into a file on a device (`sealed`), kept in IndexedDB by the web app.
+kernoid-spaces = { version = "0.5.0", path = "../spaces", default-features = false, features = ["serialize"] }
 # The sealed store's file (`sealed`): XChaCha20-Poly1305, as the foundation seals.
 chacha20poly1305 = "0.11.0"
 serde = { version = "1.0.229", features = ["derive"] }

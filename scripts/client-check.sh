@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# Runs the tests of the Rust SDK (kit/client), of kernoid-sync (kit/sync) and of the replica (kit/replica, through the
+# Runs the tests of the Rust SDK (kit/client), of kernoid-sync (kit/sync) and of the spaces (kit/spaces, through the
 # relay – open, for the test's tenant) that need a real kernoid: this
 # checkout's binary, serving a fresh database in the PostgreSQL of DATABASE_URL (a role that may create databases),
 # objects in memory, on http://clients.localhost:$PORT (18380 unless set). An instance, a tenant and the account
@@ -106,6 +106,6 @@ export KERNOID_TEST_SHELL_ADDRESS=erin@firma.test
 (cd "$root/kit/flutter/kernoid_bridge/rust" && cargo test --locked --test provider -- a_vault_on_a_space) \
     || { tail -n 30 "$work/server.log"; fail "the file shells' core"; }
 KERNOID_TEST_RELAY="http://127.0.0.1:$port/relay/kernoid" \
-    cargo test --manifest-path "$root/kit/Cargo.toml" --locked -p kernoid-replica --test server --test streams \
-    || { tail -n 30 "$work/server.log"; fail "the replica through the relay"; }
-echo "the SDK, kernoid-sync, the file shells' core and the replica work against kernoid"
+    cargo test --manifest-path "$root/kit/Cargo.toml" --locked -p kernoid-spaces --test server --test streams \
+    || { tail -n 30 "$work/server.log"; fail "the spaces through the relay"; }
+echo "the SDK, kernoid-sync, the file shells' core and the spaces work against kernoid"

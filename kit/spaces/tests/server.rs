@@ -9,8 +9,8 @@ use std::sync::Arc;
 
 use kernoid_blob::MemoryBlobs;
 use kernoid_crypt::{Domain, Rights};
-use kernoid_replica::{Replica, SyncError};
-use kernoid_space_store::Store;
+use kernoid_spaces::store::Store;
+use kernoid_spaces::{Replica, SyncError};
 use serde_json::json;
 
 const D: Domain = Domain::KERNOID;
@@ -24,7 +24,7 @@ fn replica(device: &str) -> Replica {
     Replica::open(D, device.parse().unwrap(), Store::in_memory().unwrap(), Arc::new(MemoryBlobs::new())).unwrap()
 }
 
-fn titles<S: kernoid_space_store::Backend>(replica: &Replica<S>, space: &kernoid_base::SpaceId) -> Vec<String> {
+fn titles<S: kernoid_spaces::store::Backend>(replica: &Replica<S>, space: &kernoid_base::SpaceId) -> Vec<String> {
     let log = replica.log(space).unwrap();
     log.ordered().iter().filter_map(|(_, e)| e.members.get("title")?.as_str().map(str::to_owned)).collect()
 }
