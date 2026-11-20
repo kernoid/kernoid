@@ -5,16 +5,12 @@
 //! same as an attachment.
 
 use kernoid_mail::Recipient;
+use kernoid_mime::{MessageBuilder, Part};
 use kernoid_pim::Component;
-use mail_builder::{
-    MessageBuilder,
-    headers::{HeaderType, content_type::ContentType},
-    mime::{BodyPart, MimePart},
-};
 use uuid::Uuid;
 
 use crate::{
-    Groupware, GroupwareError, Result,
+    Groupware, Result,
     scheduling::{ItipMessage, ItipSummary},
 };
 
@@ -77,33 +73,25 @@ impl Groupware {
             let method = message.summary.method().to_owned();
             let raw = MessageBuilder::new()
                 .from((principal.display_name.as_str(), message.from.as_str()))
-                .to(message.to.iter().map(String::as_str).collect::<Vec<_>>())
-                .header("Auto-Submitted", HeaderType::Text("auto-generated".into()))
+                .to(message.to.iter().map(String::as_str))
+                .header("Auto-Submitted", "auto-generated")
                 .subject(subject)
-                .body(MimePart::new(
-                    ContentType::new("multipart/mixed"),
-                    BodyPart::Multipart(vec![
-                        MimePart::new(
-                            ContentType::new("multipart/alternative"),
-                            BodyPart::Multipart(vec![
-                                MimePart::new(ContentType::new("text/plain"), BodyPart::Text(text.into())),
-                                MimePart::new(
-                                    ContentType::new("text/calendar")
-                                        .attribute("method", method.clone())
-                                        .attribute("charset", "utf-8"),
-                                    BodyPart::Text(ics.clone().into()),
-                                ),
-                            ]),
+                .body(Part::multipart(
+                    "mixed",
+                    vec![
+                        Part::multipart(
+                            "alternative",
+                            vec![
+                                Part::text("text/plain", text),
+                                Part::text("text/calendar", ics.clone())
+                                    .parameter("method", method.clone())
+                                    .parameter("charset", "utf-8"),
+                            ],
                         ),
-                        MimePart::new(
-                            ContentType::new("application/ics").attribute("name", "invite.ics"),
-                            BodyPart::Text(ics.clone().into()),
-                        )
-                        .attachment("invite.ics"),
-                    ]),
+                        Part::text("application/ics", ics.clone()).attachment("invite.ics"),
+                    ],
                 ))
-                .write_to_vec()
-                .map_err(|error| GroupwareError::Invalid(error.to_string()))?;
+                .write();
             // Accounts of this installation get it at once – delivered and applied; the others through the queue.
             let mut remote = Vec::new();
             for to in message.to.iter().map(|to| to.to_lowercase()) {
@@ -156,9 +144,12 @@ impl Groupware {
         if !from_verified {
             return;
         }
-        let Some(message) = mail_parser::MessageParser::new().parse(raw) else { return };
-        let Some(from) = message.from().and_then(|from| from.first()).and_then(|from| from.address()) else { return };
-        let from = from.to_lowercase();
+        let Some(message) = kernoid_mime::Message::parse(raw) else { return };
+        let Some(from) =
+            message.from().and_then(|from| from.first().and_then(|from| from.address().map(str::to_lowercase)))
+        else {
+            return;
+        };
         for part in message.root().parts() {
             let Some(content_type) = part.content_type() else { continue };
             let is_itip = content_type.ctype().eq_ignore_ascii_case("text")

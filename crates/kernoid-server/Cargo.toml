@@ -21,7 +21,7 @@ files = ["data"]
 # The relay of kernoid's foundation (RFC 0010, 4).
 relay = ["dep:kernoid-relay"]
 # What the three need: the stores of mail, calendars and files, and JMAP and WebDAV, which serve them together.
-data = ["dep:kernoid-dav", "dep:kernoid-files", "dep:kernoid-groupware", "dep:kernoid-jmap", "dep:kernoid-mail", "kernoid-smtp/server", "dep:mail-builder"]
+data = ["dep:kernoid-dav", "dep:kernoid-files", "dep:kernoid-groupware", "dep:kernoid-jmap", "dep:kernoid-mail", "kernoid-smtp/server", "dep:kernoid-mime"]
 
 [dependencies]
 async-graphql = "7.2.1"
@@ -50,7 +50,7 @@ kernoid-relay = { version = "0.5.1", path = "../kernoid-relay", optional = true 
 # Always its client (kernoid's own messages through a relay); its server with `data`.
 kernoid-smtp = { version = "0.5.1", path = "../kernoid-smtp", default-features = false }
 kernoid-store = { version = "0.5.1", path = "../kernoid-store" }
-mail-builder = { version = "2.0.0", optional = true }
+kernoid-mime = { version = "0.5.1", path = "../../kit/mime", optional = true }
 metrics = "0.24.6"
 percent-encoding = "2.3.2"
 metrics-exporter-prometheus = { version = "0.18.3", default-features = false }

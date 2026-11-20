@@ -18,8 +18,8 @@ kernoid-mail = { version = "0.5.1", path = "../kernoid-mail" }
 # iCalendar, vCard, recurrences, JSCalendar and JSContact – the kit's library (MIT), by path as kernoid-e2e.
 kernoid-pim = { version = "0.5.1", path = "../../kit/pim" }
 kernoid-store = { version = "0.5.1", path = "../kernoid-store" }
-mail-builder = "2.0.0"
-mail-parser = { version = "1.0.0", features = ["full_encoding"] }
+# Mail messages: the kit's library (MIT), by path.
+kernoid-mime = { version = "0.5.1", path = "../../kit/mime" }
 percent-encoding = "2.3.2"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"

@@ -4,7 +4,7 @@
 //! `protected-headers="v1"`, and the outer message keeps the header fields delivery, threads and sorting need – with
 //! the subject replaced by `[...]` and recorded in `HP-Outer`.
 
-use mail_parser::{MessageParser, MimeHeaders};
+use kernoid_mime::Message;
 use rand::{Rng, rngs::OsRng};
 
 use crate::{
@@ -93,12 +93,13 @@ pub struct Summary {
 
 /// The summary of a mail message in plain text.
 pub fn summary(raw: &[u8]) -> Result<Summary> {
-    let message = MessageParser::default().parse(raw).ok_or(Error::NotMail)?;
-    let preview = message.body_preview(256).map(|p| p.into_owned()).unwrap_or_default();
+    let message = Message::parse(raw).ok_or(Error::NotMail)?;
+    let root = message.root();
+    let preview = root.body_preview(256).unwrap_or_default();
     Ok(Summary {
-        subject: message.subject().map(str::to_owned),
+        subject: root.subject(),
         preview: preview.split_whitespace().collect::<Vec<_>>().join(" "),
-        has_attachment: message.attachment_count() > 0,
+        has_attachment: root.has_attachments(),
     })
 }
 
@@ -117,18 +118,18 @@ pub fn decrypt_summary(data: &[u8], keys: &[&SecretKey]) -> Result<Summary> {
 /// The armored OpenPGP message of a PGP/MIME message: the second part of a `multipart/encrypted` with the protocol
 /// `application/pgp-encrypted`.
 fn encrypted_payload(raw: &[u8]) -> Option<Vec<u8>> {
-    let message = MessageParser::default().parse(raw)?;
-    let root = message.content_type()?;
-    let encrypted = root.ctype().eq_ignore_ascii_case("multipart")
-        && root.subtype().is_some_and(|s| s.eq_ignore_ascii_case("encrypted"))
+    let message = Message::parse_headers(raw)?;
+    let content_type = message.root().header("Content-Type")?;
+    let root = kernoid_mime::params::parse(&content_type.unfolded(), true)?;
+    let encrypted = root.is("multipart", "encrypted")
         && root.attribute("protocol").is_some_and(|p| p.eq_ignore_ascii_case("application/pgp-encrypted"));
     if !encrypted {
         return None;
     }
-    let mail_parser::PartType::Multipart(children) = &message.root_part().body else { return None };
-    let part = message.part(*children.get(1)?)?;
-    let contents = part.contents();
-    message::is_armored(contents).then(|| contents.to_vec())
+    let message = Message::parse(raw)?;
+    let part = message.root().root_part().children().nth(1)?;
+    let contents = part.decoded();
+    message::is_armored(&contents).then(|| contents.into_owned())
 }
 
 /// The header section (with its last line break) and the body.

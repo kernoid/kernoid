@@ -1,12 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Delivery status notifications (RFC 3464): what the sender of a message gets back when kernoid gives up on some of
-//! its recipients (RFC 0002, 10.2). Built with mail-builder.
+//! its recipients (RFC 0002, 10.2). Built with kernoid-mime.
 
-use mail_builder::{
-    MessageBuilder,
-    headers::{content_type::ContentType, date::Date},
-    mime::MimePart,
-};
+use kernoid_mime::{DateTime, Encoding, MessageBuilder, Part};
 
 /// A recipient kernoid gave up on.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -41,7 +37,7 @@ pub fn bounce(hostname: &str, sender: &str, original: &[u8], failures: &[Failure
     }
     text.push_str("\r\nThe headers of your message are attached.\r\n");
 
-    let mut status = format!("Reporting-MTA: dns; {hostname}\r\nArrival-Date: {}\r\n", Date::now().to_rfc822());
+    let mut status = format!("Reporting-MTA: dns; {hostname}\r\nArrival-Date: {}\r\n", DateTime::now().to_rfc822());
     for failure in failures {
         status.push_str(&format!("\r\nFinal-Recipient: rfc822; {}\r\nAction: failed\r\n", failure.recipient));
         status.push_str(&format!(
@@ -61,25 +57,22 @@ pub fn bounce(hostname: &str, sender: &str, original: &[u8], failures: &[Failure
         }
     }
 
-    let report = MimePart::new(
-        ContentType::new("multipart/report").attribute("report-type", "delivery-status"),
+    let report = Part::multipart(
+        "report",
         vec![
-            MimePart::new("text/plain", text),
-            MimePart::new("message/delivery-status", status.into_bytes()).transfer_encoding("7bit"),
-            MimePart::new("text/rfc822-headers", headers_of(original).to_vec()).transfer_encoding("7bit"),
+            Part::text("text/plain", text),
+            Part::binary("message/delivery-status", status.into_bytes()).transfer_encoding(Encoding::SevenBit),
+            Part::binary("text/rfc822-headers", headers_of(original).to_vec()).transfer_encoding(Encoding::SevenBit),
         ],
-    );
+    )
+    .parameter("report-type", "delivery-status");
     MessageBuilder::new()
-        .from(mail_builder::headers::address::Address::new_address(
-            Some("Mail Delivery System"),
-            format!("mailer-daemon@{hostname}"),
-        ))
-        .to(sender)
+        .from(("Mail Delivery System".to_owned(), format!("mailer-daemon@{hostname}")))
+        .to([sender])
         .subject("Undelivered Mail Returned to Sender")
-        .header("Auto-Submitted", mail_builder::headers::raw::Raw::new("auto-replied"))
+        .header("Auto-Submitted", "auto-replied")
         .body(report)
-        .write_to_vec()
-        .expect("writing to memory")
+        .write()
 }
 
 #[cfg(test)]

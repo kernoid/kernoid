@@ -467,14 +467,13 @@ fn arrival_notice(
         text.push_str(&format!("  {more}\r\n"));
     }
     text.push_str(&format!("\r\n{closing}\r\n"));
-    mail_builder::MessageBuilder::new()
-        .from(mail_builder::headers::address::Address::new_address(Some("kernoid"), format!("mailer-daemon@{host}")))
-        .to(to)
+    kernoid_mime::MessageBuilder::new()
+        .from(("kernoid".to_owned(), format!("mailer-daemon@{host}")))
+        .to([to])
         .subject(subject)
-        .header("Auto-Submitted", mail_builder::headers::raw::Raw::new("auto-generated"))
+        .header("Auto-Submitted", "auto-generated")
         .text_body(text)
-        .write_to_vec()
-        .expect("writing to memory")
+        .write()
 }
 
 #[cfg(test)]

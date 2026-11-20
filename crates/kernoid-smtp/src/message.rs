@@ -293,9 +293,10 @@ mod tests {
     fn dates_are_written_as_rfc_5322_has_them() {
         let date = date_now();
         assert!(date.ends_with(" +0000"), "{date}");
-        assert!(mail_parser::MessageParser::new()
-            .parse_headers(format!("Date: {date}\r\n\r\n").as_bytes())
-            .and_then(|message| message.date())
-            .is_some());
+        assert!(
+            kernoid_mime::Message::parse_headers(format!("Date: {date}\r\n\r\n").as_bytes())
+                .and_then(|message| message.date())
+                .is_some()
+        );
     }
 }

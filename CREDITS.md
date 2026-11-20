@@ -15,8 +15,9 @@ and MTA-STS, threading, the Sieve interpreter (`kernoid-sieve`), scheduling, the
 calcard and jmap-tools (`kit/pim`, `kernoid-pim`, MIT). No file of kernoid is taken over or derived from Stalwart's
 any more.
 
-**Libraries** of Stalwart Labs that kernoid uses as they are: `mail-parser`, `mail-auth`, `mail-builder`,
-`smtp-proto` (Apache-2.0 OR MIT).
+**Libraries** of Stalwart Labs that kernoid uses as they are: `mail-auth` and `smtp-proto` (Apache-2.0 OR MIT;
+mail-auth brings `mail-parser` with it). kernoid reads and writes messages with its own `kernoid-mime` (`kit/mime`,
+MIT, written from the RFCs) since 2026-11-20, in place of `mail-parser` and `mail-builder`.
 
 ## ZITADEL
 

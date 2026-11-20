@@ -24,8 +24,8 @@ kernoid-store = { version = "0.5.1", path = "../kernoid-store" }
 base64 = "0.22.1"
 futures-util = { version = "0.3.34", default-features = false }
 kernoid-mail = { version = "0.5.1", path = "../kernoid-mail" }
-mail-builder = "2.0.0"
-mail-parser = { version = "1.0.0", features = ["full_encoding"] }
+# Mail messages: the kit's library (MIT), by path.
+kernoid-mime = { version = "0.5.1", path = "../../kit/mime" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 sha2 = "0.11.1"

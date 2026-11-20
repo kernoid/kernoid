@@ -5,7 +5,6 @@
 use std::collections::{BTreeSet, HashMap};
 
 use bytes::Bytes;
-use mail_parser::MessageParser;
 use uuid::Uuid;
 
 use crate::{
@@ -225,9 +224,8 @@ impl Mail {
     /// Stores an incoming message for `account`: skipped if it is a duplicate, else where the account's active Sieve
     /// script puts it – the inbox (or Junk) without one.
     pub async fn deliver(&self, account: Uuid, raw: Bytes, delivery: Delivery<'_>) -> Result<Delivered> {
-        let message_id = MessageParser::new()
-            .parse_headers(&raw[..])
-            .and_then(|message| message.message_id().map(str::to_owned))
+        let message_id = kernoid_mime::Message::parse_headers(&raw[..])
+            .and_then(|message| message.message_id())
             .filter(|id| !id.is_empty());
         if let Some(message_id) = &message_id {
             let duplicate = sqlx::query_scalar!(

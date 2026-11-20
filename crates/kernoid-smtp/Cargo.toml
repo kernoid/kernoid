@@ -16,8 +16,8 @@ default = ["server"]
 # The MX, submission and the queue's sending (RFC 0002, 9, 10); without it only the client (identity alone).
 server = [
     "dep:aws-lc-rs", "dep:bytes", "dep:jiff", "dep:jiff-sqlx", "dep:idna", "dep:kernoid-config", "dep:kernoid-groupware",
-    "dep:kernoid-identity", "dep:kernoid-mail", "dep:kernoid-oidc", "dep:kernoid-store", "dep:mail-builder",
-    "dep:mail-auth", "dep:mail-parser", "dep:rustls-webpki", "dep:sha2", "dep:tokio-util", "dep:sqlx", "dep:tracing",
+    "dep:kernoid-identity", "dep:kernoid-mail", "dep:kernoid-oidc", "dep:kernoid-store", "dep:kernoid-mime",
+    "dep:mail-auth", "dep:rustls-webpki", "dep:sha2", "dep:tokio-util", "dep:sqlx", "dep:tracing",
     "dep:uuid", "dep:x509-cert", "dep:zeroize", "tokio/sync", "tokio/rt", "tokio/macros",
 ]
 
@@ -34,9 +34,8 @@ kernoid-identity = { version = "0.5.1", path = "../kernoid-identity", optional =
 kernoid-mail = { version = "0.5.1", path = "../kernoid-mail", optional = true }
 kernoid-oidc = { version = "0.5.1", path = "../kernoid-oidc", optional = true }
 kernoid-store = { version = "0.5.1", path = "../kernoid-store", optional = true }
-mail-builder = { version = "2.0.0", optional = true }
+kernoid-mime = { version = "0.5.1", path = "../../kit/mime", optional = true }
 mail-auth = { version = "0.15.1", default-features = false, features = ["aws-lc-rs", "arc"], optional = true }
-mail-parser = { version = "1.0.0", features = ["full_encoding"], optional = true }
 rustls = { version = "0.23.46", default-features = false, features = ["aws-lc-rs", "prefer-post-quantum", "std", "tls12"] }
 rustls-webpki = { version = "0.103.16", default-features = false, features = ["aws-lc-rs", "std"], optional = true }
 sha2 = { version = "0.11.1", optional = true }

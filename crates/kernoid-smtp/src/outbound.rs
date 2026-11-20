@@ -147,10 +147,9 @@ impl Outbound {
     /// The message with the DKIM signatures of its `From` domain prepended, if kernoid has keys for it (RFC 0002, 10.3).
     async fn signed(&self, raw: bytes::Bytes) -> bytes::Bytes {
         let Some(main) = &self.0.main else { return raw };
-        let domain = mail_parser::MessageParser::new()
-            .parse_headers(&raw[..])
+        let domain = kernoid_mime::Message::parse_headers(&raw[..])
             .and_then(|message| {
-                message.from().and_then(|from| from.first()).and_then(|addr| addr.address().map(str::to_owned))
+                message.from().and_then(|from| from.first().and_then(|addr| addr.address().map(str::to_owned)))
             })
             .and_then(|address| address.rsplit_once('@').map(|(_, domain)| domain.to_lowercase()));
         let Some(domain) = domain else { return raw };

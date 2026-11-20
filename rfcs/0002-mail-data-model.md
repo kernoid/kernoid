@@ -84,7 +84,7 @@ each account in its own transaction.
 | `received_at` | when kernoid received it (or the date an import gives) |
 | `sent_at` | the `Date` header, if any |
 | `message_id`, `in_reply_to`, `references` | from the headers, for threading and clients |
-| `subject`, `from`, `to`, `cc`, `bcc`, `reply_to`, `sender` | parsed with mail-parser; addresses as JSON lists of `{name, email}` |
+| `subject`, `from`, `to`, `cc`, `bcc`, `reply_to`, `sender` | parsed with kernoid-mime; addresses as JSON lists of `{name, email}` |
 | `preview` | at most 256 characters of the text, as JMAP `preview` |
 | `has_attachment` | |
 | `keywords` | JMAP keywords, IMAP flags: `$seen`, `$flagged`, `$answered`, `$draft` and others; lower case, since they are case-insensitive |
@@ -93,8 +93,8 @@ An email is in **one or more mailboxes** (`email_mailboxes`, JMAP `mailboxIds`),
 whenever it is added to a mailbox, so IMAP clients see a move as expunge plus a new message. An email in no mailbox
 does not exist: removing the last one destroys it.
 
-- **Import** (`import_email`) parses the message with [mail-parser](https://crates.io/crates/mail-parser) (Apache-2.0
-  OR MIT, by Stalwart Labs), refuses what is too large (`mail.max_message_size`) or over the quota, writes the sealed
+- **Import** (`import_email`) parses the message with kernoid-mime (`kit/mime`, MIT, kernoid's own; until 0.5 with
+  Stalwart Labs' mail-parser), refuses what is too large (`mail.max_message_size`) or over the quota, writes the sealed
   object, then the rows. Delivery and JMAP `Email/import` both go through it.
 - **Keywords** follow IMAP's flag syntax ([RFC 9051](https://www.rfc-editor.org/rfc/rfc9051), `atom`): 1–255
   printable ASCII characters without `( ) { ] % * " \` and space.
@@ -106,8 +106,8 @@ does not exist: removing the last one destroys it.
 ## 5. Threads
 
 Two emails are in one thread if their
-**base subjects are the same** – the subject without `Re:`, `Fwd:` and the like, as mail-parser's `thread_name`
-gives it – **and they share a message id**: their own `Message-ID`, an `In-Reply-To`, a `References` or a
+**base subjects are the same** – the subject without `Re:`, `Fwd:` and the like (RFC 5256, 2.1, with the markers of other
+languages – `AW:`, `WG:`, `SV:` …), as kernoid-mime's `base_subject` gives it – **and they share a message id**: their own `Message-ID`, an `In-Reply-To`, a `References` or a
 `Resent-Message-ID`. Each email's ids are kept with a hash of its base subject (`email_thread_refs`); a new email
 joins the thread of the earliest email that matches, or starts a new one.
 
@@ -396,7 +396,8 @@ the process role `imap` (part of `all`) when `[imap]` is configured, in `kernoid
 - The protocol is kernoid's own, written from the RFCs: commands are cut from the bytes with their literals –
   synchronizing, `LITERAL+` and binary – under limits (a line or another literal 64 KiB, a message as large as
   `mail.max_message_size`), parsed without ever panicking, and answered by a session on the mail store; so is what
-  `FETCH` reads from a message (`ENVELOPE`, `BODYSTRUCTURE`, sections, `BINARY`), through mail-parser.
+  `FETCH` reads from a message (`ENVELOPE`, `BODYSTRUCTURE`, sections, `BINARY`), through kernoid-mime – sections
+  are byte ranges of the stored message.
 - **Extensions:** `IDLE`, `MOVE`, `UIDPLUS`, `CONDSTORE`, `QRESYNC`, `ENABLE`, `NAMESPACE`, `SPECIAL-USE`,
   `LIST-EXTENDED`, `LIST-STATUS`, `ESEARCH`, `SEARCHRES`, `WITHIN`, `BINARY`, `MULTIAPPEND`, `LITERAL+`, `SASL-IR`,
   `UTF8=ACCEPT`, `ID`, `UNSELECT`, `STATUS=SIZE`, `CHILDREN`, `ACL` and `RIGHTS=` (12.2), `SORT`, `SORT=DISPLAY`,

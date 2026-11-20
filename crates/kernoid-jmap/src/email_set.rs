@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `Email/set` and `Email/import` (RFC 8621, 4.6 and 4.8): new emails – built with mail-builder from JSON, or
+//! `Email/set` and `Email/import` (RFC 8621, 4.6 and 4.8): new emails – built with kernoid-mime from JSON, or
 //! imported from a blob – keywords and mailboxes changed, emails destroyed.
 
 use std::collections::BTreeSet;
@@ -7,11 +7,7 @@ use std::collections::BTreeSet;
 use bytes::Bytes;
 use jiff::Timestamp;
 use kernoid_mail::{Access, EmailInfo, Keyword, MailError, NewEmail, Rights};
-use mail_builder::{
-    MessageBuilder,
-    headers::{address::Address, date::Date},
-    mime::MimePart,
-};
+use kernoid_mime::{DateTime, MessageBuilder, build::Address};
 use serde_json::{Map, Value, json};
 use uuid::Uuid;
 
@@ -40,15 +36,15 @@ fn received_at(value: Option<&Value>) -> Result<Option<Timestamp>, String> {
     }
 }
 
-fn addresses(value: Option<&Value>) -> Result<Option<Address<'static>>, String> {
+fn addresses(value: Option<&Value>) -> Result<Option<Vec<Address>>, String> {
     let Some(Value::Array(list)) = value else { return Ok(None) };
     let mut out = Vec::new();
     for entry in list {
         let email = entry.get("email").and_then(Value::as_str).ok_or("an address needs email")?.to_owned();
         let name = entry.get("name").and_then(Value::as_str).map(str::to_owned);
-        out.push(Address::new_address(name, email));
+        out.push(Address::new(name, email));
     }
-    Ok(if out.is_empty() { None } else { Some(Address::new_list(out)) })
+    Ok(if out.is_empty() { None } else { Some(out) })
 }
 
 impl Context<'_> {
@@ -64,7 +60,7 @@ impl Context<'_> {
     async fn build(&self, access: &Access, object: &Map<String, Value>) -> Result<Vec<u8>, String> {
         let mut builder = MessageBuilder::new();
         if let Some(from) = addresses(object.get("from"))? {
-            builder = builder.from(from);
+            builder = builder.from_list(from);
         }
         if let Some(to) = addresses(object.get("to"))? {
             builder = builder.to(to);
@@ -82,13 +78,13 @@ impl Context<'_> {
             builder = builder.sender(sender);
         }
         if let Some(subject) = object.get("subject").and_then(Value::as_str) {
-            builder = builder.subject(subject.to_owned());
+            builder = builder.subject(subject);
         }
         let sent = match object.get("sentAt").and_then(Value::as_str) {
             Some(date) => date.parse::<jiff::Timestamp>().map_err(|_| "sentAt is a date")?.as_second(),
             None => Timestamp::now().as_second(),
         };
-        builder = builder.date(Date::new(sent));
+        builder = builder.date(DateTime::from_timestamp(sent));
         let ids = |key: &str| -> Vec<String> {
             object
                 .get(key)
@@ -104,7 +100,7 @@ impl Context<'_> {
             None => builder = builder.message_id(format!("{}@kernoid", Uuid::now_v7())),
         }
         if let Some(id) = ids("inReplyTo").first() {
-            builder = builder.in_reply_to(id.clone());
+            builder = builder.in_reply_to([id.clone()]);
         }
         let references = ids("references");
         if !references.is_empty() {
@@ -138,10 +134,8 @@ impl Context<'_> {
                 _ => builder = builder.attachment(kind, name, content.to_vec()),
             }
         }
-        if object.get("textBody").is_none() && object.get("htmlBody").is_none() && object.get("attachments").is_none() {
-            builder = builder.body(MimePart::new("text/plain", ""));
-        }
-        builder.write_to_vec().map_err(|error| error.to_string())
+        // Without text, HTML or attachments the body is empty text.
+        Ok(builder.write())
     }
 
     pub async fn email_set(&mut self, args: Map<String, Value>) -> MethodResult {
