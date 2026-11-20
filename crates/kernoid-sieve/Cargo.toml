@@ -15,5 +15,5 @@ workspace = true
 [dependencies]
 getrandom = "0.4.3"
 # Mail messages: the kit's library (MIT), by path.
-kernoid-mime = { version = "0.5.1", path = "../../kit/mime" }
+kernoid-mime = { version = "0.6.0", path = "../../kit/mime" }
 sha2 = "0.11.1"

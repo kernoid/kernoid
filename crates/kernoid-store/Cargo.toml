@@ -20,9 +20,9 @@ jiff-sqlx = { version = "1.0.0", features = ["postgres", "serde"] }
 chacha20poly1305 = { version = "0.11.0", default-features = false, features = ["alloc", "zeroize"] }
 futures-util = { version = "0.3.34", default-features = false }
 getrandom = "0.4.3"
-kernoid-config = { version = "0.5.1", path = "../kernoid-config" }
+kernoid-config = { version = "0.6.0", path = "../kernoid-config" }
 # Object storage through the kit's own client (in memory, S3) – no object_store.
-kernoid-blob = { version = "0.5.1", path = "../../kit/blob", features = ["s3"] }
+kernoid-blob = { version = "0.6.0", path = "../../kit/blob", features = ["s3"] }
 sha2 = "0.11.1"
 sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "tls-rustls-aws-lc-rs", "postgres", "migrate", "macros", "uuid", "json", "sqlx-toml"] }
 thiserror = "2.0.21"

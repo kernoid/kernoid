@@ -5,7 +5,15 @@ What changes from release to release, for those who run kernoid and those who bu
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org) –
 before 1.0, a minor version (0.2) may change the API and the configuration, and says how to upgrade here.
 
-## [Unreleased]
+## [0.6.0] – DATE
+
+kernoid is its own code now: everything taken over from Stalwart, and the libraries that read calendars, contacts, mail,
+Sieve, SAML signatures, passkeys, LDAP, ACME, certificates and S3, are replaced by kernoid's own, written from the RFCs
+and specifications – no OpenSSL and no chrono any more, every crate `AGPL-3.0-or-later` (the kit MIT). The server's
+crates are on crates.io from this release, so that other programs build kernoid's identity in (RFC 0009). Upgrade by
+pulling the image `ghcr.io/kernoid/kernoid:0.6.0` (the Helm chart and the crates follow the version): no migration;
+read the **Upgrading** notes below – some answers change (Authentication-Results, Sieve capabilities, metrics,
+SAML from AD FS with CBC encryption).
 
 ### Added
 
@@ -100,8 +108,6 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   `http.web_app` still serve a directory).
 - JSCalendar as JMAP shows it: participants' ids come from their addresses (the same in a series and its overrides),
   overrides are written back as whole components, a zone only a calendar defines is shown in UTC.
-### Changed
-
 - **Object storage through kernoid's own S3 client** (`kernoid_blob::objects`, MIT, in the kit) in place of the crate
   object_store: requests signed with AWS Signature Version 4, ranges, multipart uploads, rustls on AWS-LC with
   post-quantum key exchange preferred. Nothing to change in the configuration, and objects stay where they are; AWS

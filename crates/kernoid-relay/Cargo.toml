@@ -16,9 +16,9 @@ workspace = true
 axum = "0.8.9"
 jiff = { version = "1.0.1", features = ["serde"] }
 jiff-sqlx = { version = "1.0.0", features = ["postgres", "serde"] }
-kernoid-base = { version = "0.5.1", path = "../../kit/base" }
-kernoid-crypt = { version = "0.5.1", path = "../../kit/crypt" }
-kernoid-store = { version = "0.5.1", path = "../kernoid-store" }
+kernoid-base = { version = "0.6.0", path = "../../kit/base" }
+kernoid-crypt = { version = "0.6.0", path = "../../kit/crypt" }
+kernoid-store = { version = "0.6.0", path = "../kernoid-store" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres", "macros", "uuid", "sqlx-toml"] }

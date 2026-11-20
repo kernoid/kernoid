@@ -28,8 +28,8 @@ ml-dsa = { version = "0.1.2", default-features = false, features = ["alloc", "ze
 ml-kem = { version = "0.2.3", features = ["deterministic"] }
 sha3 = "0.10.9"
 x25519-dalek = "3.0.0"
-kernoid-base = { version = "0.5.1", path = "../base" }
-kernoid-log = { version = "0.5.1", path = "../log" }
+kernoid-base = { version = "0.6.0", path = "../base" }
+kernoid-log = { version = "0.6.0", path = "../log" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 sha2 = "0.11.1"

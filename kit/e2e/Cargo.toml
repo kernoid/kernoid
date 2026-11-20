@@ -29,7 +29,7 @@ wasm = ["dep:wasm-bindgen", "pgp/wasm"]
 [dependencies]
 base64 = "0.22.1"
 # Mail parsed as the server parses it: kernoid's own (the kit).
-kernoid-mime = { version = "0.5.1", path = "../mime" }
+kernoid-mime = { version = "0.6.0", path = "../mime" }
 # OpenPGP (RFC 9580) with its post-quantum algorithms (RFC 9980) – MIT OR Apache-2.0.
 pgp = { version = "0.21.0", default-features = false, features = ["pqc"] }
 rand = "0.8.6"
