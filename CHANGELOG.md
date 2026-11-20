@@ -7,7 +7,7 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 ## [Unreleased]
 
-## [0.5.1] – DATE
+## [0.5.1] – 2026-11-20
 
 kernoid becomes the core of a suite of building blocks ([RFC 0008](rfcs/0008-suite-and-building-blocks.md)–0011): an
 installation runs only the services it wants, down to identity alone or a relay alone; other programs log in with
