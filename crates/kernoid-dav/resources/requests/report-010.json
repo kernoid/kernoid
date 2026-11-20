@@ -27,13 +27,10 @@
     {
       "type": "Property",
       "comp": [
-        "VCalendar",
-        "VEvent"
+        "VCALENDAR",
+        "VEVENT"
       ],
-      "prop": {
-        "type": "Other",
-        "data": "X-ABC-GUID"
-      },
+      "prop": "X-ABC-GUID",
       "op": {
         "type": "TextMatch",
         "data": {

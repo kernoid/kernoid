@@ -27,8 +27,8 @@
     {
       "type": "Component",
       "comp": [
-        "VCalendar",
-        "VEvent"
+        "VCALENDAR",
+        "VEVENT"
       ],
       "op": {
         "type": "Exists"

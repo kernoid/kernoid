@@ -19,9 +19,7 @@
       "type": "Property",
       "comp": null,
       "prop": {
-        "name": {
-          "type": "Fn"
-        },
+        "name": "FN",
         "group": null
       },
       "op": {

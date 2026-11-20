@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
+use crate::proto::names::{ICalendarComponentType, ICalendarParameterName, ICalendarProperty, VCardParameterName};
 use crate::proto::types::{TimeRange, dead_property::DeadElementTag};
 use crate::proto::{
     Depth,
@@ -17,10 +18,6 @@ use crate::proto::{
             TextMatch, Timezone, VCardPropertyWithGroup,
         },
     },
-};
-use calcard::{
-    icalendar::{ICalendarComponentType, ICalendarParameterName, ICalendarProperty},
-    vcard::VCardParameterName,
 };
 
 impl DavParser for Report {

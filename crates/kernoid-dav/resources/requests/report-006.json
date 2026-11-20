@@ -27,12 +27,10 @@
     {
       "type": "Property",
       "comp": [
-        "VCalendar",
-        "VEvent"
+        "VCALENDAR",
+        "VEVENT"
       ],
-      "prop": {
-        "type": "Uid"
-      },
+      "prop": "UID",
       "op": {
         "type": "TextMatch",
         "data": {

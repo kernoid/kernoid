@@ -27,12 +27,10 @@
     {
       "type": "Property",
       "comp": [
-        "VCalendar",
-        "VTodo"
+        "VCALENDAR",
+        "VTODO"
       ],
-      "prop": {
-        "type": "Completed"
-      },
+      "prop": "COMPLETED",
       "op": {
         "type": "Undefined"
       }
@@ -40,12 +38,10 @@
     {
       "type": "Property",
       "comp": [
-        "VCalendar",
-        "VTodo"
+        "VCALENDAR",
+        "VTODO"
       ],
-      "prop": {
-        "type": "Status"
-      },
+      "prop": "STATUS",
       "op": {
         "type": "TextMatch",
         "data": {

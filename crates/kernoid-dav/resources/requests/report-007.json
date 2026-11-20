@@ -27,12 +27,10 @@
     {
       "type": "Property",
       "comp": [
-        "VCalendar",
-        "VEvent"
+        "VCALENDAR",
+        "VEVENT"
       ],
-      "prop": {
-        "type": "Attendee"
-      },
+      "prop": "ATTENDEE",
       "op": {
         "type": "TextMatch",
         "data": {
@@ -47,13 +45,11 @@
     {
       "type": "Parameter",
       "comp": [
-        "VCalendar",
-        "VEvent"
+        "VCALENDAR",
+        "VEVENT"
       ],
-      "prop": {
-        "type": "Attendee"
-      },
-      "param": "Partstat",
+      "prop": "ATTENDEE",
+      "param": "PARTSTAT",
       "op": {
         "type": "TextMatch",
         "data": {

@@ -17,37 +17,27 @@
             "properties": [
               {
                 "group": null,
-                "name": {
-                  "type": "Version"
-                },
+                "name": "VERSION",
                 "no_value": false
               },
               {
                 "group": null,
-                "name": {
-                  "type": "Uid"
-                },
+                "name": "UID",
                 "no_value": false
               },
               {
                 "group": null,
-                "name": {
-                  "type": "Nickname"
-                },
+                "name": "NICKNAME",
                 "no_value": false
               },
               {
                 "group": null,
-                "name": {
-                  "type": "Email"
-                },
+                "name": "EMAIL",
                 "no_value": false
               },
               {
                 "group": null,
-                "name": {
-                  "type": "Fn"
-                },
+                "name": "FN",
                 "no_value": false
               }
             ]
@@ -61,9 +51,7 @@
       "type": "Property",
       "comp": null,
       "prop": {
-        "name": {
-          "type": "Nickname"
-        },
+        "name": "NICKNAME",
         "group": null
       },
       "op": {

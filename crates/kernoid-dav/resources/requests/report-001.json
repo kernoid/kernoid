@@ -16,84 +16,62 @@
           "data": {
             "properties": [
               {
-                "component": "VCalendar",
-                "name": {
-                  "type": "Version"
-                },
+                "component": "VCALENDAR",
+                "name": "VERSION",
                 "no_value": false
               },
               {
-                "component": "VEvent",
-                "name": {
-                  "type": "Summary"
-                },
+                "component": "VEVENT",
+                "name": "SUMMARY",
                 "no_value": false
               },
               {
-                "component": "VEvent",
-                "name": {
-                  "type": "Uid"
-                },
+                "component": "VEVENT",
+                "name": "UID",
                 "no_value": false
               },
               {
-                "component": "VEvent",
-                "name": {
-                  "type": "Dtstart"
-                },
+                "component": "VEVENT",
+                "name": "DTSTART",
                 "no_value": false
               },
               {
-                "component": "VEvent",
-                "name": {
-                  "type": "Dtend"
-                },
+                "component": "VEVENT",
+                "name": "DTEND",
                 "no_value": false
               },
               {
-                "component": "VEvent",
-                "name": {
-                  "type": "Duration"
-                },
+                "component": "VEVENT",
+                "name": "DURATION",
                 "no_value": false
               },
               {
-                "component": "VEvent",
-                "name": {
-                  "type": "Rrule"
-                },
+                "component": "VEVENT",
+                "name": "RRULE",
                 "no_value": false
               },
               {
-                "component": "VEvent",
-                "name": {
-                  "type": "Rdate"
-                },
+                "component": "VEVENT",
+                "name": "RDATE",
                 "no_value": false
               },
               {
-                "component": "VEvent",
-                "name": {
-                  "type": "Exrule"
-                },
+                "component": "VEVENT",
+                "name": "EXRULE",
                 "no_value": false
               },
               {
-                "component": "VEvent",
-                "name": {
-                  "type": "Exdate"
-                },
+                "component": "VEVENT",
+                "name": "EXDATE",
                 "no_value": false
               },
               {
-                "component": "VEvent",
-                "name": {
-                  "type": "RecurrenceId"
-                },
+                "component": "VEVENT",
+                "name": "RECURRENCE-ID",
                 "no_value": false
               },
               {
-                "component": "VTimezone",
+                "component": "VTIMEZONE",
                 "name": null,
                 "no_value": false
               }
@@ -110,8 +88,8 @@
     {
       "type": "Component",
       "comp": [
-        "VCalendar",
-        "VEvent"
+        "VCALENDAR",
+        "VEVENT"
       ],
       "op": {
         "type": "TimeRange",

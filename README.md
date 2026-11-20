@@ -37,7 +37,7 @@ time the mailbox, the login for single sign-on and the owner of files. Free soft
 | `crates/kernoid-oidc` | the OpenID Connect provider: applications in projects, signing keys with a life cycle, authorization code flow with PKCE, ID, access and refresh tokens, project roles in tokens, userinfo, logout; logging in with other OpenID and SAML 2.0 providers (`federation`, `saml` with bergshamra) |
 | `crates/kernoid-mail` | the mail store of each account: mailboxes, emails (raw messages sealed in object storage), threads, keywords, quotas, the journal of changes for JMAP and IMAP, and who may use whose mail (shared mailboxes, grants) |
 | `crates/kernoid-smtp` | mail over SMTP: the MX for the tenants' domains (SPF, DKIM, DMARC, ARC, iprev, a basic spam filter, Sieve), submission with app passwords, the queue's delivery with DKIM signing, MTA-STS and DANE, bounces, DNS checks |
-| `crates/kernoid-groupware` | calendars and contacts of each account: events and contacts parsed with calcard, sharing, invitations (iTIP/iMIP) |
+| `crates/kernoid-groupware` | calendars and contacts of each account: events and contacts parsed with kernoid-pim, sharing, invitations (iTIP/iMIP) |
 | `crates/kernoid-dav` | CalDAV and CardDAV; the protocol parser taken over from Stalwart |
 | `crates/kernoid-files` | the file store of each account and of the tenant's team folders: directories, files of any size in sealed parts, versions, sharing, WebDAV locks |
 | `crates/kernoid-jmap` | JMAP Core, Mail, Calendars, Contacts and FileNode for programs and web apps, with push over EventSource |

@@ -103,7 +103,7 @@ impl From<&RawElement<'_>> for DeadElementTag {
 
 #[cfg(test)]
 mod tests {
-    use calcard::vcard::VCardVersion;
+    use kernoid_pim::vcard::Version as VCardVersion;
 
     use crate::proto::{
         parser::{DavParser, tokenizer::Tokenizer},

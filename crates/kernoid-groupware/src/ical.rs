@@ -1,14 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Reading what clients send (RFC 0004, 3): an iCalendar object or a vCard, parsed by calcard, checked, and the
+//! Reading what clients send (RFC 0004, 3): an iCalendar object or a vCard, parsed by kernoid-pim, checked, and the
 //! index kept in the clear worked out from it.
 
-use calcard::{
-    Entry, Parser,
-    common::timezone::{Tz, ZonedDateTime},
-    icalendar::{ICalendar, ICalendarComponentType, ICalendarProperty},
-    vcard::{VCard, VCardProperty},
+use jiff::{Timestamp, tz::TimeZone};
+use kernoid_pim::{
+    Component, expand, ical,
+    vcard::{self, VCard},
 };
-use jiff::Timestamp;
 
 use crate::{GroupwareError, Result};
 
@@ -21,7 +19,7 @@ pub const MAX_INSTANCES: usize = 3000;
 /// An event or task as a client sent it, with its index.
 #[derive(Debug)]
 pub struct ParsedEvent {
-    pub ical: ICalendar,
+    pub ical: Component,
     pub uid: String,
     /// `VEVENT`, `VTODO` or `VJOURNAL`.
     pub component: &'static str,
@@ -33,23 +31,20 @@ pub struct ParsedEvent {
 }
 
 /// Parses and checks an iCalendar object for a calendar: one UID, one kind of component (RFC 4791, 4.1).
-pub fn parse_event(text: &str, default_tz: Tz) -> Result<ParsedEvent> {
+pub fn parse_event(text: &str, default_tz: TimeZone) -> Result<ParsedEvent> {
     if text.len() > MAX_OBJECT_SIZE {
         return Err(GroupwareError::TooLarge { limit: MAX_OBJECT_SIZE as u64 });
     }
-    let ical = match Parser::new(text).entry() {
-        Entry::ICalendar(ical) => ical,
-        _ => return Err(GroupwareError::Invalid("not an iCalendar object".into())),
-    };
-    let mut uid: Option<&str> = None;
+    let ical = ical::parse(text).map_err(|_| GroupwareError::Invalid("not an iCalendar object".into()))?;
+    let mut uid: Option<String> = None;
     let mut component = None;
     let mut organizer = None;
     for comp in &ical.components {
-        let kind = match comp.component_type {
-            ICalendarComponentType::VEvent => "VEVENT",
-            ICalendarComponentType::VTodo => "VTODO",
-            ICalendarComponentType::VJournal => "VJOURNAL",
-            ICalendarComponentType::VFreebusy | ICalendarComponentType::VAvailability => {
+        let kind = match comp.name.as_str() {
+            "VEVENT" => "VEVENT",
+            "VTODO" => "VTODO",
+            "VJOURNAL" => "VJOURNAL",
+            "VFREEBUSY" | "VAVAILABILITY" => {
                 return Err(GroupwareError::Invalid("free/busy and availability are not stored".into()));
             }
             _ => continue,
@@ -58,18 +53,16 @@ pub fn parse_event(text: &str, default_tz: Tz) -> Result<ParsedEvent> {
             return Err(GroupwareError::Invalid("an object holds one kind of component".into()));
         }
         component = Some(kind);
-        match (uid, comp.uid()) {
+        match (&uid, comp.uid()) {
             (_, None) => return Err(GroupwareError::Invalid("a component without UID".into())),
-            (Some(known), Some(other)) if known != other => {
+            (Some(known), Some(other)) if *known != other => {
                 return Err(GroupwareError::Invalid("an object holds one UID".into()));
             }
             (_, Some(other)) => uid = Some(other),
         }
         if organizer.is_none() {
-            organizer = comp
-                .property(&ICalendarProperty::Organizer)
-                .and_then(|entry| entry.calendar_address())
-                .map(|address| address.to_lowercase());
+            organizer =
+                comp.property("ORGANIZER").and_then(|entry| entry.address()).map(|address| address.to_lowercase());
         }
     }
     let (Some(uid), Some(component)) = (uid, component) else {
@@ -78,34 +71,21 @@ pub fn parse_event(text: &str, default_tz: Tz) -> Result<ParsedEvent> {
     if uid.is_empty() || uid.len() > 255 {
         return Err(GroupwareError::Invalid("the UID must have 1 to 255 characters".into()));
     }
-    let uid = uid.to_owned();
-    let span = span(&ical, default_tz);
+    let span = span(&ical, &default_tz);
     Ok(ParsedEvent { ical, uid, component, span, organizer })
 }
 
 /// The span of an object's instances (RFC 0004, 3).
-pub fn span(ical: &ICalendar, default_tz: Tz) -> Option<(Timestamp, Option<Timestamp>)> {
-    let expanded = ical.expand_dates(default_tz, MAX_INSTANCES);
-    let endless = expanded.events.len() >= MAX_INSTANCES;
-    let mut first: Option<Timestamp> = None;
-    let mut last: Option<Timestamp> = None;
-    for event in &expanded.events {
-        let (Some(start), Some(end)) = (utc(event.start), utc(event.end)) else { continue };
-        first = Some(first.map_or(start, |first| first.min(start)));
-        last = Some(last.map_or(end, |last| last.max(end)));
-    }
-    let first = first?;
-    Some((first, if endless { None } else { last.map(|last| last.max(first)) }))
-}
-
-/// An instant of calcard as a time in UTC.
-pub fn utc(time: ZonedDateTime) -> Option<Timestamp> {
-    Some(time.to_timestamp())
+pub fn span(ical: &Component, default_tz: &TimeZone) -> Option<(Timestamp, Option<Timestamp>)> {
+    let expanded = expand::expand(ical, default_tz, None, MAX_INSTANCES);
+    let first = expanded.instances.iter().map(|instance| instance.start).min()?;
+    let last = expanded.instances.iter().map(|instance| instance.end).max().unwrap_or(first);
+    Some((first, if expanded.complete { Some(last.max(first)) } else { None }))
 }
 
 /// The time zone named by a calendar, or UTC.
-pub fn time_zone(name: Option<&str>) -> Tz {
-    name.and_then(Tz::iana).unwrap_or(Tz::UTC)
+pub fn time_zone(name: Option<&str>) -> TimeZone {
+    name.and_then(kernoid_pim::tz::iana).unwrap_or(TimeZone::UTC)
 }
 
 /// A contact as a client sent it, with its index.
@@ -124,28 +104,22 @@ pub fn parse_contact(text: &str) -> Result<ParsedContact> {
     if text.len() > MAX_OBJECT_SIZE {
         return Err(GroupwareError::TooLarge { limit: MAX_OBJECT_SIZE as u64 });
     }
-    let mut parser = Parser::new(text);
-    let card = match parser.entry() {
-        Entry::VCard(card) => card,
+    let card = match vcard::parse_all(text) {
+        Ok(mut cards) if cards.len() == 1 => cards.remove(0),
+        Ok(cards) if cards.len() > 1 => return Err(GroupwareError::Invalid("a resource holds one vCard".into())),
         _ => return Err(GroupwareError::Invalid("not a vCard".into())),
     };
-    if !matches!(parser.entry(), Entry::Eof) {
-        return Err(GroupwareError::Invalid("a resource holds one vCard".into()));
-    }
-    let text_of = |property: &VCardProperty| {
-        card.property(property).and_then(|entry| entry.values.first()).and_then(|value| value.as_text())
-    };
-    let uid = text_of(&VCardProperty::Uid)
-        .map(str::to_owned)
-        .ok_or_else(|| GroupwareError::Invalid("a vCard without UID".into()))?;
-    if uid.is_empty() || uid.len() > 255 {
+    let uid = card.uid().ok_or_else(|| GroupwareError::Invalid("a vCard without UID".into()))?;
+    if uid.len() > 255 {
         return Err(GroupwareError::Invalid("the UID must have 1 to 255 characters".into()));
     }
-    let kind = text_of(&VCardProperty::Kind).map_or_else(|| "individual".to_owned(), str::to_lowercase);
+    let kind = card
+        .text("KIND")
+        .or_else(|| card.text("X-ADDRESSBOOKSERVER-KIND"))
+        .map_or_else(|| "individual".to_owned(), |kind| kind.trim().to_lowercase());
     let mut emails: Vec<String> = card
-        .properties(&VCardProperty::Email)
-        .filter_map(|entry| entry.values.first().and_then(|value| value.as_text()))
-        .map(|email| email.trim().to_lowercase())
+        .properties("EMAIL")
+        .map(|entry| entry.as_text().trim().to_lowercase())
         .filter(|email| !email.is_empty())
         .collect();
     emails.sort();
@@ -164,7 +138,7 @@ mod tests {
 
     #[test]
     fn events_are_checked_and_indexed() {
-        let event = parse_event(WEEKLY, Tz::UTC).unwrap();
+        let event = parse_event(WEEKLY, TimeZone::UTC).unwrap();
         assert_eq!(event.uid, "a@example");
         assert_eq!(event.component, "VEVENT");
         assert_eq!(event.organizer.as_deref(), Some("alice@example.org"));
@@ -173,11 +147,11 @@ mod tests {
         assert_eq!(end.unwrap().to_string(), "2026-10-19T10:00:00Z");
 
         let endless = WEEKLY.replace(";COUNT=3", "");
-        assert_eq!(parse_event(&endless, Tz::UTC).unwrap().span.unwrap().1, None);
+        assert_eq!(parse_event(&endless, TimeZone::UTC).unwrap().span.unwrap().1, None);
 
         // A UTC start keeps its time across the change of daylight saving time on 2026-10-25.
         let berlin = time_zone(Some("Europe/Berlin"));
-        let endless = parse_event(&WEEKLY.replace("COUNT=3", "COUNT=10"), berlin).unwrap();
+        let endless = parse_event(&WEEKLY.replace("COUNT=3", "COUNT=10"), berlin.clone()).unwrap();
         assert_eq!(endless.span.unwrap().1.unwrap().to_string(), "2026-12-07T10:00:00Z");
 
         let floating = WEEKLY.replace("T090000Z", "T090000").replace("T100000Z", "T100000");
@@ -188,8 +162,8 @@ mod tests {
             "END:VCALENDAR",
             "BEGIN:VEVENT\r\nUID:b@example\r\nDTSTART:20261005T090000Z\r\nEND:VEVENT\r\nEND:VCALENDAR",
         );
-        assert!(matches!(parse_event(&two_uids, Tz::UTC), Err(GroupwareError::Invalid(_))));
-        assert!(parse_event("BEGIN:VCARD\r\nEND:VCARD\r\n", Tz::UTC).is_err());
+        assert!(matches!(parse_event(&two_uids, TimeZone::UTC), Err(GroupwareError::Invalid(_))));
+        assert!(parse_event("BEGIN:VCARD\r\nEND:VCARD\r\n", TimeZone::UTC).is_err());
     }
 
     #[test]

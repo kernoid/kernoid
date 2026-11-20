@@ -24,8 +24,8 @@
     {
       "type": "Component",
       "comp": [
-        "VCalendar",
-        "VFreebusy"
+        "VCALENDAR",
+        "VFREEBUSY"
       ],
       "op": {
         "type": "TimeRange",

@@ -8,9 +8,11 @@ from each; every file says the same in its SPDX header and its first lines. The 
 ## Stalwart
 
 [Stalwart](https://github.com/stalwartlabs/stalwart) by Stalwart Labs LLC – mail and collaboration server. Code was
-taken from **v0.16.27**, once, and changed for kernoid; it is not merged again – except calcard, jmap-tools and the
-Sieve interpreter, which moved into the repository from crates.io and are taken over as they are, now from **v1.1.0**
-(commit `e7cde9b`, 2026-11-09). Only files under `AGPL-3.0-only OR
+taken from **v0.16.27**, once, and changed for kernoid; it is not merged again – except the Sieve interpreter, which
+moved into the repository from crates.io and is taken over as it is, now from **v1.1.0** (commit `e7cde9b`,
+2026-11-09). calcard and jmap-tools were taken over the same way until 2026-11-20; kernoid's own `kernoid-pim`
+(`kit/pim`, MIT, written anew) replaced them, and with them the scheduling and the query filters derived from
+Stalwart's. Only files under `AGPL-3.0-only OR
 LicenseRef-SEL` were taken, under `AGPL-3.0-only`, with Stalwart's copyright (`2020 Stalwart Labs LLC`); nothing under
 the Stalwart Enterprise License, which `scripts/check-sel.sh` enforces.
 
@@ -19,11 +21,8 @@ the Stalwart Enterprise License, which `scripts/check-sel.sh` enforces.
 | In kernoid | From Stalwart |
 |---|---|
 | `crates/kernoid-imap/src/proto/` | `crates/imap-proto` – IMAP requests and responses |
-| `crates/kernoid-dav/src/proto/` | `crates/dav-proto` – WebDAV, CalDAV and CardDAV requests and responses |
-| `crates/kernoid-groupware/src/scheduling/` | `crates/groupware/src/scheduling` – iTIP (RFC 5546) |
-| `crates/calcard/` | `crates/calcard` – iCalendar, vCard, JSCalendar, JSContact (its files from rust-rrule and bttf keep their licences) |
+| `crates/kernoid-dav/src/proto/` | `crates/dav-proto` – WebDAV, CalDAV and CardDAV requests and responses (the names in its filters are kernoid's, `names.rs`) |
 | `crates/sieve/` | `crates/sieve` – the Sieve interpreter (sieve-rs), before on crates.io; without its tests, which live in a repository of Stalwart's that is not public |
-| `crates/jmap-tools/` | `crates/jmap-tools` – JMAP objects with JSON Pointer (its JSON files from serde_json_borrow keep their licence) |
 
 **Derived** – written for kernoid's storage, following Stalwart's logic:
 
@@ -33,12 +32,9 @@ the Stalwart Enterprise License, which `scripts/check-sel.sh` enforces.
 | `crates/kernoid-imap/src/message.rs` | `FETCH` in `crates/imap/src/op/fetch.rs` |
 | `crates/kernoid-smtp/src/session.rs`, `message.rs` | the inbound session (`crates/smtp/src/inbound`) and `queue_message` |
 | `crates/kernoid-smtp/src/client.rs`, `crates/kernoid-smtp/src/mta_sts.rs`, `dane.rs` | the outbound client, MTA-STS and DANE (`crates/smtp/src/outbound`) |
-| `crates/kernoid-groupware/src/itip.rs` | receiving iTIP in `crates/groupware/src/calendar/itip.rs` |
-| `crates/kernoid-dav/src/query.rs` | calendar and contact queries in `crates/dav/src/calendar/query.rs`, `card/query.rs` |
 
 **Libraries** of Stalwart Labs that kernoid uses as they are: `mail-parser`, `mail-auth`, `mail-builder`,
-`smtp-proto` (Apache-2.0 OR MIT). The SDK `kernoid-client` (MIT) uses `calcard` 0.3.14, its last
-release on crates.io (Apache-2.0 OR MIT).
+`smtp-proto` (Apache-2.0 OR MIT).
 
 ## ZITADEL
 

@@ -785,9 +785,9 @@ impl Dav {
                 let mut contents = HashMap::new();
                 for event in candidates {
                     let Some(text) = data.get(&event.id) else { continue };
-                    let calcard::Entry::ICalendar(parsed) = calcard::Parser::new(text).entry() else { continue };
-                    let instances = query::instances(&parsed, default_tz, data_range);
-                    if !query::calendar_matches(&parsed, &query.filters, &instances, default_tz) {
+                    let Ok(parsed) = kernoid_pim::ical::parse(text) else { continue };
+                    let instances = query::instances(&parsed, default_tz.clone(), data_range);
+                    if !query::calendar_matches(&parsed, &query.filters, &instances, default_tz.clone()) {
                         continue;
                     }
                     contents.insert(event.id, Content { text: Some(text.clone()), instances: Some(instances) });
@@ -817,7 +817,7 @@ impl Dav {
                         break;
                     }
                     let Some(text) = data.get(&contact.id) else { continue };
-                    let calcard::Entry::VCard(card) = calcard::Parser::new(text).entry() else { continue };
+                    let Ok(card) = kernoid_pim::vcard::parse(text) else { continue };
                     if !query::vcard_matches(&card, &query.filters) {
                         continue;
                     }
@@ -966,12 +966,12 @@ impl Dav {
         owner: Uuid,
         calendars: Option<Vec<Uuid>>,
         range: crate::proto::types::TimeRange,
-        extra: Vec<calcard::icalendar::ICalendarEntry>,
-    ) -> Result<calcard::icalendar::ICalendar, Error> {
+        extra: Vec<kernoid_pim::Property>,
+    ) -> Result<kernoid_pim::Component, Error> {
         let zones: HashMap<Uuid, Option<String>> =
             self.groupware.calendars(owner).await?.into_iter().map(|info| (info.id, info.timezone)).collect();
         let calendars = calendars.unwrap_or_else(|| zones.keys().copied().collect());
-        let mut busy = HashMap::new();
+        let mut busy = query::Busy::new();
         for calendar in calendars {
             let candidates = self
                 .groupware
@@ -980,8 +980,8 @@ impl Dav {
             let ids: Vec<Uuid> = candidates.iter().map(|event| event.id).collect();
             let tz = ical::time_zone(zones.get(&calendar).cloned().flatten().as_deref());
             for (_, text) in self.groupware.event_data(owner, &ids).await? {
-                let calcard::Entry::ICalendar(parsed) = calcard::Parser::new(&text).entry() else { continue };
-                let instances = query::instances(&parsed, tz, Some(range));
+                let Ok(parsed) = kernoid_pim::ical::parse(&text) else { continue };
+                let instances = query::instances(&parsed, tz.clone(), Some(range));
                 query::busy_times(&parsed, &instances, &range, &mut busy);
             }
         }
@@ -1025,15 +1025,11 @@ fn apply_calendar_prop(prop: &DavPropertyValue, new: &mut NewCalendar, dead: &mu
         (DavProperty::CalDav(CalDavProperty::TimezoneId), DavValue::String(tz)) => new.timezone = Some(tz.clone()),
         (DavProperty::CalDav(CalDavProperty::CalendarTimezone), DavValue::ICalendar(ical)) => {
             if let Some(tz) = ical
-                .components
-                .iter()
-                .find(|comp| comp.component_type == calcard::icalendar::ICalendarComponentType::VTimezone)
-                .and_then(|comp| comp.property(&calcard::icalendar::ICalendarProperty::Tzid))
-                .and_then(|entry| entry.values.first())
-                .and_then(|value| value.as_text())
-                .filter(|name| calcard::common::timezone::Tz::iana(name).is_some())
+                .components("VTIMEZONE")
+                .find_map(|comp| comp.text("TZID"))
+                .and_then(|name| kernoid_pim::tz::iana_name(&name))
             {
-                new.timezone = Some(tz.to_owned());
+                new.timezone = Some(tz);
             }
         }
         (DavProperty::CalDav(CalDavProperty::SupportedCalendarComponentSet), DavValue::Components(components)) => {

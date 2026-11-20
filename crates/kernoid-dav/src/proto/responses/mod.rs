@@ -201,8 +201,8 @@ mod tests {
     use std::fmt::Display;
 
     use crate::proto::types::dead_property::{DeadElementTag, DeadProperty, DeadPropertyTag};
-    use calcard::{icalendar::ICalendar, vcard::VCard};
     use http::StatusCode;
+    use kernoid_pim::{Component as ICalendar, vcard::VCard};
     use mail_parser::DateTime;
 
     use crate::proto::{

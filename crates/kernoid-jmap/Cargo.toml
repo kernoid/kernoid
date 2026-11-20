@@ -12,11 +12,11 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-calcard = { version = "1.1.0", path = "../calcard" }
 bytes = "1.12.1"
 jiff = { version = "1.0.1", features = ["serde", "tzdb-bundle-always"] }
 jiff-sqlx = { version = "1.0.0", features = ["postgres", "serde"] }
 kernoid-e2e = { version = "0.5.1", path = "../../kit/e2e" }
+kernoid-pim = { version = "0.5.1", path = "../../kit/pim" }
 kernoid-files = { version = "0.5.1", path = "../kernoid-files" }
 kernoid-groupware = { version = "0.5.1", path = "../kernoid-groupware" }
 kernoid-identity = { version = "0.5.1", path = "../kernoid-identity" }

@@ -5,6 +5,7 @@
  */
 
 use super::{DavParser, RawElement, Token, XmlValueParser, tokenizer::Tokenizer};
+use crate::proto::names::{ICalendarComponentType, ICalendarProperty, VCardProperty};
 use crate::proto::schema::{
     Attribute, AttributeValue, Element, NamedElement, Namespace,
     property::{
@@ -15,12 +16,7 @@ use crate::proto::schema::{
     response::List,
 };
 use crate::proto::types::{TimeRange, dead_property::DeadProperty};
-use calcard::{
-    Entry, Parser,
-    common::{IanaParse, PartialDateTime},
-    icalendar::{ICalendar, ICalendarComponentType, ICalendarParameterName, ICalendarProperty},
-    vcard::{VCardParameterName, VCardProperty, VCardVersion},
-};
+use kernoid_pim::{Component as ICalendar, ical, vcard::Version as VCardVersion};
 use mail_parser::DateTime;
 
 impl Tokenizer<'_> {
@@ -159,7 +155,7 @@ impl Tokenizer<'_> {
                         break;
                     }
                     if let Some(last_component) = components.pop()
-                        && last_component != ICalendarComponentType::VCalendar
+                        && last_component.as_str() != "VCALENDAR"
                         && !matches!(data.properties.last(), Some(CalDavPropertyName { component: Some(component), .. }) if component == &last_component)
                     {
                         data.properties.push(CalDavPropertyName {
@@ -245,7 +241,7 @@ impl Tokenizer<'_> {
                                 }
                             }
                             DavProperty::CalDav(CalDavProperty::CalendarTimezone) => {
-                                match self.collect_string_value()?.map(|v| ICalendar::parse(&v).map_err(|_| v)) {
+                                match self.collect_string_value()?.map(|v| ical::parse(&v).map_err(|_| v)) {
                                     Some(Ok(value)) => DavValue::ICalendar(value),
                                     Some(Err(value)) => DavValue::String(value),
                                     None => DavValue::Null,
@@ -492,36 +488,8 @@ impl AttributeValue for ICalendarDateTime {
     where
         Self: Sized,
     {
-        let mut dt = PartialDateTime::default();
-        dt.parse_timestamp(&mut s.as_bytes().iter().peekable(), true);
-        dt.to_timestamp().map(ICalendarDateTime)
-    }
-}
-
-impl AttributeValue for ICalendarComponentType {
-    fn from_str(s: &str) -> Option<Self>
-    where
-        Self: Sized,
-    {
-        ICalendarComponentType::parse(s.as_bytes())
-    }
-}
-
-impl AttributeValue for ICalendarProperty {
-    fn from_str(s: &str) -> Option<Self>
-    where
-        Self: Sized,
-    {
-        ICalendarProperty::parse(s.as_bytes()).unwrap_or_else(|| ICalendarProperty::Other(s.to_string())).into()
-    }
-}
-
-impl AttributeValue for ICalendarParameterName {
-    fn from_str(s: &str) -> Option<Self>
-    where
-        Self: Sized,
-    {
-        ICalendarParameterName::parse(s).into()
+        let time = kernoid_pim::Time::parse(s, None, false)?;
+        Some(ICalendarDateTime(time.resolve(&kernoid_pim::tz::Zones::default(), &jiff::tz::TimeZone::UTC).as_second()))
     }
 }
 
@@ -530,41 +498,23 @@ impl AttributeValue for VCardPropertyWithGroup {
     where
         Self: Sized,
     {
-        if let Some((group, s)) = s.split_once('.') {
-            VCardPropertyWithGroup {
-                name: VCardProperty::parse(s.as_bytes()).unwrap_or_else(|| VCardProperty::Other(s.to_string())),
-                group: group.to_string().into(),
+        match s.split_once('.') {
+            Some((group, name)) => {
+                VCardPropertyWithGroup { name: VCardProperty::new(name), group: Some(group.to_string()) }
             }
-            .into()
-        } else {
-            VCardPropertyWithGroup {
-                name: VCardProperty::parse(s.as_bytes()).unwrap_or_else(|| VCardProperty::Other(s.to_string())),
-                group: None,
-            }
-            .into()
+            None => VCardPropertyWithGroup { name: VCardProperty::new(s), group: None },
         }
-    }
-}
-
-impl AttributeValue for VCardParameterName {
-    fn from_str(s: &str) -> Option<Self>
-    where
-        Self: Sized,
-    {
-        VCardParameterName::parse(s).into()
+        .into()
     }
 }
 
 impl XmlValueParser for ICalendar {
     fn parse_bytes(bytes: &[u8]) -> Option<Self> {
-        let text = String::from_utf8_lossy(bytes);
-        let mut parser = Parser::new(&text);
-        if let Entry::ICalendar(ical) = parser.entry() { Some(ical) } else { None }
+        ical::parse(&String::from_utf8_lossy(bytes)).ok()
     }
 
     fn parse_str(text: &str) -> Option<Self> {
-        let mut parser = Parser::new(text);
-        if let Entry::ICalendar(ical) = parser.entry() { Some(ical) } else { None }
+        ical::parse(text).ok()
     }
 }
 

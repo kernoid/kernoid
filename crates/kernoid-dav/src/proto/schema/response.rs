@@ -9,9 +9,8 @@ use super::{
     property::{DavProperty, Privilege},
     request::{DavPropertyValue, Filter},
 };
-use calcard::{
-    icalendar::{ICalendarComponentType, ICalendarParameterName, ICalendarProperty},
-    vcard::{VCardParameterName, VCardProperty},
+use crate::proto::names::{
+    ICalendarComponentType, ICalendarParameterName, ICalendarProperty, VCardParameterName, VCardProperty,
 };
 use http::StatusCode;
 use std::{borrow::Cow, fmt::Display};

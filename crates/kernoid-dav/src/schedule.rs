@@ -4,12 +4,9 @@
 
 use std::borrow::Cow;
 
-use calcard::{
-    Entry, Parser,
-    icalendar::{ICalendarComponentType, ICalendarEntry, ICalendarProperty, ICalendarValue},
-};
 use http::{HeaderValue, StatusCode, header};
 use kernoid_groupware::{Level, PrincipalInfo};
+use kernoid_pim::{Property, ical, tz::Zones};
 
 use crate::{
     Dav, Error,
@@ -24,44 +21,29 @@ use crate::{
 pub(crate) async fn outbox_post(dav: &Dav, user: &PrincipalInfo, body: &[u8]) -> Result<DavResponse, Error> {
     let invalid = || Error::Condition(StatusCode::BAD_REQUEST, CalCondition::ValidSchedulingMessage.into());
     let text = std::str::from_utf8(body).map_err(|_| invalid())?;
-    let Entry::ICalendar(ical) = Parser::new(text).entry() else { return Err(invalid()) };
-    let method = ical
-        .components
-        .first()
-        .and_then(|root| root.property(&ICalendarProperty::Method))
-        .and_then(|entry| entry.values.first())
-        .and_then(|value| value.as_text())
-        .unwrap_or_default();
-    let request = ical
-        .components
-        .iter()
-        .find(|comp| comp.component_type == ICalendarComponentType::VFreebusy)
-        .filter(|_| method.eq_ignore_ascii_case("REQUEST"))
-        .ok_or_else(invalid)?;
-    let organizer = request
-        .property(&ICalendarProperty::Organizer)
-        .and_then(|entry| entry.calendar_address())
-        .map(|address| address.to_lowercase());
+    let ical = ical::parse(text).map_err(|_| invalid())?;
+    let method = ical.method().unwrap_or_default();
+    let request = ical.components("VFREEBUSY").next().filter(|_| method == "REQUEST").ok_or_else(invalid)?;
+    let organizer = request.property("ORGANIZER").and_then(Property::address).map(|address| address.to_lowercase());
     if organizer.is_none_or(|organizer| !user.addresses.contains(&organizer)) {
         return Err(Error::Condition(StatusCode::FORBIDDEN, CalCondition::ValidOrganizer.into()));
     }
-    let time = |property| {
-        request.property(&property).and_then(|entry| match entry.values.first() {
-            Some(ICalendarValue::PartialDateTime(date)) => {
-                date.to_date_time().and_then(|date| date.to_date_time_with_tz(calcard::common::timezone::Tz::UTC))
-            }
-            _ => None,
-        })
+    let zones = Zones::of(&ical);
+    let time = |name: &str| {
+        request
+            .property(name)
+            .and_then(Property::time_value)
+            .map(|time| time.resolve(&zones, &jiff::tz::TimeZone::UTC).as_second())
     };
-    let (Some(start), Some(end)) = (time(ICalendarProperty::Dtstart), time(ICalendarProperty::Dtend)) else {
+    let (Some(start), Some(end)) = (time("DTSTART"), time("DTEND")) else {
         return Err(invalid());
     };
-    let range = TimeRange::new(start.timestamp(), end.timestamp());
-    let uid = request.uid().unwrap_or_default().to_owned();
+    let range = TimeRange::new(start, end);
+    let uid = request.uid().unwrap_or_default();
 
     let mut response = ScheduleResponse::default();
-    for attendee in request.properties(&ICalendarProperty::Attendee) {
-        let Some(address) = attendee.calendar_address() else { continue };
+    for attendee in request.properties("ATTENDEE") {
+        let Some(address) = attendee.address() else { continue };
         let address = address.to_lowercase();
         let mut item = ScheduleResponseItem {
             recipient: Href(format!("mailto:{address}")),
@@ -96,22 +78,12 @@ pub(crate) async fn outbox_post(dav: &Dav, user: &PrincipalInfo, body: &[u8]) ->
                         None => None,
                     };
                     let extra = vec![
-                        ICalendarEntry {
-                            name: ICalendarProperty::Uid,
-                            params: vec![],
-                            values: smallvec::smallvec![ICalendarValue::Text(uid.clone())],
-                        },
+                        Property::text("UID", &uid),
                         attendee.clone(),
-                        request.property(&ICalendarProperty::Organizer).cloned().expect("checked"),
+                        request.property("ORGANIZER").cloned().expect("checked"),
                     ];
                     let mut object = dav.freebusy(account, calendars, range, extra).await?;
-                    if let Some(root) = object.components.first_mut() {
-                        root.entries.push(ICalendarEntry {
-                            name: ICalendarProperty::Method,
-                            params: vec![],
-                            values: smallvec::smallvec![ICalendarValue::Text("REPLY".into())],
-                        });
-                    }
+                    object.properties.push(Property::new("METHOD", "REPLY"));
                     item.request_status = Cow::Borrowed("2.0;Success");
                     item.calendar_data = Some(object.to_string());
                 }

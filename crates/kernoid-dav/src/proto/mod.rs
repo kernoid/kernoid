@@ -9,8 +9,9 @@
 //! responses. Changed for kernoid: Stalwart's internal types replaced (`types.rs`), the conversion of request headers
 //! for Stalwart's tracing and the archived (rkyv) dead properties left out.
 
-use calcard::vcard::VCardVersion;
+use kernoid_pim::vcard::Version as VCardVersion;
 
+pub mod names;
 pub mod parser;
 pub mod requests;
 pub mod responses;

@@ -9,15 +9,13 @@ use super::{
     request::DavPropertyValue,
     response::{Ace, AclRestrictions, Href, List, Response, SupportedPrivilege},
 };
+use crate::proto::names::{ICalendarComponentType, ICalendarProperty, VCardProperty};
 use crate::proto::types::{
     TimeRange,
     dead_property::{DeadElementTag, DeadProperty},
 };
 use crate::proto::{Depth, Timeout};
-use calcard::{
-    icalendar::{ICalendar, ICalendarComponentType, ICalendarProperty},
-    vcard::{VCard, VCardProperty, VCardVersion},
-};
+use kernoid_pim::{Component as ICalendar, vcard::VCard, vcard::Version as VCardVersion};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(test, derive(serde::Serialize, serde::Deserialize))]
@@ -160,8 +158,8 @@ pub enum DavValue {
     ActiveLocks(List<ActiveLock>),
     LockEntries(List<LockEntry>),
     ReportSets(List<ReportSet>),
-    ICalendar(ICalendar),
-    VCard(VCard),
+    ICalendar(#[cfg_attr(test, serde(with = "crate::proto::names::text::ical"))] ICalendar),
+    VCard(#[cfg_attr(test, serde(with = "crate::proto::names::text::vcard"))] VCard),
     Components(List<Comp>),
     Collations(List<SupportedCollation>),
     PrivilegeSet(List<SupportedPrivilege>),

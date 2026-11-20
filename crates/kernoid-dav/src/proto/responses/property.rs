@@ -5,6 +5,7 @@
  */
 
 use super::{XmlCdataEscape, XmlEscape};
+use crate::proto::names::ICalendarComponentType;
 use crate::proto::types::dead_property::DeadProperty;
 use crate::proto::{
     responses::DeadPropertyFormat,
@@ -19,7 +20,6 @@ use crate::proto::{
         response::{Ace, AclRestrictions, Href, List, PropResponse, SupportedPrivilege},
     },
 };
-use calcard::icalendar::ICalendarComponentType;
 use mail_parser::{DOW, DateTime, MONTH};
 use std::fmt::Display;
 
@@ -115,19 +115,19 @@ impl Display for DavValue {
 impl DavValue {
     pub fn all_calendar_components() -> Self {
         DavValue::Components(List(vec![
-            Comp(ICalendarComponentType::VEvent),
-            Comp(ICalendarComponentType::VTodo),
-            Comp(ICalendarComponentType::VJournal),
-            Comp(ICalendarComponentType::VFreebusy),
-            Comp(ICalendarComponentType::VTimezone),
-            Comp(ICalendarComponentType::VAlarm),
-            Comp(ICalendarComponentType::Standard),
-            Comp(ICalendarComponentType::Daylight),
-            Comp(ICalendarComponentType::VAvailability),
-            Comp(ICalendarComponentType::Available),
-            Comp(ICalendarComponentType::Participant),
-            Comp(ICalendarComponentType::VLocation),
-            Comp(ICalendarComponentType::VResource),
+            Comp(ICalendarComponentType::new("VEVENT")),
+            Comp(ICalendarComponentType::new("VTODO")),
+            Comp(ICalendarComponentType::new("VJOURNAL")),
+            Comp(ICalendarComponentType::new("VFREEBUSY")),
+            Comp(ICalendarComponentType::new("VTIMEZONE")),
+            Comp(ICalendarComponentType::new("VALARM")),
+            Comp(ICalendarComponentType::new("STANDARD")),
+            Comp(ICalendarComponentType::new("DAYLIGHT")),
+            Comp(ICalendarComponentType::new("VAVAILABILITY")),
+            Comp(ICalendarComponentType::new("AVAILABLE")),
+            Comp(ICalendarComponentType::new("PARTICIPANT")),
+            Comp(ICalendarComponentType::new("VLOCATION")),
+            Comp(ICalendarComponentType::new("VRESOURCE")),
         ]))
     }
 }

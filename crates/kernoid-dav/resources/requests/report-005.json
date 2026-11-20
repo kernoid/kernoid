@@ -27,9 +27,9 @@
     {
       "type": "Component",
       "comp": [
-        "VCalendar",
-        "VTodo",
-        "VAlarm"
+        "VCALENDAR",
+        "VTODO",
+        "VALARM"
       ],
       "op": {
         "type": "TimeRange",

@@ -2,8 +2,8 @@
 //! Notifications (RFC 0004, 6): what scheduling changed in an account's events, for JMAP's
 //! `CalendarEventNotification`; the iTIP message is kept sealed. They go after 30 days.
 
-use calcard::icalendar::ICalendar;
 use jiff::Timestamp;
+use kernoid_pim::Component;
 use uuid::Uuid;
 
 use crate::{
@@ -36,7 +36,7 @@ impl Groupware {
         event: Option<Uuid>,
         kind: &str,
         changed_by: &str,
-        itip: &ICalendar,
+        itip: &Component,
     ) -> Result<Uuid> {
         let mut change = self.change(account).await?;
         let tenant = change.tenant();

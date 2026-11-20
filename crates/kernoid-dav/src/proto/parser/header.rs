@@ -5,7 +5,7 @@
  */
 
 use crate::proto::{ByteRange, Condition, Depth, If, RequestHeaders, ResourceState, Return, Timeout};
-use calcard::vcard::VCardVersion;
+use kernoid_pim::vcard::Version as VCardVersion;
 use std::ops::Range;
 
 impl<'x> RequestHeaders<'x> {

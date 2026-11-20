@@ -3,18 +3,15 @@
 //! 3744, 5397, 6578), read-only ACLs included. Which value each property has follows what Stalwart answers
 //! (`crates/dav/src/common/propfind.rs`, v0.16.27), so that the same clients work.
 
-use calcard::{
-    Entry, Parser,
-    icalendar::{ICalendar, ICalendarComponentType},
-    vcard::VCardVersion,
-};
 use http::StatusCode;
 use kernoid_groupware::{Level, PrincipalInfo, ical};
+use kernoid_pim::{Component, vcard};
 
 use crate::{
     Dav, Error,
     node::{Collection, Node},
     path,
+    proto::names::ICalendarComponentType,
     proto::{
         requests::NsDeadProperty,
         schema::{
@@ -155,10 +152,10 @@ fn calendar_data(
     if data.properties.is_empty() && data.expand.is_none() && data.limit_recurrence.is_none() {
         return Some(text.to_owned());
     }
-    let Entry::ICalendar(ical) = Parser::new(text).entry() else { return Some(text.to_owned()) };
+    let Ok(ical) = kernoid_pim::ical::parse(text) else { return Some(text.to_owned()) };
     let mut instances = match (&content.instances, data.expand.or(data.limit_recurrence)) {
         (Some(instances), _) => instances.clone(),
-        (None, Some(range)) => query::instances(&ical, calcard::common::timezone::Tz::UTC, Some(range)),
+        (None, Some(range)) => query::instances(&ical, jiff::tz::TimeZone::UTC, Some(range)),
         (None, None) => Vec::new(),
     };
     query::serialize_ical(&ical, data, &mut instances, instances_limit)
@@ -410,9 +407,7 @@ impl Dav {
                     info.components
                         .iter()
                         .filter_map(|name| match name.as_str() {
-                            "VEVENT" => Some(Comp(ICalendarComponentType::VEvent)),
-                            "VTODO" => Some(Comp(ICalendarComponentType::VTodo)),
-                            "VJOURNAL" => Some(Comp(ICalendarComponentType::VJournal)),
+                            "VEVENT" | "VTODO" | "VJOURNAL" => Some(Comp(ICalendarComponentType::new(name))),
                             _ => None,
                         })
                         .collect::<Vec<_>>()
@@ -485,16 +480,16 @@ impl Dav {
                     Some((ical::MAX_OBJECT_SIZE as u64).into())
                 }
                 (CardDavProperty::AddressData { properties, version }, Node::Contact(..)) => {
-                    content.text.as_deref().map(|text| match Parser::new(text).entry() {
-                        Entry::VCard(card) => {
-                            let version = version.unwrap_or_else(|| card.version().unwrap_or(VCardVersion::V4_0));
-                            if properties.is_empty() && version == card.version().unwrap_or(VCardVersion::V4_0) {
+                    content.text.as_deref().map(|text| match vcard::parse(text) {
+                        Ok(card) => {
+                            let version = version.unwrap_or(card.version);
+                            if properties.is_empty() && version == card.version {
                                 DavValue::CData(text.to_owned())
                             } else {
                                 DavValue::CData(query::serialize_vcard(&card, properties, version))
                             }
                         }
-                        _ => DavValue::CData(text.to_owned()),
+                        Err(_) => DavValue::CData(text.to_owned()),
                     })
                 }
                 _ => None,
@@ -536,21 +531,11 @@ fn collations(namespace: Namespace) -> DavValue {
 /// A calendar with only the time zone a calendar names (`calendar-timezone`, RFC 4791, 5.2.2), its rules from a year
 /// back to ten years ahead.
 fn vtimezone(name: &str) -> Option<String> {
-    use calcard::icalendar::{ICalendarComponent, ICalendarEntry, ICalendarProperty, ICalendarValue};
-    let text = |property, value: &str| ICalendarEntry {
-        name: property,
-        params: vec![],
-        values: smallvec::smallvec![ICalendarValue::Text(value.into())],
-    };
-    let mut ical = ICalendar {
-        components: vec![ICalendarComponent {
-            component_type: ICalendarComponentType::VCalendar,
-            entries: vec![text(ICalendarProperty::Version, "2.0"), text(ICalendarProperty::Prodid, crate::PROD_ID)],
-            component_ids: vec![],
-        }],
-    };
-    let now = jiff::Timestamp::now().as_second();
-    ical.add_timezone(name, now - 366 * 86_400, now + 10 * 366 * 86_400)?;
+    let mut ical = Component::calendar(crate::PROD_ID);
+    let now = jiff::Timestamp::now();
+    let from = now.checked_sub(jiff::SignedDuration::from_hours(366 * 24)).ok()?;
+    let to = now.checked_add(jiff::SignedDuration::from_hours(10 * 366 * 24)).ok()?;
+    ical.components.push(kernoid_pim::tz::vtimezone(name, from, to)?);
     Some(ical.to_string())
 }
 

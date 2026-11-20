@@ -9,15 +9,14 @@ use super::{
     property::{DavProperty, DavValue, LockScope, LockType},
     response::Ace,
 };
+use crate::proto::names::{
+    ICalendarComponentType, ICalendarParameterName, ICalendarProperty, VCardParameterName, VCardProperty,
+};
 use crate::proto::types::{
     TimeRange,
     dead_property::{DeadProperty, DeadPropertyTag},
 };
 use crate::proto::{Condition, Depth};
-use calcard::{
-    icalendar::{ICalendarComponentType, ICalendarParameterName, ICalendarProperty},
-    vcard::{VCardParameterName, VCardProperty},
-};
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(test, derive(serde::Serialize, serde::Deserialize))]
