@@ -46,10 +46,11 @@ for package in meta["packages"]:
             print(package["name"] + "=" + os.path.relpath(os.path.dirname(package["manifest_path"])))
             break
 ')
-# Those crates compile again (the rest is reused from the last run).
+# Those crates compile again (the rest is reused from the last run). A target directory restored from a cache may hold
+# nothing of a package, and then `cargo clean -p` fails – there is nothing to clean then.
 if [ -d "$target" ]; then
   for entry in $crates; do
-    cargo clean --quiet --target-dir "$target" -p "${entry%%=*}"
+    cargo clean --quiet --target-dir "$target" -p "${entry%%=*}" 2>/dev/null || true
   done
 fi
 SQLX_CRATES_OUT="$out" RUSTC_WRAPPER="$wrapper" CARGO_TARGET_DIR="$target" \
