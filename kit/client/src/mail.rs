@@ -268,7 +268,7 @@ impl std::fmt::Debug for Inner {
 
 impl Email {
     /// The text of the email: its plain-text parts, or its HTML parts as text `width` columns wide. Nothing of the
-    /// HTML is run or loaded – html2text only reads it.
+    /// HTML is run or loaded – [`crate::html`] only reads it.
     pub fn text(&self, width: usize) -> String {
         let value = |part: &BodyPart| part.part_id.as_ref().and_then(|id| self.body_values.get(id)).map(|v| &v.value);
         let plain: Vec<&String> =
@@ -328,7 +328,7 @@ impl std::fmt::Debug for InlineFile {
 
 /// HTML as plain text, `width` columns wide.
 pub fn html_to_text(html: &str, width: usize) -> String {
-    html2text::config::plain().string_from_read(html.as_bytes(), width.max(20)).unwrap_or_else(|_| html.to_owned())
+    crate::html::to_text(html, width)
 }
 
 #[derive(Debug, Clone, Deserialize)]

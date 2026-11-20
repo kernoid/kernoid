@@ -32,6 +32,9 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 - The server and the SDK read and write iCalendar and vCard with `kernoid-pim` instead of calcard and jmap-tools
   (Stalwart's, `AGPL-3.0-only`, removed); scheduling (iTIP) and the filters of CalDAV and CardDAV queries are kernoid's
   own now, no longer derived from Stalwart's. The SDK drops calcard 0.3.14 – `kernoid-client`'s API is unchanged.
+- The SDK shows HTML mail as text with its own converter (`kernoid_client::html`, MIT, written from the HTML
+  standard) in place of html2text: blocks become lines, lists keep their markers, quotations are quoted with `>`,
+  links read `text <url>`, scripts, styles and the head are dropped, and the work stays linear on hostile input.
 - JSCalendar as JMAP shows it: participants' ids come from their addresses (the same in a series and its overrides),
   overrides are written back as whole components, a zone only a calendar defines is shown in UTC.
 ### Changed

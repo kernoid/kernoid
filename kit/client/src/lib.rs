@@ -9,6 +9,7 @@ pub mod calendars;
 pub mod contacts;
 pub mod e2e;
 pub mod files;
+pub mod html;
 pub mod mail;
 pub mod oidc;
 pub mod push;
