@@ -9,7 +9,7 @@ End-to-end encryption of [kernoid](https://kernoid.dev)'s apps (kernoid's RFC 00
   secret key (Argon2 with AES-256-OCB), unlocked with a recovery code or a passkey's PRF.
 - **Messages** (`message`): encrypting to several recipients and signing, decrypting and verifying.
 - **Mail** (`mime`, `compose`): PGP/MIME with header protection (RFC 9788) and the encrypted summary kernoid's apps
-  show in lists; mail built and read in the client.
+  show in lists; mail built and read in the client – read with [kernoid-mime](../mime), the server's parser.
 
 With the feature `wasm` it builds the `Keyring` of kernoid's web app (wasm-bindgen). The protocol around it – finding
 keys, publishing them, the copies kept by the server – is in `kernoid-client`.

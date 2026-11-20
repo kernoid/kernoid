@@ -14,6 +14,10 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   names, a calendar's own `VTIMEZONE`), vCard 4.0, 3.0 and 2.1 (quoted-printable), JSCalendar and JSContact with the
   conversions both ways, JMAP patches. What it does not understand goes back out unchanged (`iCalProps`,
   `iCalComponents`, `vCardProps`).
+- **`kernoid-mime`** (`kit/mime`, MIT, a crate of the kit): kernoid's own library of Internet mail, written from the
+  RFCs – messages with the byte ranges of every part, header fields in their forms (encoded words, addresses and
+  groups, dates, message ids), RFC 2231 parameters, transfer encodings, charsets (encoding_rs and UTF-7), what a reader
+  shows (RFC 8621, 4.1.4), base subjects, and messages written.
 
 ### Changed
 
@@ -49,6 +53,18 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   policy one step milder); a message's end after `DATA` is only `CRLF . CRLF` (no bare LF, against SMTP smuggling).
   `kernoid_smtp::Dns` is kernoid's own type now (caches of TXT strings, MX, PTR and addresses); the DNS crate is
   hickory-resolver as before.
+  mail-auth is at 0.15.1.
+- **Mail is read and written with `kernoid-mime`** in place of Stalwart Labs' mail-parser (1.0 in the server, 0.11 in
+  `kernoid-e2e`) and mail-builder 2.0 – import and delivery, IMAP `FETCH` and `SEARCH`, JMAP `Email/*` and blobs,
+  Sieve, bounces, vacation replies, invitations, the notices of upload links, and the apps' reading of decrypted
+  mail. What kernoid stored stays valid: part blob ids keep their numbers, `ENVELOPE` and `BODYSTRUCTURE` are written
+  as before (the tests that pinned them pass unchanged). Edge cases may answer differently: words without `@` in an
+  address field are a name, not an address; JMAP's `header:…:asText`, `asAddresses`, `asMessageIds` and `asURLs` read
+  any field in the form asked for (before, fields of another kind gave `null`); a text part whose charset label is
+  wrong but whose bytes are UTF-8 is read as UTF-8; the base subject takes off the reply and forward markers of other
+  languages (`AW:`, `WG:`, `SV:` …) from kernoid-mime's own list, so a reply's thread may differ where the lists
+  differ (OPEN: not compared with mail-parser's list, which kernoid did not read). The apps' `compose::parse` gives `html` only
+  for an HTML part (no HTML made from plain text), and `sentAt` in UTC.
 - The server and the SDK read and write iCalendar and vCard with `kernoid-pim` instead of calcard and jmap-tools
   (Stalwart's, `AGPL-3.0-only`, removed); scheduling (iTIP) and the filters of CalDAV and CardDAV queries are kernoid's
   own now, no longer derived from Stalwart's. The SDK drops calcard 0.3.14 – `kernoid-client`'s API is unchanged.

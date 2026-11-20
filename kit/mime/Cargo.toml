@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: MIT
+# kernoid-mime: Internet mail – messages read (RFC 5322, MIME: RFC 2045–2049, 2183, 2231, 2047, 6532) with the byte
+# ranges of their parts, and written (header fields folded and encoded, multiparts, attachments) – kernoid's own
+# library, written from the RFCs, part of the kit (MIT, RFC 0008): the server stores, searches and answers IMAP and JMAP
+# with it, the end-to-end library reads decrypted messages with it. Its requirements are minimum versions, the kit's
+# Cargo.lock pins them, each at least two weeks old when taken (`../tui/scripts/check-age.py --dir=kit`).
+[package]
+name = "kernoid-mime"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Internet mail messages: parsing with byte ranges, charsets, encoded words, MIME, and writing"
+keywords = ["kernoid", "email", "mime", "rfc5322", "parser"]
+categories = ["email", "parser-implementations", "encoding"]
+homepage.workspace = true
+readme = "README.md"
+
+[dependencies]
+# The charsets of the WHATWG Encoding Standard: ISO-8859-x, Windows-125x, KOI8, Shift_JIS, ISO-2022-JP, EUC-JP,
+# GB18030, Big5, EUC-KR, UTF-16 ((Apache-2.0 OR MIT) AND BSD-3-Clause).
+encoding_rs = "0.8.42"
+
+[lints]
+workspace = true

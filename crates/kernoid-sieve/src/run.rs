@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 
-use mail_parser::DateTime;
+use kernoid_mime::DateTime;
 use sha2::{Digest, Sha256};
 
 use crate::{
@@ -505,8 +505,7 @@ impl Run<'_> {
                     .dates(&name, *index)
                     .iter()
                     .map(|date| {
-                        let original = i64::from(date.tz_hour) * 3600 + i64::from(date.tz_minute) * 60;
-                        let original = if date.tz_before_gmt { -original } else { original };
+                        let original = i64::from(date.offset) * 60;
                         date_part(date.to_timestamp(), zone.unwrap_or(original), *part)
                     })
                     .collect();

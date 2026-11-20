@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! What tests read from the message, through mail-parser: header fields decoded (RFC 2047) and unfolded, the
+//! What tests read from the message, through kernoid-mime: header fields decoded (RFC 2047) and unfolded, the
 //! addresses in them, their dates, and the body (RFC 5173).
 
-use mail_parser::{DateTime, Header, HeaderForm, Message, MessageParser};
+use kernoid_mime::{DateTime, Header, Message};
 
 pub(crate) struct Mail<'m> {
     raw: &'m [u8],
@@ -29,9 +29,7 @@ pub(crate) fn domain(address: &str) -> &str {
 
 /// Parses one address as in a header field; `None` unless it is one address with an `@`.
 pub(crate) fn single_address(text: &str) -> Option<(Option<String>, String)> {
-    let raw = format!("{text}\r\n");
-    let parsed = HeaderForm::Addresses.parse(raw.as_bytes());
-    let list = parsed.value().as_address()?;
+    let list = kernoid_mime::address::parse(text);
     let mut mailboxes = list.mailboxes();
     let first = mailboxes.next()?;
     if mailboxes.next().is_some() {
@@ -47,7 +45,7 @@ pub(crate) fn single_address(text: &str) -> Option<(Option<String>, String)> {
 
 impl<'m> Mail<'m> {
     pub(crate) fn new(raw: &'m [u8]) -> Self {
-        Mail { raw, message: MessageParser::new().parse(raw) }
+        Mail { raw, message: Message::parse(raw) }
     }
 
     pub(crate) fn size(&self) -> usize {
@@ -78,20 +76,14 @@ impl<'m> Mail<'m> {
 
     /// The decoded, unfolded values of the fields called `name`.
     pub(crate) fn header_values(&self, name: &str, index: Option<(usize, bool)>) -> Vec<String> {
-        self.indexed(name, index)
-            .iter()
-            .map(|field| field.parse_as(HeaderForm::Text).value().as_text().unwrap_or_default().to_owned())
-            .collect()
+        self.indexed(name, index).iter().map(|field| field.text()).collect()
     }
 
     /// The addresses in the fields called `name`, group members included; what is no address is left out.
     pub(crate) fn addresses(&self, name: &str, index: Option<(usize, bool)>) -> Vec<String> {
         let mut out = Vec::new();
         for field in self.indexed(name, index) {
-            let parsed = field.parse_as(HeaderForm::Addresses);
-            if let Some(list) = parsed.value().as_address() {
-                out.extend(list.mailboxes().filter_map(|mailbox| mailbox.address().map(str::to_owned)));
-            }
+            out.extend(field.addresses().mailboxes().filter_map(|mailbox| mailbox.address().map(str::to_owned)));
         }
         out
     }
@@ -107,25 +99,21 @@ impl<'m> Mail<'m> {
                 } else {
                     raw
                 };
-                HeaderForm::Date.parse(raw).value().as_datetime().filter(DateTime::is_valid)
+                kernoid_mime::date::parse(&String::from_utf8_lossy(raw)).filter(DateTime::is_valid)
             })
             .collect()
     }
 
     pub(crate) fn subject(&self) -> Option<String> {
-        self.message.as_ref().and_then(|message| message.subject()).map(str::to_owned)
+        self.message.as_ref().and_then(|message| message.subject())
     }
 
     pub(crate) fn message_id(&self) -> Option<String> {
-        self.message.as_ref().and_then(|message| message.message_id()).map(str::to_owned)
+        self.message.as_ref().and_then(|message| message.message_id())
     }
 
     pub(crate) fn references(&self) -> Vec<String> {
-        self.message
-            .as_ref()
-            .and_then(|message| message.references())
-            .map(|list| list.iter().map(str::to_owned).collect())
-            .unwrap_or_default()
+        self.message.as_ref().map(|message| message.references()).unwrap_or_default()
     }
 
     /// What `body` compares (RFC 5173, 5): the raw body, the decoded parts of the given types, or the text parts.
@@ -150,15 +138,13 @@ impl<'m> Mail<'m> {
 
     fn parts(&self, message: &Message<'_>, types: &[String]) -> Vec<String> {
         let mut out = Vec::new();
-        for part in message.parts() {
+        for part in message.all_parts() {
             if part.is_multipart() {
                 continue;
             }
-            let (ctype, subtype) = match part.content_type() {
-                Some(content_type) => {
-                    (content_type.ctype().to_ascii_lowercase(), content_type.subtype().map(str::to_ascii_lowercase))
-                }
-                None => ("text".to_owned(), Some("plain".to_owned())),
+            let (ctype, subtype) = match part.media_type().split_once('/') {
+                Some((ctype, subtype)) => (ctype.to_owned(), Some(subtype.to_owned())),
+                None => (part.media_type().to_owned(), None),
             };
             let wanted = types.iter().any(|wanted| match wanted.split_once('/') {
                 _ if wanted.is_empty() => true,
@@ -172,7 +158,7 @@ impl<'m> Mail<'m> {
                 String::from_utf8_lossy(part.raw_headers()).into_owned()
             } else if ctype == "text" {
                 match part.text() {
-                    Some(text) if subtype.as_deref() == Some("html") => mail_parser::html_to_text(&text),
+                    Some(text) if subtype.as_deref() == Some("html") => kernoid_mime::html_to_text(&text),
                     Some(text) => text.into_owned(),
                     None => String::new(),
                 }
@@ -248,6 +234,7 @@ YmluYXJ5\r\n\
         let date = mail.dates("date", None);
         assert_eq!(date.len(), 1);
         assert_eq!(date[0].to_timestamp(), 859_914_391);
+        assert_eq!(date[0].offset, -480);
         assert_eq!(mail.dates("received", None)[0].to_timestamp(), 859_914_391);
         assert!(mail.dates("subject", None).is_empty());
     }

@@ -2,11 +2,7 @@
 //! `vacation` (RFC 5230, RFC 6131): whether to answer – never an empty sender, the user themselves, lists, automatic
 //! mail (RFC 3834), nor mail that is not addressed to the user – and the reply.
 
-use mail_builder::{
-    MessageBuilder,
-    headers::raw::Raw,
-    mime::{BodyPart, MimePart},
-};
+use kernoid_mime::{DateTime, MessageBuilder, build::Address};
 use sha2::{Digest, Sha256};
 
 use crate::{
@@ -121,19 +117,16 @@ pub(crate) fn respond(mail: &Mail<'_>, context: &Context<'_>, request: Request) 
         host => host,
     };
     let mut builder = MessageBuilder::new()
-        .from(match &name {
-            Some(name) => mail_builder::headers::address::Address::from((name.clone(), from.clone())),
-            None => mail_builder::headers::address::Address::from(from.clone()),
-        })
-        .to(sender.to_owned())
+        .from(Address::new(name.clone(), from.clone()))
+        .to([sender])
         .subject(subject)
-        .date(context.now)
+        .date(DateTime::from_timestamp(context.now))
         .message_id(format!("{}@{host}", hex(&id)))
-        .header("Auto-Submitted", Raw::new("auto-replied"));
+        .header("Auto-Submitted", "auto-replied");
     if let Some(original) = mail.message_id() {
         let mut references = mail.references();
         references.push(original.clone());
-        builder = builder.in_reply_to(original).references(references);
+        builder = builder.in_reply_to([original]).references(references);
     }
     builder = if request.mime {
         let mut entity = request.reason.replace("\r\n", "\n").replace('\n', "\r\n");
@@ -141,18 +134,18 @@ pub(crate) fn respond(mail: &Mail<'_>, context: &Context<'_>, request: Request) 
             // Without headers, the entity is its body.
             entity.insert_str(0, "\r\n");
         }
-        builder.body(MimePart::raw(BodyPart::Binary(entity.into_bytes().into())))
+        builder.raw_entity(entity.into_bytes())
     } else {
         builder.text_body(request.reason)
     };
-    let message = builder.write_to_vec().unwrap_or_default();
+    let message = builder.write();
     Some(Vacation { to: sender.to_owned(), key, seconds: request.seconds, message })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mail_parser::MessageParser;
+    use kernoid_mime::Message;
 
     fn request() -> Request {
         Request {
@@ -185,13 +178,13 @@ Message-ID: <m1@other.example>\r\nReferences: <m0@other.example>\r\n\r\nHi\r\n";
         let reply = respond(&mail, &context("carol@other.example"), request()).unwrap();
         assert_eq!(reply.to, "carol@other.example");
         assert!(reply.key.ends_with(":carol@other.example"));
-        let parsed = MessageParser::new().parse(&reply.message).unwrap();
-        assert_eq!(parsed.subject(), Some("Auto: Lunch"));
+        let parsed = Message::parse(&reply.message).unwrap();
+        assert_eq!(parsed.subject().as_deref(), Some("Auto: Lunch"));
         assert_eq!(parsed.from().unwrap().first().unwrap().address(), Some("alice@firma.example"));
-        assert_eq!(parsed.in_reply_to().unwrap().first(), Some("m1@other.example"));
-        assert_eq!(parsed.references().unwrap().iter().collect::<Vec<_>>(), ["m0@other.example", "m1@other.example"]);
+        assert_eq!(parsed.in_reply_to(), ["m1@other.example"]);
+        assert_eq!(parsed.references(), ["m0@other.example", "m1@other.example"]);
         assert_eq!(parsed.headers().get("auto-submitted").unwrap().raw_value(), b" auto-replied\r\n");
-        assert!(parsed.body_text(0).unwrap().contains("I am away."));
+        assert!(parsed.root().body_text(0).unwrap().contains("I am away."));
         assert!(parsed.message_id().unwrap().ends_with("@firma.example"));
 
         // Its own subject, sender and a MIME body.
@@ -203,10 +196,10 @@ Message-ID: <m1@other.example>\r\nReferences: <m0@other.example>\r\n\r\nHi\r\n";
             ..request()
         };
         let reply = respond(&mail, &context("carol@other.example"), custom).unwrap();
-        let parsed = MessageParser::new().parse(&reply.message).unwrap();
-        assert_eq!(parsed.subject(), Some("Away"));
+        let parsed = Message::parse(&reply.message).unwrap();
+        assert_eq!(parsed.subject().as_deref(), Some("Away"));
         assert_eq!(parsed.from().unwrap().first().unwrap().name(), Some("Alice"));
-        assert!(parsed.body_html(0).unwrap().contains("<p>Away</p>"));
+        assert!(parsed.root().body_html(0).unwrap().contains("<p>Away</p>"));
     }
 
     #[test]
@@ -241,7 +234,7 @@ Message-ID: <m1@other.example>\r\nReferences: <m0@other.example>\r\n\r\nHi\r\n";
         assert!(respond(&elsewhere, &context("carol@other.example"), with).is_some());
         let subaddressed = Mail::new(b"From: carol@other.example\r\nCc: alice+news@firma.example\r\n\r\nHi\r\n");
         let reply = respond(&subaddressed, &context("carol@other.example"), request()).unwrap();
-        let parsed = MessageParser::new().parse(&reply.message).unwrap();
-        assert_eq!(parsed.subject(), Some("Automatic reply"));
+        let parsed = Message::parse(&reply.message).unwrap();
+        assert_eq!(parsed.subject().as_deref(), Some("Automatic reply"));
     }
 }

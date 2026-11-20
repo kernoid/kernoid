@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! What `FETCH` reads from a message, parsed by mail-parser: `ENVELOPE` and `BODYSTRUCTURE`/`BODY` (RFC 9051, 7.5.2),
+//! What `FETCH` reads from a message, parsed by kernoid-mime: `ENVELOPE` and `BODYSTRUCTURE`/`BODY` (RFC 9051, 7.5.2),
 //! the sections of `BODY[…]` (6.4.5) and the decoded content of `BINARY[…]` (RFC 3516). Sizes are those of the raw
 //! message; line counts count line feeds. Without UTF-8 (RFC 6855), text the client gets in the envelope or the
 //! structure is 7-bit: what is not ASCII goes into an RFC 2047 encoded word.
@@ -7,7 +7,7 @@
 use std::borrow::Cow;
 
 use base64::Engine;
-use mail_parser::{Address, Message, MessagePart, MessageRef, PartKind};
+use kernoid_mime::{Address, AddressList, Headers, Message, MessageRef, PartRef};
 
 use crate::proto::{
     request::{Section, SectionText},
@@ -31,7 +31,7 @@ fn text(out: &mut Vec<u8>, value: Option<&str>, utf8: bool) {
 }
 
 /// A header's value as written: unfolded and trimmed.
-fn raw_header<'m>(headers: mail_parser::Headers<'m>, name: &str) -> Option<String> {
+fn raw_header(headers: Headers<'_>, name: &str) -> Option<String> {
     let header = headers.get(name)?;
     let value = String::from_utf8_lossy(header.raw_value());
     let unfolded: String = value.split(['\r', '\n']).collect::<Vec<_>>().join("");
@@ -58,7 +58,7 @@ fn address(out: &mut Vec<u8>, name: Option<&str>, address: Option<&str>, utf8: b
 }
 
 /// An address list; groups between `(NIL NIL "name" NIL)` and `(NIL NIL NIL NIL)`.
-fn addresses(out: &mut Vec<u8>, list: Option<mail_parser::AddressList<'_>>, utf8: bool) {
+fn addresses(out: &mut Vec<u8>, list: Option<AddressList>, utf8: bool) {
     let Some(list) = list.filter(|list| !list.is_empty()) else {
         out.extend_from_slice(b"NIL");
         return;
@@ -88,11 +88,16 @@ pub(crate) fn envelope(out: &mut Vec<u8>, message: MessageRef<'_>, utf8: bool) {
     out.push(b'(');
     text(out, raw_header(headers, "Date").as_deref(), utf8);
     out.push(b' ');
-    text(out, message.subject(), utf8);
+    text(out, message.subject().as_deref(), utf8);
     let from = message.from();
-    for list in
-        [from, message.sender().or(from), message.reply_to().or(from), message.to(), message.cc(), message.bcc()]
-    {
+    for list in [
+        from.clone(),
+        message.sender().or_else(|| from.clone()),
+        message.reply_to().or_else(|| from.clone()),
+        message.to(),
+        message.cc(),
+        message.bcc(),
+    ] {
         out.push(b' ');
         addresses(out, list, utf8);
     }
@@ -117,7 +122,7 @@ fn parameters<'m>(out: &mut Vec<u8>, parameters: impl Iterator<Item = (&'m str, 
 }
 
 /// Disposition, language and location – the extension data every part ends with.
-fn extension_tail(out: &mut Vec<u8>, part: &MessagePart<'_>, utf8: bool) {
+fn extension_tail(out: &mut Vec<u8>, part: &PartRef<'_>, utf8: bool) {
     out.push(b' ');
     match part.content_disposition() {
         Some(disposition) => {
@@ -130,9 +135,11 @@ fn extension_tail(out: &mut Vec<u8>, part: &MessagePart<'_>, utf8: bool) {
         None => out.extend_from_slice(b"NIL"),
     }
     out.push(b' ');
-    match part.content_language() {
-        Some(languages) if languages.len() == 1 => text(out, languages.first(), utf8),
-        Some(languages) if !languages.is_empty() => {
+    let languages = part.content_language();
+    match languages.len() {
+        0 => out.extend_from_slice(b"NIL"),
+        1 => text(out, languages.first().map(String::as_str), utf8),
+        _ => {
             out.push(b'(');
             for (index, language) in languages.iter().enumerate() {
                 if index > 0 {
@@ -142,10 +149,9 @@ fn extension_tail(out: &mut Vec<u8>, part: &MessagePart<'_>, utf8: bool) {
             }
             out.push(b')');
         }
-        _ => out.extend_from_slice(b"NIL"),
     }
     out.push(b' ');
-    text(out, part.content_location(), utf8);
+    text(out, part.content_location().as_deref(), utf8);
 }
 
 fn line_count(bytes: &[u8]) -> usize {
@@ -153,9 +159,9 @@ fn line_count(bytes: &[u8]) -> usize {
 }
 
 /// The structure of a part and what it contains.
-fn part_structure(out: &mut Vec<u8>, part: MessagePart<'_>, extended: bool, utf8: bool, depth: usize) {
+fn part_structure(out: &mut Vec<u8>, part: PartRef<'_>, extended: bool, utf8: bool, depth: usize) {
     let content_type = part.content_type();
-    let children: Vec<MessagePart<'_>> = part.children().collect();
+    let children: Vec<PartRef<'_>> = part.children().collect();
     if part.is_multipart() && !children.is_empty() && depth < MAX_DEPTH {
         out.push(b'(');
         for child in children {
@@ -175,10 +181,7 @@ fn part_structure(out: &mut Vec<u8>, part: MessagePart<'_>, extended: bool, utf8
         out.push(b')');
         return;
     }
-    let nested = match part.kind() {
-        PartKind::Message(nested) if depth < MAX_DEPTH => Some(nested),
-        _ => None,
-    };
+    let nested = part.nested().filter(|_| depth < MAX_DEPTH);
     let (kind, subtype) = match (content_type, nested) {
         (Some(content_type), _) if !part.is_multipart() => (
             content_type.ctype().to_ascii_lowercase(),
@@ -203,9 +206,9 @@ fn part_structure(out: &mut Vec<u8>, part: MessagePart<'_>, extended: bool, utf8
     out.push(b' ');
     text(out, raw_header(part.headers(), "Content-ID").as_deref(), utf8);
     out.push(b' ');
-    text(out, part.content_description(), utf8);
+    text(out, part.content_description().as_deref(), utf8);
     out.push(b' ');
-    let encoding = part.content_transfer_encoding().map(str::to_ascii_lowercase);
+    let encoding = part.content_transfer_encoding().map(|encoding| encoding.to_ascii_lowercase());
     text(out, Some(encoding.as_deref().unwrap_or("7bit")), utf8);
     let body = part.raw_body();
     out.extend_from_slice(format!(" {}", body.len()).as_bytes());
@@ -235,7 +238,7 @@ pub(crate) fn body_structure(out: &mut Vec<u8>, message: &Message<'_>, extended:
 #[derive(Clone, Copy)]
 enum Node<'m> {
     Message(MessageRef<'m>),
-    Part(MessagePart<'m>),
+    Part(PartRef<'m>),
 }
 
 /// Follows part numbers (RFC 9051, 6.4.5): in a multipart the n-th child; in a message its body's parts, or – for a
@@ -311,11 +314,7 @@ fn header_fields(block: &[u8], names: &[String], not: bool) -> Vec<u8> {
 /// The text of a message: its body. The top message's runs to the end of what was stored.
 fn message_text<'m>(raw: &'m [u8], message: MessageRef<'m>) -> &'m [u8] {
     let root = message.root_part();
-    if message.container().is_none() {
-        raw.get(root.offset_body() as usize..).unwrap_or_default()
-    } else {
-        root.raw_body()
-    }
+    if message.container().is_none() { raw.get(root.offset_body()..).unwrap_or_default() } else { root.raw_body() }
 }
 
 /// `BODY[section]`; `None` if the message has no such part.
@@ -364,8 +363,6 @@ pub(crate) fn partial(content: &[u8], range: Option<(u32, u32)>) -> &[u8] {
 
 #[cfg(test)]
 mod tests {
-    use mail_parser::MessageParser;
-
     use super::*;
 
     const MESSAGE: &str = "From: =?UTF-8?Q?J=C3=BCrgen?= <juergen@remote.example>\r\n\
@@ -425,7 +422,7 @@ odd\r\n\
 
     #[test]
     fn envelopes() {
-        let message = MessageParser::new().parse(MESSAGE.as_bytes()).unwrap();
+        let message = Message::parse(MESSAGE.as_bytes()).unwrap();
         assert_eq!(
             written(|out| envelope(out, message.root(), false)),
             "(\"Sat, 24 Oct 2026 08:30:00 +0200\" \"=?utf-8?B?R3LDvMOfZQ==?=\" \
@@ -441,7 +438,7 @@ odd\r\n\
 
     #[test]
     fn structures() {
-        let message = MessageParser::new().parse(MESSAGE.as_bytes()).unwrap();
+        let message = Message::parse(MESSAGE.as_bytes()).unwrap();
         assert_eq!(
             written(|out| body_structure(out, &message, false, false)),
             "(((\"text\" \"plain\" (\"charset\" \"utf-8\") NIL NIL \"quoted-printable\" 30 1)\
@@ -464,7 +461,7 @@ odd\r\n\
             "{extended}"
         );
         assert!(extended.ends_with("\"mixed\" (\"boundary\" \"outer\") NIL NIL NIL)"), "{extended}");
-        let single = MessageParser::new().parse(b"Subject: x\r\n\r\nHello\r\nAlice\r\n".as_slice()).unwrap();
+        let single = Message::parse(b"Subject: x\r\n\r\nHello\r\nAlice\r\n".as_slice()).unwrap();
         assert_eq!(
             written(|out| body_structure(out, &single, false, false)),
             "(\"text\" \"plain\" (\"charset\" \"us-ascii\") NIL NIL \"7bit\" 14 2)"
@@ -473,7 +470,7 @@ odd\r\n\
 
     #[test]
     fn sections() {
-        let message = MessageParser::new().parse(MESSAGE.as_bytes()).unwrap();
+        let message = Message::parse(MESSAGE.as_bytes()).unwrap();
         assert_eq!(section_of(&message, &[], None).unwrap(), MESSAGE);
         assert_eq!(section_of(&message, &[1, 1], None).unwrap(), "Gr=C3=BC=C3=9Fe!\r\nZweite Zeile");
         assert_eq!(
@@ -502,14 +499,14 @@ odd\r\n\
         assert_eq!(section_of(&message, &[2, 1], None), None);
         assert_eq!(section_of(&message, &[], Some(SectionText::Mime)), None);
         assert_eq!(section_of(&message, &[2], Some(SectionText::Header)), None);
-        let single = MessageParser::new().parse(b"Subject: x\r\n\r\nHello\r\n".as_slice()).unwrap();
+        let single = Message::parse(b"Subject: x\r\n\r\nHello\r\n".as_slice()).unwrap();
         assert_eq!(section_of(&single, &[1], None).unwrap(), "Hello\r\n");
         assert_eq!(section_of(&single, &[2], None), None);
     }
 
     #[test]
     fn binaries() {
-        let message = MessageParser::new().parse(MESSAGE.as_bytes()).unwrap();
+        let message = Message::parse(MESSAGE.as_bytes()).unwrap();
         assert_eq!(binary(&message, &[2]).unwrap().unwrap().as_ref(), b"%PDF-1.4\n");
         assert_eq!(binary(&message, &[1, 1]).unwrap().unwrap().as_ref(), "Grüße!\r\nZweite Zeile".as_bytes());
         assert_eq!(binary(&message, &[4]), Err(()));
@@ -534,7 +531,7 @@ odd\r\n\
                 let position = (random() as usize) % bytes.len();
                 bytes[position] = b"\r\n-:;\"=(){}<>@ ax"[(random() % 17) as usize];
             }
-            let Some(message) = MessageParser::new().parse(bytes.as_slice()) else { continue };
+            let Some(message) = Message::parse(bytes.as_slice()) else { continue };
             let mut out = Vec::new();
             body_structure(&mut out, &message, true, random() % 2 == 0);
             envelope(&mut out, message.root(), false);
@@ -550,7 +547,7 @@ odd\r\n\
         for _ in 0..200 {
             deep = format!("Content-Type: message/rfc822\r\n\r\n{deep}");
         }
-        let message = MessageParser::new().parse(deep.as_bytes()).unwrap();
+        let message = Message::parse(deep.as_bytes()).unwrap();
         let mut out = Vec::new();
         body_structure(&mut out, &message, true, false);
     }

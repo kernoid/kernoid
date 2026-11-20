@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Threads (RFC 0002, 5). An email belongs to the thread of an earlier email when both have the same base subject
-//! (mail-parser's `thread_name`: the subject without `Re:`, `Fwd:` and list tags, RFC 5256, 2.1) and they name a
+//! (kernoid-mime's `base_subject`: the subject without `Re:`, `Fwd:` and list tags, RFC 5256, 2.1) and they name a
 //! common message id – each email names its own `Message-ID` and every id of its `In-Reply-To`, `References` and
 //! `Resent-Message-ID`. So a reply finds the message it answers, a message finds the replies that came before it,
 //! and two replies to the same message find each other.

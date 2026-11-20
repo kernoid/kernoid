@@ -6,7 +6,7 @@
 use std::collections::{BTreeSet, HashMap};
 
 use kernoid_mail::{Keyword, MailError, MailboxEntry, NewEmail, Rights};
-use mail_parser::MessageParser;
+use kernoid_mime::Message;
 use uuid::Uuid;
 
 use crate::{
@@ -330,7 +330,7 @@ impl Session {
             } else {
                 None
             };
-            let parsed = raw.as_deref().and_then(|raw| MessageParser::new().parse(raw));
+            let parsed = raw.as_deref().and_then(Message::parse);
             let mut response = FetchResponse::new(position as u32 + 1);
             for item in &items {
                 let message = parsed.as_ref();
@@ -360,7 +360,7 @@ impl Session {
                     }
                     FetchItem::Rfc822Header | FetchItem::Rfc822Text => {
                         let Some(message) = message else { continue };
-                        let body = (message.root().root_part().offset_body() as usize).min(raw.len());
+                        let body = message.root().root_part().offset_body().min(raw.len());
                         let (name, content) = if *item == FetchItem::Rfc822Header {
                             ("RFC822.HEADER ", &raw[..body])
                         } else {

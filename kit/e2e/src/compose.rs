@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 //! Mail the apps write and read when kernoid must not see it (RFC 0006, 5.3–5.4): a message built from its parts –
 //! here, because the server builds it otherwise (JMAP `Email/set`) and must not see the text –, and an encrypted
-//! message's inner message read into its parts for display, with mail-parser (never sent back to the server's
+//! message's inner message read into its parts for display, with kernoid-mime (never sent back to the server's
 //! `Email/parse`). Building is plain RFC 5322 and MIME: header fields with RFC 2047 encoded words where they are not
 //! ASCII, file names after RFC 2231, every body in base64.
 
 use base64::{Engine, engine::general_purpose::STANDARD};
-use mail_parser::{MessageParser, MimeHeaders, PartType};
+use kernoid_mime::{AddressList, Message};
 use rand::{RngCore, rngs::OsRng};
 use serde::{Deserialize, Serialize};
 
@@ -138,11 +138,12 @@ pub fn build(draft: &Draft) -> Result<Vec<u8>> {
 
 /// Reads a message into its parts.
 pub fn parse(raw: &[u8]) -> Result<Parsed> {
-    let message = MessageParser::default().parse(raw).ok_or(Error::NotMail)?;
-    let list = |address: Option<&mail_parser::Address<'_>>| -> Vec<Mailbox> {
+    let message = Message::parse(raw).ok_or(Error::NotMail)?;
+    let root = message.root();
+    let list = |address: Option<AddressList>| -> Vec<Mailbox> {
         address
             .map(|a| {
-                a.iter()
+                a.mailboxes()
                     .filter_map(|m| {
                         m.address().map(|email| Mailbox {
                             name: m.name().map(str::to_owned).filter(|n| !n.is_empty()),
@@ -153,47 +154,54 @@ pub fn parse(raw: &[u8]) -> Result<Parsed> {
             })
             .unwrap_or_default()
     };
-    let ids = |value: &mail_parser::HeaderValue<'_>| -> Vec<String> {
-        value.as_text_list().map(|l| l.iter().map(|s| s.to_string()).collect()).unwrap_or_default()
-    };
-    let attachments = message
+    let parts: Vec<_> = root.parts().map(|part| part.id()).collect();
+    let attachments = root
         .attachments()
+        .into_iter()
         .map(|part| Part {
-            index: message.parts.iter().position(|p| std::ptr::eq(p, part)).unwrap_or(0),
+            index: parts.iter().position(|id| *id == part.id()).unwrap_or(0),
             name: part.attachment_name().map(str::to_owned),
             media_type: part
                 .content_type()
                 .map(|t| format!("{}/{}", t.ctype(), t.subtype().unwrap_or("octet-stream")))
                 .unwrap_or_else(|| "application/octet-stream".to_owned()),
-            size: part.contents().len(),
-            cid: part.content_id().map(str::to_owned),
+            size: content(&part).len(),
+            cid: part.content_id(),
             inline: part.content_disposition().is_some_and(|d| d.ctype().eq_ignore_ascii_case("inline")),
         })
         .collect();
     Ok(Parsed {
-        subject: message.subject().map(str::to_owned),
-        from: list(message.from()),
-        to: list(message.to()),
-        cc: list(message.cc()),
-        reply_to: list(message.reply_to()),
-        sent_at: message.date().map(|d| d.to_rfc3339()),
-        message_id: message.message_id().map(str::to_owned),
-        in_reply_to: ids(message.in_reply_to()),
-        references: ids(message.references()),
-        text: message.body_text(0).map(|t| t.into_owned()),
-        html: message.body_html(0).filter(|_| !message.html_body.is_empty()).map(|h| h.into_owned()),
+        subject: root.subject(),
+        from: list(root.from()),
+        to: list(root.to()),
+        cc: list(root.cc()),
+        reply_to: list(root.reply_to()),
+        sent_at: root.date().map(|d| kernoid_mime::DateTime::from_timestamp(d.to_timestamp()).to_rfc3339()),
+        message_id: root.message_id(),
+        in_reply_to: root.in_reply_to(),
+        references: root.references(),
+        text: root.body_text(0),
+        html: root.body_html(0),
         attachments,
     })
 }
 
+/// A part's content: text in UTF-8, other leaves without their transfer encoding, messages as written.
+fn content(part: &kernoid_mime::PartRef<'_>) -> Vec<u8> {
+    match part.text() {
+        Some(text) => text.into_owned().into_bytes(),
+        None => part.decoded().into_owned(),
+    }
+}
+
 /// The decoded content of a part of a message (an index of [`Part`]).
 pub fn part(raw: &[u8], index: usize) -> Result<Vec<u8>> {
-    let message = MessageParser::default().parse(raw).ok_or(Error::NotMail)?;
-    let part = message.parts.get(index).ok_or(Error::NotMail)?;
-    match &part.body {
-        PartType::Multipart(_) => Err(Error::NotMail),
-        _ => Ok(part.contents().to_vec()),
+    let message = Message::parse(raw).ok_or(Error::NotMail)?;
+    let part = message.root().parts().nth(index).ok_or(Error::NotMail)?;
+    if part.is_multipart() {
+        return Err(Error::NotMail);
     }
+    Ok(content(&part))
 }
 
 /// A header field, folded where its value has spaces and lines would be long.

@@ -8,7 +8,6 @@
 use base64::Engine;
 use bytes::Bytes;
 use kernoid_e2e::{Kind, PublicKey, mime};
-use mail_parser::MessageParser;
 use uuid::Uuid;
 
 use crate::{Keyword, Mail, MailError, NewEmail, Result};
@@ -96,14 +95,15 @@ impl Mail {
     /// Curve25519 keys; post-quantum ones wait for Autocrypt's next version (RFC 0006, 4.4). `None` otherwise, and for
     /// a message that has the header already.
     pub(crate) async fn autocrypt_header(&self, account: Uuid, raw: &[u8]) -> Result<Option<String>> {
-        let Some(headers) = MessageParser::new().parse_headers(raw) else { return Ok(None) };
+        let Some(headers) = kernoid_mime::Message::parse_headers(raw) else { return Ok(None) };
         if headers.headers().contains("Autocrypt") {
             return Ok(None);
         }
-        let Some(from) = headers.from().and_then(|from| from.first()).and_then(|from| from.address()) else {
+        let Some(from) =
+            headers.from().and_then(|from| from.first().and_then(|from| from.address().map(str::to_lowercase)))
+        else {
             return Ok(None);
         };
-        let from = from.to_lowercase();
         let key = sqlx::query_scalar!(
             "SELECT k.public_key FROM openpgp_keys k JOIN addresses a ON a.account_id = k.account_id
              WHERE k.account_id = $1 AND k.retired_at IS NULL AND k.kind = 'compatible' AND lower(a.address) = $2",

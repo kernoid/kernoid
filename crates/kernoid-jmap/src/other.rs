@@ -6,7 +6,7 @@ use std::collections::BTreeSet;
 use bytes::Bytes;
 use jiff_sqlx::ToSqlx;
 use kernoid_mail::{Access, MailError, SendError};
-use mail_parser::MessageParser;
+use kernoid_mime::Message;
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
@@ -266,7 +266,7 @@ impl Context<'_> {
             return Err(json!({ "type": "invalidEmail", "description": "no such email" }));
         }
         let raw = mail.raw_email(account, email).await.map_err(|_| json!({ "type": "invalidEmail" }))?;
-        let message = MessageParser::new().parse(&raw[..]).ok_or_else(|| json!({ "type": "invalidEmail" }))?;
+        let message = Message::parse(&raw[..]).ok_or_else(|| json!({ "type": "invalidEmail" }))?;
         // Every sender address must be the account's own (RFC 0002, 10.1).
         let own: BTreeSet<&str> = identities.iter().map(|identity| identity.2.as_str()).collect();
         let senders: Vec<String> = message

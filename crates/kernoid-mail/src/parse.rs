@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! What kernoid keeps of a message in PostgreSQL (RFC 0002, 4), read with mail-parser.
+//! What kernoid keeps of a message in PostgreSQL (RFC 0002, 4), read with kernoid-mime.
 
 use jiff::Timestamp;
 
-use mail_parser::{AddressList, MessageParser, TextList};
+use kernoid_mime::{AddressList, Message};
 use serde::{Deserialize, Serialize};
 
 /// Length of the preview, in characters (JMAP `preview` has at most 256).
@@ -44,11 +44,11 @@ pub(crate) struct Summary {
     pub encrypted_summary: Option<Vec<u8>>,
 }
 
-fn ids(list: Option<TextList<'_>>) -> Vec<String> {
-    list.map(|list| list.iter().filter(|id| !id.is_empty()).map(str::to_owned).collect()).unwrap_or_default()
+fn ids(list: Vec<String>) -> Vec<String> {
+    list.into_iter().filter(|id| !id.is_empty()).collect()
 }
 
-fn mailboxes(address: Option<AddressList<'_>>) -> Vec<Mailbox> {
+fn mailboxes(address: Option<AddressList>) -> Vec<Mailbox> {
     address
         .map(|address| {
             address
@@ -66,7 +66,8 @@ fn mailboxes(address: Option<AddressList<'_>>) -> Vec<Mailbox> {
 
 /// Reads the headers and a preview; `None` if the input is not a message at all.
 pub(crate) fn summarize(raw: &[u8]) -> Option<Summary> {
-    let message = MessageParser::default().parse(raw)?;
+    let message = Message::parse(raw)?;
+    let message = message.root();
     let preview = message
         .body_preview(PREVIEW)
         .map(|text| text.split_whitespace().collect::<Vec<_>>().join(" "))
@@ -74,12 +75,12 @@ pub(crate) fn summarize(raw: &[u8]) -> Option<Summary> {
         .unwrap_or_default();
     Some(Summary {
         sent_at: message.date().and_then(|date| jiff::Timestamp::from_second(date.to_timestamp()).ok()),
-        message_id: message.message_id().filter(|id| !id.is_empty()).map(str::to_owned),
+        message_id: message.message_id().filter(|id| !id.is_empty()),
         in_reply_to: ids(message.in_reply_to()),
         references: ids(message.references()),
         resent_message_ids: ids(message.resent_message_id()),
-        subject: message.subject().map(str::to_owned),
-        base_subject: message.thread_name().unwrap_or_default().to_owned(),
+        subject: message.subject(),
+        base_subject: message.base_subject(),
         from: mailboxes(message.from()),
         to: mailboxes(message.to()),
         cc: mailboxes(message.cc()),
@@ -88,7 +89,7 @@ pub(crate) fn summarize(raw: &[u8]) -> Option<Summary> {
         sender: mailboxes(message.sender()),
         preview,
         has_attachment: message.has_attachments(),
-        search_text: search_text(&message),
+        search_text: search_text(message),
         encrypted: false,
         encrypted_summary: None,
     })
@@ -96,15 +97,19 @@ pub(crate) fn summarize(raw: &[u8]) -> Option<Summary> {
 
 /// What the search index reads of a message: its text bodies and the names of its attachments, cut at
 /// [`SEARCH_TEXT`] bytes.
-pub(crate) fn search_text(message: &mail_parser::Message<'_>) -> String {
+pub(crate) fn search_text(message: kernoid_mime::MessageRef<'_>) -> String {
     let mut text = String::new();
-    for index in 0..message.text_body().len() {
-        if let Some(body) = message.body_text(index) {
-            text.push_str(&body);
+    let (bodies, _, attachments) = message.bodies();
+    for part in bodies {
+        if let Some(body) = part.text() {
+            match part.kind() {
+                kernoid_mime::Kind::Html => text.push_str(&kernoid_mime::html_to_text(&body)),
+                _ => text.push_str(&body),
+            }
             text.push('\n');
         }
     }
-    for attachment in message.attachments() {
+    for attachment in attachments {
         if let Some(name) = attachment.attachment_name() {
             text.push_str(name);
             text.push('\n');
@@ -122,7 +127,7 @@ pub(crate) fn search_text(message: &mail_parser::Message<'_>) -> String {
 
 /// The search text of a raw message (for emails stored before the index).
 pub(crate) fn search_text_of(raw: &[u8]) -> String {
-    MessageParser::default().parse(raw).map(|message| search_text(&message)).unwrap_or_default()
+    Message::parse(raw).map(|message| search_text(message.root())).unwrap_or_default()
 }
 
 /// A full-text query (RFC 0002, 13.1): every word of `text`, matched as a word or a word's beginning; `None` if it

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Mailboxes as mbox (RFC 0002, 13.3): mboxrd quoting, the received time in the `From ` line, keywords in `Status`,
-//! `X-Status` and `X-Keywords` headers as Dovecot and Thunderbird write them. Reading uses mail-parser's mbox reader.
+//! `X-Status` and `X-Keywords` headers as Dovecot and Thunderbird write them.
 
 use bytes::Bytes;
 use jiff::Timestamp;
@@ -60,19 +60,39 @@ pub struct MboxMessage {
     pub received_at: Option<Timestamp>,
 }
 
-/// The messages of an mbox.
+/// The messages of an mbox: each starts at a `From ` line; one `>` comes off quoted `From ` lines (mboxrd).
 pub fn read_mbox(data: &[u8]) -> Vec<MboxMessage> {
-    mail_parser::mailbox::mbox::MessageIterator::new(data)
-        .filter_map(std::result::Result::ok)
-        .map(|message| {
-            let received_at = match message.internal_date() {
-                0 => None,
-                at => jiff::Timestamp::from_second(at as i64).ok(),
-            };
-            let (raw, keywords) = split_flags(message.contents());
+    let mut messages = Vec::new();
+    let mut current: Option<(Option<Timestamp>, Vec<u8>)> = None;
+    for line in data.split_inclusive(|&b| b == b'\n') {
+        if let Some(from) = line.strip_prefix(b"From ") {
+            if let Some((received_at, contents)) = current.take() {
+                messages.push((received_at, contents));
+            }
+            current = Some((received_time(from), Vec::new()));
+            continue;
+        }
+        let Some((_, contents)) = current.as_mut() else { continue };
+        let quoted =
+            line.iter().position(|&b| b != b'>').is_some_and(|start| start > 0 && line[start..].starts_with(b"From "));
+        contents.extend_from_slice(if quoted { &line[1..] } else { line });
+    }
+    messages.extend(current);
+    messages
+        .into_iter()
+        .map(|(received_at, contents)| {
+            let (raw, keywords) = split_flags(&contents);
             MboxMessage { raw, keywords, received_at }
         })
         .collect()
+}
+
+/// The time of a `From ` line: after the sender, in asctime's form (`Sat Oct 24 10:00:00 2026`), in UTC.
+fn received_time(line: &[u8]) -> Option<Timestamp> {
+    let line = String::from_utf8_lossy(line);
+    let (_, date) = line.trim().split_once(char::is_whitespace)?;
+    let date = kernoid_mime::date::parse(date)?;
+    jiff::Timestamp::from_second(date.to_timestamp()).ok()
 }
 
 /// Takes the keyword headers out of the header section and turns line ends into CRLF.

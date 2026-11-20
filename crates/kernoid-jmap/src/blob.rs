@@ -4,7 +4,7 @@
 
 use bytes::Bytes;
 use futures_util::{Stream, stream};
-use mail_parser::{Message, MessageParser, MessagePart, PartKind};
+use kernoid_mime::{Kind, Message, PartRef};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -75,32 +75,32 @@ pub(crate) fn readable(email: &EmailInfo, access: &Access) -> bool {
 }
 
 /// Part `index` of a message: the parts of the message itself in document order, those of messages nested in it
-/// not counted – as mail-parser 0.11 numbered them, so that part blob ids stay as they were.
-pub(crate) fn part_at<'x>(message: &'x Message<'_>, index: usize) -> Option<MessagePart<'x>> {
+/// not counted – as mail-parser 0.11 numbered them before kernoid-mime, so that part blob ids stay as they were.
+pub(crate) fn part_at<'x>(message: &'x Message<'_>, index: usize) -> Option<PartRef<'x>> {
     message.root().parts().nth(index)
 }
 
 /// The number [`part_at`] gives a part of the message itself.
-pub(crate) fn part_index(message: &Message<'_>, part: &MessagePart<'_>) -> Option<usize> {
+pub(crate) fn part_index(message: &Message<'_>, part: &PartRef<'_>) -> Option<usize> {
     message.root().parts().position(|other| other.id() == part.id())
 }
 
 /// The content of a part: text as UTF-8, other leaves without their transfer encoding, containers as written.
-fn content<'x>(part: &MessagePart<'x>) -> std::borrow::Cow<'x, [u8]> {
+fn content<'x>(part: &PartRef<'x>) -> std::borrow::Cow<'x, [u8]> {
     match part.kind() {
-        PartKind::Text | PartKind::Html => match part.text() {
+        Kind::Text | Kind::Html => match part.text() {
             Some(std::borrow::Cow::Borrowed(text)) => std::borrow::Cow::Borrowed(text.as_bytes()),
             Some(std::borrow::Cow::Owned(text)) => std::borrow::Cow::Owned(text.into_bytes()),
             None => part.decoded(),
         },
-        PartKind::Binary | PartKind::InlineBinary => part.decoded(),
-        PartKind::Message(_) | PartKind::Multipart => std::borrow::Cow::Borrowed(part.raw_body()),
+        Kind::Binary | Kind::InlineBinary => part.decoded(),
+        Kind::Message | Kind::Multipart => std::borrow::Cow::Borrowed(part.raw_body()),
     }
 }
 
 /// The decoded content of part `index` of `raw`.
 pub(crate) fn part_content(raw: &[u8], index: usize) -> Option<Bytes> {
-    let message = MessageParser::new().parse(raw)?;
+    let message = Message::parse(raw)?;
     let part = part_at(&message, index)?;
     Some(Bytes::from(content(&part).into_owned()))
 }
@@ -114,15 +114,15 @@ const MAX_EMBEDDED_ALL: usize = 20 * 1024 * 1024;
 /// and loads nothing from elsewhere – a sandbox without scripts or forms.
 fn email_view(raw: &[u8], index: usize) -> Option<String> {
     use base64::Engine;
-    let message = MessageParser::new().parse(raw)?;
+    let message = Message::parse(raw)?;
     let part = part_at(&message, index)?;
-    if !matches!(part.kind(), PartKind::Html) {
+    if part.kind() != Kind::Html {
         return None;
     }
     let mut html = part.text()?.into_owned();
     let mut budget = MAX_EMBEDDED_ALL;
     for part in message.root().parts() {
-        let (Some(id), PartKind::Binary | PartKind::InlineBinary) = (part.content_id(), part.kind()) else {
+        let (Some(id), Kind::Binary | Kind::InlineBinary) = (part.content_id(), part.kind()) else {
             continue;
         };
         let bytes = part.decoded();

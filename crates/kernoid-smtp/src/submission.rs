@@ -10,7 +10,6 @@ use base64::Engine;
 use bytes::Bytes;
 use kernoid_identity::{Identity, IdentityError};
 use kernoid_mail::{Delivered, Delivery, MailError, Outgoing, Recipient};
-use mail_parser::MessageParser;
 use crate::proto::{AUTH_LOGIN, AUTH_OAUTHBEARER, AUTH_PLAIN, AUTH_XOAUTH2, MailFrom as ProtoMailFrom, RcptTo, RequestReceiver};
 
 use crate::session::{MailFrom, Rcpt, Session, State, normalize};
@@ -264,7 +263,7 @@ impl Session {
         ) else {
             return "503 5.5.1 MAIL is required first".into();
         };
-        let Some(message) = MessageParser::new().parse_headers(&raw[..]) else {
+        let Some(message) = kernoid_mime::Message::parse_headers(&raw[..]) else {
             return "550 5.6.0 The message could not be parsed".into();
         };
         let senders: Vec<String> = message

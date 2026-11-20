@@ -184,7 +184,7 @@ that the sender encrypted does that (5.3).
 
 ### 5.4 Reading
 
-The apps decrypt in the client: the summary for lists, the message (parsed with mail-parser in `kit/e2e`, the same
+The apps decrypt in the client: the summary for lists, the message (parsed with kernoid-mime in `kit/e2e`, the same
 parser as the server) for reading. Search over text happens in the app over what it has decrypted; **OPEN:** an
 encrypted search index kept by the app.
 

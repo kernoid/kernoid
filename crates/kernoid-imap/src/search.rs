@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 
 use jiff::Timestamp;
 use kernoid_mail::{AddressInfo, EmailInfo};
-use mail_parser::{Address, HeaderValue, Message, MessageParser};
+use kernoid_mime::Message;
 use uuid::Uuid;
 
 use crate::{
@@ -72,25 +72,22 @@ fn uses_modseq(key: &SearchKey) -> bool {
     any_leaf(key, &|key| matches!(key, SearchKey::ModSeq(_)))
 }
 
-/// A header's decoded text: addresses as `name <address>`.
+/// A header's decoded text: addresses as `name <address>`, message ids without brackets.
 fn header_text(message: &Message<'_>, name: &str) -> Option<String> {
     let mut texts = Vec::new();
-    for header in message.headers().iter().filter(|header| header.raw_name().eq_ignore_ascii_case(name)) {
-        texts.push(match header.value() {
-            HeaderValue::Text(text) => text.to_string(),
-            HeaderValue::TextList(list) => list.iter().collect::<Vec<_>>().join(" "),
-            HeaderValue::Address(address) => address
-                .iter()
-                .flat_map(|item| match item {
-                    Address::Mailbox(mailbox) => vec![mailbox],
-                    Address::Group(group) => group.mailboxes().collect(),
-                })
+    for header in message.headers().all(name) {
+        texts.push(match name.to_ascii_lowercase().as_str() {
+            "from" | "sender" | "reply-to" | "to" | "cc" | "bcc" | "resent-from" | "resent-sender" | "resent-to"
+            | "resent-cc" | "resent-bcc" => header
+                .addresses()
+                .mailboxes()
                 .map(|mailbox| {
                     format!("{} <{}>", mailbox.name().unwrap_or_default(), mailbox.address().unwrap_or_default())
                 })
                 .collect::<Vec<_>>()
                 .join(", "),
-            _ => String::from_utf8_lossy(header.raw_value()).into_owned(),
+            "message-id" | "in-reply-to" | "references" | "resent-message-id" => header.message_ids().join(" "),
+            _ => header.text(),
         });
     }
     (!texts.is_empty()).then(|| texts.join("\n"))
@@ -182,9 +179,9 @@ fn matches(key: &SearchKey, candidate: &Candidate<'_>, selected: &Selected) -> b
         SearchKey::Cc(needle) => summary(&|info| in_addresses(&info.cc, needle)),
         SearchKey::Bcc(needle) => summary(&|info| in_addresses(&info.bcc, needle)),
         SearchKey::Subject(needle) => summary(&|info| subject(info, needle)),
-        SearchKey::Header(name, needle) if needle.is_empty() => candidate
-            .message
-            .is_some_and(|message| message.headers().iter().any(|h| h.raw_name().eq_ignore_ascii_case(name))),
+        SearchKey::Header(name, needle) if needle.is_empty() => {
+            candidate.message.is_some_and(|message| message.headers().contains(name))
+        }
         SearchKey::Header(name, needle) => header(name, needle),
         SearchKey::Body(needle) => in_body(needle),
         SearchKey::Text(needle) => {
@@ -241,7 +238,7 @@ impl Session {
             } else {
                 None
             };
-            let message = raw.as_deref().and_then(|raw| MessageParser::new().parse(raw));
+            let message = raw.as_deref().and_then(Message::parse);
             let candidate = Candidate {
                 position,
                 entry,
