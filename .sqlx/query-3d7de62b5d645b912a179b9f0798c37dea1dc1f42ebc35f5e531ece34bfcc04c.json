@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT credential FROM account_passkeys",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "credential",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "account_passkeys",
+            "name": "credential"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3d7de62b5d645b912a179b9f0798c37dea1dc1f42ebc35f5e531ece34bfcc04c"
+}

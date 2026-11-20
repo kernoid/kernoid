@@ -20,7 +20,6 @@ use kernoid_smtp::{
 };
 use kernoid_store::{BlobStore, MainKeys, TenantKeys, crypto::Key};
 use mail_auth::{DnssecStatus, Mx, RecordSet, ResolverCache, TxtRecord, dkim::DomainKey, dns::TxtRecordParser};
-use object_store::memory::InMemory;
 use sqlx::PgPool;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
@@ -63,7 +62,7 @@ async fn setup(pool: PgPool) -> Setup {
     let remote = tenant(&identity, instance, "Remote", "remote.example").await;
     let main = MainKeys::new(Key::random().unwrap(), Vec::new());
     let keys = Arc::new(TenantKeys::with_main_keys(pool.clone(), main.clone()));
-    let blobs = BlobStore::new(Arc::new(InMemory::new()), keys);
+    let blobs = BlobStore::in_memory(keys);
     Setup { pool: pool.clone(), identity, mail: Mail::new(pool, blobs, Limits::default()), main, firma, remote }
 }
 

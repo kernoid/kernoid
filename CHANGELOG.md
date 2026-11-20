@@ -34,6 +34,22 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   own now, no longer derived from Stalwart's. The SDK drops calcard 0.3.14 – `kernoid-client`'s API is unchanged.
 - JSCalendar as JMAP shows it: participants' ids come from their addresses (the same in a series and its overrides),
   overrides are written back as whole components, a zone only a calendar defines is shown in UTC.
+### Changed
+
+- **Object storage through kernoid's own S3 client** (`kernoid_blob::objects`, MIT, in the kit) in place of the crate
+  object_store: requests signed with AWS Signature Version 4, ranges, multipart uploads, rustls on AWS-LC with
+  post-quantum key exchange preferred. Nothing to change in the configuration, and objects stay where they are; AWS
+  buckets are now reached by their own host (`<bucket>.s3.<region>.amazonaws.com`, by path if the name has a dot),
+  self-hosted storage by path as before. An endpoint over plain HTTP without `allow_http` is refused at start.
+  `kernoid-blob`: `ObjectBlobs::new` takes an `Arc<dyn Objects>` (`MemoryObjects`, `S3Objects`) – no more
+  `object_store` re-export.
+- **Passkeys verified by kernoid itself** (W3C WebAuthn Level 3: client and authenticator data, COSE keys ES256,
+  EdDSA/Ed25519 and RS256, signatures through aws-lc-rs, a CBOR decoder of its own) in place of webauthn-rs – so no
+  OpenSSL any more: building needs neither `pkg-config` nor `libssl-dev`. Passkeys registered before keep working and
+  are written in kernoid's form at their next use; a ceremony started before the upgrade (five minutes at most) has to
+  be started again. Registration now prefers a discoverable passkey (`residentKey: preferred`) and offers EdDSA.
+- **LDAP messages read and written by kernoid itself** (`kernoid_ldap::proto`, BER as RFC 4511 has it) in place of
+  ldap3_proto; the directory answers as before (checked with OpenLDAP's `ldapsearch`, `ldapwhoami`, `ldapdelete`).
 
 ## [0.5.1] – 2026-11-20
 

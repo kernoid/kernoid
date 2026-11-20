@@ -12,7 +12,6 @@ use kernoid_identity::{Address, CHALLENGE_LABEL, DomainName, Identity, TxtLookup
 use kernoid_jmap::{Caller, Jmap};
 use kernoid_mail::{Limits, Mail};
 use kernoid_store::{BlobStore, MainKeys, TenantKeys, crypto::Key};
-use object_store::memory::InMemory;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -50,7 +49,7 @@ async fn setup(pool: PgPool) -> Setup {
         .insert(format!("{CHALLENGE_LABEL}.firma.example"), vec![format!("kernoid-verification={token}")]);
     identity.verify_tenant_domain(instance, tenant, &domain, &dns, WHO).await.unwrap();
     let keys = Arc::new(TenantKeys::with_main_keys(pool.clone(), MainKeys::new(Key::random().unwrap(), Vec::new())));
-    let blobs = BlobStore::new(Arc::new(InMemory::new()), keys.clone());
+    let blobs = BlobStore::in_memory(keys.clone());
     let mail = Mail::new(pool, blobs, Limits::default());
     let jmap = Jmap::new(mail.clone(), 1_000_000, jiff::SignedDuration::from_hours(24 * 5))
         .with_groupware(Groupware::new(mail, keys));

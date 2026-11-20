@@ -88,8 +88,8 @@ curl -H 'Host: login.example.localhost' localhost:8080/.well-known/openid-config
 
 ## Development
 
-Rust 1.99.1 (`rust-toolchain.toml`; the code needs at least 1.94), OpenSSL with `pkg-config` (for webauthn-rs) and
-Docker. Building needs no database: SQL is
+Rust 1.99.1 (`rust-toolchain.toml`; the code needs at least 1.94) and
+Docker – no OpenSSL. Building needs no database: SQL is
 checked at build time against the query cache in `.sqlx/`. The tests need PostgreSQL and a role that may create
 databases and roles; each test creates its own database:
 

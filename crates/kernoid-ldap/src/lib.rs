@@ -1,26 +1,19 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! The directory over LDAPv3 (RFC 4511; RFC 0003, 8) for software that reads one: each tenant's people and groups,
-//! read only. Messages are parsed and written by ldap3_proto (MPL-2.0, from Kanidm); the server is kernoid's own.
+//! read only. Messages are kernoid's own too (`proto`: BER as RFC 4511 has it).
 //!
 //! An account binds over TLS – LDAPS, or after `StartTLS` – with its address or its DN and an app password, or its
 //! password if it needs no second factor; failures count like failed logins. A bound account reads its tenant's
 //! tree (`tree`); without a bind, only the root DSE. What would change the directory is refused: the directory is
 //! kept with kernoid's API, SCIM or the web app.
 
+pub mod proto;
 pub mod tree;
 
 use std::{net::IpAddr, sync::Arc, time::Duration};
 
 use futures_util::{SinkExt, StreamExt};
 use kernoid_identity::{Identity, IdentityError};
-use ldap3_proto::{
-    LdapCodec,
-    control::LdapControl,
-    proto::{
-        LdapBindCred, LdapBindResponse, LdapExtendedResponse, LdapMsg, LdapOp, LdapResult, LdapResultCode,
-        LdapSearchRequest, LdapSearchScope,
-    },
-};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpListener,
@@ -29,6 +22,10 @@ use tokio::{
 use tokio_rustls::TlsAcceptor;
 use tokio_util::{codec::Framed, sync::CancellationToken};
 use uuid::Uuid;
+
+use crate::proto::{
+    BindAuth, BindResponse, Codec, Control, ExtendedResponse, LdapResult, Message, Op, ResultCode, Scope, SearchRequest,
+};
 
 /// A connection, plain or upgraded to TLS.
 pub trait Io: AsyncRead + AsyncWrite + Unpin + Send {}
@@ -136,12 +133,12 @@ struct Session {
     bound: Option<Bound>,
 }
 
-fn done(code: LdapResultCode, message: &str) -> LdapResult {
-    LdapResult { code, matcheddn: String::new(), message: message.to_owned(), referral: Vec::new() }
+fn done(code: ResultCode, message: &str) -> LdapResult {
+    LdapResult::new(code, message)
 }
 
 fn success() -> LdapResult {
-    done(LdapResultCode::Success, "")
+    done(ResultCode::Success, "")
 }
 
 /// What a session does after a message.
@@ -153,7 +150,7 @@ enum Next {
 
 impl Session {
     async fn run(mut self, stream: Box<dyn Io>) {
-        let mut framed = Framed::new(stream, LdapCodec::default());
+        let mut framed = Framed::new(stream, Codec);
         loop {
             let message = match tokio::time::timeout(self.inner.settings.timeout, framed.next()).await {
                 Ok(Some(Ok(message))) => message,
@@ -161,13 +158,13 @@ impl Session {
                 // the next one starts.
                 Ok(Some(Err(_))) | Ok(None) | Err(_) => return,
             };
-            let msgid = message.msgid;
+            let msgid = message.id;
             let (responses, controls, next) = self.handle(message).await;
             let count = responses.len();
             for (index, op) in responses.into_iter().enumerate() {
-                let mut response = LdapMsg::new(msgid, op);
+                let mut response = Message::new(msgid, op);
                 if index + 1 == count {
-                    response.ctrl = controls.clone();
+                    response.controls = controls.clone();
                 }
                 if framed.send(response).await.is_err() {
                     return;
@@ -185,7 +182,7 @@ impl Session {
                     match Server(self.inner.clone()).start_tls(plain).await {
                         Some(tls) => {
                             self.tls = true;
-                            framed = Framed::new(tls, LdapCodec::default());
+                            framed = Framed::new(tls, Codec);
                         }
                         None => return,
                     }
@@ -195,47 +192,46 @@ impl Session {
     }
 
     /// The responses to a message, the controls of the last, and what comes next.
-    async fn handle(&mut self, message: LdapMsg) -> (Vec<LdapOp>, Vec<LdapControl>, Next) {
-        if let LdapOp::SearchRequest(request) = &message.op {
-            let (responses, controls) = self.search(request, &message.ctrl).await;
+    async fn handle(&mut self, message: Message) -> (Vec<Op>, Vec<Control>, Next) {
+        if let Op::SearchRequest(request) = &message.op {
+            let (responses, controls) = self.search(request, &message.controls).await;
             return (responses, controls, Next::Continue);
         }
         let (responses, next) = self.handle_other(message).await;
         (responses, Vec::new(), next)
     }
 
-    async fn handle_other(&mut self, message: LdapMsg) -> (Vec<LdapOp>, Next) {
+    async fn handle_other(&mut self, message: Message) -> (Vec<Op>, Next) {
         match message.op {
-            LdapOp::BindRequest(request) => {
-                let result = self.bind(&request.dn, request.cred).await;
-                (vec![LdapOp::BindResponse(LdapBindResponse { res: result, saslcreds: None })], Next::Continue)
+            Op::BindRequest(request) => {
+                let result = self.bind(&request.dn, request.auth).await;
+                (vec![Op::BindResponse(BindResponse { result, sasl_credentials: None })], Next::Continue)
             }
-            LdapOp::UnbindRequest => (Vec::new(), Next::Close),
-            LdapOp::ExtendedRequest(request) => match request.name.as_str() {
+            Op::UnbindRequest => (Vec::new(), Next::Close),
+            Op::ExtendedRequest(request) => match request.name.as_str() {
                 tree::OID_START_TLS if self.tls => {
-                    (vec![extended(done(LdapResultCode::OperationsError, "TLS is up already"), None)], Next::Continue)
+                    (vec![extended(done(ResultCode::OperationsError, "TLS is up already"), None)], Next::Continue)
                 }
                 tree::OID_START_TLS => (vec![extended(success(), Some(tree::OID_START_TLS))], Next::StartTls),
                 tree::OID_WHOAMI => {
                     let who = self.bound.as_ref().map(|bound| format!("dn:{}", bound.dn)).unwrap_or_default();
-                    let mut response = LdapExtendedResponse { res: success(), name: None, value: None };
-                    response.value = Some(who.into_bytes());
-                    (vec![LdapOp::ExtendedResponse(response)], Next::Continue)
+                    let response = ExtendedResponse { result: success(), name: None, value: Some(who.into_bytes()) };
+                    (vec![Op::ExtendedResponse(response)], Next::Continue)
                 }
                 _ => (
-                    vec![extended(done(LdapResultCode::ProtocolError, "unsupported extended operation"), None)],
+                    vec![extended(done(ResultCode::ProtocolError, "unsupported extended operation"), None)],
                     Next::Continue,
                 ),
             },
-            LdapOp::AbandonRequest(_) => (Vec::new(), Next::Continue),
+            Op::AbandonRequest(_) => (Vec::new(), Next::Continue),
             op => {
-                let refused = done(LdapResultCode::UnwillingToPerform, "the directory is read only");
+                let refused = done(ResultCode::UnwillingToPerform, "the directory is read only");
                 let response = match op {
-                    LdapOp::ModifyRequest(_) => LdapOp::ModifyResponse(refused),
-                    LdapOp::AddRequest(_) => LdapOp::AddResponse(refused),
-                    LdapOp::DelRequest(_) => LdapOp::DelResponse(refused),
-                    LdapOp::ModifyDNRequest(_) => LdapOp::ModifyDNResponse(refused),
-                    LdapOp::CompareRequest(_) => LdapOp::CompareResult(refused),
+                    Op::ModifyRequest(_) => Op::ModifyResponse(refused),
+                    Op::AddRequest(_) => Op::AddResponse(refused),
+                    Op::DelRequest(_) => Op::DelResponse(refused),
+                    Op::ModifyDnRequest(_) => Op::ModifyDnResponse(refused),
+                    Op::CompareRequest(_) => Op::CompareResponse(refused),
                     // A response from a client: not something a client sends.
                     _ => return (Vec::new(), Next::Close),
                 };
@@ -245,20 +241,20 @@ impl Session {
     }
 
     /// A simple bind (RFC 4513, 5.1): anonymous, or an account with its password – over TLS only.
-    async fn bind(&mut self, dn: &str, cred: LdapBindCred) -> LdapResult {
+    async fn bind(&mut self, dn: &str, auth: BindAuth) -> LdapResult {
         self.bound = None;
-        let LdapBindCred::Simple(password) = cred else {
-            return done(LdapResultCode::AuthMethodNotSupported, "only simple binds");
+        let BindAuth::Simple(password) = auth else {
+            return done(ResultCode::AuthMethodNotSupported, "only simple binds");
         };
         match (dn.is_empty(), password.is_empty()) {
             (true, true) => return success(),
             // An unauthenticated bind (RFC 4513, 5.1.2) would look like a successful one to careless software.
-            (false, true) => return done(LdapResultCode::UnwillingToPerform, "a bind needs a password"),
-            (true, false) => return done(LdapResultCode::InvalidCredentials, "invalid credentials"),
+            (false, true) => return done(ResultCode::UnwillingToPerform, "a bind needs a password"),
+            (true, false) => return done(ResultCode::InvalidCredentials, "invalid credentials"),
             (false, false) => {}
         }
         if !self.tls {
-            return done(LdapResultCode::ConfidentialityRequired, "bind over TLS: LDAPS or StartTLS");
+            return done(ResultCode::ConfidentialityRequired, "bind over TLS: LDAPS or StartTLS");
         }
         let login = tree::bind_login(dn).unwrap_or_else(|| dn.trim().to_owned());
         match self.inner.identity.program_login(&login, &password, Some(self.remote), &[], None).await {
@@ -268,46 +264,43 @@ impl Session {
                 success()
             }
             Err(IdentityError::InvalidCredentials | IdentityError::AccountDeactivated) => {
-                done(LdapResultCode::InvalidCredentials, "invalid credentials")
+                done(ResultCode::InvalidCredentials, "invalid credentials")
             }
-            Err(IdentityError::TooManyAttempts { .. }) => {
-                done(LdapResultCode::Busy, "too many attempts; try again later")
-            }
+            Err(IdentityError::TooManyAttempts { .. }) => done(ResultCode::Busy, "too many attempts; try again later"),
             Err(error) => {
                 tracing::warn!(%error, "an LDAP bind");
-                done(LdapResultCode::Other, "try again later")
+                done(ResultCode::Other, "try again later")
             }
         }
     }
 
     /// A search: its entries and result, and the controls of the result.
-    async fn search(&self, request: &LdapSearchRequest, controls: &[LdapControl]) -> (Vec<LdapOp>, Vec<LdapControl>) {
-        let paged = controls.iter().any(|control| matches!(control, LdapControl::SimplePagedResults { .. }));
-        let finish = |result: LdapResult, mut out: Vec<LdapOp>| {
-            out.push(LdapOp::SearchResultDone(result));
+    async fn search(&self, request: &SearchRequest, controls: &[Control]) -> (Vec<Op>, Vec<Control>) {
+        let paged = controls.iter().any(|control| matches!(control, Control::PagedResults { .. }));
+        let finish = |result: LdapResult, mut out: Vec<Op>| {
+            out.push(Op::SearchResultDone(result));
             // Every entry comes on the first page; the empty cookie says there is no other (RFC 2696).
-            let controls =
-                if paged { vec![LdapControl::SimplePagedResults { size: 0, cookie: Vec::new() }] } else { Vec::new() };
+            let controls = if paged { vec![Control::PagedResults { size: 0, cookie: Vec::new() }] } else { Vec::new() };
             (out, controls)
         };
         let base = tree::normalize(&request.base);
-        if base.is_empty() && request.scope == LdapSearchScope::Base {
+        if base.is_empty() && request.scope == Scope::Base {
             let context = self.bound.as_ref().map(|bound| tree::base_dn(bound.tenant));
             let entry = tree::root_dse(context);
             let mut out = Vec::new();
             if tree::matches(&entry, &request.filter) {
-                out.push(LdapOp::SearchResultEntry(tree::result(&entry, &request.attrs, request.typesonly)));
+                out.push(Op::SearchResultEntry(tree::result(&entry, &request.attributes, request.types_only)));
             }
             return finish(success(), out);
         }
         let Some(bound) = &self.bound else {
-            return finish(done(LdapResultCode::InsufficentAccessRights, "bind first"), Vec::new());
+            return finish(done(ResultCode::InsufficientAccessRights, "bind first"), Vec::new());
         };
         let directory = match self.inner.identity.directory(bound.tenant).await {
             Ok(directory) => directory,
             Err(error) => {
                 tracing::warn!(%error, "an LDAP search");
-                return finish(done(LdapResultCode::Other, "try again later"), Vec::new());
+                return finish(done(ResultCode::Other, "try again later"), Vec::new());
             }
         };
         let entries = tree::entries(bound.tenant, &directory);
@@ -316,11 +309,11 @@ impl Session {
         if !exists {
             let matched =
                 if base.ends_with(&format!(",{tenant_base}")) { tree::base_dn(bound.tenant) } else { String::new() };
-            let mut result = done(LdapResultCode::NoSuchObject, "no such entry");
-            result.matcheddn = matched;
+            let mut result = done(ResultCode::NoSuchObject, "no such entry");
+            result.matched_dn = matched;
             return finish(result, Vec::new());
         }
-        let limit = match usize::try_from(request.sizelimit) {
+        let limit = match usize::try_from(request.size_limit) {
             Ok(asked) if asked > 0 => asked.min(self.inner.settings.max_entries),
             _ => self.inner.settings.max_entries,
         };
@@ -332,14 +325,14 @@ impl Session {
                 continue;
             }
             if out.len() == limit {
-                return finish(done(LdapResultCode::SizeLimitExceeded, "more entries than the limit"), out);
+                return finish(done(ResultCode::SizeLimitExceeded, "more entries than the limit"), out);
             }
-            out.push(LdapOp::SearchResultEntry(tree::result(entry, &request.attrs, request.typesonly)));
+            out.push(Op::SearchResultEntry(tree::result(entry, &request.attributes, request.types_only)));
         }
         finish(success(), out)
     }
 }
 
-fn extended(result: LdapResult, name: Option<&str>) -> LdapOp {
-    LdapOp::ExtendedResponse(LdapExtendedResponse { res: result, name: name.map(str::to_owned), value: None })
+fn extended(result: LdapResult, name: Option<&str>) -> Op {
+    Op::ExtendedResponse(ExtendedResponse { result, name: name.map(str::to_owned), value: None })
 }

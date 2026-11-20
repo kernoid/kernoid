@@ -6,8 +6,9 @@ use std::sync::Arc;
 
 use bytes::Bytes;
 use kernoid_config::Blob;
-use kernoid_store::{BlobError, BlobStore, KeyError, MainKeys, TenantKeys, WrapStatus, crypto::Key};
-use object_store::{ObjectStoreExt, PutPayload, memory::InMemory, path::Path};
+use kernoid_store::{
+    BlobError, BlobStore, KeyError, MainKeys, MemoryObjects, Objects, TenantKeys, WrapStatus, crypto::Key,
+};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -146,14 +147,14 @@ async fn runtime_role_may_record_an_expunged_uid_again(pool: PgPool) {
 }
 
 /// A blob store over memory whose raw content the test can see and change.
-fn blobs(pool: &PgPool, main: Key) -> (BlobStore, Arc<InMemory>) {
-    let memory = Arc::new(InMemory::new());
+fn blobs(pool: &PgPool, main: Key) -> (BlobStore, Arc<MemoryObjects>) {
+    let memory = Arc::new(MemoryObjects::new());
     let keys = Arc::new(TenantKeys::new(pool.clone(), main));
     (BlobStore::new(memory.clone(), keys), memory)
 }
 
-async fn raw(memory: &InMemory, tenant: Uuid, key: &str) -> Bytes {
-    memory.get(&Path::from(format!("tenants/{tenant}/{key}"))).await.unwrap().bytes().await.unwrap()
+async fn raw(memory: &MemoryObjects, tenant: Uuid, key: &str) -> Bytes {
+    memory.read(&format!("tenants/{tenant}/{key}")).await.unwrap()
 }
 
 #[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
@@ -190,15 +191,15 @@ async fn changed_or_moved_content_is_refused(pool: PgPool) {
     let sealed = raw(&memory, a, "mail/1").await;
 
     // Copied to another tenant (whose key has the same number) or to another path.
-    memory.put(&Path::from(format!("tenants/{b}/mail/1")), PutPayload::from(sealed.clone())).await.unwrap();
+    memory.put(&format!("tenants/{b}/mail/1"), sealed.clone()).await.unwrap();
     assert!(matches!(store.get(b, "mail/1").await, Err(BlobError::Crypto(_))));
-    memory.put(&Path::from(format!("tenants/{a}/mail/2")), PutPayload::from(sealed.clone())).await.unwrap();
+    memory.put(&format!("tenants/{a}/mail/2"), sealed.clone()).await.unwrap();
     assert!(matches!(store.get(a, "mail/2").await, Err(BlobError::Crypto(_))));
 
     // Changed in place.
     let mut changed = sealed.to_vec();
     *changed.last_mut().unwrap() ^= 1;
-    memory.put(&Path::from(format!("tenants/{a}/mail/1")), PutPayload::from(changed)).await.unwrap();
+    memory.put(&format!("tenants/{a}/mail/1"), Bytes::from(changed)).await.unwrap();
     assert!(matches!(store.get(a, "mail/1").await, Err(BlobError::Crypto(_))));
 }
 
@@ -216,7 +217,7 @@ async fn a_wrong_main_key_reads_nothing(pool: PgPool) {
 async fn concurrent_first_writes_share_one_key(pool: PgPool) {
     let tenant = Uuid::from_u128(1);
     let main = Key::random().unwrap();
-    let memory = Arc::new(InMemory::new());
+    let memory = Arc::new(MemoryObjects::new());
     let writers = (0..8).map(|i| {
         // Separate key managers, as in separate processes.
         let store = BlobStore::new(memory.clone(), Arc::new(TenantKeys::new(pool.clone(), main.clone())));
@@ -278,7 +279,7 @@ async fn objects_in_postgresql_are_sealed_and_limited(pool: PgPool) {
 async fn rotated_tenant_keys_keep_old_content_readable(pool: PgPool) {
     let tenant = Uuid::from_u128(1);
     let keys = Arc::new(TenantKeys::new(pool.clone(), Key::random().unwrap()));
-    let memory = Arc::new(InMemory::new());
+    let memory = Arc::new(MemoryObjects::new());
     let store = BlobStore::new(memory.clone(), keys.clone());
     store.put(tenant, "old", Bytes::from_static(b"before")).await.unwrap();
 
@@ -296,7 +297,7 @@ async fn rotated_tenant_keys_keep_old_content_readable(pool: PgPool) {
 #[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
 async fn main_key_rotation_rewraps_everything(pool: PgPool) {
     let (old, new) = (Key::random().unwrap(), Key::random().unwrap());
-    let memory = Arc::new(InMemory::new());
+    let memory = Arc::new(MemoryObjects::new());
     let before = BlobStore::new(memory.clone(), Arc::new(TenantKeys::new(pool.clone(), old.clone())));
     for tenant in 1..=3 {
         before.put(Uuid::from_u128(tenant), "mail/1", Bytes::from(format!("tenant {tenant}"))).await.unwrap();

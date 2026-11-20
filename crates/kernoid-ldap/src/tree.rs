@@ -6,17 +6,16 @@
 use std::collections::HashMap;
 
 use kernoid_identity::directory::Directory;
-use ldap3_proto::proto::{
-    LdapFilter, LdapPartialAttribute, LdapSearchResultEntry, LdapSearchScope, LdapSubstringFilter,
-};
+
+use crate::proto::{Filter, PartialAttribute, Scope, SearchResultEntry, Substrings};
 use uuid::Uuid;
 
 /// StartTLS (RFC 4511, 4.14).
 pub const OID_START_TLS: &str = "1.3.6.1.4.1.1466.20037";
 /// Who am I? (RFC 4532).
-pub const OID_WHOAMI: &str = ldap3_proto::proto::OID_WHOAMI;
+pub const OID_WHOAMI: &str = "1.3.6.1.4.1.4203.1.11.3";
 /// Simple paged results (RFC 2696).
-pub const OID_PAGED_RESULTS: &str = "1.2.840.113556.1.4.319";
+pub const OID_PAGED_RESULTS: &str = crate::proto::OID_PAGED_RESULTS;
 
 /// Attributes returned only when asked for by name or with `+` (RFC 4511, 4.5.1.8).
 const OPERATIONAL: [&str; 2] = ["entryuuid", "entrydn"];
@@ -181,19 +180,19 @@ pub fn root_dse(naming_context: Option<String>) -> Entry {
 }
 
 /// Whether `entry` (normalized DN) lies in the scope of `base` (normalized DN).
-pub fn in_scope(entry: &str, base: &str, scope: &LdapSearchScope) -> bool {
+pub fn in_scope(entry: &str, base: &str, scope: &Scope) -> bool {
     let below = |dn: &str| base.is_empty() || dn.ends_with(&format!(",{base}"));
     let parent = |dn: &str| dn.split_once(',').map(|(_, parent)| parent.to_owned()).unwrap_or_default();
     match scope {
-        LdapSearchScope::Base => entry == base,
-        LdapSearchScope::OneLevel => entry != base && parent(entry) == base,
-        LdapSearchScope::Subtree => entry == base || (!entry.is_empty() && below(entry)),
-        LdapSearchScope::Children => entry != base && !entry.is_empty() && below(entry),
+        Scope::Base => entry == base,
+        Scope::OneLevel => entry != base && parent(entry) == base,
+        Scope::Subtree => entry == base || (!entry.is_empty() && below(entry)),
+        Scope::Children => entry != base && !entry.is_empty() && below(entry),
     }
 }
 
 /// Whether `entry` matches `filter` (RFC 4511, 4.5.1.7); values compare without case.
-pub fn matches(entry: &Entry, filter: &LdapFilter) -> bool {
+pub fn matches(entry: &Entry, filter: &Filter) -> bool {
     let values = |name: &str| -> Vec<String> {
         if name.eq_ignore_ascii_case("entrydn") {
             return vec![entry.dn.to_lowercase()];
@@ -201,10 +200,10 @@ pub fn matches(entry: &Entry, filter: &LdapFilter) -> bool {
         entry.values(name).map(|values| values.iter().map(|value| value.to_lowercase()).collect()).unwrap_or_default()
     };
     match filter {
-        LdapFilter::And(all) => all.iter().all(|filter| matches(entry, filter)),
-        LdapFilter::Or(any) => any.iter().any(|filter| matches(entry, filter)),
-        LdapFilter::Not(filter) => !matches(entry, filter),
-        LdapFilter::Equality(name, value) | LdapFilter::Approx(name, value) => {
+        Filter::And(all) => all.iter().all(|filter| matches(entry, filter)),
+        Filter::Or(any) => any.iter().any(|filter| matches(entry, filter)),
+        Filter::Not(filter) => !matches(entry, filter),
+        Filter::Equality(name, value) | Filter::Approx(name, value) => {
             let value = value.to_lowercase();
             if name.eq_ignore_ascii_case("member") || name.eq_ignore_ascii_case("memberof") {
                 values(name).iter().any(|own| normalize(own) == normalize(&value))
@@ -212,15 +211,15 @@ pub fn matches(entry: &Entry, filter: &LdapFilter) -> bool {
                 values(name).contains(&value)
             }
         }
-        LdapFilter::Present(name) => !values(name).is_empty(),
-        LdapFilter::Substring(name, substring) => values(name).iter().any(|value| substring_matches(value, substring)),
-        LdapFilter::GreaterOrEqual(name, value) => values(name).iter().any(|own| *own >= value.to_lowercase()),
-        LdapFilter::LessOrEqual(name, value) => values(name).iter().any(|own| *own <= value.to_lowercase()),
-        LdapFilter::Extensible(_) => false,
+        Filter::Present(name) => !values(name).is_empty(),
+        Filter::Substring(name, substring) => values(name).iter().any(|value| substring_matches(value, substring)),
+        Filter::GreaterOrEqual(name, value) => values(name).iter().any(|own| *own >= value.to_lowercase()),
+        Filter::LessOrEqual(name, value) => values(name).iter().any(|own| *own <= value.to_lowercase()),
+        Filter::Extensible(_) => false,
     }
 }
 
-fn substring_matches(value: &str, filter: &LdapSubstringFilter) -> bool {
+fn substring_matches(value: &str, filter: &Substrings) -> bool {
     let mut rest = value;
     if let Some(initial) = &filter.initial {
         let Some(after) = rest.strip_prefix(initial.to_lowercase().as_str()) else { return false };
@@ -239,29 +238,33 @@ fn substring_matches(value: &str, filter: &LdapSubstringFilter) -> bool {
 
 /// The entry as a search returns it: the attributes asked for (none: all user attributes; `*` all user attributes;
 /// `+` the operational ones; `1.1` none), only their names if `types_only`.
-pub fn result(entry: &Entry, asked: &[String], types_only: bool) -> LdapSearchResultEntry {
+pub fn result(entry: &Entry, asked: &[String], types_only: bool) -> SearchResultEntry {
     let all_user = asked.is_empty() || asked.iter().any(|name| name == "*");
     let all_operational = asked.iter().any(|name| name == "+");
     let wanted = |name: &str| {
         let operational = OPERATIONAL.contains(&name.to_lowercase().as_str());
         (if operational { all_operational } else { all_user }) || asked.iter().any(|own| own.eq_ignore_ascii_case(name))
     };
-    let mut attributes: Vec<LdapPartialAttribute> = entry
+    let mut attributes: Vec<PartialAttribute> = entry
         .attributes
         .iter()
         .filter(|(name, _)| wanted(name))
-        .map(|(name, values)| LdapPartialAttribute {
-            atype: name.clone(),
-            vals: if types_only { Vec::new() } else { values.iter().map(|value| value.clone().into_bytes()).collect() },
+        .map(|(name, values)| PartialAttribute {
+            name: name.clone(),
+            values: if types_only {
+                Vec::new()
+            } else {
+                values.iter().map(|value| value.clone().into_bytes()).collect()
+            },
         })
         .collect();
     if wanted("entryDN") && !entry.dn.is_empty() {
-        attributes.push(LdapPartialAttribute {
-            atype: "entryDN".into(),
-            vals: if types_only { Vec::new() } else { vec![entry.dn.clone().into_bytes()] },
+        attributes.push(PartialAttribute {
+            name: "entryDN".into(),
+            values: if types_only { Vec::new() } else { vec![entry.dn.clone().into_bytes()] },
         });
     }
-    LdapSearchResultEntry { dn: entry.dn.clone(), attributes }
+    SearchResultEntry { dn: entry.dn.clone(), attributes }
 }
 
 #[cfg(test)]
@@ -319,12 +322,12 @@ mod tests {
         let (tenant, directory, _, _) = directory();
         let entries = entries(tenant, &directory);
         let person = &entries[3];
-        use LdapFilter::*;
+        use Filter::*;
         let eq = |name: &str, value: &str| Equality(name.into(), value.into());
         let sub = |name: &str, initial: Option<&str>, any: &[&str], last: Option<&str>| {
             Substring(
                 name.into(),
-                LdapSubstringFilter {
+                Substrings {
                     initial: initial.map(str::to_owned),
                     any: any.iter().map(|part| (*part).to_owned()).collect(),
                     final_: last.map(str::to_owned),
@@ -347,10 +350,10 @@ mod tests {
         }
         let base = normalize(&format!("ou=people, o={tenant}"));
         let dn = normalize(&person.dn);
-        assert!(in_scope(&dn, &base, &LdapSearchScope::OneLevel));
-        assert!(in_scope(&dn, &normalize(&format!("o={tenant}")), &LdapSearchScope::Subtree));
-        assert!(!in_scope(&dn, &normalize(&format!("o={tenant}")), &LdapSearchScope::OneLevel));
-        assert!(!in_scope(&dn, &base, &LdapSearchScope::Base));
+        assert!(in_scope(&dn, &base, &Scope::OneLevel));
+        assert!(in_scope(&dn, &normalize(&format!("o={tenant}")), &Scope::Subtree));
+        assert!(!in_scope(&dn, &normalize(&format!("o={tenant}")), &Scope::OneLevel));
+        assert!(!in_scope(&dn, &base, &Scope::Base));
     }
 
     #[test]
@@ -359,13 +362,13 @@ mod tests {
         let person = &entries(tenant, &directory)[3];
         let names = |asked: &[&str]| -> Vec<String> {
             let asked: Vec<String> = asked.iter().map(|name| (*name).to_owned()).collect();
-            result(person, &asked, false).attributes.into_iter().map(|attribute| attribute.atype).collect()
+            result(person, &asked, false).attributes.into_iter().map(|attribute| attribute.name).collect()
         };
         assert!(names(&[]).contains(&"mail".to_owned()) && !names(&[]).contains(&"entryUUID".to_owned()));
         assert_eq!(names(&["MAIL", "entryuuid"]), ["mail", "entryUUID"]);
         assert!(names(&["+"]).contains(&"entryDN".to_owned()));
         assert!(names(&["1.1"]).is_empty());
-        assert!(result(person, &["mail".into()], true).attributes[0].vals.is_empty());
+        assert!(result(person, &["mail".into()], true).attributes[0].values.is_empty());
     }
 
     #[test]

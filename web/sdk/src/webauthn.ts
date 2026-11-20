@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Passkeys: kernoid sends WebAuthn options as JSON (binary values in base64url, as webauthn-rs writes them) and
+// Passkeys: kernoid sends WebAuthn options as JSON (binary values in base64url) and
 // expects the browser's answer as JSON in the same encoding. These functions translate both ways.
 
 import { decode, encode } from "./base64url.js";

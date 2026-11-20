@@ -24,7 +24,7 @@ ignore = [
 
 [licenses]
 confidence-threshold = 0.93
-# Compatible with the AGPL-3.0: permissive licences, the weak copyleft of MPL-2.0 (webauthn-rs) and LGPL-2.1+
+# Compatible with the AGPL-3.0: permissive licences, the weak copyleft of MPL-2.0 (fast_chemail and ascii_utils, through async-graphql) and LGPL-2.1+
 # (r-efi, UEFI targets only), and the AGPL itself (kernoid).
 allow = [
   "0BSD",

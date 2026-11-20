@@ -16,7 +16,7 @@ pub mod lock;
 pub mod parts;
 pub mod scan;
 
-pub use blob::{BlobError, BlobStore, DATABASE_OBJECT_LIMIT};
+pub use blob::{BlobError, BlobStore, DATABASE_OBJECT_LIMIT, MemoryObjects, ObjectError, Objects, objects, s3_config};
 pub use keys::{KeyError, MainKeys, TenantKeys, WrapStatus, rewrap, wrap_status};
 pub use sqlx::PgPool;
 

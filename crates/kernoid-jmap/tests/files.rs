@@ -15,7 +15,6 @@ use kernoid_store::{
     crypto::Key,
     scan::{Refused, Scanner, Verdict},
 };
-use object_store::memory::InMemory;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -59,7 +58,7 @@ async fn setup_with(pool: PgPool, scanner: Option<Arc<dyn Scanner>>) -> Setup {
         .insert(format!("{CHALLENGE_LABEL}.firma.example"), vec![format!("kernoid-verification={token}")]);
     identity.verify_tenant_domain(instance, tenant, &domain, &dns, WHO).await.unwrap();
     let keys = Arc::new(TenantKeys::with_main_keys(pool.clone(), MainKeys::new(Key::random().unwrap(), Vec::new())));
-    let mut blobs = BlobStore::new(Arc::new(InMemory::new()), keys);
+    let mut blobs = BlobStore::in_memory(keys);
     if let Some(scanner) = scanner {
         blobs = blobs.with_scanner(scanner);
     }

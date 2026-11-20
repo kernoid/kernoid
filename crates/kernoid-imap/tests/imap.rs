@@ -11,7 +11,6 @@ use kernoid_identity::{Address, DomainName, Identity};
 use kernoid_imap::{Protocol, Server, Settings};
 use kernoid_mail::{Limits, Mail, MailEvents, NewEmail, Role};
 use kernoid_store::{BlobStore, MainKeys, TenantKeys, crypto::Key};
-use object_store::memory::InMemory;
 use sqlx::PgPool;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use uuid::Uuid;
@@ -44,7 +43,7 @@ async fn setup(pool: PgPool) -> Setup {
     identity.set_password(alice, PASSWORD, WHO).await.unwrap();
     let (_, app_password) = identity.add_app_password(alice, "Thunderbird", WHO).await.unwrap();
     let keys = Arc::new(TenantKeys::with_main_keys(pool.clone(), MainKeys::new(Key::random().unwrap(), Vec::new())));
-    let blobs = BlobStore::new(Arc::new(InMemory::new()), keys);
+    let blobs = BlobStore::in_memory(keys);
     let mail = Mail::new(pool, blobs, Limits::default());
     let (server_tls, client_tls) = tls_pair();
     Setup { identity, mail, events: MailEvents::default(), tenant, alice, app_password, server_tls, client_tls }

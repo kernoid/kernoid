@@ -13,7 +13,7 @@ accepted under the [Developer Certificate of Origin](https://developercertificat
 
 ## Build and test
 
-Rust 1.99.1 (`rust-toolchain.toml`), OpenSSL with `pkg-config` (for webauthn-rs) and Docker. Building needs no
+Rust 1.99.1 (`rust-toolchain.toml`) and Docker – no OpenSSL. Building needs no
 database: SQL is checked at build time against the query cache in `.sqlx/`. The tests need PostgreSQL and a role that
 may create databases; each test gets its own database:
 

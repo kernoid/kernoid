@@ -13,7 +13,6 @@ use kernoid_files::{
 };
 use kernoid_identity::{Address, CHALLENGE_LABEL, DomainName, Identity, TxtLookup, role::Principal, services::Service};
 use kernoid_store::{BlobStore, MainKeys, TenantKeys, crypto::Key};
-use object_store::memory::InMemory;
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -49,7 +48,7 @@ async fn setup(pool: PgPool, limits: Limits) -> Setup {
         .insert(format!("{CHALLENGE_LABEL}.firma.example"), vec![format!("kernoid-verification={token}")]);
     identity.verify_tenant_domain(instance, tenant, &domain, &dns, WHO).await.unwrap();
     let keys = Arc::new(TenantKeys::with_main_keys(pool.clone(), MainKeys::new(Key::random().unwrap(), Vec::new())));
-    let blobs = BlobStore::new(Arc::new(InMemory::new()), keys);
+    let blobs = BlobStore::in_memory(keys);
     Setup { identity, files: Files::new(pool.clone(), blobs, limits), pool, tenant }
 }
 

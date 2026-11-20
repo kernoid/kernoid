@@ -63,7 +63,6 @@ rustls = { version = "0.23.46", default-features = false, features = ["aws-lc-rs
 tokio-rustls = { version = "0.26.6", default-features = false }
 kernoid-events = { path = "../kernoid-events" }
 kernoid-store = { path = "../kernoid-store" }
-object_store = "0.14.2"
 rcgen = { version = "0.14.10", default-features = false, features = ["aws_lc_rs", "pem"] }
 sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres", "macros", "migrate"] }
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros"] }

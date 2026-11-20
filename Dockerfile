@@ -34,8 +34,6 @@ RUN pnpm --filter @kernoid/login --filter @kernoid/app run build
 
 FROM docker.io/library/rust:1.99.1-slim-trixie AS build
 WORKDIR /src
-# OpenSSL for webauthn-rs (passkeys); the runtime image brings libssl.
-RUN apt-get update && apt-get install -y --no-install-recommends pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
 COPY . .
 COPY --from=web /web/login/dist web/login/dist
 COPY --from=web /web/app/dist web/app/dist

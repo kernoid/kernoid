@@ -10,8 +10,7 @@ use std::sync::Arc;
 
 use bytes::Bytes;
 use kernoid_config::Blob;
-use kernoid_store::{BlobError, BlobStore, TenantKeys, crypto::Key};
-use object_store::{ObjectStoreExt, aws::AmazonS3Builder, path::Path};
+use kernoid_store::{BlobError, BlobStore, Objects, TenantKeys, crypto::Key, objects, s3_config};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -43,18 +42,8 @@ async fn round_trip_stores_only_ciphertext(pool: PgPool) {
     assert_eq!(store.get(tenant, "test/round-trip").await.unwrap(), content);
 
     // What the object storage holds is not the content.
-    let raw = AmazonS3Builder::new()
-        .with_endpoint(s3.endpoint.unwrap())
-        .with_region(s3.region)
-        .with_bucket_name(s3.bucket)
-        .with_access_key_id(s3.access_key_id.expose())
-        .with_secret_access_key(s3.secret_access_key.expose())
-        .with_allow_http(true)
-        .with_virtual_hosted_style_request(false)
-        .build()
-        .unwrap();
-    let stored =
-        raw.get(&Path::from(format!("tenants/{tenant}/test/round-trip"))).await.unwrap().bytes().await.unwrap();
+    let raw = objects::s3::S3Objects::new(&s3_config(&s3)).unwrap();
+    let stored = raw.read(&format!("tenants/{tenant}/test/round-trip")).await.unwrap();
     assert!(stored.starts_with(b"KRNO"));
     assert!(!stored.windows(content.len()).any(|window| window == content.as_ref()));
 
