@@ -191,9 +191,9 @@ async fn changed_or_moved_content_is_refused(pool: PgPool) {
     let sealed = raw(&memory, a, "mail/1").await;
 
     // Copied to another tenant (whose key has the same number) or to another path.
-    memory.put(&format!("tenants/{b}/mail/1"), Bytes::from(sealed.clone())).await.unwrap();
+    memory.put(&format!("tenants/{b}/mail/1"), sealed.clone()).await.unwrap();
     assert!(matches!(store.get(b, "mail/1").await, Err(BlobError::Crypto(_))));
-    memory.put(&format!("tenants/{a}/mail/2"), Bytes::from(sealed.clone())).await.unwrap();
+    memory.put(&format!("tenants/{a}/mail/2"), sealed.clone()).await.unwrap();
     assert!(matches!(store.get(a, "mail/2").await, Err(BlobError::Crypto(_))));
 
     // Changed in place.
