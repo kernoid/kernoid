@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH RECURSIVE up AS (\n               SELECT parent_id AS id, 1 AS depth FROM file_nodes WHERE id = $1 AND parent_id IS NOT NULL\n               UNION ALL\n               SELECT n.parent_id, up.depth + 1 FROM file_nodes n JOIN up ON n.id = up.id\n               WHERE n.parent_id IS NOT NULL AND up.depth < $2)\n           SELECT id AS \"id!\" FROM up ORDER BY depth",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "49b682bafef40695af2584558b4537911ccb2a1fde71cdc89a2609457e3c29f8"
+}

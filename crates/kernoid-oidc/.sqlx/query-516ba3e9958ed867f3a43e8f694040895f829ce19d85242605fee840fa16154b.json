@@ -1,0 +1,174 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT r.used_at, r.expires_at > now() AS \"fresh!\", r.family, r.instance_id, r.application_id,\n                      r.account_id, r.session_id, r.scopes, r.offline, r.auth_time, r.checks,\n                      s.expires_at AS \"session_expires?\",\n                      (a.active AND t.active AND (r.offline OR (s.terminated_at IS NULL AND s.expires_at > now())))\n                          IS TRUE AS \"alive!\",\n                      a.tenant_id\n               FROM refresh_tokens r\n               LEFT JOIN sessions s ON s.id = r.session_id\n               JOIN accounts a ON a.id = r.account_id\n               JOIN tenants t ON t.id = a.tenant_id\n               WHERE r.token_hash = $1\n               FOR UPDATE OF r",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "used_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "refresh_tokens",
+            "name": "used_at"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "fresh!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "family",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "refresh_tokens",
+            "name": "family"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "instance_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "refresh_tokens",
+            "name": "instance_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "application_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "refresh_tokens",
+            "name": "application_id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "account_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "refresh_tokens",
+            "name": "account_id"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "session_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "refresh_tokens",
+            "name": "session_id"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "scopes",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "refresh_tokens",
+            "name": "scopes"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "offline",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "refresh_tokens",
+            "name": "offline"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "auth_time",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "refresh_tokens",
+            "name": "auth_time"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "checks",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "refresh_tokens",
+            "name": "checks"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "session_expires?",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "sessions",
+            "name": "expires_at"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "alive!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 13,
+        "name": "tenant_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "accounts",
+            "name": "tenant_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      true,
+      null,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      null,
+      false
+    ]
+  },
+  "hash": "516ba3e9958ed867f3a43e8f694040895f829ce19d85242605fee840fa16154b"
+}

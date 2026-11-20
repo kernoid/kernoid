@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE file_contents SET body_search = to_tsvector('simple', $2) WHERE id = $1 AND body_search IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ce5cfef56a195880c40a8f3eb4183684abc6372d0ba30a51a2376ba8f45b729a"
+}

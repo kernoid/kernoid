@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE mailboxes SET uid_next = uid_next + 1 WHERE id = $1 AND uid_next <= 4294967295 RETURNING uid_next - 1 AS \"uid!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "uid!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "62db66a3eaed2445b6246059e1e3ce48bbf16e128e45e397dffde967fc0d9b71"
+}

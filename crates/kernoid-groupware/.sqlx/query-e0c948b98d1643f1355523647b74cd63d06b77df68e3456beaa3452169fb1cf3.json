@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE calendars c SET collection_key = $3 WHERE c.id = $1 AND c.account_id = $2 AND NOT c.is_default\n                 AND c.collection_key IS NULL AND NOT EXISTS (SELECT 1 FROM calendar_events e WHERE e.calendar_id = c.id)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e0c948b98d1643f1355523647b74cd63d06b77df68e3456beaa3452169fb1cf3"
+}

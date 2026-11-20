@@ -29,10 +29,17 @@ const APP_CONTENT_SECURITY_POLICY: &str = "default-src 'none'; script-src 'self'
      img-src 'self' data: blob:; font-src 'self'; media-src 'self' blob:; frame-src 'self'; connect-src 'self'; \
      manifest-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'";
 
-/// The builds made into the binary by `build.rs`: the login UI and the web app from `pnpm build` in `web/` (empty in
+/// The builds made into the binary by kernoid-web: the login UI and the web app from `pnpm build` in `web/` (empty in
 /// a build of kernoid without them, which answers 404 at `/login` and `/app`), and the tests' fixture.
 mod builds {
-    include!(concat!(env!("OUT_DIR"), "/builds.rs"));
+    pub(crate) use kernoid_web::{LOGIN_UI, WEB_APP};
+
+    /// A build as `pnpm build` leaves it: an index page and one asset (`src/testdata/login-ui`), sorted by path.
+    #[cfg(test)]
+    pub(crate) static FIXTURE: kernoid_web::Files = &[
+        ("assets/app-1234.js", include_bytes!("testdata/login-ui/assets/app-1234.js")),
+        ("index.html", include_bytes!("testdata/login-ui/index.html")),
+    ];
 }
 
 /// The files of a build, by their path.

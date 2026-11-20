@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO instance_domains (domain, instance_id, is_primary) VALUES ($1, $2, true)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "38674b8e8b534021b37a44f35a72c480d7b8b2ab5290fd5f602bffe920490c11"
+}

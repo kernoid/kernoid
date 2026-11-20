@@ -1,0 +1,74 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT d.domain, c.not_after AS \"not_after?\", o.attempts AS \"attempts?\", o.next_attempt_at AS \"next?\",\n                  o.last_error AS \"last_error?\"\n           FROM instance_domains d\n           LEFT JOIN tls_certificates c ON c.domain = d.domain\n           LEFT JOIN acme_orders o ON o.domain = d.domain\n           ORDER BY d.domain",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "domain",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "instance_domains",
+            "name": "domain"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "not_after?",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "tls_certificates",
+            "name": "not_after"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "attempts?",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "acme_orders",
+            "name": "attempts"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "next?",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "acme_orders",
+            "name": "next_attempt_at"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "last_error?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "acme_orders",
+            "name": "last_error"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "f9336e9316c4e31846d5aef772012471e7f8ff4e1700b2acf9814f4b2f0984b8"
+}

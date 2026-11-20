@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT l.password_hash, f.failures AS \"failures?\", f.window_start AS \"window_start?\"\n             FROM file_links l LEFT JOIN file_link_failures f ON f.link_id = l.id WHERE l.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "password_hash",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "file_links",
+            "name": "password_hash"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "failures?",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "file_link_failures",
+            "name": "failures"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "window_start?",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "file_link_failures",
+            "name": "window_start"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "dffd658bc19fcd5b610ad0aeb1da453ca888c92a61554ac6496dd6c934ff697d"
+}

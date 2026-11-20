@@ -12,7 +12,7 @@ edition = "2024"
 rust-version = "1.94"
 license = "AGPL-3.0-or-later"
 repository = "https://github.com/kernoid/kernoid"
-publish = false
+homepage = "https://kernoid.dev"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

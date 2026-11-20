@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE dkim_keys SET state = 'active', state_since = now()\n             WHERE domain = $1 AND selector = $2 AND state = 'next'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a1df6e043eac3e2c67fe70772bf3522116dddaf8fd004d724ff2982429c2a01a"
+}

@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT resource_name FROM contacts WHERE addressbook_id = $1 AND uid = $2 AND resource_name <> $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "resource_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "contacts",
+            "name": "resource_name"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "87d42047b6e0b310a360ee9d770219b8b3560bf6b1a3b70fe11e1460c6938e5b"
+}

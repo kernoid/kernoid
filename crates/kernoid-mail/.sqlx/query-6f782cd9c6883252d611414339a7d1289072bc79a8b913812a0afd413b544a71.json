@@ -1,0 +1,43 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT role,\n                      EXISTS (SELECT 1 FROM mailboxes c WHERE c.parent_id = m.id) AS \"has_child!\",\n                      EXISTS (SELECT 1 FROM email_mailboxes em WHERE em.mailbox_id = m.id) AS \"has_email!\"\n               FROM mailboxes m WHERE id = $1 AND account_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "role",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "mailboxes",
+            "name": "role"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "has_child!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "has_email!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true,
+      null,
+      null
+    ]
+  },
+  "hash": "6f782cd9c6883252d611414339a7d1289072bc79a8b913812a0afd413b544a71"
+}

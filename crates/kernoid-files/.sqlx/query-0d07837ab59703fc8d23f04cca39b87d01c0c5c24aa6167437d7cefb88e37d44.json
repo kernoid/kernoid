@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE file_nodes SET content_id = $2, size = $3, media_type = $4, modified = now(), changed = now()\n             WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0d07837ab59703fc8d23f04cca39b87d01c0c5c24aa6167437d7cefb88e37d44"
+}

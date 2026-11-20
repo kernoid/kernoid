@@ -2930,6 +2930,7 @@ dependencies = [
  "kernoid-relay",
  "kernoid-smtp",
  "kernoid-store",
+ "kernoid-web",
  "metrics",
  "percent-encoding",
  "reqwest",
@@ -3020,6 +3021,10 @@ dependencies = [
  "uuid",
  "zeroize",
 ]
+
+[[package]]
+name = "kernoid-web"
+version = "0.5.1"
 
 [[package]]
 name = "lazy_static"

@@ -6,7 +6,8 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-publish.workspace = true
+homepage.workspace = true
+description = "kernoid's modules: the parts that connect it to one outside service"
 
 [lints]
 workspace = true

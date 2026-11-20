@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO relay_stream_originals (space, stream, hash, content, blob, size) VALUES ($1, $2, $3, $4, $5, $6)\n         ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Bytea",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0a5630f9db3a1bc4ca05ede60584175738ed993d73422d747325c60b399ea0d7"
+}

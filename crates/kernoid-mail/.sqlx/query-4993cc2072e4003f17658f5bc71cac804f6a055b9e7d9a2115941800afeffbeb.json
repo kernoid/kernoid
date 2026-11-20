@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT em.uid FROM email_mailboxes em JOIN emails e ON e.id = em.email_id\n                 WHERE em.email_id = $1 AND em.mailbox_id = $2 AND e.account_id = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "uid",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "email_mailboxes",
+            "name": "uid"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "4993cc2072e4003f17658f5bc71cac804f6a055b9e7d9a2115941800afeffbeb"
+}

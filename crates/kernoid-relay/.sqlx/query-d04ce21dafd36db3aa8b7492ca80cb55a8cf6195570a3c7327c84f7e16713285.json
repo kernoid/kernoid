@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO relay_stream_records (space, stream, position, id, generation, kind, canonical)\n         VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (space, stream, id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Int8",
+        "Text",
+        "Int4",
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d04ce21dafd36db3aa8b7492ca80cb55a8cf6195570a3c7327c84f7e16713285"
+}

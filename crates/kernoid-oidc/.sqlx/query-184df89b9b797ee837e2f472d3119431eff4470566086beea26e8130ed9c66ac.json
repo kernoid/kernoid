@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE logout_notifications SET delivered_at = now(), last_error = NULL\n                         WHERE session_id = $1 AND application_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "184df89b9b797ee837e2f472d3119431eff4470566086beea26e8130ed9c66ac"
+}

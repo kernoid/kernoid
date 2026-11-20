@@ -1,0 +1,53 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT k.fingerprint, k.kind, k.public_key FROM addresses ad\n             JOIN accounts a ON a.id = ad.account_id JOIN tenants t ON t.id = a.tenant_id\n             JOIN openpgp_keys k ON k.account_id = a.id AND k.retired_at IS NULL\n             WHERE ad.address = $1 AND t.instance_id = $2 AND a.active",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "fingerprint",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "openpgp_keys",
+            "name": "fingerprint"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "openpgp_keys",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "public_key",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "openpgp_keys",
+            "name": "public_key"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "3c36c515d86779cfe7d8217fd5a251e2ea11f8abc6f69d04fd6737cb9d905342"
+}

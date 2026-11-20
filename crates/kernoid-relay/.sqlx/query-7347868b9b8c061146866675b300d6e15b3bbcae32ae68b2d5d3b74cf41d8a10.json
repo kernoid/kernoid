@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT canonical FROM relay_roster WHERE space = $1 ORDER BY seq",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "canonical",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "relay_roster",
+            "name": "canonical"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "7347868b9b8c061146866675b300d6e15b3bbcae32ae68b2d5d3b74cf41d8a10"
+}

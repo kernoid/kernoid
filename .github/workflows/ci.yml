@@ -52,13 +52,10 @@ jobs:
           (cd crates/kernoid-auth && cargo sqlx migrate run --source migrations)
       - name: Query cache (.sqlx) matches the queries and the schema
         run: cargo sqlx prepare --workspace --check -- --all-targets
-      # kernoid-auth goes to crates.io alone: its queries travel with it in its own .sqlx, a copy of the workspace's.
-      - name: kernoid-auth's own query cache matches the workspace's
-        run: |
-          want=$(grep -l kernoid_auth_sessions .sqlx/*.json | xargs -n1 basename | sort)
-          have=$(ls crates/kernoid-auth/.sqlx | sort)
-          test "$want" = "$have" || { echo "::error::copy the queries of kernoid_auth_sessions into crates/kernoid-auth/.sqlx"; exit 1; }
-          for f in crates/kernoid-auth/.sqlx/*.json; do cmp "$f" ".sqlx/$(basename "$f")"; done
+      # The server's crates go to crates.io: each carries the queries of its library in its own .sqlx, as packages
+      # build outside the workspace.
+      - name: Each crate's own query cache (crates/*/.sqlx) matches its queries
+        run: scripts/sqlx-crates.sh --check
       - run: cargo fmt --check
       - run: cargo clippy --locked --all-targets
       - name: Identity alone builds – kernoid-server without mail, calendars and files (RFC 0009, 3)
@@ -480,10 +477,13 @@ jobs:
           echo "$TOKEN" | helm registry login ghcr.io --username "$ACTOR" --password-stdin
           helm push /tmp/chart/kernoid-operator-*.tgz oci://ghcr.io/kernoid/charts
 
-  # The kit's crates on crates.io, on a release: every crate of kit/ that is published, each after those it depends on
-  # (kit/scripts/publish-order.sh), in the tag's version, through crates.io's trusted publishing (a short-lived token for this workflow and the environment
-  # `crates-io`, no stored secret). A version already on crates.io is left alone, so the job can run again. The crates
-  # were checked by main's run of the commit, which `release` waited for.
+  # The crates on crates.io, on a release, in the tag's version, through crates.io's trusted publishing (a short-lived
+  # token for this workflow and the environment `crates-io`, no stored secret): the kit's (MIT, kit/scripts/
+  # publish-order.sh), then the server's (AGPL, scripts/publish-order.sh) – so that other programs build kernoid in
+  # (RFC 0009, 3) –, then the terminal app and the operator. kernoid-web carries the builds of the login UI and the web
+  # app (scripts/web-crate.sh), so they are built here first: the WebAssembly of the kit, then web/. A version already
+  # on crates.io is left alone, so the job can run again. The crates were checked by main's run of the commit, which
+  # `release` waited for.
   crates:
     needs: release
     runs-on: ubuntu-latest
@@ -494,36 +494,53 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Rust toolchain from rust-toolchain.toml
-        working-directory: kit
         run: rustup toolchain install
+      - name: The versions are the tag's
+        run: |
+          for manifest in Cargo.toml kit/Cargo.toml; do
+            version=$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' "$manifest")
+            test "v$version" = "$GITHUB_REF_NAME" || { echo "::error::$manifest is $version, the tag $GITHUB_REF_NAME"; exit 1; }
+          done
+          for manifest in tui/Cargo.toml operator/Cargo.toml; do
+            version=$(sed -n '/^\[package\]/,/^\[/s/^version = "\(.*\)"/\1/p' "$manifest")
+            test "v$version" = "$GITHUB_REF_NAME" || { echo "::error::$manifest is $version, the tag $GITHUB_REF_NAME"; exit 1; }
+          done
+      # The web app's WebAssembly, as in the job `kit`; then the login UI and the web app, as in the job `web`.
+      - name: WebAssembly for the web app
+        working-directory: kit
+        run: |
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends clang llvm
+          cargo install wasm-bindgen-cli --version "$(e2e/scripts/wasm-bindgen-version.sh)" --locked
+          e2e/scripts/build-wasm.sh
+          vault/scripts/build-wasm.sh
+      # In the job web's container: Node 26 and pnpm, as there.
+      - name: The login UI and the web app, into kernoid-web
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src/web docker.io/library/node:26.11.1-trixie-slim sh -c \
+            'npm install --global --ignore-scripts --no-audit --no-fund pnpm@12.12.0 && pnpm install --frozen-lockfile && pnpm run build'
+          scripts/web-crate.sh
       - uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
         id: auth
       - name: Publish
-        working-directory: kit
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
         run: |
-          version=$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml)
-          test "v$version" = "$GITHUB_REF_NAME" || { echo "::error::the kit is $version, the tag $GITHUB_REF_NAME"; exit 1; }
-          for name in $(scripts/publish-order.sh); do
+          version="${GITHUB_REF_NAME#v}"
+          publish() { # directory, crate, extra arguments
+            dir=$1; name=$2; shift 2
             if curl -fsS -A "kernoid release (https://github.com/kernoid/kernoid)" \
                  "https://crates.io/api/v1/crates/$name/$version" >/dev/null 2>&1; then
-              echo "$name $version is on crates.io already"; continue
+              echo "$name $version is on crates.io already"; return
             fi
-            cargo publish --locked -p "$name"
+            (cd "$dir" && cargo publish --locked -p "$name" "$@")
+          }
+          for name in $(kit/scripts/publish-order.sh); do publish kit "$name"; done
+          for name in $(scripts/publish-order.sh); do
+            # kernoid-web's builds (dist/) are not in git: the copy scripts/web-crate.sh made.
+            if [ "$name" = kernoid-web ]; then publish . "$name" --allow-dirty; else publish . "$name"; fi
           done
-      - name: Publish kernoid-auth – logging in with kernoid for other servers (AGPL, RFC 0009, 2)
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-        run: |
-          version=$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml)
-          test "v$version" = "$GITHUB_REF_NAME" || { echo "::error::the server is $version, the tag $GITHUB_REF_NAME"; exit 1; }
-          if curl -fsS -A "kernoid release (https://github.com/kernoid/kernoid)" \
-               "https://crates.io/api/v1/crates/kernoid-auth/$version" >/dev/null 2>&1; then
-            echo "kernoid-auth $version is on crates.io already"
-          else
-            cargo publish --locked -p kernoid-auth
-          fi
+          publish tui kernoid-tui
+          publish operator kernoid-operator
 
   # An installation of the last release, with mail and a file in it, upgraded to the image just pushed: the schema
   # migrated to the newest migration, the data still there (scripts/upgrade-check.sh). The image is the one this run

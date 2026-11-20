@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE projection_cursors SET transaction_id = $2, position = $3, updated_at = now() WHERE name = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "efabe80869c0215ad9cee334baed4b3d695fcfd68bc88f625d8209f7c751a60d"
+}

@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH RECURSIVE up (id, parent_id) AS (\n                       SELECT id, parent_id FROM mailboxes WHERE id = $1\n                       UNION ALL\n                       SELECT m.id, m.parent_id FROM mailboxes m JOIN up ON m.id = up.parent_id)\n                   SELECT EXISTS (SELECT 1 FROM up WHERE id = $2) AS \"below!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "below!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "dba099729256279fb1006a967697fa16bfc3ac40d4b2f57b4bc69afb1cc0ccf1"
+}

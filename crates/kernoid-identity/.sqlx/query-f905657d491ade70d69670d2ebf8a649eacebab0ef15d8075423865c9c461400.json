@@ -1,0 +1,100 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.mail_e2e, t.e2e_mail, t.e2e_vaults, t.e2e_collections, t.e2e_recovery,\n                    r.fingerprint AS \"recovery_fingerprint?\", r.public_key AS \"recovery_key?\"\n             FROM accounts a JOIN tenants t ON t.id = a.tenant_id\n             LEFT JOIN tenant_recovery_keys r ON r.tenant_id = t.id WHERE a.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "mail_e2e",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "accounts",
+            "name": "mail_e2e"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "e2e_mail",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tenants",
+            "name": "e2e_mail"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "e2e_vaults",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tenants",
+            "name": "e2e_vaults"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "e2e_collections",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tenants",
+            "name": "e2e_collections"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "e2e_recovery",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "tenants",
+            "name": "e2e_recovery"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "recovery_fingerprint?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tenant_recovery_keys",
+            "name": "fingerprint"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "recovery_key?",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "tenant_recovery_keys",
+            "name": "public_key"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "f905657d491ade70d69670d2ebf8a649eacebab0ef15d8075423865c9c461400"
+}

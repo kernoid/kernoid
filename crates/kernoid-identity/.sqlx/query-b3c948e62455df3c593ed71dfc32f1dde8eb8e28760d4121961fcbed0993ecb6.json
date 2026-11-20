@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM role_assignments\n                     WHERE tenant_id = $1 AND principal_kind = $2 AND principal_id = $3 AND role = $4",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b3c948e62455df3c593ed71dfc32f1dde8eb8e28760d4121961fcbed0993ecb6"
+}

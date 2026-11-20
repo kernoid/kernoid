@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM mailbox_expunged WHERE expunged_at < $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "75e3bb0e25b99258583ca8d88d2aa0006d3d4ad826b5b2edb19138b4c065e138"
+}

@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT owner FROM events\n                 WHERE instance_id = $1 AND aggregate_type = $2 AND aggregate_id = $3 AND sequence = 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "owner",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "events",
+            "name": "owner"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "98f768db866e3f6fe355cda4ca9622a0b49ec0ecd4f1c177a02d5cbe9dee2e9c"
+}

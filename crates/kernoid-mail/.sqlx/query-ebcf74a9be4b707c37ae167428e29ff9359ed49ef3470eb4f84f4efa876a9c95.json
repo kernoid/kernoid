@@ -1,0 +1,48 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT em.uid, em.email_id,\n                      EXISTS (SELECT 1 FROM email_mailboxes o WHERE o.email_id = em.email_id AND o.mailbox_id <> em.mailbox_id) AS \"elsewhere!\"\n               FROM email_mailboxes em JOIN emails e ON e.id = em.email_id\n               WHERE em.mailbox_id = $1 AND (NOT $2 OR '$deleted' = ANY(e.keywords)) ORDER BY em.uid",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "uid",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "email_mailboxes",
+            "name": "uid"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "email_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "email_mailboxes",
+            "name": "email_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "elsewhere!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "ebcf74a9be4b707c37ae167428e29ff9359ed49ef3470eb4f84f4efa876a9c95"
+}

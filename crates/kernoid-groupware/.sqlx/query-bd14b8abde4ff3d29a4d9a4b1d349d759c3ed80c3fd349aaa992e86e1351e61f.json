@@ -1,0 +1,135 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO calendar_events\n                 (id, account_id, calendar_id, resource_name, uid, component, span, organized, data, size, modseq)\n             VALUES ($1, $2, $3, $4, $5, $6,\n                 CASE WHEN $7::timestamptz IS NULL THEN NULL ELSE tstzrange($7, $12, '[]') END,\n                 $8, $9, $10, $11)\n             ON CONFLICT (id) DO UPDATE SET span = excluded.span, organized = excluded.organized,\n                 data = excluded.data, size = excluded.size, modseq = excluded.modseq\n             RETURNING id, calendar_id, resource_name, uid, component, organized, size, schedule_tag, modseq",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "calendar_events",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "calendar_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "calendar_events",
+            "name": "calendar_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "resource_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "calendar_events",
+            "name": "resource_name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "uid",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "calendar_events",
+            "name": "uid"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "component",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "calendar_events",
+            "name": "component"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "organized",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "calendar_events",
+            "name": "organized"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "size",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "calendar_events",
+            "name": "size"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "schedule_tag",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "calendar_events",
+            "name": "schedule_tag"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "modseq",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "calendar_events",
+            "name": "modseq"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Timestamptz",
+        "Bool",
+        "Bytea",
+        "Int8",
+        "Int8",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "bd14b8abde4ff3d29a4d9a4b1d349d759c3ed80c3fd349aaa992e86e1351e61f"
+}

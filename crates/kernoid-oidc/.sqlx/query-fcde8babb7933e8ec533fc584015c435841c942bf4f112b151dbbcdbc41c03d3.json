@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM idp_logins WHERE expires_at < now() - interval '1 hour'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "fcde8babb7933e8ec533fc584015c435841c942bf4f112b151dbbcdbc41c03d3"
+}

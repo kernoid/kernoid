@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH RECURSIVE tree AS (\n                   SELECT id FROM file_nodes WHERE account_id = $1 AND (id = $2 OR ($2::uuid IS NULL AND parent_id IS NULL))\n                   UNION ALL\n                   SELECT n.id FROM file_nodes n JOIN tree ON n.parent_id = tree.id)\n               SELECT id AS \"id!\" FROM tree",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "fe23f1d77fd1d517814164716ea1b0e8c1b51efb197f9d6e8f79650f27660535"
+}

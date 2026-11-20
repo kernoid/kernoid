@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT t.services_off FROM accounts a JOIN tenants t ON t.id = a.tenant_id WHERE a.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "services_off",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "tenants",
+            "name": "services_off"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "9732f6375bf4b70f6bef4b1cd968e6663695b8ee5562718c3d06e594488b5f4d"
+}

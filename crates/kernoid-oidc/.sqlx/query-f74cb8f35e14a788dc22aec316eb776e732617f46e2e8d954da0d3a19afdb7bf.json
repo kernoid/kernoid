@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM session_applications sa USING sessions s\n             WHERE s.id = sa.session_id AND s.terminated_at IS NOT NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "f74cb8f35e14a788dc22aec316eb776e732617f46e2e8d954da0d3a19afdb7bf"
+}

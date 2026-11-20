@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE mail_accounts SET mailbox_names = jsonb_set(mailbox_names, ARRAY[$2], to_jsonb($3::text))\n                 WHERE account_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "869fdcf0d6b068481cbe570ead097abbf66b94a61ba3a3ac978bd52b17712560"
+}

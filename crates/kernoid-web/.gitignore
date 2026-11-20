@@ -1,0 +1,3 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# The builds copied in for the package (scripts/web-crate.sh); never committed.
+/dist/

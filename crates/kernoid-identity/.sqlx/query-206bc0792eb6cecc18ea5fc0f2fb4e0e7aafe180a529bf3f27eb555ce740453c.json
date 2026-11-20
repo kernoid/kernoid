@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO account_services (account_id, service, state) VALUES ($1, $2, $3)\n                 ON CONFLICT (account_id, service) DO UPDATE SET state = $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "206bc0792eb6cecc18ea5fc0f2fb4e0e7aafe180a529bf3f27eb555ce740453c"
+}

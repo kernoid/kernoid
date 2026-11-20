@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM file_nodes WHERE id = ANY($1) RETURNING space_id AS \"space?\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "space?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "file_nodes",
+            "name": "space_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "8bb898d7f181dfc9ee2074c0463eff6c7163b0ebc141b71d16191466c657adbf"
+}

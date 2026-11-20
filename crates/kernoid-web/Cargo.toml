@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# kernoid-web: the login UI and the web app (web/, AGPL), built, as tables of files that kernoid-server serves at
+# /login and /app. In the repository the build script takes them from web/login/dist and web/app/dist (`pnpm build`);
+# the package on crates.io carries a copy in dist/ (scripts/web-crate.sh, at publish time, without source maps).
+[package]
+name = "kernoid-web"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "kernoid's login UI and web app, built, for kernoid-server to serve"
+readme = "README.md"
+keywords = ["kernoid"]
+include = ["/Cargo.toml", "/LICENSE", "/README.md", "/build.rs", "/src/**", "/dist/**"]
+
+[lints]
+workspace = true

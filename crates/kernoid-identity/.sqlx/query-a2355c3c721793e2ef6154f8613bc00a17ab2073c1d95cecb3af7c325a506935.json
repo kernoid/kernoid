@@ -1,0 +1,88 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT t.e2e_mail, t.e2e_vaults, t.e2e_collections, t.e2e_recovery,\n                    r.fingerprint AS \"recovery_fingerprint?\", r.public_key AS \"recovery_key?\"\n             FROM tenants t LEFT JOIN tenant_recovery_keys r ON r.tenant_id = t.id WHERE t.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "e2e_mail",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tenants",
+            "name": "e2e_mail"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "e2e_vaults",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tenants",
+            "name": "e2e_vaults"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "e2e_collections",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tenants",
+            "name": "e2e_collections"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "e2e_recovery",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "tenants",
+            "name": "e2e_recovery"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "recovery_fingerprint?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tenant_recovery_keys",
+            "name": "fingerprint"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "recovery_key?",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "tenant_recovery_keys",
+            "name": "public_key"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "a2355c3c721793e2ef6154f8613bc00a17ab2073c1d95cecb3af7c325a506935"
+}

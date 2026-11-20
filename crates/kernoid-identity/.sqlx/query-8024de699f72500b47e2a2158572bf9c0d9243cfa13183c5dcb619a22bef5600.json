@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO addresses (address, tenant_id, group_id, is_primary, domain) VALUES ($1, $2, $3, false, $4)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8024de699f72500b47e2a2158572bf9c0d9243cfa13183c5dcb619a22bef5600"
+}

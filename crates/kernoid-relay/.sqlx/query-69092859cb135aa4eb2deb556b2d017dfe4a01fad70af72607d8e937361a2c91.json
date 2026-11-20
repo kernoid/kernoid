@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO relay_stream_tokens (space, stream, generation, read_hash, write_hash) VALUES ($1, $2, 0, $3, $4)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "69092859cb135aa4eb2deb556b2d017dfe4a01fad70af72607d8e937361a2c91"
+}

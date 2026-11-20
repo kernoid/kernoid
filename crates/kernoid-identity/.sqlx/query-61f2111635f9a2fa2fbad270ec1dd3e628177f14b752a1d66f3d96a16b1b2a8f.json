@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT p.tenant_id, g.roles AS \"roles?\"\n               FROM projects p LEFT JOIN project_grants g ON g.project_id = p.id AND g.tenant_id = $2\n               WHERE p.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tenant_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "projects",
+            "name": "tenant_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "roles?",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "project_grants",
+            "name": "roles"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "61f2111635f9a2fa2fbad270ec1dd3e628177f14b752a1d66f3d96a16b1b2a8f"
+}

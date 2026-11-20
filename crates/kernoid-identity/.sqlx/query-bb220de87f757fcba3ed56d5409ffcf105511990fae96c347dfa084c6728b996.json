@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT trash_retention_days, junk_retention_days FROM tenants WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "trash_retention_days",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "tenants",
+            "name": "trash_retention_days"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "junk_retention_days",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "tenants",
+            "name": "junk_retention_days"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "bb220de87f757fcba3ed56d5409ffcf105511990fae96c347dfa084c6728b996"
+}

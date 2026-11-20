@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE auth_requests SET expires_at = now()\n             WHERE id = $1 AND instance_id = $2 AND session_id IS NULL AND expires_at > now()\n             RETURNING redirect_uri, state",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "redirect_uri",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "auth_requests",
+            "name": "redirect_uri"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "state",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "auth_requests",
+            "name": "state"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "387b6bc997ef031d6a8ab73dbf781c86ec2d32adafa6d0dcb2aa995f62feacf3"
+}

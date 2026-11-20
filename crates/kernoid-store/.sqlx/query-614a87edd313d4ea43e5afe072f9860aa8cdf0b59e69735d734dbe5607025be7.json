@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO blob_objects (path, content) VALUES ($1, $2)\n                     ON CONFLICT (path) DO UPDATE SET content = EXCLUDED.content, stored_at = now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "614a87edd313d4ea43e5afe072f9860aa8cdf0b59e69735d734dbe5607025be7"
+}

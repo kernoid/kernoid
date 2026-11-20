@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE email_mailboxes SET modseq = $2 WHERE email_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6d7f560eff6175155d1f5327bb281a64acb97f44d6f63dde6540a5332b7cf947"
+}

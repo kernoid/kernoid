@@ -29,12 +29,13 @@ After adding or changing a query, update the cache against a migrated database a
 cargo sqlx migrate run --source crates/kernoid-store/migrations
 (cd crates/kernoid-auth && cargo sqlx migrate run --source migrations)   # sqlx-cli with the feature sqlx-toml
 cargo sqlx prepare --workspace -- --all-targets
+scripts/sqlx-crates.sh                                                   # each crate's own .sqlx, for crates.io
 ```
 
 The web part (`web/`: SDK, login UI and web app, AGPL) needs Node 26 or later and pnpm (the version in `web/package.json`,
 `packageManager`). pnpm installs only versions published at least two weeks ago (`minimumReleaseAge`) and runs no
 install scripts of dependencies. A release build of kernoid embeds `web/login/dist` and `web/app/dist` as they are when
-it is compiled; a debug build reads them from there at run time. To try changes without building kernoid again, point
+it is compiled (the crate `kernoid-web`); a debug build reads them from there at run time. To try changes without building kernoid again, point
 `http.login_ui` at `web/login/dist` and `http.web_app` at `web/app/dist`, and open `/app/` on an instance's domain.
 
 ```sh

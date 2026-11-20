@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO webauthn_challenges (id, instance_id, purpose, account_id, session_id, state, expires_at)\n             VALUES ($1, $2, $3, $4, $5, $6, now() + make_interval(secs => $7))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid",
+        "Text",
+        "Uuid",
+        "Uuid",
+        "Jsonb",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "04282d043582b7b041237e5411d4b86a3e41fe14aca329adc12cbf5ab729062e"
+}

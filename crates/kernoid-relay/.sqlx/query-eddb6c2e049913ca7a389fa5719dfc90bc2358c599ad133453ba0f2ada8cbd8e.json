@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO relay_requests (space, member, canonical) VALUES ($1, $2, $3)\n         ON CONFLICT (space, member) DO UPDATE SET canonical = EXCLUDED.canonical, received_at = now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "eddb6c2e049913ca7a389fa5719dfc90bc2358c599ad133453ba0f2ada8cbd8e"
+}

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE openpgp_keys SET retired_at = coalesce(retired_at, now())\n                     WHERE fingerprint = $1 AND account_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d83faae3e9e8d525f1240fffd4fac045b02a5f05ea8dc4cb97d23bdf374133ff"
+}

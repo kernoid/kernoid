@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO sieve_vacation_sent (account_id, key, expires_at)\n                   VALUES ($1, $2, now() + make_interval(secs => $3))\n                   ON CONFLICT (account_id, key) DO UPDATE SET expires_at = EXCLUDED.expires_at\n                       WHERE sieve_vacation_sent.expires_at < now()\n                   RETURNING 1 AS \"sent!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "sent!",
+        "type_info": "Int4",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Float8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "0ac934ff941890498e88d12ef4e77af97ae9677f4f47e960526d93d22e0e9dfb"
+}

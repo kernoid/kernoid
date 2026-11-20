@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE mail_accounts SET mailbox_names = mailbox_names - $2 WHERE account_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "90adeffbe7ca37c0751d009108074ee7fd60bb615032d324e01c641fa3dad85b"
+}

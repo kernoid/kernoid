@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT node_type FROM file_nodes WHERE id = $1 AND account_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "node_type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "file_nodes",
+            "name": "node_type"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "79155fb71f8f3beec128320f956515807e2866f5e227bbee438b0852ef4f2b30"
+}

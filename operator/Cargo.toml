@@ -14,7 +14,7 @@ rust-version = "1.94"
 license = "AGPL-3.0-or-later"
 repository = "https://github.com/kernoid/kernoid"
 description = "Runs kernoid on Kubernetes"
-publish = false
+homepage = "https://kernoid.dev"
 
 [lints.rust]
 unsafe_code = "forbid"

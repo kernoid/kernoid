@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO email_thread_refs (account_id, subject_hash, message_ref, email_id)\n         SELECT $1, $2, reference, $3 FROM unnest($4::text[]) AS reference\n         ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bytea",
+        "Uuid",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "361f2f63ab6592ad0852f05df2de1c0bb5bd9ee1747d97bc8e8d099a88f94fea"
+}

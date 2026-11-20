@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE mailboxes SET\n                 name = coalesce($3, name),\n                 parent_id = CASE WHEN $4 THEN $5 ELSE parent_id END,\n                 role = CASE WHEN $6 THEN $7 ELSE role END,\n                 sort_order = coalesce($8, sort_order),\n                 is_subscribed = coalesce($9, is_subscribed)\n             WHERE id = $1 AND account_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Bool",
+        "Uuid",
+        "Bool",
+        "Text",
+        "Int4",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "de71c65b5cb09a1c913808c6861f7e4fe9418cf07c5318bce0a8fb1c338e0e9f"
+}

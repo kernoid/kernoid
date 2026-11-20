@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE logout_notifications SET last_error = $3, next_attempt_at = now() + make_interval(secs => $4)\n                         WHERE session_id = $1 AND application_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ab7e5332a0d8937568828c8045be60edd509c8f4cc6310d701011fea9a91beb0"
+}

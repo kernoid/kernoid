@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id FROM file_nodes\n         WHERE account_id = $1 AND parent_id IS NOT DISTINCT FROM $2\n           AND (name = $3 OR ($5 AND lower(name) = lower($3)))\n           AND id IS DISTINCT FROM $4\n         ORDER BY name = $3 DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "file_nodes",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Uuid",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "1f24cbacb2d4731f7c5e280513fec33bad46b9d1bcdd3b7697ff83d471213685"
+}

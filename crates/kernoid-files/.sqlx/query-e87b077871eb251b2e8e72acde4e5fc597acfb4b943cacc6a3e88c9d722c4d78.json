@@ -1,0 +1,101 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH RECURSIVE up AS (\n               SELECT id, parent_id, 0 AS depth FROM file_nodes WHERE id = $1\n               UNION ALL\n               SELECT n.id, n.parent_id, up.depth + 1 FROM file_nodes n JOIN up ON n.id = up.parent_id\n               WHERE up.depth < 64),\n           down AS (\n               SELECT id FROM file_nodes WHERE id = $1 AND $2\n               UNION ALL\n               SELECT n.id FROM file_nodes n JOIN down ON n.parent_id = down.id)\n           SELECT l.token, l.node_id, l.holder_id, l.exclusive, l.deep, l.owner_info, l.expires_at\n           FROM file_locks l\n           WHERE l.expires_at > now()\n             AND (l.node_id = $1\n                  OR (l.deep AND l.node_id IN (SELECT id FROM up))\n                  OR l.node_id IN (SELECT id FROM down))",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "token",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "file_locks",
+            "name": "token"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "node_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "file_locks",
+            "name": "node_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "holder_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "file_locks",
+            "name": "holder_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "exclusive",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "file_locks",
+            "name": "exclusive"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "deep",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "file_locks",
+            "name": "deep"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "owner_info",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "file_locks",
+            "name": "owner_info"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "expires_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "file_locks",
+            "name": "expires_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "e87b077871eb251b2e8e72acde4e5fc597acfb4b943cacc6a3e88c9d722c4d78"
+}

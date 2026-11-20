@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT blob AS \"blob!\" FROM relay_stream_originals WHERE space = $1 AND stream = $2 AND blob IS NOT NULL",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "blob!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "relay_stream_originals",
+            "name": "blob"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "2f0c39d00043749241d6b1ba2909921c42b65d5627cec2a50fb3eb6d5d359c8e"
+}

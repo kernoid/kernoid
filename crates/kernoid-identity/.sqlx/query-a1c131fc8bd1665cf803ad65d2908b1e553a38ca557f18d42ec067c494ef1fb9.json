@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO login_failures (instance_id, key, failures, window_start) VALUES ($1, $2, 1, now())\n             ON CONFLICT (instance_id, key) DO UPDATE SET\n                 failures = CASE WHEN login_failures.window_start <= now() - make_interval(secs => $3)\n                                 THEN 1 ELSE login_failures.failures + 1 END,\n                 window_start = CASE WHEN login_failures.window_start <= now() - make_interval(secs => $3)\n                                     THEN now() ELSE login_failures.window_start END",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a1c131fc8bd1665cf803ad65d2908b1e553a38ca557f18d42ec067c494ef1fb9"
+}

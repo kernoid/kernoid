@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO logout_notifications (session_id, application_id, account_id, instance_id)\n             SELECT sa.session_id, sa.application_id, s.account_id, s.instance_id\n             FROM session_applications sa\n             JOIN sessions s ON s.id = sa.session_id\n             JOIN applications a ON a.id = sa.application_id\n             WHERE s.terminated_at IS NOT NULL AND a.backchannel_logout_uri IS NOT NULL\n             ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "e790992dd8aef9ee5d111157b0695b404ce4096d2a018749d598852107881d5c"
+}
