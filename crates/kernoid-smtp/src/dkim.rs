@@ -3,7 +3,7 @@
 //! (RFC 8463), each under a selector of its own, made by the worker for every verified domain. A domain's first RSA
 //! key signs at once; any later key – the first Ed25519 key, or one made by `rotate` – is `next` until DNS shows its
 //! record (`activate_published`), then it signs and the key it replaces is `retired`. Mail is signed with every
-//! active key. Signing is mail-auth's.
+//! active key. Signing is `auth::dkim`'s.
 
 use std::future::Future;
 
@@ -14,10 +14,8 @@ use aws_lc_rs::{
 };
 use base64::Engine;
 use kernoid_store::{MainKeys, PgPool};
-use mail_auth::{
-    crypto::{Ed25519Key, RsaKey, Sha256},
-    dkim::DkimSigner,
-};
+
+use crate::auth::dkim::SigningKey;
 
 /// The algorithms of DKIM keys.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -266,7 +264,6 @@ pub async fn public_records(pool: &PgPool, domain: &str) -> Result<Vec<PublicKey
 
 /// The `DKIM-Signature` headers for `raw`, one per active key of `domain`; none if the domain has no key.
 pub async fn sign(pool: &PgPool, main: &MainKeys, domain: &str, raw: &[u8]) -> Result<Vec<String>, DkimError> {
-    use mail_auth::headers::HeaderWriter;
     let rows = sqlx::query!(
         "SELECT selector, algorithm, private_sealed FROM dkim_keys
          WHERE domain = $1 AND state = 'active' ORDER BY algorithm DESC",
@@ -278,21 +275,15 @@ pub async fn sign(pool: &PgPool, main: &MainKeys, domain: &str, raw: &[u8]) -> R
     for row in rows {
         let (private, _) =
             main.open_secret(&context(domain), &row.private_sealed).map_err(|e| DkimError::Key(e.to_string()))?;
-        let signature = match Algorithm::parse(&row.algorithm) {
-            Some(Algorithm::Rsa) => {
-                let key =
-                    RsaKey::<Sha256>::from_key_der(rustls::pki_types::PrivateKeyDer::Pkcs8(private.as_slice().into()))
-                        .map_err(|e| DkimError::Key(e.to_string()))?;
-                DkimSigner::from_key(key).domain(domain).selector(row.selector).headers(SIGNED_HEADERS).sign(raw)
-            }
-            Some(Algorithm::Ed25519) => {
-                let key = Ed25519Key::from_pkcs8_der(&private).map_err(|e| DkimError::Key(e.to_string()))?;
-                DkimSigner::from_key(key).domain(domain).selector(row.selector).headers(SIGNED_HEADERS).sign(raw)
-            }
+        let key = match Algorithm::parse(&row.algorithm) {
+            Some(Algorithm::Rsa) => SigningKey::rsa(&private),
+            Some(Algorithm::Ed25519) => SigningKey::ed25519(&private),
             None => continue,
         }
-        .map_err(|e| DkimError::Key(e.to_string()))?;
-        headers.push(signature.to_header());
+        .map_err(DkimError::Key)?;
+        let header =
+            crate::auth::dkim::sign(raw, &key, domain, &row.selector, &SIGNED_HEADERS).map_err(DkimError::Key)?;
+        headers.push(header);
     }
     Ok(headers)
 }

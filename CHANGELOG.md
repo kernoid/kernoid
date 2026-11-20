@@ -28,7 +28,17 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   just before the upgrade may be answered once more.
 - The SMTP session, the handling of received messages, the SMTP client of the queue, DANE, MTA-STS and threading are
   kernoid's own code now (`AGPL-3.0-or-later`), written from the RFCs; replies and stored messages stay as they were.
-  mail-auth is at 0.15.1, on the server's mail-parser 1.0.
+- **Mail authentication and SMTP parsing are kernoid's own** (`kernoid_smtp::auth`, `kernoid_smtp::proto`, written
+  from the RFCs): SPF (RFC 7208, with macros and the limits of ten lookups and two void lookups), DKIM verifying and
+  signing (RFC 6376, RSA-SHA256 and Ed25519-SHA256 of RFC 8463), DMARC (RFC 7489, organizational domains by the DNS
+  tree walk of DMARCbis), ARC (RFC 8617), iprev, and SMTP commands, `DATA`/`BDAT` and replies; they replace Stalwart's
+  mail-auth and smtp-proto, which are gone from the lock file. DKIM keys, selectors and their rotation are unchanged.
+  What changes: `Authentication-Results` has one result per line, with `header.a` and the first eight characters of
+  `header.b` for DKIM, `arc.chain` for ARC and reasons in comments; `rsa-sha1` signatures give `dkim=policy` (RFC
+  8301); DMARC honours `np=` for domains that do not exist and `t=y`, and `pct` below 100 counts as testing (the
+  policy one step milder); a message's end after `DATA` is only `CRLF . CRLF` (no bare LF, against SMTP smuggling).
+  `kernoid_smtp::Dns` is kernoid's own type now (caches of TXT strings, MX, PTR and addresses); the DNS crate is
+  hickory-resolver as before.
 - The server and the SDK read and write iCalendar and vCard with `kernoid-pim` instead of calcard and jmap-tools
   (Stalwart's, `AGPL-3.0-only`, removed); scheduling (iTIP) and the filters of CalDAV and CardDAV queries are kernoid's
   own now, no longer derived from Stalwart's. The SDK drops calcard 0.3.14 – `kernoid-client`'s API is unchanged.

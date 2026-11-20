@@ -2,7 +2,7 @@
 //! The basic spam filter (RFC 0002, 9.3): a score added up from the authentication results and from what a message
 //! lacks. Transparent on purpose – every test that counted is named in `X-Spam-Status`.
 
-use mail_auth::{DkimResult, DmarcResult, IprevResult, SpfResult};
+use crate::auth::{DkimResult, DmarcResult, IprevResult, SpfResult};
 
 /// What the filter looks at.
 #[derive(Debug, Clone, Default)]
@@ -60,7 +60,7 @@ pub fn score(signals: &Signals) -> Verdict {
     if !dkim_pass && signals.dkim.iter().any(|result| matches!(result, DkimResult::Fail(_))) {
         add(1.0, "DKIM_FAIL");
     }
-    if matches!(signals.dmarc, Some(DmarcResult::Fail(_))) {
+    if matches!(signals.dmarc, Some(DmarcResult::Fail)) {
         add(2.0, "DMARC_FAIL");
     }
     if matches!(signals.iprev, Some(IprevResult::Fail(_) | IprevResult::PermError(_))) {

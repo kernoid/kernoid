@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The server's part of kernoid-smtp (the feature `server`), included into the crate's root by `lib.rs`.
+pub mod auth;
 pub mod dane;
 pub mod dkim;
 pub mod dns;

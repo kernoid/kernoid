@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! What happens to a message once its data is read (RFC 0002, 9.3 and 9.4). On the MX: the loop check, DKIM, ARC
-//! and DMARC through mail-auth (SPF and iprev were checked with `MAIL FROM` and `EHLO`), a refusal for DMARC
+//! and DMARC with kernoid's `auth` (SPF and iprev were checked with `MAIL FROM` and `EHLO`), a refusal for DMARC
 //! `p=reject`, the malware scan, the basic spam filter, and then the headers kernoid adds in front – `Received`
 //! (RFC 5321, 4.4), `Authentication-Results` (RFC 8601), `Received-SPF` (RFC 7208, 9.1) and `X-Spam-Status`. The
 //! message goes to every recipient's account at once – there is no queue for incoming mail, and `250` means stored.
@@ -9,13 +9,16 @@ use std::collections::BTreeSet;
 
 use bytes::Bytes;
 use kernoid_mail::{Delivered, Delivery, MailError};
-use mail_auth::{
-    AuthenticatedMessage, AuthenticationResults, dkim::VerifySignature, DkimResult, DmarcResult, IprevResult, ReceivedSpf, SpfOutput,
-    SpfResult, dmarc::Policy, dmarc::verify::DmarcParameters, headers::HeaderWriter, spf::verify::SpfParameters,
-};
 use uuid::Uuid;
 
 use crate::{
+    auth::{
+        DkimResult, DmarcResult, IprevResult, SpfOutput, SpfResult, arc, dkim,
+        dmarc::{self, Policy},
+        message::Message,
+        results::{AuthenticationResults, received_spf},
+        spf::SpfParameters,
+    },
     session::Session,
     spam::{self, Signals},
 };
@@ -126,10 +129,11 @@ impl Session {
     async fn check(&mut self, raw: &[u8]) -> Result<Checked, String> {
         let settings = &self.inner.settings;
         let hostname = settings.hostname.as_str();
-        let Some(message) = AuthenticatedMessage::parse(raw) else {
+        let message = Message::parse(raw);
+        if message.headers.is_empty() {
             return Err("550 5.6.0 The message could not be parsed".into());
-        };
-        if message.received_headers_count() >= settings.max_received {
+        }
+        if message.all("Received").count() >= settings.max_received {
             return Err("554 5.4.6 Too many Received headers, the message is looping".into());
         }
         let Some(mail_from) = self.mail_from.as_ref() else {
@@ -140,14 +144,11 @@ impl Session {
         let spf_params = SpfParameters::mail_from(self.remote, &helo, hostname, &mail_from.address);
         let spf = mail_from.spf.clone().unwrap_or_else(|| SpfOutput::new(mail_from.domain.clone()));
 
-        let dkim = dns.authenticator.verify_dkim(dns.parameters(&message)).await;
-        let arc = dns.authenticator.verify_arc(dns.parameters(&message)).await;
-        let dmarc = dns
-            .authenticator
-            .verify_dmarc(dns.parameters(DmarcParameters::new(&message, &dkim, &mail_from.domain, &spf)))
-            .await;
+        let dkim = dkim::verify(dns, &message).await;
+        let arc = arc::verify(dns, &message).await;
+        let dmarc = dmarc::verify(dns, &message.from_domains(), &mail_from.domain, &spf, &dkim).await;
         let dmarc_result = dmarc.result();
-        let dmarc_failed = matches!(dmarc_result, DmarcResult::Fail(_));
+        let dmarc_failed = dmarc_result == DmarcResult::Fail;
         if dmarc_failed && dmarc.policy() == Policy::Reject {
             return Err("550 5.7.1 Rejected by the sender's DMARC policy".into());
         }
@@ -157,16 +158,16 @@ impl Session {
         let dmarc_pass = dmarc_result == DmarcResult::Pass;
         let dkim_pass_for_from = dkim.iter().any(|output| {
             output.result() == &DkimResult::Pass
-                && output.signature().is_some_and(|signature| signature.domain().eq_ignore_ascii_case(&from_domain))
+                && output.signature().is_some_and(|signature| signature.domain.eq_ignore_ascii_case(&from_domain))
         });
         let spf_pass_for_from = spf.result() == SpfResult::Pass && mail_from.domain.eq_ignore_ascii_case(&from_domain);
         let local_from = !from_domain.is_empty() && self.inner.mail.serves_domain(&from_domain).await.unwrap_or(false);
-        let headers_of = |name: &str| message.headers().iter().any(|(field, _)| field.eq_ignore_ascii_case(name.as_bytes()));
+        let headers_of = |name: &str| message.first(name).is_some();
         let signals = Signals {
             spf_mail_from: Some(spf.result()),
             spf_ehlo: self.spf_ehlo.as_ref().map(SpfOutput::result),
             dkim: dkim.iter().map(|output| output.result().clone()).collect(),
-            dmarc: Some(dmarc_result.clone()),
+            dmarc: Some(dmarc_result),
             iprev: self.iprev.as_ref().map(|iprev| iprev.result.clone()),
             has_message_id: headers_of("Message-ID"),
             has_date: headers_of("Date"),
@@ -182,12 +183,12 @@ impl Session {
         }
         let results = results
             .with_spf_result(&spf, &spf_params)
-            .with_dkim_results(&dkim, &header_from)
+            .with_dkim_results(&dkim)
             .with_arc_result(&arc, self.remote)
             .with_dmarc_result(&dmarc);
         let mut headers = self.received(&helo);
         headers.push_str(&results.to_header());
-        headers.push_str(&ReceivedSpf::new(&spf, &spf_params).to_header());
+        headers.push_str(&received_spf(&spf, &spf_params));
         headers.push_str(&verdict.header(settings.junk_score));
         Ok(Checked { headers, junk, dmarc_pass })
     }

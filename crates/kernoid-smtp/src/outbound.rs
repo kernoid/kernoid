@@ -12,7 +12,6 @@ use std::{
 
 use jiff::Timestamp;
 use kernoid_mail::{Delivery, Leased, Mail, Outgoing, Recipient};
-use mail_auth::IpLookupStrategy;
 use rustls::pki_types::ServerName;
 use tokio_util::sync::CancellationToken;
 
@@ -379,7 +378,7 @@ impl Outbound {
         client.greeting().await?;
         let mut ehlo = client.ehlo(&settings.hostname).await?;
         if !hop.implicit_tls {
-            let offered = ehlo.has_capability(smtp_proto::EXT_START_TLS);
+            let offered = ehlo.has_capability(crate::proto::EXT_START_TLS);
             let required = !matches!(hop.tls, Tls::Opportunistic);
             if offered && (use_tls || required) {
                 let (upgraded, certificates) = client.start_tls(config, name).await?;
@@ -418,29 +417,23 @@ impl Outbound {
             }]);
         }
         let dns = &self.0.dns;
-        let hosts: Vec<String> = match dns.authenticator.mx_lookup(domain, Some(&dns.mx)).await {
-            Ok(records) if records.records.is_empty() => vec![domain.to_owned()],
-            Ok(records) => {
-                let mut records: Vec<_> = records.records.iter().collect();
+        let hosts: Vec<String> = match dns.mx(domain).await {
+            Ok(records) if records.is_empty() => vec![domain.to_owned()],
+            Ok(mut records) => {
                 records.sort_by_key(|mx| mx.preference);
-                let hosts: Vec<String> = records
-                    .iter()
-                    .flat_map(|mx| mx.exchanges.iter())
-                    .map(|host| host.trim_end_matches('.').to_lowercase())
-                    .collect();
+                let hosts: Vec<String> =
+                    records.iter().map(|mx| mx.exchange.trim_end_matches('.').to_lowercase()).collect();
                 // A null MX (RFC 7505): the domain takes no mail.
                 if hosts.iter().all(String::is_empty) {
                     return Err(RouteError::Permanent(format!("{domain} accepts no mail (null MX)")));
                 }
                 hosts.into_iter().filter(|host| !host.is_empty()).collect()
             }
-            Err(mail_auth::Error::Dns(mail_auth::DnsError::RecordNotFound(code))) => {
-                if code == mail_auth::hickory_resolver::proto::op::ResponseCode::NXDomain {
-                    return Err(RouteError::Permanent(format!("the domain {domain} does not exist")));
-                }
-                // No MX records: the domain itself is the mail server (RFC 5321, 5.1).
-                vec![domain.to_owned()]
+            Err(crate::dns::DnsError::NxDomain) => {
+                return Err(RouteError::Permanent(format!("the domain {domain} does not exist")));
             }
+            // No MX records: the domain itself is the mail server (RFC 5321, 5.1).
+            Err(crate::dns::DnsError::NoRecords) => vec![domain.to_owned()],
             Err(error) => return Err(RouteError::Temporary(format!("looking up the MX of {domain}: {error}"))),
         };
         // What the domain publishes about TLS: DANE for signed MX records, else an MTA-STS policy.
@@ -491,11 +484,7 @@ impl Outbound {
         let dns = &self.0.dns;
         let ips: Vec<IpAddr> = match host.parse::<IpAddr>() {
             Ok(ip) => vec![ip],
-            Err(_) => dns
-                .authenticator
-                .ip_lookup(host, IpLookupStrategy::Ipv4thenIpv6, 4, Some(&dns.ipv4), Some(&dns.ipv6))
-                .await
-                .unwrap_or_default(),
+            Err(_) => dns.ips(host, 4).await.unwrap_or_default(),
         };
         ips.into_iter()
             .filter(|ip| self.0.settings.allow_private_networks || kernoid_oidc::outbound::is_public(*ip))

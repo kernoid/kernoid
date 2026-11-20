@@ -11,10 +11,7 @@ use bytes::Bytes;
 use kernoid_identity::{Identity, IdentityError};
 use kernoid_mail::{Delivered, Delivery, MailError, Outgoing, Recipient};
 use mail_parser::MessageParser;
-use smtp_proto::{
-    AUTH_LOGIN, AUTH_OAUTHBEARER, AUTH_PLAIN, AUTH_XOAUTH2, MailFrom as ProtoMailFrom, RcptTo,
-    request::receiver::RequestReceiver,
-};
+use crate::proto::{AUTH_LOGIN, AUTH_OAUTHBEARER, AUTH_PLAIN, AUTH_XOAUTH2, MailFrom as ProtoMailFrom, RcptTo, RequestReceiver};
 
 use crate::session::{MailFrom, Rcpt, Session, State, normalize};
 
@@ -187,7 +184,7 @@ impl Session {
         }
     }
 
-    pub(crate) async fn submission_mail_from(&mut self, from: ProtoMailFrom<String>) {
+    pub(crate) async fn submission_mail_from(&mut self, from: ProtoMailFrom) {
         if self.helo.is_none() {
             self.reply("503 5.5.1 Polite people say EHLO first");
             return;
@@ -217,7 +214,7 @@ impl Session {
         self.reply("250 2.1.0 OK");
     }
 
-    pub(crate) async fn submission_rcpt_to(&mut self, to: RcptTo<String>) {
+    pub(crate) async fn submission_rcpt_to(&mut self, to: RcptTo) {
         if self.mail_from.is_none() {
             self.reply("503 5.5.1 MAIL is required first");
             return;

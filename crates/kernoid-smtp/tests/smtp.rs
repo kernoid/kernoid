@@ -18,7 +18,6 @@ use kernoid_store::{
     crypto::Key,
     scan::{Scanner, Verdict},
 };
-use mail_auth::{ResolverCache, TxtRecord, dmarc::DmarcRecord, dns::TxtRecordParser, spf::SpfRecord};
 use sqlx::PgPool;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
 use uuid::Uuid;
@@ -151,9 +150,8 @@ fn message(from: &str, subject: &str, id: &str, extra: &str) -> String {
     )
 }
 
-fn txt<T: TxtRecordParser + Into<TxtRecord>>(dns: &Dns, name: &str, record: &str) {
-    let value = T::parse(record.as_bytes()).unwrap().into();
-    dns.txt.insert(name.into(), value, Instant::now() + FOREVER);
+fn txt(dns: &Dns, name: &str, record: &str) {
+    dns.txt.insert(name.into(), Ok(vec![record.to_owned()]), Instant::now() + FOREVER);
 }
 
 /// Bounces to the SRS address of forwarded mail go on to the original sender; nothing else may use it.
@@ -315,10 +313,10 @@ async fn sieve_quota_junk_and_dmarc(pool: PgPool) {
     let alice = setup.account("alice").await;
     let dns = Dns::offline();
     // psd=n ends DMARC's walk up the tree here; the test resolver has no answers beyond the caches.
-    txt::<SpfRecord>(&dns, "evil.example.", "v=spf1 -all");
-    txt::<DmarcRecord>(&dns, "_dmarc.evil.example.", "v=DMARC1; p=reject; psd=n");
-    txt::<SpfRecord>(&dns, "shady.example.", "v=spf1 -all");
-    txt::<DmarcRecord>(&dns, "_dmarc.shady.example.", "v=DMARC1; p=quarantine; psd=n");
+    txt(&dns, "evil.example.", "v=spf1 -all");
+    txt(&dns, "_dmarc.evil.example.", "v=DMARC1; p=reject; psd=n");
+    txt(&dns, "shady.example.", "v=spf1 -all");
+    txt(&dns, "_dmarc.shady.example.", "v=DMARC1; p=quarantine; psd=n");
     let server = setup.server(dns, None);
     setup
         .mail

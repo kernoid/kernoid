@@ -4,32 +4,26 @@
 //! (`mail.notification_relay`, RFC 0009, 3; [`submit`]).
 //!
 //! It speaks RFC 5321 one command at a time: every command waits for its reply, so no pipelining (RFC 2920) is
-//! needed and a broken reply is found where it happens. Replies are read with smtp-proto's parsers – a reply is
-//! complete when smtp-proto says so, an `EHLO` reply is read for its extensions. `STARTTLS` (RFC 3207) refuses a
+//! needed and a broken reply is found where it happens. Replies are read with `proto::reply` – a reply is
+//! complete when its last line is, an `EHLO` reply is read for its extensions. `STARTTLS` (RFC 3207) refuses a
 //! server that sends anything after its `220`, so that nothing said in plain text is taken for what comes over TLS.
 //! The message goes with `DATA` and the transparency procedure (RFC 5321, 4.5.2); `SIZE` (RFC 1870) and `SMTPUTF8`
 //! (RFC 6531) are given only to servers that offer them.
 
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 
+use crate::proto::{EXT_SIZE, EXT_SMTP_UTF8, Ehlo, Reply, reply};
 use base64::Engine;
 use rustls::{
     ClientConfig, DigitallySignedStruct, SignatureScheme,
     client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
     pki_types::{CertificateDer, ServerName, UnixTime},
 };
-use smtp_proto::{
-    EXT_SIZE, EXT_SMTP_UTF8, EhloResponse, Response,
-    response::parser::{MAX_RESPONSE_LENGTH, ResponseReceiver},
-};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
 };
 use tokio_rustls::TlsConnector;
-
-/// The most a reply may take, its lines together – an `EHLO` reply has many.
-const MAX_REPLY: usize = 4 * MAX_RESPONSE_LENGTH;
 
 /// How much of the message is written at once.
 const WRITE_CHUNK: usize = 64 * 1024;
@@ -47,14 +41,14 @@ pub enum ClientError {
     #[error("the server's reply could not be read")]
     Unparsable,
     #[error("{}", reply_text(.0))]
-    Reply(Response<String>),
+    Reply(Reply),
     #[error("TLS: {0}")]
     Tls(String),
 }
 
 /// A reply as one line for logs and bounces: `550 5.1.1 Mailbox does not exist`, the enhanced status code
 /// (RFC 2034) only where the server gave one.
-fn reply_text(response: &Response<String>) -> String {
+fn reply_text(response: &Reply) -> String {
     let message = response.message.replace(['\r', '\n'], " ");
     match response.esc {
         [0, 0, 0] => format!("{} {}", response.code, message.trim()),
@@ -73,7 +67,7 @@ pub type ClientResult<T> = Result<T, ClientError>;
 
 /// A reply made here, for what the client refuses before the server is asked.
 fn local_reply(code: u16, esc: [u8; 3], message: &str) -> ClientError {
-    ClientError::Reply(Response { code, esc, message: message.to_owned() })
+    ClientError::Reply(Reply { code, esc, message: message.to_owned() })
 }
 
 /// An SMTP session with one server.
@@ -82,7 +76,7 @@ pub struct Client {
     timeout: Duration,
     /// Bytes read from the server that no reply took yet.
     unread: Vec<u8>,
-    /// The extensions of the last `EHLO` reply (smtp-proto's `EXT_*`).
+    /// The extensions of the last `EHLO` reply (`proto`'s `EXT_*`).
     extensions: u32,
 }
 
@@ -136,42 +130,22 @@ impl Client {
     }
 
     /// The next reply, and its bytes as they came.
-    async fn reply_with_bytes(&mut self) -> ClientResult<(Response<String>, Vec<u8>)> {
-        let mut receiver = ResponseReceiver::default();
-        let mut taken = Vec::new();
+    async fn reply(&mut self) -> ClientResult<Reply> {
         loop {
-            if !self.unread.is_empty() {
-                let mut bytes = self.unread.iter();
-                let parsed = receiver.parse(&mut bytes);
-                let used = self.unread.len() - bytes.len();
-                taken.extend(self.unread.drain(..used));
-                match parsed {
-                    Ok(response) => {
-                        // The rest of the reply's last line belongs to it.
-                        if let Some(end) = self.unread.iter().position(|byte| *byte == b'\n') {
-                            taken.extend(self.unread.drain(..=end));
-                        } else if !self.unread.is_empty() || !taken.ends_with(b"\n") {
-                            return Err(ClientError::Unparsable);
-                        }
-                        return Ok((response, taken));
-                    }
-                    Err(smtp_proto::Error::NeedsMoreData { .. }) => {}
-                    Err(_) => return Err(ClientError::Unparsable),
+            match reply::parse(&self.unread) {
+                Ok(Some((response, used))) => {
+                    self.unread.drain(..used);
+                    return Ok(response);
                 }
-            }
-            if taken.len() + self.unread.len() > MAX_REPLY {
-                return Err(ClientError::Unparsable);
+                Ok(None) => {}
+                Err(_) => return Err(ClientError::Unparsable),
             }
             self.fill().await?;
         }
     }
 
-    async fn reply(&mut self) -> ClientResult<Response<String>> {
-        Ok(self.reply_with_bytes().await?.0)
-    }
-
     /// Sends one command line and reads the reply.
-    pub async fn command(&mut self, line: &str) -> ClientResult<Response<String>> {
+    pub async fn command(&mut self, line: &str) -> ClientResult<Reply> {
         if line.contains(['\r', '\n']) {
             return Err(local_reply(501, [5, 5, 2], "a command is one line"));
         }
@@ -184,7 +158,7 @@ impl Client {
     }
 
     /// A command that must succeed (`2xx`); any other reply is the error.
-    async fn expect(&mut self, line: &str) -> ClientResult<Response<String>> {
+    async fn expect(&mut self, line: &str) -> ClientResult<Reply> {
         let response = self.command(line).await?;
         if (200..300).contains(&response.code) { Ok(response) } else { Err(ClientError::Reply(response)) }
     }
@@ -196,15 +170,13 @@ impl Client {
     }
 
     /// `EHLO`, or `HELO` with a server that does not know `EHLO` (RFC 5321, 3.2): the extensions the server offers.
-    pub async fn ehlo(&mut self, hostname: &str) -> ClientResult<EhloResponse<String>> {
-        self.write(format!("EHLO {hostname}\r\n").as_bytes()).await?;
-        self.flush().await?;
-        let (response, bytes) = self.reply_with_bytes().await?;
+    pub async fn ehlo(&mut self, hostname: &str) -> ClientResult<Ehlo> {
+        let response = self.command(&format!("EHLO {hostname}")).await?;
         let ehlo = match response.code {
-            250 => EhloResponse::parse(&mut bytes.iter()).map_err(|_| ClientError::Unparsable)?,
+            250 => Ehlo::from_reply(&response),
             500 | 502 => {
                 self.expect(&format!("HELO {hostname}")).await?;
-                EhloResponse::new(hostname.to_owned())
+                Ehlo::new(hostname.to_owned())
             }
             _ => return Err(ClientError::Reply(response)),
         };
@@ -274,7 +246,7 @@ impl Client {
     }
 
     /// The reply to `RCPT TO`; a refusal is a reply, not an error.
-    pub async fn rcpt_to(&mut self, to: &str) -> ClientResult<Response<String>> {
+    pub async fn rcpt_to(&mut self, to: &str) -> ClientResult<Reply> {
         self.command(&format!("RCPT TO:<{to}>")).await
     }
 
@@ -284,7 +256,7 @@ impl Client {
 
     /// `DATA`, the message with the transparency procedure (RFC 5321, 4.5.2), and the final reply. A server that
     /// does not answer `DATA` with `354` gives that reply instead.
-    pub async fn data(&mut self, message: &[u8]) -> ClientResult<Response<String>> {
+    pub async fn data(&mut self, message: &[u8]) -> ClientResult<Reply> {
         let response = self.command("DATA").await?;
         if response.code != 354 {
             return Ok(response);
@@ -478,7 +450,7 @@ async fn deliver_to_relay(
     client.greeting().await?;
     let ehlo = client.ehlo(hostname).await?;
     if !relay.implicit_tls {
-        if !ehlo.has_capability(smtp_proto::EXT_START_TLS) {
+        if !ehlo.has_capability(crate::proto::EXT_START_TLS) {
             return Err(ClientError::Tls(format!("{} offers no STARTTLS", relay.host)));
         }
         client = client.start_tls(tls, name).await?.0;
@@ -550,7 +522,7 @@ mod tests {
             server("220 mx ESMTP\r\n", &[EHLO, "250 ok\r\n", "250 ok\r\n", "354 go on\r\n", "250 2.0.0 queued\r\n"]);
         client.greeting().await.unwrap();
         let ehlo = client.ehlo("kernoid.example").await.unwrap();
-        assert!(ehlo.has_capability(smtp_proto::EXT_SIZE));
+        assert!(ehlo.has_capability(crate::proto::EXT_SIZE));
         client.mail_from("a@kernoid.example", 42, false).await.unwrap();
         assert_eq!(client.rcpt_to("b@other.example").await.unwrap().code, 250);
         let reply = client.data(b"Subject: x\r\n\r\n.starts with a dot\nbare line end").await.unwrap();

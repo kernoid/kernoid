@@ -9,9 +9,9 @@
 //! matching types make a record unusable and are left out. The resolver that validates DNSSEC is hickory's; the
 //! certificates are read with x509-cert and chains checked with rustls-webpki.
 
-use mail_auth::{
-    MessageAuthenticator,
-    hickory_resolver::proto::{
+use hickory_resolver::{
+    TokioResolver,
+    proto::{
         dnssec::Proof,
         rr::{
             RData, Record, RecordType,
@@ -78,8 +78,8 @@ fn absolute(name: &str) -> String {
 }
 
 /// Whether the domain's MX records are signed: only then does DANE apply to its hosts (RFC 7672, 2.2.1).
-pub async fn mx_is_secure(resolver: &MessageAuthenticator, domain: &str) -> bool {
-    match resolver.resolver().lookup(absolute(domain), RecordType::MX).await {
+pub async fn mx_is_secure(resolver: &TokioResolver, domain: &str) -> bool {
+    match resolver.lookup(absolute(domain), RecordType::MX).await {
         Ok(lookup) => {
             let answers: Vec<Record> =
                 lookup.answers().iter().filter(|record| record.record_type() == RecordType::MX).cloned().collect();
@@ -119,9 +119,9 @@ fn entry(usage: CertUsage, selector: Selector, matching: Matching, data: &[u8]) 
 }
 
 /// The TLSA records of `host` on `port`, as far as DNSSEC vouches for them.
-pub async fn lookup(resolver: &MessageAuthenticator, host: &str, port: u16) -> TlsaLookup {
+pub async fn lookup(resolver: &TokioResolver, host: &str, port: u16) -> TlsaLookup {
     let name = format!("_{port}._tcp.{}", absolute(host));
-    let lookup = match resolver.resolver().lookup(name.as_str(), RecordType::TLSA).await {
+    let lookup = match resolver.lookup(name.as_str(), RecordType::TLSA).await {
         Ok(lookup) => lookup,
         // Denied – and with a validating resolver, a denial that does not hold is an error, not this.
         Err(error) if error.is_no_records_found() || error.is_nx_domain() => return TlsaLookup::None,

@@ -6,6 +6,7 @@
 //! mail) takes this crate without the feature, to send its codes.
 
 pub mod client;
+pub mod proto;
 
 // The server's part, at the crate's root as before; without the feature, none of it is built.
 #[cfg(feature = "server")]

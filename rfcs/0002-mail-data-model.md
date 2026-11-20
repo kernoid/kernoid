@@ -163,9 +163,10 @@ accepts mail for their addresses and stores it at once. It relays nothing: mail 
 
 ### 9.1 The server
 
-- Its own process role, `smtp`, part of `all`, on `smtp.listen` (port 25). Requests are parsed with
-  [smtp-proto](https://crates.io/crates/smtp-proto) (Apache-2.0 OR MIT, by Stalwart Labs); the session around it
-  is kernoid's own, written from RFC 5321 and its extensions.
+- Its own process role, `smtp`, part of `all`, on `smtp.listen` (port 25). Requests are parsed by kernoid's own
+  `kernoid_smtp::proto`, and the session around it is kernoid's own too, both written from RFC 5321 and its extensions
+  (until 2026-11-20 the parser was Stalwart's smtp-proto). After `DATA`, only `CRLF . CRLF` ends a message – a bare LF
+  is no line end there, so that no second message can be smuggled in behind the first.
 - **Extensions:** `PIPELINING`, `8BITMIME`, `SMTPUTF8`, `SIZE`, `ENHANCEDSTATUSCODES`, `CHUNKING` (`BDAT`) and
   `STARTTLS` when kernoid has certificates (its own, or from ACME – the same as for HTTPS). No `AUTH` on the MX: who
   logs in to send uses submission.
@@ -201,12 +202,20 @@ accepts mail for their addresses and stores it at once. It relays nothing: mail 
 
 ### 9.3 Checks
 
-With [mail-auth](https://crates.io/crates/mail-auth) (Apache-2.0 OR MIT, by Stalwart Labs):
+With kernoid's own `kernoid_smtp::auth`, written from the RFCs (until 2026-11-20 Stalwart's mail-auth), DNS through
+hickory's resolver with caches, signatures through aws-lc-rs:
 
 - **iprev** (does the client's address resolve back to a name that resolves to it), **SPF** for `HELO` and `MAIL
   FROM` ([RFC 7208](https://www.rfc-editor.org/rfc/rfc7208)), **DKIM** ([RFC 6376](https://www.rfc-editor.org/rfc/rfc6376)),
   **ARC** ([RFC 8617](https://www.rfc-editor.org/rfc/rfc8617); now historic, still checked for mail through
   mailing lists), **DMARC** ([RFC 7489](https://www.rfc-editor.org/rfc/rfc7489)).
+- **SPF** with macros, `exp=` and the limits of RFC 7208, 4.6.4 (ten terms that look up DNS, two lookups that find
+  nothing); the `p` macro expands to `unknown`. **DKIM** with RSA-SHA256 (keys of at least 1024 bits, RFC 8301) and
+  Ed25519-SHA256 (RFC 8463); `rsa-sha1` is no longer accepted and gives `policy`; at most ten signatures of a message
+  are checked. **DMARC** finds the policy and organizational domains by the DNS tree walk of DMARCbis
+  (draft-ietf-dmarc-dmarcbis, 4.10: at most eight queries, `psd=` ends a walk) instead of a public suffix list,
+  honours `sp=`, `np=` and `t=y` (the policy one step milder; `pct` below 100 counts as testing).
+  **ARC** is validated as RFC 8617, 5.2 says (kernoid adds no sets of its own; sealing exists for tests).
 - The results go into an `Authentication-Results` header ([RFC 8601](https://www.rfc-editor.org/rfc/rfc8601)) and a
   `Received-SPF` header; any `Authentication-Results` claiming kernoid's host name that arrives with the message is
   not trusted.
@@ -281,7 +290,7 @@ process stops.
 Every verified domain of a tenant gets DKIM keys ([RFC 6376](https://www.rfc-editor.org/rfc/rfc6376)) of two
 algorithms, made by the worker and sealed with the main key in `dkim_keys`: RSA with 2048 bits (selectors
 `kernoid1`, `kernoid2`, …) and Ed25519 ([RFC 8463](https://www.rfc-editor.org/rfc/rfc8463); `kernoid-ed1`, …).
-Mail is signed with every active key of its `From` domain when it leaves the queue – so replies of Sieve and bounces
+Mail is signed (`relaxed/relaxed`, by `kernoid_smtp::auth::dkim`) with every active key of its `From` domain when it leaves the queue – so replies of Sieve and bounces
 are signed as well; receivers that do not know Ed25519 ignore that signature and check the RSA one.
 
 A key is `next`, `active` or `retired`; per domain and algorithm one may be active and one next. A domain's first RSA
