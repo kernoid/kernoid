@@ -351,6 +351,8 @@ pub struct FilesState {
     pub found: Vec<Found>,
     /// A vault on a space open (RFC 0010, 5): its directory, in `path` too; what `nodes` lists then is its entries.
     pub vault: Option<FileNode>,
+    /// In that vault, reading only: what would change it is refused here already.
+    pub vault_reader: bool,
 }
 
 #[derive(Debug, Default)]
@@ -1103,7 +1105,8 @@ impl App {
     }
 
     /// The store of vaults on spaces of this account on this computer – in `$XDG_STATE_HOME/kernoid` (or
-    /// `~/.local/state/kernoid`), one file per account –, opened at the first use.
+    /// `~/.local/state/kernoid`), one file per account, sealed under a key of the system's key store –, opened at the
+    /// first use.
     fn vaults(&mut self) -> Option<Vaults> {
         if let Some(vaults) = &self.vaults {
             return Some(vaults.clone());
@@ -1119,7 +1122,27 @@ impl App {
         }
         let name: String =
             self.client.session.username.chars().map(|c| if c.is_alphanumeric() { c } else { '_' }).collect();
-        let vaults = self.attempt(|_| Vaults::open(&directory.join(format!("vaults-{name}.db")), "terminal"))?;
+        let key = match vaults_key(&self.client.session.username) {
+            Ok(key) => key,
+            Err(error) => {
+                self.fail(format!("no key store for the vaults on this computer: {error}"));
+                return None;
+            }
+        };
+        let path = directory.join(format!("vaults-{name}.sealed"));
+        let vaults = match Vaults::open_sealed(&path, key, "terminal") {
+            Ok(vaults) => vaults,
+            // Sealed under a key the key store no longer has: nothing in it is lost – the vaults come again from
+            // their relay, with the account's code.
+            Err(_) if path.exists() => {
+                let _ = std::fs::remove_file(&path);
+                self.attempt(|_| Vaults::open_sealed(&path, key, "terminal"))?
+            }
+            Err(error) => {
+                self.fail(error);
+                return None;
+            }
+        };
         self.vaults = Some(vaults.clone());
         Some(vaults)
     }
@@ -1139,12 +1162,19 @@ impl App {
             let (client, e2e) = (&self.client, &mut self.e2e);
             block(vaults.enter(client, e2e, &store, &node))
         };
+        if matches!(entered, Ok(true)) {
+            // Shares changed elsewhere reach the members – where this computer may add members.
+            let (client, e2e) = (&self.client, &mut self.e2e);
+            let _ = block(vaults.reconcile(client, e2e, &store, &node));
+        }
         match entered {
             Ok(true) => {
                 let mut node = node;
                 if let Ok(Some(name)) = block(vaults.name(&node)) {
                     node.name = name;
                 }
+                self.files.vault_reader =
+                    matches!(block(vaults.level(&node)), Ok(kernoid_tui::jmap::e2e::Level::Read) | Err(_));
                 self.files.vault = Some(node.clone());
                 self.files.path.push(node);
                 self.files.list.select(None);
@@ -1994,7 +2024,7 @@ impl App {
                     id: id.clone(),
                     kind: String::new(),
                     name: id.clone(),
-                    email: None,
+                    ..Principal::default()
                 });
                 (principal, Level::of(rights))
             })
@@ -2951,6 +2981,11 @@ impl App {
             (FilesFocus::Nodes, KeyCode::Char('v' | 'S' | 'L' | 'm')) if self.files.vault.is_some() => {
                 self.fail("not in a vault on a space – share the vault itself from where it lies");
             }
+            (_, KeyCode::Char('u' | 'n' | 'R' | 'D') | KeyCode::Delete)
+                if self.files.vault_reader && self.files.vault.is_some() =>
+            {
+                self.fail("you may only read this vault");
+            }
             (FilesFocus::Nodes, KeyCode::Char('D') | KeyCode::Delete) if self.files.vault.is_some() => {
                 self.trash_in_vault();
             }
@@ -3184,6 +3219,29 @@ fn link_expiry(text: &str) -> Result<Option<String>, String> {
         return Err("the day has passed".into());
     }
     Ok(Some(format!("{end:.0}")))
+}
+
+/// The key the vaults on spaces of `account` are sealed with on this computer: 32 random bytes, made the first time
+/// and kept in the system's key store (Keychain, Credential Manager, Secret Service) – never in a file.
+fn vaults_key(account: &str) -> Result<[u8; 32], String> {
+    let entry = keyring::Entry::new("kernoid-tui vaults", account).map_err(|e| e.to_string())?;
+    match entry.get_password() {
+        Ok(kept) => {
+            let bytes: Vec<u8> = (0..kept.len())
+                .step_by(2)
+                .filter_map(|i| kept.get(i..i + 2).and_then(|pair| u8::from_str_radix(pair, 16).ok()))
+                .collect();
+            bytes.try_into().map_err(|_| "a key that is not one in the key store".to_owned())
+        }
+        Err(keyring::Error::NoEntry) => {
+            let mut key = [0u8; 32];
+            getrandom::fill(&mut key).map_err(|e| e.to_string())?;
+            let hex: String = key.iter().map(|b| format!("{b:02x}")).collect();
+            entry.set_password(&hex).map_err(|e| e.to_string())?;
+            Ok(key)
+        }
+        Err(error) => Err(error.to_string()),
+    }
 }
 
 #[cfg(test)]

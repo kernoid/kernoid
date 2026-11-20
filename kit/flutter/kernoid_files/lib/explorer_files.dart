@@ -8,6 +8,8 @@ import 'package:path_provider/path_provider.dart';
 
 import 'package:kernoid_bridge/kernoid_bridge.dart';
 
+import 'space_vault.dart';
+
 /// kernoid's stores in Windows' Explorer (docs/plan.md, 5): a sync root per store below `%USERPROFILE%\kernoid`, with
 /// placeholders downloaded when they are opened – the Cloud Files shell on the Rust side, running while the app is
 /// open. It has a login of its own, set up once with kernoid's login page and kept by the shell (DPAPI) in the app's
@@ -47,6 +49,7 @@ class ExplorerFiles extends ChangeNotifier {
   /// Sets the shell up with a login made for it just now and hands it over: `shell` is disposed, so that only the
   /// shell renews it from here on.
   Future<void> setUp(Kernoid shell) async {
+    await handVaultsToShell(account, shell);
     final kept = shell.keptLogin();
     shell.dispose();
     if (kept == null) return;

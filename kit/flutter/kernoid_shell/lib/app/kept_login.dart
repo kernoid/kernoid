@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT
 import 'dart:async';
+import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -25,6 +27,18 @@ class KeptLogin {
   );
 
   static StreamSubscription<String>? _watching;
+
+  /// The key the vaults on spaces of `account` are sealed with on this device (RFC 0010, 5): 32 random bytes, made
+  /// the first time and kept in the system's key store beside the login – never in a file.
+  static Future<List<int>> vaultsKey(String account) async {
+    final name = 'kernoid.vaults.${base64Url.encode(utf8.encode(account)).replaceAll('=', '')}';
+    final kept = await _storage.read(key: name);
+    if (kept != null) return base64.decode(kept);
+    final random = Random.secure();
+    final key = List<int>.generate(32, (_) => random.nextInt(256));
+    await _storage.write(key: name, value: base64.encode(key));
+    return key;
+  }
 
   /// Signs in with what was kept; none if nothing was, or if the login has ended (then it is forgotten).
   static Future<Kernoid?> resume() async {

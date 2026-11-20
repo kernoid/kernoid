@@ -6,6 +6,8 @@ import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
 
 import 'package:kernoid_bridge/kernoid_bridge.dart';
 
+import 'space_vault.dart';
+
 /// The stores in Finder and the Files app (docs/plan.md, 5): the File Provider extension in `native/apple/`, a domain
 /// per store, through the channel `dev.kernoid.kernoid/fileprovider` (`native/apple/App/FileProviderChannel.swift`).
 ///
@@ -39,6 +41,7 @@ class FileProvider {
       shell.dispose();
       throw StateError('signed in as $other, not as ${account.username}');
     }
+    await handVaultsToShell(account, shell);
     final kept = shell.keptLogin();
     shell.dispose();
     if (kept == null) throw StateError('the login gave nothing to keep');

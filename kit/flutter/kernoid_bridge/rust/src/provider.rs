@@ -14,10 +14,12 @@
 //! processes renewing one login would end it. Its renewals come back as `kept` in the next answer – in `ok` or in
 //! `error` – and the shell keeps the newest. A shell whose instances may run in several processes (Apple's File Provider: one per domain) opens
 //! with `renew: false`: nothing is renewed in the background, a call answers `unauthorized` when the access token has
-//! expired, and the shell opens again – under a lock of its own – with the newest kept login. Vaults stay locked in the shells (**OPEN**: the account's key from a `device:` copy in the platform's
-//! key store, plan section 6).
+//! expired, and the shell opens again – under a lock of its own – with the newest kept login. OpenPGP vaults stay locked
+//! in the shells (**OPEN**: the account's key from a `device:` copy in the platform's key store, plan section 6); vaults
+//! on spaces are shown and changed as in the app, the shell a device of its own in each (`spaces`).
 //!
-//! Operations: `open {kept, renew}` (or `{server, address, password}` with an app password) → `{session, kept}`; `close {session}`; `stores {session}`; `list {session, store,
+//! Operations: `open {kept, renew}` (or `{server, address, password}` with an app password; `vaults: {store, codes,
+//! key}` besides what the kept login names) → `{session, kept}`; `close {session}`; `stores {session}`; `list {session, store,
 //! parent}`; `changes {session, store, since}` → `{items, deleted, anchor, more}` (no `since`: everything); `item
 //! {session, store, id}`; `fetch {session, store, id, to}` (the content into a file); `create {session, store, parent,
 //! name, directory, from}`; `modify {session, store, id, name, parent, from}` (each optional; `parent: null` is the
@@ -34,6 +36,7 @@ use crate::api::kernoid::{Kernoid, KernoidError, RUNTIME};
 
 #[cfg(target_os = "android")]
 mod jni;
+mod spaces;
 // The Windows shell; what decides in it is tested on every system, what calls Windows is built only there.
 #[cfg_attr(not(windows), allow(dead_code))]
 pub(crate) mod cloud_files;
@@ -46,6 +49,8 @@ static SESSIONS: LazyLock<Mutex<HashMap<u64, Session>>> = LazyLock::new(Mutex::d
 
 struct Session {
     account: Kernoid,
+    /// Vaults on spaces, where the app handed the shell what they need.
+    spaces: Option<std::sync::Arc<spaces::ShellSpaces>>,
     /// The login as last handed to the shell; a renewal differs from it.
     kept: Option<String>,
 }
@@ -143,9 +148,15 @@ async fn answer(request: &Value) -> Result<Value, KernoidError> {
             account.stop_renewing();
         }
         let kept = account.kept_login();
+        // Vaults on spaces: as the app kept them with the shell's login – or given here (an app password, tests).
+        let given = match request.get("vaults") {
+            Some(vaults) => serde_json::from_value(vaults.clone()).ok(),
+            None => account.shell_vaults(),
+        };
+        let spaces = given.and_then(|given| spaces::ShellSpaces::open(&given).ok()).map(std::sync::Arc::new);
         let mut sessions = SESSIONS.lock().map_err(|_| error("the sessions are broken"))?;
         let id = sessions.keys().max().map_or(1, |n| n + 1);
-        sessions.insert(id, Session { account, kept: kept.clone() });
+        sessions.insert(id, Session { account, kept: kept.clone(), spaces });
         return Ok(json!({ "session": id, "kept": kept }));
     }
     let id = request.get("session").and_then(Value::as_u64).ok_or_else(|| error("`session` is missing"))?;
@@ -153,19 +164,30 @@ async fn answer(request: &Value) -> Result<Value, KernoidError> {
         SESSIONS.lock().map_err(|_| error("the sessions are broken"))?.remove(&id);
         return Ok(json!({}));
     }
-    let client = {
+    let (client, shell) = {
         let sessions = SESSIONS.lock().map_err(|_| error("the sessions are broken"))?;
-        sessions.get(&id).ok_or_else(|| error("no such session"))?.account.sdk_client()
+        let session = sessions.get(&id).ok_or_else(|| error("no such session"))?;
+        (session.account.sdk_client(), session.spaces.clone())
     };
+    let shell = shell.as_deref();
+    if let Some(spaces) = shell
+        && let Some(answer) = in_space(&client, spaces, op, request).await?
+    {
+        return Ok(answer);
+    }
     Ok(match op {
         "stores" => stores(&client),
         "list" => {
             let (store, parent) = (text(request, "store")?, optional(request, "parent"));
             let nodes = files::children(&client, store, parent).await?;
             let here = rights_at(&client, store, parent).await?;
-            json!({ "items": nodes.iter().map(|n| item_in(n, Some(here))).collect::<Vec<_>>() })
+            let mut items: Vec<Value> = nodes.iter().map(|n| item_in(n, Some(here))).collect();
+            for (n, value) in nodes.iter().zip(items.iter_mut()) {
+                named(&client, shell, n, value).await;
+            }
+            json!({ "items": items })
         }
-        "changes" => changes(&client, text(request, "store")?, optional(request, "since")).await?,
+        "changes" => changes(&client, shell, text(request, "store")?, optional(request, "since")).await?,
         "item" => {
             let store = text(request, "store")?;
             let n = node(&client, store, text(request, "id")?).await?;
@@ -174,7 +196,9 @@ async fn answer(request: &Value) -> Result<Value, KernoidError> {
             } else {
                 Some(rights_at(&client, store, n.parent_id.as_deref()).await?)
             };
-            json!({ "item": item_in(&n, here) })
+            let mut value = item_in(&n, here);
+            named(&client, shell, &n, &mut value).await;
+            json!({ "item": value })
         }
         "fetch" => fetch(&client, request).await?,
         "create" => create(&client, request).await?,
@@ -288,7 +312,51 @@ async fn node(client: &Client, store: &str, id: &str) -> Result<files::FileNode,
     serde_json::from_value(found).map_err(|e| error(&format!("an item the core cannot read: {e}")))
 }
 
-async fn changes(client: &Client, store: &str, since: Option<&str>) -> Result<Value, KernoidError> {
+/// The changes since `since`. With vaults on spaces, the anchor is the store's state and a digest of what is in the
+/// vaults (`state~digest`): when what is in them changed, the shell gets everything again (`reset`) – the streams say
+/// what is there, not what went.
+async fn changes(
+    client: &Client,
+    shell: Option<&spaces::ShellSpaces>,
+    store: &str,
+    since: Option<&str>,
+) -> Result<Value, KernoidError> {
+    let Some(shell) = shell else { return store_changes(client, store, since).await };
+    let snapshot = files::snapshot(client, store).await?;
+    let mut inside = Vec::new();
+    for vault in snapshot.nodes.iter().filter(|n| n.space.is_some() && n.vault.as_deref() == Some(n.id.as_str())) {
+        if shell.ready(client, vault).await {
+            inside.extend(spaces::all(shell, vault).await?);
+        }
+    }
+    let digest = {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        for value in &inside {
+            value["id"].as_str().hash(&mut hasher);
+            value["version"].as_str().hash(&mut hasher);
+        }
+        format!("{:016x}", hasher.finish())
+    };
+    let (state, known) = since.and_then(|s| s.split_once('~')).map_or((since, None), |(a, b)| (Some(a), Some(b)));
+    if known == Some(digest.as_str()) {
+        let mut answer = store_changes(client, store, state).await?;
+        if let Some(anchor) = answer["anchor"].as_str().map(str::to_owned) {
+            answer["anchor"] = json!(format!("{anchor}~{digest}"));
+        }
+        return Ok(answer);
+    }
+    let mut all = items(client, store, &snapshot.nodes).await?;
+    for (n, value) in snapshot.nodes.iter().zip(all.iter_mut()) {
+        named(client, Some(shell), n, value).await;
+    }
+    all.extend(inside);
+    Ok(
+        json!({ "items": all, "deleted": [], "anchor": format!("{}~{digest}", snapshot.state), "more": false, "reset": true }),
+    )
+}
+
+async fn store_changes(client: &Client, store: &str, since: Option<&str>) -> Result<Value, KernoidError> {
     let Some(since) = since.filter(|s| !s.is_empty()) else {
         let snapshot = files::snapshot(client, store).await?;
         let items = items(client, store, &snapshot.nodes).await?;
@@ -308,6 +376,114 @@ async fn changes(client: &Client, store: &str, since: Option<&str>) -> Result<Va
         }
         Err(other) => Err(other.into()),
     }
+}
+
+/// A vault on a space the shell has: named as in its space, open.
+async fn named(client: &Client, shell: Option<&spaces::ShellSpaces>, n: &files::FileNode, value: &mut Value) {
+    let Some(shell) = shell else { return };
+    if n.space.is_none() || n.vault.as_deref() != Some(n.id.as_str()) || !shell.ready(client, n).await {
+        return;
+    }
+    if let Ok(Some(name)) = shell.vaults.name(n).await {
+        value["name"] = json!(name);
+        value["locked"] = json!(false);
+        value["version"] = json!(format!("{}|{}", value["version"].as_str().unwrap_or_default(), name));
+    }
+}
+
+/// An operation on what lies in a vault on a space – `None` where the request is not about one.
+async fn in_space(
+    client: &Client,
+    shell: &spaces::ShellSpaces,
+    op: &str,
+    request: &Value,
+) -> Result<Option<Value>, KernoidError> {
+    let store = optional(request, "store").unwrap_or_default();
+    let id = optional(request, "id");
+    let parent = optional(request, "parent");
+    // The vault and the stream an id or a parent names; a parent may be the vault's directory itself.
+    let entry = id.and_then(spaces::parse);
+    let into = match parent.and_then(spaces::parse) {
+        Some((vault, stream)) => Some((vault.to_owned(), Some(stream.to_owned()))),
+        None => match parent {
+            Some(parent) if matches!(op, "list" | "create") => {
+                let n = node(client, store, parent).await?;
+                (n.space.is_some() && n.vault.as_deref() == Some(n.id.as_str())).then(|| (n.id.clone(), None))
+            }
+            _ => None,
+        },
+    };
+    let answer = match (op, entry, into) {
+        ("list", _, Some((vault, directory))) => {
+            let vault = spaces::vault_node(client, store, &vault).await?;
+            if !shell.ready(client, &vault).await {
+                return Err(error("the vault is not at hand here yet – open it in the app once"));
+            }
+            json!({ "items": spaces::list(shell, &vault, directory.as_deref()).await? })
+        }
+        ("item", Some((vault, stream)), _) => {
+            let vault = spaces::vault_node(client, store, vault).await?;
+            shell.ready(client, &vault).await;
+            json!({ "item": spaces::entry_item(shell, &vault, stream).await? })
+        }
+        ("fetch", Some((vault, stream)), _) => {
+            let vault = spaces::vault_node(client, store, vault).await?;
+            shell.ready(client, &vault).await;
+            let data = shell.vaults.read_file(&vault, stream).await?;
+            tokio::fs::write(text(request, "to")?, data).await.map_err(|e| error(&e.to_string()))?;
+            json!({ "item": spaces::entry_item(shell, &vault, stream).await? })
+        }
+        ("create", None, Some((vault, directory))) => {
+            let vault = spaces::vault_node(client, store, &vault).await?;
+            shell.ready(client, &vault).await;
+            let name = text(request, "name")?;
+            let stream = if request.get("directory").and_then(Value::as_bool).unwrap_or(false) {
+                shell.vaults.make_directory(&vault, directory.as_deref(), name).await?
+            } else {
+                let data = tokio::fs::read(text(request, "from")?).await.map_err(|e| error(&e.to_string()))?;
+                let kind = files::media_type(name);
+                shell.vaults.put_file(&vault, directory.as_deref(), name, data, Some(kind), None, None).await?
+            };
+            json!({ "item": spaces::entry_item(shell, &vault, &stream).await? })
+        }
+        ("modify", Some((vault, stream)), _) => {
+            let vault = spaces::vault_node(client, store, vault).await?;
+            shell.ready(client, &vault).await;
+            let (entry, directory) = spaces::find(shell, &vault, stream).await?;
+            let mut here = directory.clone();
+            if let Some(parent) = request.get("parent") {
+                let to = parent.as_str().and_then(|p| spaces::directory_of(&vault.id, p));
+                let outside = parent.as_str().is_some_and(|p| p != vault.id && spaces::parse(p).is_none());
+                if parent.is_null() || outside {
+                    return Err(error("nothing moves out of a vault"));
+                }
+                if to != directory {
+                    shell.vaults.move_to(&vault, directory.as_deref(), stream, to.as_deref()).await?;
+                    here = to;
+                }
+            }
+            if let Some(name) = optional(request, "name").filter(|name| *name != entry.name) {
+                shell.vaults.rename(&vault, here.as_deref(), stream, name).await?;
+            }
+            if let Some(from) = optional(request, "from") {
+                let data = tokio::fs::read(from).await.map_err(|e| error(&e.to_string()))?;
+                let name = optional(request, "name").unwrap_or(&entry.name);
+                let kind = files::media_type(name);
+                shell.vaults.put_file(&vault, here.as_deref(), name, data, Some(kind), None, Some(stream)).await?;
+            }
+            json!({ "item": spaces::entry_item(shell, &vault, stream).await? })
+        }
+        ("delete", Some((vault, stream)), _) => {
+            let vault = spaces::vault_node(client, store, vault).await?;
+            shell.ready(client, &vault).await;
+            let (_, directory) = spaces::find(shell, &vault, stream).await?;
+            // Into the vault's own trash, from where the app brings it back.
+            shell.vaults.set_trashed(&vault, directory.as_deref(), stream, true).await?;
+            json!({})
+        }
+        _ => return Ok(None),
+    };
+    Ok(Some(answer))
 }
 
 async fn fetch(client: &Client, request: &Value) -> Result<Value, KernoidError> {

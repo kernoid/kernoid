@@ -6,6 +6,8 @@ import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
 
 import 'package:kernoid_bridge/kernoid_bridge.dart';
 
+import 'space_vault.dart';
+
 /// kernoid's stores in Android's Files app and every document picker: the DocumentsProvider of the Android part
 /// (`KernoidDocumentsProvider.kt`, docs/plan.md, 5), switched on and off here through the channel
 /// `dev.kernoid.kernoid/documents` of `MainActivity.kt`.
@@ -30,6 +32,7 @@ abstract final class DocumentsProvider {
     );
     final callback = await FlutterWebAuth2.authenticate(url: login.url, callbackUrlScheme: 'dev.kernoid.kernoid');
     final shell = await Kernoid.finishLogin(login: login, callback: callback);
+    await handVaultsToShell(account, shell);
     final kept = shell.keptLogin();
     // Its renewal in this process stops here: from now on the provider alone renews this login.
     shell.dispose();

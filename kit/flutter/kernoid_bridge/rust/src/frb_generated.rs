@@ -40,7 +40,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1441774312;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -441494449;
 
 // Section: executor
 
@@ -1744,6 +1744,48 @@ fn wire__crate__api__kernoid__Kernoid_finish_login_impl(
         },
     )
 }
+fn wire__crate__api__kernoid__Kernoid_give_shell_vaults_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "Kernoid_give_shell_vaults",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(ptr_, rust_vec_len_, data_len_)
+            };
+            let mut deserializer = flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that =
+                <RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<Kernoid>>>::sse_decode(
+                    &mut deserializer,
+                );
+            let api_directory = <String>::sse_decode(&mut deserializer);
+            let api_key = <Vec<u8>>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, crate::api::kernoid::KernoidError>((move || {
+                let mut api_that_guard = None;
+                let decode_indices_ = flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                    flutter_rust_bridge::for_generated::LockableOrderInfo::new(&api_that, 0, false),
+                ]);
+                for i in decode_indices_ {
+                    match i {
+                        0 => api_that_guard = Some(api_that.lockable_decode_sync_ref()),
+                        _ => unreachable!(),
+                    }
+                }
+                let api_that_guard = api_that_guard.unwrap();
+                let output_ok =
+                    crate::api::kernoid::Kernoid::give_shell_vaults(&*api_that_guard, api_directory, api_key)?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
 fn wire__crate__api__kernoid__Kernoid_give_vault_keys_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -2452,6 +2494,7 @@ fn wire__crate__api__kernoid__Kernoid_open_vaults_impl(
                 );
             let api_path = <String>::sse_decode(&mut deserializer);
             let api_device = <String>::sse_decode(&mut deserializer);
+            let api_key = <Vec<u8>>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, crate::api::kernoid::KernoidError>((move || {
@@ -2466,7 +2509,8 @@ fn wire__crate__api__kernoid__Kernoid_open_vaults_impl(
                         }
                     }
                     let api_that_guard = api_that_guard.unwrap();
-                    let output_ok = crate::api::kernoid::Kernoid::open_vaults(&*api_that_guard, api_path, api_device)?;
+                    let output_ok =
+                        crate::api::kernoid::Kernoid::open_vaults(&*api_that_guard, api_path, api_device, api_key)?;
                     std::result::Result::Ok(output_ok)
                 })())
             }
@@ -3921,6 +3965,48 @@ fn wire__crate__api__kernoid__Kernoid_share_space_vault_impl(
         },
     )
 }
+fn wire__crate__api__kernoid__Kernoid_share_vaults_with_shell_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "Kernoid_share_vaults_with_shell",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(ptr_, rust_vec_len_, data_len_)
+            };
+            let mut deserializer = flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that =
+                <RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<Kernoid>>>::sse_decode(
+                    &mut deserializer,
+                );
+            let api_directory = <String>::sse_decode(&mut deserializer);
+            let api_key = <Vec<u8>>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, crate::api::kernoid::KernoidError>((move || {
+                let mut api_that_guard = None;
+                let decode_indices_ = flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                    flutter_rust_bridge::for_generated::LockableOrderInfo::new(&api_that, 0, false),
+                ]);
+                for i in decode_indices_ {
+                    match i {
+                        0 => api_that_guard = Some(api_that.lockable_decode_sync_ref()),
+                        _ => unreachable!(),
+                    }
+                }
+                let api_that_guard = api_that_guard.unwrap();
+                let output_ok =
+                    crate::api::kernoid::Kernoid::share_vaults_with_shell(&*api_that_guard, api_directory, api_key)?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
 fn wire__crate__api__kernoid__Kernoid_sign_out_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -4294,6 +4380,55 @@ fn wire__crate__api__kernoid__Kernoid_vault_entries_impl(
                             api_directory,
                         )
                         .await?;
+                        std::result::Result::Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__kernoid__Kernoid_vault_level_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "Kernoid_vault_level",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(ptr_, rust_vec_len_, data_len_)
+            };
+            let mut deserializer = flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that =
+                <RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<Kernoid>>>::sse_decode(
+                    &mut deserializer,
+                );
+            let api_vault_id = <String>::sse_decode(&mut deserializer);
+            let api_space = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, crate::api::kernoid::KernoidError>(
+                    (move || async move {
+                        let mut api_that_guard = None;
+                        let decode_indices_ = flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                            flutter_rust_bridge::for_generated::LockableOrderInfo::new(&api_that, 0, false),
+                        ]);
+                        for i in decode_indices_ {
+                            match i {
+                                0 => api_that_guard = Some(api_that.lockable_decode_async_ref().await),
+                                _ => unreachable!(),
+                            }
+                        }
+                        let api_that_guard = api_that_guard.unwrap();
+                        let output_ok =
+                            crate::api::kernoid::Kernoid::vault_level(&*api_that_guard, api_vault_id, api_space)
+                                .await?;
                         std::result::Result::Ok(output_ok)
                     })()
                     .await,
@@ -6262,65 +6397,66 @@ fn pde_ffi_dispatcher_primary_impl(
         32 => wire__crate__api__kernoid__Kernoid_files_impl(port, ptr, rust_vec_len, data_len),
         33 => wire__crate__api__kernoid__Kernoid_find_principals_impl(port, ptr, rust_vec_len, data_len),
         34 => wire__crate__api__kernoid__Kernoid_finish_login_impl(port, ptr, rust_vec_len, data_len),
-        35 => wire__crate__api__kernoid__Kernoid_give_vault_keys_impl(port, ptr, rust_vec_len, data_len),
-        37 => wire__crate__api__kernoid__Kernoid_key_status_impl(port, ptr, rust_vec_len, data_len),
-        39 => wire__crate__api__kernoid__Kernoid_lock_key_impl(port, ptr, rust_vec_len, data_len),
-        40 => wire__crate__api__kernoid__Kernoid_login_impl(port, ptr, rust_vec_len, data_len),
-        42 => wire__crate__api__kernoid__Kernoid_mail_settings_impl(port, ptr, rust_vec_len, data_len),
-        43 => wire__crate__api__kernoid__Kernoid_mailboxes_impl(port, ptr, rust_vec_len, data_len),
-        44 => wire__crate__api__kernoid__Kernoid_make_key_impl(port, ptr, rust_vec_len, data_len),
-        45 => wire__crate__api__kernoid__Kernoid_mark_emails_impl(port, ptr, rust_vec_len, data_len),
-        46 => wire__crate__api__kernoid__Kernoid_move_emails_impl(port, ptr, rust_vec_len, data_len),
-        47 => wire__crate__api__kernoid__Kernoid_move_mailbox_impl(port, ptr, rust_vec_len, data_len),
-        48 => wire__crate__api__kernoid__Kernoid_move_vault_impl(port, ptr, rust_vec_len, data_len),
-        50 => wire__crate__api__kernoid__Kernoid_open_vaults_impl(port, ptr, rust_vec_len, data_len),
-        51 => wire__crate__api__kernoid__Kernoid_own_avatar_impl(port, ptr, rust_vec_len, data_len),
-        52 => wire__crate__api__kernoid__Kernoid_own_name_impl(port, ptr, rust_vec_len, data_len),
-        54 => wire__crate__api__kernoid__Kernoid_principals_impl(port, ptr, rust_vec_len, data_len),
-        55 => wire__crate__api__kernoid__Kernoid_remove_file_link_impl(port, ptr, rust_vec_len, data_len),
-        56 => wire__crate__api__kernoid__Kernoid_remove_own_avatar_impl(port, ptr, rust_vec_len, data_len),
-        57 => wire__crate__api__kernoid__Kernoid_remove_vault_member_impl(port, ptr, rust_vec_len, data_len),
-        58 => wire__crate__api__kernoid__Kernoid_rename_file_impl(port, ptr, rust_vec_len, data_len),
-        59 => wire__crate__api__kernoid__Kernoid_rename_in_vault_impl(port, ptr, rust_vec_len, data_len),
-        60 => wire__crate__api__kernoid__Kernoid_rename_mailbox_impl(port, ptr, rust_vec_len, data_len),
-        61 => wire__crate__api__kernoid__Kernoid_rename_space_vault_impl(port, ptr, rust_vec_len, data_len),
-        62 => wire__crate__api__kernoid__Kernoid_reply_draft_impl(port, ptr, rust_vec_len, data_len),
-        63 => wire__crate__api__kernoid__Kernoid_restore_version_impl(port, ptr, rust_vec_len, data_len),
-        64 => wire__crate__api__kernoid__Kernoid_resume_impl(port, ptr, rust_vec_len, data_len),
-        65 => wire__crate__api__kernoid__Kernoid_save_contact_impl(port, ptr, rust_vec_len, data_len),
-        66 => wire__crate__api__kernoid__Kernoid_save_event_impl(port, ptr, rust_vec_len, data_len),
-        67 => wire__crate__api__kernoid__Kernoid_save_instance_impl(port, ptr, rust_vec_len, data_len),
-        68 => wire__crate__api__kernoid__Kernoid_save_part_impl(port, ptr, rust_vec_len, data_len),
-        69 => wire__crate__api__kernoid__Kernoid_search_files_impl(port, ptr, rust_vec_len, data_len),
-        70 => wire__crate__api__kernoid__Kernoid_send_draft_impl(port, ptr, rust_vec_len, data_len),
-        71 => wire__crate__api__kernoid__Kernoid_send_plan_impl(port, ptr, rust_vec_len, data_len),
-        73 => wire__crate__api__kernoid__Kernoid_set_account_language_impl(port, ptr, rust_vec_len, data_len),
-        74 => wire__crate__api__kernoid__Kernoid_set_mail_settings_impl(port, ptr, rust_vec_len, data_len),
-        75 => wire__crate__api__kernoid__Kernoid_set_own_avatar_impl(port, ptr, rust_vec_len, data_len),
-        76 => wire__crate__api__kernoid__Kernoid_set_own_name_impl(port, ptr, rust_vec_len, data_len),
-        77 => wire__crate__api__kernoid__Kernoid_set_vacation_impl(port, ptr, rust_vec_len, data_len),
-        79 => wire__crate__api__kernoid__Kernoid_share_directory_impl(port, ptr, rust_vec_len, data_len),
-        80 => wire__crate__api__kernoid__Kernoid_share_space_vault_impl(port, ptr, rust_vec_len, data_len),
-        81 => wire__crate__api__kernoid__Kernoid_sign_out_impl(port, ptr, rust_vec_len, data_len),
-        83 => wire__crate__api__kernoid__Kernoid_sync_folder_impl(port, ptr, rust_vec_len, data_len),
-        84 => wire__crate__api__kernoid__Kernoid_unlock_key_impl(port, ptr, rust_vec_len, data_len),
-        85 => wire__crate__api__kernoid__Kernoid_upload_files_impl(port, ptr, rust_vec_len, data_len),
-        87 => wire__crate__api__kernoid__Kernoid_vacation_impl(port, ptr, rust_vec_len, data_len),
-        88 => wire__crate__api__kernoid__Kernoid_vault_entries_impl(port, ptr, rust_vec_len, data_len),
-        89 => wire__crate__api__kernoid__Kernoid_vault_make_directory_impl(port, ptr, rust_vec_len, data_len),
-        90 => wire__crate__api__kernoid__Kernoid_vault_move_impl(port, ptr, rust_vec_len, data_len),
-        91 => wire__crate__api__kernoid__Kernoid_vault_name_impl(port, ptr, rust_vec_len, data_len),
-        92 => wire__crate__api__kernoid__Kernoid_vault_remove_impl(port, ptr, rust_vec_len, data_len),
-        93 => wire__crate__api__kernoid__Kernoid_vault_rename_impl(port, ptr, rust_vec_len, data_len),
-        94 => wire__crate__api__kernoid__Kernoid_vault_save_impl(port, ptr, rust_vec_len, data_len),
-        95 => wire__crate__api__kernoid__Kernoid_vault_set_trashed_impl(port, ptr, rust_vec_len, data_len),
-        96 => wire__crate__api__kernoid__Kernoid_vault_upload_impl(port, ptr, rust_vec_len, data_len),
-        97 => wire__crate__api__kernoid__Kernoid_watch_changes_impl(port, ptr, rust_vec_len, data_len),
-        98 => wire__crate__api__kernoid__Kernoid_watch_login_impl(port, ptr, rust_vec_len, data_len),
-        100 => wire__crate__api__kernoid__init_app_impl(port, ptr, rust_vec_len, data_len),
-        101 => wire__crate__api__kernoid__sync_report_default_impl(port, ptr, rust_vec_len, data_len),
-        104 => wire__crate__api__windows_files__windows_files_start_impl(port, ptr, rust_vec_len, data_len),
-        106 => wire__crate__api__windows_files__windows_files_stop_impl(port, ptr, rust_vec_len, data_len),
+        36 => wire__crate__api__kernoid__Kernoid_give_vault_keys_impl(port, ptr, rust_vec_len, data_len),
+        38 => wire__crate__api__kernoid__Kernoid_key_status_impl(port, ptr, rust_vec_len, data_len),
+        40 => wire__crate__api__kernoid__Kernoid_lock_key_impl(port, ptr, rust_vec_len, data_len),
+        41 => wire__crate__api__kernoid__Kernoid_login_impl(port, ptr, rust_vec_len, data_len),
+        43 => wire__crate__api__kernoid__Kernoid_mail_settings_impl(port, ptr, rust_vec_len, data_len),
+        44 => wire__crate__api__kernoid__Kernoid_mailboxes_impl(port, ptr, rust_vec_len, data_len),
+        45 => wire__crate__api__kernoid__Kernoid_make_key_impl(port, ptr, rust_vec_len, data_len),
+        46 => wire__crate__api__kernoid__Kernoid_mark_emails_impl(port, ptr, rust_vec_len, data_len),
+        47 => wire__crate__api__kernoid__Kernoid_move_emails_impl(port, ptr, rust_vec_len, data_len),
+        48 => wire__crate__api__kernoid__Kernoid_move_mailbox_impl(port, ptr, rust_vec_len, data_len),
+        49 => wire__crate__api__kernoid__Kernoid_move_vault_impl(port, ptr, rust_vec_len, data_len),
+        51 => wire__crate__api__kernoid__Kernoid_open_vaults_impl(port, ptr, rust_vec_len, data_len),
+        52 => wire__crate__api__kernoid__Kernoid_own_avatar_impl(port, ptr, rust_vec_len, data_len),
+        53 => wire__crate__api__kernoid__Kernoid_own_name_impl(port, ptr, rust_vec_len, data_len),
+        55 => wire__crate__api__kernoid__Kernoid_principals_impl(port, ptr, rust_vec_len, data_len),
+        56 => wire__crate__api__kernoid__Kernoid_remove_file_link_impl(port, ptr, rust_vec_len, data_len),
+        57 => wire__crate__api__kernoid__Kernoid_remove_own_avatar_impl(port, ptr, rust_vec_len, data_len),
+        58 => wire__crate__api__kernoid__Kernoid_remove_vault_member_impl(port, ptr, rust_vec_len, data_len),
+        59 => wire__crate__api__kernoid__Kernoid_rename_file_impl(port, ptr, rust_vec_len, data_len),
+        60 => wire__crate__api__kernoid__Kernoid_rename_in_vault_impl(port, ptr, rust_vec_len, data_len),
+        61 => wire__crate__api__kernoid__Kernoid_rename_mailbox_impl(port, ptr, rust_vec_len, data_len),
+        62 => wire__crate__api__kernoid__Kernoid_rename_space_vault_impl(port, ptr, rust_vec_len, data_len),
+        63 => wire__crate__api__kernoid__Kernoid_reply_draft_impl(port, ptr, rust_vec_len, data_len),
+        64 => wire__crate__api__kernoid__Kernoid_restore_version_impl(port, ptr, rust_vec_len, data_len),
+        65 => wire__crate__api__kernoid__Kernoid_resume_impl(port, ptr, rust_vec_len, data_len),
+        66 => wire__crate__api__kernoid__Kernoid_save_contact_impl(port, ptr, rust_vec_len, data_len),
+        67 => wire__crate__api__kernoid__Kernoid_save_event_impl(port, ptr, rust_vec_len, data_len),
+        68 => wire__crate__api__kernoid__Kernoid_save_instance_impl(port, ptr, rust_vec_len, data_len),
+        69 => wire__crate__api__kernoid__Kernoid_save_part_impl(port, ptr, rust_vec_len, data_len),
+        70 => wire__crate__api__kernoid__Kernoid_search_files_impl(port, ptr, rust_vec_len, data_len),
+        71 => wire__crate__api__kernoid__Kernoid_send_draft_impl(port, ptr, rust_vec_len, data_len),
+        72 => wire__crate__api__kernoid__Kernoid_send_plan_impl(port, ptr, rust_vec_len, data_len),
+        74 => wire__crate__api__kernoid__Kernoid_set_account_language_impl(port, ptr, rust_vec_len, data_len),
+        75 => wire__crate__api__kernoid__Kernoid_set_mail_settings_impl(port, ptr, rust_vec_len, data_len),
+        76 => wire__crate__api__kernoid__Kernoid_set_own_avatar_impl(port, ptr, rust_vec_len, data_len),
+        77 => wire__crate__api__kernoid__Kernoid_set_own_name_impl(port, ptr, rust_vec_len, data_len),
+        78 => wire__crate__api__kernoid__Kernoid_set_vacation_impl(port, ptr, rust_vec_len, data_len),
+        80 => wire__crate__api__kernoid__Kernoid_share_directory_impl(port, ptr, rust_vec_len, data_len),
+        81 => wire__crate__api__kernoid__Kernoid_share_space_vault_impl(port, ptr, rust_vec_len, data_len),
+        83 => wire__crate__api__kernoid__Kernoid_sign_out_impl(port, ptr, rust_vec_len, data_len),
+        85 => wire__crate__api__kernoid__Kernoid_sync_folder_impl(port, ptr, rust_vec_len, data_len),
+        86 => wire__crate__api__kernoid__Kernoid_unlock_key_impl(port, ptr, rust_vec_len, data_len),
+        87 => wire__crate__api__kernoid__Kernoid_upload_files_impl(port, ptr, rust_vec_len, data_len),
+        89 => wire__crate__api__kernoid__Kernoid_vacation_impl(port, ptr, rust_vec_len, data_len),
+        90 => wire__crate__api__kernoid__Kernoid_vault_entries_impl(port, ptr, rust_vec_len, data_len),
+        91 => wire__crate__api__kernoid__Kernoid_vault_level_impl(port, ptr, rust_vec_len, data_len),
+        92 => wire__crate__api__kernoid__Kernoid_vault_make_directory_impl(port, ptr, rust_vec_len, data_len),
+        93 => wire__crate__api__kernoid__Kernoid_vault_move_impl(port, ptr, rust_vec_len, data_len),
+        94 => wire__crate__api__kernoid__Kernoid_vault_name_impl(port, ptr, rust_vec_len, data_len),
+        95 => wire__crate__api__kernoid__Kernoid_vault_remove_impl(port, ptr, rust_vec_len, data_len),
+        96 => wire__crate__api__kernoid__Kernoid_vault_rename_impl(port, ptr, rust_vec_len, data_len),
+        97 => wire__crate__api__kernoid__Kernoid_vault_save_impl(port, ptr, rust_vec_len, data_len),
+        98 => wire__crate__api__kernoid__Kernoid_vault_set_trashed_impl(port, ptr, rust_vec_len, data_len),
+        99 => wire__crate__api__kernoid__Kernoid_vault_upload_impl(port, ptr, rust_vec_len, data_len),
+        100 => wire__crate__api__kernoid__Kernoid_watch_changes_impl(port, ptr, rust_vec_len, data_len),
+        101 => wire__crate__api__kernoid__Kernoid_watch_login_impl(port, ptr, rust_vec_len, data_len),
+        103 => wire__crate__api__kernoid__init_app_impl(port, ptr, rust_vec_len, data_len),
+        104 => wire__crate__api__kernoid__sync_report_default_impl(port, ptr, rust_vec_len, data_len),
+        107 => wire__crate__api__windows_files__windows_files_start_impl(port, ptr, rust_vec_len, data_len),
+        109 => wire__crate__api__windows_files__windows_files_stop_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -6335,19 +6471,21 @@ fn pde_ffi_dispatcher_sync_impl(
     match func_id {
         22 => wire__crate__api__kernoid__Kernoid_email_labels_impl(ptr, rust_vec_len, data_len),
         29 => wire__crate__api__kernoid__Kernoid_file_stores_impl(ptr, rust_vec_len, data_len),
-        36 => wire__crate__api__kernoid__Kernoid_kept_login_impl(ptr, rust_vec_len, data_len),
-        38 => wire__crate__api__kernoid__Kernoid_links_available_impl(ptr, rust_vec_len, data_len),
-        41 => wire__crate__api__kernoid__Kernoid_mail_accounts_impl(ptr, rust_vec_len, data_len),
-        49 => wire__crate__api__kernoid__Kernoid_offers_impl(ptr, rust_vec_len, data_len),
-        53 => wire__crate__api__kernoid__Kernoid_phone_labels_impl(ptr, rust_vec_len, data_len),
-        72 => wire__crate__api__kernoid__Kernoid_server_impl(ptr, rust_vec_len, data_len),
-        78 => wire__crate__api__kernoid__Kernoid_settings_available_impl(ptr, rust_vec_len, data_len),
-        82 => wire__crate__api__kernoid__Kernoid_space_vaults_impl(ptr, rust_vec_len, data_len),
-        86 => wire__crate__api__kernoid__Kernoid_username_impl(ptr, rust_vec_len, data_len),
-        99 => wire__crate__api__kernoid__OidcLogin_url_impl(ptr, rust_vec_len, data_len),
-        102 => wire__crate__api__windows_files__windows_files_available_impl(ptr, rust_vec_len, data_len),
-        103 => wire__crate__api__windows_files__windows_files_configured_impl(ptr, rust_vec_len, data_len),
-        105 => wire__crate__api__windows_files__windows_files_status_impl(ptr, rust_vec_len, data_len),
+        35 => wire__crate__api__kernoid__Kernoid_give_shell_vaults_impl(ptr, rust_vec_len, data_len),
+        37 => wire__crate__api__kernoid__Kernoid_kept_login_impl(ptr, rust_vec_len, data_len),
+        39 => wire__crate__api__kernoid__Kernoid_links_available_impl(ptr, rust_vec_len, data_len),
+        42 => wire__crate__api__kernoid__Kernoid_mail_accounts_impl(ptr, rust_vec_len, data_len),
+        50 => wire__crate__api__kernoid__Kernoid_offers_impl(ptr, rust_vec_len, data_len),
+        54 => wire__crate__api__kernoid__Kernoid_phone_labels_impl(ptr, rust_vec_len, data_len),
+        73 => wire__crate__api__kernoid__Kernoid_server_impl(ptr, rust_vec_len, data_len),
+        79 => wire__crate__api__kernoid__Kernoid_settings_available_impl(ptr, rust_vec_len, data_len),
+        82 => wire__crate__api__kernoid__Kernoid_share_vaults_with_shell_impl(ptr, rust_vec_len, data_len),
+        84 => wire__crate__api__kernoid__Kernoid_space_vaults_impl(ptr, rust_vec_len, data_len),
+        88 => wire__crate__api__kernoid__Kernoid_username_impl(ptr, rust_vec_len, data_len),
+        102 => wire__crate__api__kernoid__OidcLogin_url_impl(ptr, rust_vec_len, data_len),
+        105 => wire__crate__api__windows_files__windows_files_available_impl(ptr, rust_vec_len, data_len),
+        106 => wire__crate__api__windows_files__windows_files_configured_impl(ptr, rust_vec_len, data_len),
+        108 => wire__crate__api__windows_files__windows_files_status_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }

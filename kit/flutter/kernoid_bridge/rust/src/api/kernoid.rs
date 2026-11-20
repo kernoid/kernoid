@@ -64,12 +64,16 @@ pub struct Kernoid {
     login: Option<Arc<Login>>,
     /// Vaults on spaces (RFC 0010, 5), once the app opened their store on this device ([`Kernoid::open_vaults`]).
     vaults: Arc<std::sync::Mutex<Option<client::e2e::Vaults>>>,
+    /// Where the codes of vaults entered go for the shell, and their key ([`Kernoid::share_vaults_with_shell`]).
+    shell_codes: Arc<std::sync::Mutex<Option<CodesFile>>>,
 }
 
 /// A login with OpenID Connect while the app runs: the server, the tokens – renewed in the background –, and who
 /// hears of each renewal (to keep the new refresh token).
 struct Login {
     server: String,
+    /// For a shell's login: where its vaults on spaces are kept, and the codes the app hands it (RFC 0010, 5).
+    shell_vaults: std::sync::Mutex<Option<ShellVaults>>,
     tokens: std::sync::Mutex<client::oidc::Tokens>,
     watcher: std::sync::Mutex<Option<StreamSink<String>>>,
     renewal: std::sync::Mutex<Option<tokio::task::JoinHandle<()>>>,
@@ -87,13 +91,54 @@ impl std::fmt::Debug for Login {
 struct Kept {
     server: String,
     login: client::oidc::Saved,
+    /// A shell's vaults on spaces – kept with its login in the system's key store, so that the shells need nothing new.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    vaults: Option<ShellVaults>,
+}
+
+/// What a shell (the system's file manager) needs for vaults on spaces: its own sealed store – a device of its own,
+/// written by it alone –, the sealed file of codes the app writes for it, and the key of both (hexadecimal).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub(crate) struct ShellVaults {
+    pub store: String,
+    pub codes: String,
+    pub key: String,
+}
+
+impl ShellVaults {
+    pub(crate) fn key(&self) -> Option<[u8; 32]> {
+        let bytes: Vec<u8> = (0..self.key.len())
+            .step_by(2)
+            .filter_map(|i| self.key.get(i..i + 2).and_then(|pair| u8::from_str_radix(pair, 16).ok()))
+            .collect();
+        bytes.try_into().ok()
+    }
 }
 
 impl Login {
     fn kept(&self) -> Option<String> {
         let saved = self.tokens.lock().ok()?.saved()?;
-        serde_json::to_string(&Kept { server: self.server.clone(), login: saved }).ok()
+        let vaults = self.shell_vaults.lock().ok()?.clone();
+        serde_json::to_string(&Kept { server: self.server.clone(), login: saved, vaults }).ok()
     }
+}
+
+/// Where the app writes codes for the shell, and their key.
+type CodesFile = (String, [u8; 32]);
+
+/// The codes the app hands a shell: vault directory → space and recovery code (hexadecimal), sealed.
+pub(crate) type ShellCodes = std::collections::BTreeMap<String, (String, String)>;
+
+pub(crate) fn read_codes(path: &str, key: &[u8; 32]) -> ShellCodes {
+    std::fs::read(path)
+        .ok()
+        .and_then(|sealed| kernoid_vault::sealed::open(key, &sealed).ok())
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .unwrap_or_default()
+}
+
+fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
 impl Drop for Kernoid {
@@ -786,6 +831,7 @@ impl Kernoid {
             opened: Arc::default(),
             login: None,
             vaults: Arc::default(),
+            shell_codes: Arc::default(),
         })
     }
 
@@ -820,7 +866,46 @@ impl Kernoid {
             .map_err(|_| KernoidError { unauthorized: true, message: "the kept login is unreadable".into() })?;
         let saved = kept.login.tokens();
         let tokens = run(async move { client::oidc::refresh(&saved, &options()).await }).await?;
-        Kernoid::signed_in(kept.server, tokens).await
+        let account = Kernoid::signed_in(kept.server, tokens).await?;
+        if let Some(login) = &account.login
+            && let Ok(mut vaults) = login.shell_vaults.lock()
+        {
+            *vaults = kept.vaults;
+        }
+        Ok(account)
+    }
+
+    /// A shell's vaults on spaces, as its login was kept with them.
+    pub(crate) fn shell_vaults(&self) -> Option<ShellVaults> {
+        self.login.as_ref()?.shell_vaults.lock().ok()?.clone()
+    }
+
+    /// Gives this login – a shell's, before it is kept for the shell – what it needs for vaults on spaces: its store
+    /// and the codes file in `directory`, sealed under `key` (32 bytes). The app hands it codes with
+    /// [`Kernoid::share_vaults_with_shell`].
+    #[frb(sync)]
+    pub fn give_shell_vaults(&self, directory: String, key: Vec<u8>) -> Result<(), KernoidError> {
+        let bad = || KernoidError { unauthorized: false, message: "a key of 32 bytes".into() };
+        let key: [u8; 32] = key.try_into().map_err(|_| bad())?;
+        let login = self.login.as_ref().ok_or_else(|| KernoidError {
+            unauthorized: false,
+            message: "only a login with OpenID Connect is kept".into(),
+        })?;
+        let at = |name: &str| std::path::Path::new(&directory).join(name).to_string_lossy().into_owned();
+        let vaults = ShellVaults { store: at("shell.sealed"), codes: at("shell-codes.sealed"), key: hex(&key) };
+        *login.shell_vaults.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(vaults);
+        Ok(())
+    }
+
+    /// From now on, every vault on a space this app enters is handed to the shell too: its code, sealed into the codes
+    /// file in `directory` under `key` – the shell comes in with it as a device of its own.
+    #[frb(sync)]
+    pub fn share_vaults_with_shell(&self, directory: String, key: Vec<u8>) -> Result<(), KernoidError> {
+        let key: [u8; 32] =
+            key.try_into().map_err(|_| KernoidError { unauthorized: false, message: "a key of 32 bytes".into() })?;
+        let codes = std::path::Path::new(&directory).join("shell-codes.sealed").to_string_lossy().into_owned();
+        *self.shell_codes.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some((codes, key));
+        Ok(())
     }
 
     async fn signed_in(server: String, tokens: client::oidc::Tokens) -> Result<Kernoid, KernoidError> {
@@ -834,6 +919,7 @@ impl Kernoid {
         .await?;
         let login = Arc::new(Login {
             server,
+            shell_vaults: std::sync::Mutex::new(None),
             tokens: std::sync::Mutex::new(tokens),
             watcher: std::sync::Mutex::new(None),
             renewal: std::sync::Mutex::new(None),
@@ -848,6 +934,7 @@ impl Kernoid {
             opened: Arc::default(),
             login: Some(login),
             vaults: Arc::default(),
+            shell_codes: Arc::default(),
         })
     }
 
@@ -2382,9 +2469,12 @@ fn vault_entry(e: client::e2e::Entry) -> VaultEntry {
 /// Vaults on spaces (RFC 0010, 5): what lies in one is kept end to end through the foundation's streams.
 impl Kernoid {
     /// Opens this account's store of vaults on spaces on this device – `path`, a file in the app's own directory, one
-    /// per account – with `device` (e.g. the host's name) as the start of this device's name in them.
-    pub fn open_vaults(&self, path: String, device: String) -> Result<(), KernoidError> {
-        let vaults = client::e2e::Vaults::open(std::path::Path::new(&path), &device)?;
+    /// per account, sealed under `key` (32 bytes from the system's key store) – with `device` (e.g. the host's name)
+    /// as the start of this device's name in them.
+    pub fn open_vaults(&self, path: String, device: String, key: Vec<u8>) -> Result<(), KernoidError> {
+        let key: [u8; 32] =
+            key.try_into().map_err(|_| KernoidError { unauthorized: false, message: "a key of 32 bytes".into() })?;
+        let vaults = client::e2e::Vaults::open_sealed(std::path::Path::new(&path), key, &device)?;
         *self.vaults.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(vaults);
         Ok(())
     }
@@ -2425,9 +2515,29 @@ impl Kernoid {
     /// is new there. False while no member made the account one.
     pub async fn enter_vault(&self, account_id: String, vault_id: String, space: String) -> Result<bool, KernoidError> {
         let (client, e2e, vaults) = (self.client.clone(), self.e2e.clone(), self.vaults()?);
+        let shell = self.shell_codes.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone();
         run(async move {
             let mut e2e = e2e.lock().await;
-            vaults.enter(&client, &mut e2e, &account_id, &space_vault(vault_id, space)).await
+            let node = space_vault(vault_id.clone(), space.clone());
+            let entered = vaults.enter(&client, &mut e2e, &account_id, &node).await?;
+            // The shell gets the code too, once: it comes in with it as a device of its own.
+            if entered
+                && let Some((path, key)) = shell
+                && !read_codes(&path, &key).contains_key(&vault_id)
+                && let Ok(Some(code)) = client::e2e::Vaults::code(&client, &mut e2e, &account_id, &node).await
+            {
+                let mut codes = read_codes(&path, &key);
+                codes.insert(vault_id, (space, hex(&code)));
+                if let Ok(bytes) = serde_json::to_vec(&codes) {
+                    let _ = std::fs::write(&path, kernoid_vault::sealed::seal(&key, &bytes));
+                }
+            }
+            // Shares changed elsewhere (the administration, another app) reach the members here – where this device
+            // may add members; a failure leaves the vault open as it is.
+            if entered {
+                let _ = vaults.reconcile(&client, &mut e2e, &account_id, &node).await;
+            }
+            Ok(entered)
         })
         .await
     }
@@ -2650,6 +2760,18 @@ impl Kernoid {
         })
         .await?;
         Ok(waiting.into_iter().map(principal).collect())
+    }
+
+    /// How far this device may go in a vault on a space: `read`, `edit` or `full`.
+    pub async fn vault_level(&self, vault_id: String, space: String) -> Result<String, KernoidError> {
+        let vaults = self.vaults()?;
+        let level = run(async move { vaults.level(&space_vault(vault_id, space)).await }).await?;
+        Ok(match level {
+            client::e2e::Level::Read => "read",
+            client::e2e::Level::Edit => "edit",
+            client::e2e::Level::Full => "full",
+        }
+        .into())
     }
 
     /// Renames a vault on a space.

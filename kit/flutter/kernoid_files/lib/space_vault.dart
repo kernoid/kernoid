@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:kernoid_bridge/kernoid_bridge.dart';
 import 'package:kernoid_l10n/l10n/app_localizations.dart';
 import 'package:kernoid_shell/app/format.dart';
+import 'package:kernoid_shell/app/kept_login.dart';
 import 'package:kernoid_shell/app/save.dart';
 import 'package:kernoid_shell/widgets/states.dart';
 import 'package:kernoid_ui/ui.dart';
@@ -18,15 +19,44 @@ import 'files.dart' show fileIcon;
 import 'l10n/files_text.dart';
 import 'viewer.dart';
 
-/// Opens the store of vaults on spaces of `account` on this device once (RFC 0010, 5): a file in the app's support
-/// directory, one per account, and this device's name in the vaults made from its host name.
+/// Opens the store of vaults on spaces of `account` on this device once (RFC 0010, 5): a sealed file in the app's
+/// support directory, one per account, and this device's name in the vaults made from its host name.
 Future<void> openVaults(Kernoid account) async {
   if (_opened[account] ?? false) return;
   final key = base64Url.encode(utf8.encode('${account.server}|${account.username}')).replaceAll('=', '');
   final directory = Directory('${(await getApplicationSupportDirectory()).path}/vaults');
   await directory.create(recursive: true);
-  await account.openVaults(path: '${directory.path}/$key.db', device: Platform.localHostname);
+  // Sealed under a key of the system's key store: the file alone gives nothing away.
+  final sealing = await KeptLogin.vaultsKey('${account.server}|${account.username}');
+  await account.openVaults(path: '${directory.path}/$key.sealed', device: Platform.localHostname, key: sealing);
+  await keepHandingVaults(account);
   _opened[account] = true;
+}
+
+/// Where a shell of `account` (the system's file manager) keeps its vaults on spaces and the codes the app hands it.
+Future<String> _shellDirectory(Kernoid account) async {
+  final key = base64Url.encode(utf8.encode('${account.server}|${account.username}')).replaceAll('=', '');
+  final directory = Directory('${(await getApplicationSupportDirectory()).path}/vaults/shell-$key');
+  await directory.create(recursive: true);
+  return directory.path;
+}
+
+/// Hands the vaults on spaces of `account` to a shell whose own login is `shell`, before that login is kept for it:
+/// the shell becomes a device of its own in each vault the app opens from now on (RFC 0010, 5). On Apple's systems the
+/// File Provider reads it only from the app group's container (**OPEN**: needs the signing team).
+Future<void> handVaultsToShell(Kernoid account, Kernoid shell) async {
+  final directory = await _shellDirectory(account);
+  final key = await KeptLogin.vaultsKey('shell|${account.server}|${account.username}');
+  shell.giveShellVaults(directory: directory, key: key);
+  account.shareVaultsWithShell(directory: directory, key: key);
+}
+
+/// Keeps handing vaults to the shell of `account` that has them – at every start of the app.
+Future<void> keepHandingVaults(Kernoid account) async {
+  final directory = await _shellDirectory(account);
+  if (!File('$directory/shell-codes.sealed').existsSync() && !File('$directory/shell.sealed').existsSync()) return;
+  final key = await KeptLogin.vaultsKey('shell|${account.server}|${account.username}');
+  account.shareVaultsWithShell(directory: directory, key: key);
 }
 
 /// The accounts whose store of vaults is open in this run of the app.
@@ -61,6 +91,9 @@ class _SpaceVaultViewState extends State<SpaceVaultView> {
   /// False while no member gave the account access; null while that is not known yet.
   bool? _entered;
   bool _trash = false;
+
+  /// Reading only: nothing is offered that the relay would refuse.
+  bool _reader = false;
   bool _busy = false;
   Object? _error;
   List<({String name, int sent, int total})> _uploads = [];
@@ -84,10 +117,12 @@ class _SpaceVaultViewState extends State<SpaceVaultView> {
         space: _space,
       );
       final name = entered ? await widget.account.vaultName(vaultId: widget.vault.id, space: _space) : null;
+      final level = entered ? await widget.account.vaultLevel(vaultId: widget.vault.id, space: _space) : 'read';
       if (!mounted) return;
       setState(() {
         _entered = entered;
         _name = name;
+        _reader = level == 'read';
       });
       if (entered) await _load();
     } catch (error) {
@@ -316,11 +351,11 @@ class _SpaceVaultViewState extends State<SpaceVaultView> {
       items: [
         if (!entry.isDirectory && !entry.trashed) ('open', LucideIcons.eye, l.open, false),
         if (!entry.isDirectory) ('save', LucideIcons.download, l.save, false),
-        if (!entry.trashed) ('rename', LucideIcons.pencil, l.rename, false),
-        if (!entry.trashed) ('move', LucideIcons.folderInput, l.filesText.vaultMoveTo, false),
-        if (entry.trashed) ('restore', LucideIcons.undo2, l.filesText.vaultRestore, false),
-        if (!entry.trashed) ('trash', LucideIcons.trash2, l.delete, true),
-        if (entry.trashed) ('remove', LucideIcons.trash2, l.filesText.deleteFileForGood, true),
+        if (!entry.trashed && !_reader) ('rename', LucideIcons.pencil, l.rename, false),
+        if (!entry.trashed && !_reader) ('move', LucideIcons.folderInput, l.filesText.vaultMoveTo, false),
+        if (entry.trashed && !_reader) ('restore', LucideIcons.undo2, l.filesText.vaultRestore, false),
+        if (!entry.trashed && !_reader) ('trash', LucideIcons.trash2, l.delete, true),
+        if (entry.trashed && !_reader) ('remove', LucideIcons.trash2, l.filesText.deleteFileForGood, true),
       ],
     );
     if (!mounted) return;
@@ -348,7 +383,7 @@ class _SpaceVaultViewState extends State<SpaceVaultView> {
     final k = context.k;
     final open = _entered ?? false;
     final actions = [
-      if (open && !_trash) ...[
+      if (open && !_trash && !_reader) ...[
         KIconButton(
           key: const ValueKey('vault-new-folder'),
           icon: LucideIcons.folderPlus,

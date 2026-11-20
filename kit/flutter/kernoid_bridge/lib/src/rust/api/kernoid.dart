@@ -7,9 +7,9 @@ import '../frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `account`, `addresses`, `children`, `count`, `directory`, `draft`, `event_form`, `event`, `file_node`, `html_of`, `identity`, `kept`, `link_mode_name`, `mail_account`, `options`, `own_addresses`, `principal`, `recipients`, `renew`, `run`, `sdk_client`, `signed_in`, `space_vault`, `status`, `stop_renewing`, `unique_path`, `vault_entry`, `vault_node`, `vaults`, `walk`, `write`
-// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Kept`, `Login`, `Step`, `Target`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `drop`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`
+// These functions are ignored because they are not marked as `pub`: `account`, `addresses`, `children`, `count`, `directory`, `draft`, `event_form`, `event`, `file_node`, `hex`, `html_of`, `identity`, `kept`, `key`, `link_mode_name`, `mail_account`, `options`, `own_addresses`, `principal`, `read_codes`, `recipients`, `renew`, `run`, `sdk_client`, `shell_vaults`, `signed_in`, `space_vault`, `status`, `stop_renewing`, `unique_path`, `vault_entry`, `vault_node`, `vaults`, `walk`, `write`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Kept`, `Login`, `ShellVaults`, `Step`, `Target`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `drop`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<Kernoid>>
 abstract class Kernoid implements RustOpaqueInterface {
@@ -166,6 +166,11 @@ abstract class Kernoid implements RustOpaqueInterface {
   static Future<Kernoid> finishLogin({required OidcLogin login, required String callback}) =>
       RustLib.instance.api.crateApiKernoidKernoidFinishLogin(login: login, callback: callback);
 
+  /// Gives this login – a shell's, before it is kept for the shell – what it needs for vaults on spaces: its store
+  /// and the codes file in `directory`, sealed under `key` (32 bytes). The app hands it codes with
+  /// [`Kernoid::share_vaults_with_shell`].
+  void giveShellVaults({required String directory, required List<int> key});
+
   /// After sharing a vault: gives its key to those shared with who have a key of their own. Returns those who still
   /// wait – groups, and people without a key.
   Future<List<Principal>> giveVaultKeys({
@@ -219,9 +224,10 @@ abstract class Kernoid implements RustOpaqueInterface {
   bool offers({required String capability});
 
   /// Opens this account's store of vaults on spaces on this device – `path`, a file in the app's own directory, one
-  /// per account – with `device` (e.g. the host's name) as the start of this device's name in them.
+  /// per account, sealed under `key` (32 bytes from the system's key store) – with `device` (e.g. the host's name)
+  /// as the start of this device's name in them.
   /// Vaults on spaces (RFC 0010, 5): what lies in one is kept end to end through the foundation's streams.
-  Future<void> openVaults({required String path, required String device});
+  Future<void> openVaults({required String path, required String device, required List<int> key});
 
   /// The account's own picture, or none.
   Future<Uint8List?> ownAvatar();
@@ -351,6 +357,10 @@ abstract class Kernoid implements RustOpaqueInterface {
     required List<FileShare> shares,
   });
 
+  /// From now on, every vault on a space this app enters is handed to the shell too: its code, sealed into the codes
+  /// file in `directory` under `key` – the shell comes in with it as a device of its own.
+  void shareVaultsWithShell({required String directory, required List<int> key});
+
   /// Signs out: a login with OpenID Connect is revoked at the server – the browser's session there stays.
   Future<void> signOut();
 
@@ -387,6 +397,10 @@ abstract class Kernoid implements RustOpaqueInterface {
   /// What lies in a directory of a vault on a space – `None`: its top.
   /// Vaults on spaces (RFC 0010, 5): what lies in one is kept end to end through the foundation's streams.
   Future<List<VaultEntry>> vaultEntries({required String vaultId, required String space, String? directory});
+
+  /// How far this device may go in a vault on a space: `read`, `edit` or `full`.
+  /// Vaults on spaces (RFC 0010, 5): what lies in one is kept end to end through the foundation's streams.
+  Future<String> vaultLevel({required String vaultId, required String space});
 
   /// A directory in a directory of a vault on a space; returns its id.
   /// Vaults on spaces (RFC 0010, 5): what lies in one is kept end to end through the foundation's streams.
