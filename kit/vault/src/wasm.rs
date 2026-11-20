@@ -133,9 +133,10 @@ impl WebVaults {
         self.streams.recover(relay, &space(space_id)?, &RecoveryCode(code), Some(device_name)).map(drop).map_err(js)
     }
 
-    /// Reads what is new in a vault.
-    pub fn sync(&mut self, space_id: &str) -> Result<(), JsError> {
-        self.streams.sync(&space(space_id)?).map(drop).map_err(js)
+    /// Reads what is new in a vault; false when this browser was removed from it and forgot it – it comes in again
+    /// with the account's code.
+    pub fn sync(&mut self, space_id: &str) -> Result<bool, JsError> {
+        crate::sync(&mut self.streams, &space(space_id)?).map_err(js)
     }
 
     pub fn name(&self, space_id: &str) -> Result<Option<String>, JsError> {
@@ -225,10 +226,23 @@ impl WebVaults {
         serde_json::to_string(&members).map_err(|error| JsError::new(&error.to_string()))
     }
 
-    /// Makes an account a member; its recovery code's bytes, or none for a member already there.
-    #[wasm_bindgen(js_name = addMember)]
-    pub fn add_member(&mut self, space_id: &str, account: &str) -> Result<Option<Vec<u8>>, JsError> {
-        Ok(crate::add_member(&mut self.streams, &space(space_id)?, account).map_err(js)?.map(|code| code.0.to_vec()))
+    /// The members with their levels, as JSON: `[[account, "read" | "edit" | "full"]]`.
+    #[wasm_bindgen(js_name = memberLevels)]
+    pub fn member_levels(&self, space_id: &str) -> Result<String, JsError> {
+        let levels = crate::member_levels(&self.streams, &space(space_id)?).map_err(js)?;
+        serde_json::to_string(&levels).map_err(|error| JsError::new(&error.to_string()))
+    }
+
+    /// Brings the members in line with `wanted` (JSON `[[account, level]]`); `own` stays. As JSON: `{ codes: [[account,
+    /// [bytes]]], removed: [account] }` – the codes to seal to the accounts' keys.
+    #[wasm_bindgen(js_name = setMembers)]
+    pub fn set_members(&mut self, space_id: &str, own: &str, wanted: &str) -> Result<String, JsError> {
+        let wanted: Vec<(String, crate::Level)> =
+            serde_json::from_str(wanted).map_err(|error| JsError::new(&error.to_string()))?;
+        let done = crate::set_members(&mut self.streams, &space(space_id)?, own, &wanted).map_err(js)?;
+        let codes: Vec<(String, Vec<u8>)> = done.codes.into_iter().map(|(a, c)| (a, c.0.to_vec())).collect();
+        serde_json::to_string(&serde_json::json!({ "codes": codes, "removed": done.removed }))
+            .map_err(|error| JsError::new(&error.to_string()))
     }
 
     #[wasm_bindgen(js_name = removeMember)]

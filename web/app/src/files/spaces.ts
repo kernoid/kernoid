@@ -108,10 +108,8 @@ export async function create(jmap: Jmap, accountId: string, parent: string | nul
 export async function enter(jmap: Jmap, accountId: string, node: FileNode): Promise<boolean> {
   await vaults(jmap);
   const space = spaceOf(node);
-  if (await call<boolean>("hasSpace", space)) {
-    await call("sync", space);
-    return true;
-  }
+  // A page removed from the vault – its member came in again at another level – forgets it and comes in anew.
+  if ((await call<boolean>("hasSpace", space)) && (await call<boolean>("sync", space))) return true;
   const ring = await unlockedRing();
   if (!ring) throw new JmapError("locked", "unlock your key first (account page)");
   const result = await jmap.call<{ list: { sealed: string | null }[] }>(USING, "VaultKey/get", { accountId, ids: [node.id] });
@@ -196,22 +194,40 @@ export async function directories(jmap: Jmap, node: FileNode, except: string): P
   return found;
 }
 
-/** After sharing a vault: makes each person shared with a member, with a code sealed to their key. Groups and people
- * without a key wait (**OPEN**: a group's members). Returns those who wait. */
-export async function share(jmap: Jmap, accountId: string, node: FileNode, people: Principal[]): Promise<Principal[]> {
+export type Level = "read" | "edit" | "full";
+
+/** After sharing a vault: brings its members in line with whom it is shared with and how far – who is new becomes a
+ * member with a code sealed to their key, who is gone leaves, who has another level comes in again with it. Groups and
+ * people without a key wait (**OPEN**: a group's members); a member already there without a key keeps their level.
+ * Returns those who wait. */
+export async function share(jmap: Jmap, accountId: string, node: FileNode, people: { principal: Principal; level: Level }[]): Promise<Principal[]> {
   await enter(jmap, accountId, node);
   const space = spaceOf(node);
+  const current = JSON.parse(await call<string>("memberLevels", space)) as [string, Level][];
   const waitingFor: Principal[] = [];
-  const update: Record<string, string> = {};
-  for (const person of people) {
-    const keys = person.type === "individual" && person.email ? ((await lookup(jmap, [person.email])).get(person.email.toLowerCase()) ?? []) : [];
+  const wanted: [string, Level][] = [];
+  const keysOf = new Map<string, string[]>();
+  for (const { principal, level } of people) {
+    const keys = principal.type === "individual" && principal.email ? ((await lookup(jmap, [principal.email])).get(principal.email.toLowerCase()) ?? []) : [];
     if (keys.length === 0) {
-      waitingFor.push(person);
+      const now = current.find(([account]) => account === principal.id);
+      if (now) wanted.push(now);
+      else waitingFor.push(principal);
       continue;
     }
-    const code = await call<Uint8Array | undefined>("addMember", space, person.id);
-    if (code) update[`members/${person.id}`] = await sealCode(code, keys);
+    wanted.push([principal.id, level]);
+    keysOf.set(principal.id, keys);
   }
+  const done = JSON.parse(await call<string>("setMembers", space, jmap.account(FILENODE), JSON.stringify(wanted))) as {
+    codes: [string, number[]][];
+    removed: string[];
+  };
+  const update: Record<string, string | null> = {};
+  for (const [member, code] of done.codes) {
+    const keys = keysOf.get(member);
+    if (keys) update[`members/${member}`] = await sealCode(Uint8Array.from(code), keys);
+  }
+  for (const member of done.removed) update[`members/${member}`] = null;
   if (Object.keys(update).length > 0) {
     const result = await jmap.call<{ notUpdated?: Record<string, { type: string; description?: string }> | null }>(USING, "VaultKey/set", {
       accountId,
@@ -221,6 +237,12 @@ export async function share(jmap: Jmap, accountId: string, node: FileNode, peopl
     if (failed) throw new JmapError(failed.type, failed.description);
   }
   return waitingFor;
+}
+
+/** Renames the vault itself. */
+export async function renameVault(jmap: Jmap, accountId: string, node: FileNode, newName: string): Promise<void> {
+  await enter(jmap, accountId, node);
+  await call("renameVault", spaceOf(node), newName);
 }
 
 /** Ends a member's membership: what is written from now on is out of their reach; their code at the server goes. */
@@ -258,7 +280,8 @@ export async function moveVault(jmap: Jmap, accountId: string, old: FileNode): P
       accountId: jmap.session.primaryAccounts["urn:ietf:params:jmap:principals"],
       ids: others,
     });
-    await share(jmap, accountId, target, people.list);
+    // The OpenPGP vault knew no levels: whoever had its key may edit.
+    await share(jmap, accountId, target, people.list.map((principal) => ({ principal, level: "edit" as Level })));
   }
   return id;
 }

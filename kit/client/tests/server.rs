@@ -368,7 +368,8 @@ async fn vaults_on_spaces(e2e: &mut kernoid_client::e2e::E2e, account: &str, old
     let principal =
         files::find_principals(&alice, "carol").await.unwrap().into_iter().find(|p| p.kind == "individual").unwrap();
     files::share(&alice, account, &node.id, &[(principal.id.clone(), files::Level::Edit)]).await.unwrap();
-    let waiting = laptop.share(&alice, e2e, account, &node, std::slice::from_ref(&principal)).await.unwrap();
+    let people = [(principal.clone(), kernoid_client::e2e::Level::Edit)];
+    let waiting = laptop.share(&alice, e2e, account, &node, &people).await.unwrap();
     assert!(waiting.is_empty());
     assert!(laptop.members(&node).await.unwrap().contains(&principal.id));
     let carols = Vaults::in_memory("Carol's laptop").unwrap();
@@ -379,6 +380,18 @@ async fn vaults_on_spaces(e2e: &mut kernoid_client::e2e::E2e, account: &str, old
     carols.make_directory(&shared, None, "Von Carol").await.unwrap();
     laptop.sync(&node).await.unwrap();
     assert!(laptop.list(&node, None).await.unwrap().iter().any(|e| e.name == "Von Carol"));
+
+    // Carol's level goes down to reading: she comes in again with a new code, and may no longer write.
+    let read = [(principal.clone(), kernoid_client::e2e::Level::Read)];
+    assert!(laptop.share(&alice, e2e, account, &node, &read).await.unwrap().is_empty());
+    assert!(carols.enter(&carol, &mut carol_e2e, account, &shared).await.unwrap());
+    assert_eq!(carols.read_file(&shared, &letter.id).await.unwrap(), b"neu");
+    assert!(carols.make_directory(&shared, None, "Nicht mehr").await.is_err(), "reading only");
+
+    // The vault renamed: the phone reads the new name.
+    laptop.rename_vault(&node, "Geheim 2").await.unwrap();
+    phone.sync(&node).await.unwrap();
+    assert_eq!(phone.name(&node).await.unwrap().as_deref(), Some("Geheim 2"));
 
     // Carol leaves: the relay serves her nothing more.
     laptop.remove_member(&alice, account, &node, &principal.id).await.unwrap();

@@ -283,6 +283,23 @@ class _FilesPageState extends State<FilesPage> {
     );
   }
 
+  /// Renames a vault on a space: its name lives in the space.
+  Future<void> _renameVault(FileNode node) async {
+    final l = AppLocalizations.of(context);
+    final name = await askText(
+      context,
+      title: l.rename,
+      confirm: l.rename,
+      initial: _spaceNames[node.id] ?? '',
+      label: l.filesText.newName,
+    );
+    if (name == null || name.trim().isEmpty) return;
+    await _run(() async {
+      await widget.account.renameSpaceVault(vaultId: node.id, space: node.space!, name: name);
+      _spaceNames[node.id] = name.trim();
+    });
+  }
+
   /// Copies an OpenPGP vault into a new vault on a space beside it; the old one stays until it is removed.
   Future<void> _moveOnto(FileNode node) async {
     final l = AppLocalizations.of(context);
@@ -509,6 +526,8 @@ class _FilesPageState extends State<FilesPage> {
         if (node.isVault && !onSpace && _spaceVaults && open && (_e2e?.unlocked ?? false))
           ('moveOnto', LucideIcons.folderSync, l.filesText.vaultMoveOnto, false),
         if (rights.rename && node.role == null && open && !onSpace) ('rename', LucideIcons.pencil, l.rename, false),
+        if (rights.rename && onSpace && _spaceNames.containsKey(node.id))
+          ('renameVault', LucideIcons.pencil, l.rename, false),
         if (rights.delete && node.role == null)
           ('delete', LucideIcons.trash2, deleteForGood ? l.filesText.deleteFileForGood : l.delete, true),
       ],
@@ -529,6 +548,8 @@ class _FilesPageState extends State<FilesPage> {
         await _copy(node);
       case 'moveOnto':
         await _moveOnto(node);
+      case 'renameVault':
+        await _renameVault(node);
       case 'rename':
         await _rename(node);
       case 'delete':

@@ -34,7 +34,7 @@ use crate::{
     files::{FileNode, Principal},
 };
 
-pub use kernoid_vault::Entry;
+pub use kernoid_vault::{Entry, Level};
 
 const USING: [&str; 2] = [FILENODE, OPENPGP];
 /// The capability that names the relay of vaults on spaces.
@@ -148,7 +148,13 @@ impl Vaults {
         let space = space_id(node)?;
         let known = {
             let space = space.clone();
-            self.run(move |streams| streams.has_space(&space)).await?
+            // A device removed – its person came in again at another level – forgets the vault and comes in anew.
+            self.run(
+                move |streams| {
+                    if streams.has_space(&space)? { kernoid_vault::sync(streams, &space) } else { Ok(false) }
+                },
+            )
+            .await?
         };
         if !known {
             let relay = relay_url(client).ok_or_else(|| Error::E2e("this server keeps no vaults on spaces".into()))?;
@@ -163,8 +169,13 @@ impl Vaults {
                 .await?;
             return Ok(true);
         }
-        self.sync(node).await?;
         Ok(true)
+    }
+
+    /// Renames the vault itself.
+    pub async fn rename_vault(&self, node: &FileNode, name: &str) -> Result<()> {
+        let (space, name) = (space_id(node)?, name.to_owned());
+        self.run(move |streams| kernoid_vault::rename_vault(streams, &space, &name)).await
     }
 
     /// Reads what is new in a vault this device has.
@@ -253,21 +264,31 @@ impl Vaults {
         self.run(move |streams| kernoid_vault::members(streams, &space)).await
     }
 
-    /// After sharing a vault: makes each person shared with a member – a person of the space with a recovery code
-    /// sealed to their key. Groups and people without a key wait (**OPEN**: a group's members). Returns those who
-    /// wait.
+    /// After sharing a vault: brings its members in line with whom it is shared with and how far (RFC 0010, 5) – who
+    /// is new becomes a member with a recovery code sealed to their key, who is gone leaves, who has another level
+    /// comes in again with it. Groups and people without a key wait (**OPEN**: a group's members); a member already
+    /// there without a key now keeps their level. Returns those who wait. Needs `members` in the vault.
     pub async fn share(
         &self,
         client: &Client,
         e2e: &mut E2e,
         account: &str,
         node: &FileNode,
-        people: &[Principal],
+        people: &[(Principal, Level)],
     ) -> Result<Vec<Principal>> {
         let space = space_id(node)?;
+        let current = {
+            let space = space.clone();
+            self.run(move |streams| {
+                streams.sync(&space)?;
+                kernoid_vault::member_levels(streams, &space)
+            })
+            .await?
+        };
         let mut waiting = Vec::new();
-        let mut update = serde_json::Map::new();
-        for person in people {
+        let mut wanted = Vec::new();
+        let mut keys_of = std::collections::BTreeMap::new();
+        for (person, level) in people {
             let keys: Vec<PublicKey> = match (person.kind.as_str(), &person.email) {
                 ("individual", Some(email)) => {
                     e2e.lookup(client, std::slice::from_ref(email)).await?.into_values().flatten().collect()
@@ -275,15 +296,25 @@ impl Vaults {
                 _ => Vec::new(),
             };
             if keys.is_empty() {
-                waiting.push(person.clone());
+                match current.iter().find(|(a, _)| *a == person.id) {
+                    Some((_, now)) => wanted.push((person.id.clone(), *now)),
+                    None => waiting.push(person.clone()),
+                }
                 continue;
             }
-            let (space, id) = (space.clone(), person.id.clone());
-            let Some(code) = self.run(move |streams| kernoid_vault::add_member(streams, &space, &id)).await? else {
-                continue;
-            };
+            wanted.push((person.id.clone(), *level));
+            keys_of.insert(person.id.clone(), keys);
+        }
+        let own = client.primary(FILENODE)?;
+        let done = self.run(move |streams| kernoid_vault::set_members(streams, &space, &own, &wanted)).await?;
+        let mut update = serde_json::Map::new();
+        for (member, code) in &done.codes {
+            let Some(keys) = keys_of.get(member) else { continue };
             let recipients: Vec<&PublicKey> = keys.iter().collect();
-            update.insert(format!("members/{}", person.id), Value::String(seal_code(&code, &recipients)?));
+            update.insert(format!("members/{member}"), Value::String(seal_code(code, &recipients)?));
+        }
+        for member in &done.removed {
+            update.insert(format!("members/{member}"), Value::Null);
         }
         if !update.is_empty() {
             let change = json!({ "update": { node.id.as_str(): update } });
@@ -344,7 +375,9 @@ impl Vaults {
         let own = client.primary(FILENODE)?;
         let others: Vec<&str> = members.iter().map(String::as_str).filter(|m| *m != own).collect();
         if !others.is_empty() {
-            let people = crate::files::principals(client, &others).await?;
+            // The OpenPGP vault knew no levels: whoever had its key may edit.
+            let people: Vec<(Principal, Level)> =
+                crate::files::principals(client, &others).await?.into_iter().map(|p| (p, Level::Edit)).collect();
             self.share(client, e2e, account, &new, &people).await?;
         }
         Ok(id)

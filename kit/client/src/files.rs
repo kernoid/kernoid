@@ -39,7 +39,7 @@ pub struct Rights {
     pub may_share: bool,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FileNode {
     #[serde(rename = "@type", default)]

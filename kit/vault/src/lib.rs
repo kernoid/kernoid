@@ -76,6 +76,9 @@ pub struct Entry {
     pub size: u64,
     pub media_type: Option<String>,
     pub modified: Option<String>,
+    /// Which version a file's content is: the identity of its newest original's first part – another one tells a new
+    /// version (a file sync compares it); empty for a directory.
+    pub version: String,
 }
 
 /// A stream's id from its text.
@@ -122,12 +125,21 @@ pub fn list(streams: &Streams, space: &SpaceId, directory: Option<StreamId>) -> 
     }
     let mut entries = Vec::new();
     for (stream, name, directory, trashed) in seen {
-        let mut entry =
-            Entry { id: stream.to_string(), name, directory, trashed, size: 0, media_type: None, modified: None };
+        let mut entry = Entry {
+            id: stream.to_string(),
+            name,
+            directory,
+            trashed,
+            size: 0,
+            media_type: None,
+            modified: None,
+            version: String::new(),
+        };
         if !directory && let Some(version) = latest_version(streams, space, &stream)? {
             entry.size = version.1;
             entry.media_type = version.2;
             entry.modified = version.3;
+            entry.version = version.0.first().map(ToString::to_string).unwrap_or_default();
         }
         entries.push(entry);
     }
@@ -347,15 +359,119 @@ pub fn members(streams: &Streams, space: &SpaceId) -> Result<Vec<String>> {
     Ok(streams.roster(space)?.persons().filter_map(|p| p.name.clone()).collect())
 }
 
-/// Makes an account a member: a person named by its id, who may add members, and its recovery code – for the caller
-/// to hand to the account (sealed to its key). Nothing happens for a member already there (`None`).
-pub fn add_member(streams: &mut Streams, space: &SpaceId, account: &str) -> Result<Option<RecoveryCode>> {
+/// How far a member may go – as the file store's grant says: read, edit, or edit and share.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Level {
+    /// Reading only: the relay takes nothing written.
+    Read,
+    /// Writing (`write`).
+    Edit,
+    /// Writing, adding and removing members, purging (`write`, `members`, `purge`).
+    Full,
+}
+
+impl Level {
+    /// The level of the file store's rights: sharing is full, changing content is edit, else read.
+    pub fn of(may_share: bool, may_change: bool) -> Self {
+        if may_share {
+            Level::Full
+        } else if may_change {
+            Level::Edit
+        } else {
+            Level::Read
+        }
+    }
+
+    fn permissions(self) -> &'static [Permission] {
+        match self {
+            Level::Read => &[],
+            Level::Edit => &[Permission::Write],
+            Level::Full => &[Permission::Write, Permission::Members, Permission::Purge],
+        }
+    }
+
+    /// The level permissions amount to.
+    fn from_permissions(may: impl Fn(Permission) -> bool) -> Self {
+        if may(Permission::Members) {
+            Level::Full
+        } else if may(Permission::Write) {
+            Level::Edit
+        } else {
+            Level::Read
+        }
+    }
+}
+
+/// The accounts that are members of the vault with their levels (as their recovery devices carry them).
+pub fn member_levels(streams: &Streams, space: &SpaceId) -> Result<Vec<(String, Level)>> {
+    let roster = streams.roster(space)?;
+    let mut out = Vec::new();
+    for person in roster.persons() {
+        let Some(name) = &person.name else { continue };
+        let level = roster
+            .devices_of(&person.id)
+            .map(|d| Level::from_permissions(|p| d.may(p)))
+            .max_by_key(|l| *l as u8)
+            .unwrap_or(Level::Read);
+        out.push((name.clone(), level));
+    }
+    Ok(out)
+}
+
+/// Makes an account a member at `level`: a person named by its id, and its recovery code – for the caller to hand to
+/// the account (sealed to its key). Nothing happens for a member already there (`None`).
+pub fn add_member(streams: &mut Streams, space: &SpaceId, account: &str, level: Level) -> Result<Option<RecoveryCode>> {
     streams.sync(space)?;
     if members(streams, space)?.iter().any(|m| m == account) {
         return Ok(None);
     }
-    let (_, code) = streams.add_person(space, Some(account), &[Permission::Members])?;
+    let (_, code) = streams.add_person(space, Some(account), level.permissions())?;
     Ok(Some(code))
+}
+
+/// What [`set_members`] did: the accounts that need a (new) recovery code, and those that left.
+#[derive(Debug, Default)]
+pub struct Membership {
+    pub codes: Vec<(String, RecoveryCode)>,
+    pub removed: Vec<String>,
+}
+
+/// Brings the vault's members in line with whom it is shared with: `wanted` – accounts with their levels –; `own`, the
+/// caller's account, stays as it is. Who is no longer wanted leaves; who is new comes in; who has another level leaves
+/// and comes in again with it (a person's permissions are fixed in the roster) – and so gets a new code, with which
+/// their devices come in again ([`Streams::forget`]). Needs `members`.
+pub fn set_members(
+    streams: &mut Streams,
+    space: &SpaceId,
+    own: &str,
+    wanted: &[(String, Level)],
+) -> Result<Membership> {
+    streams.sync(space)?;
+    let current = member_levels(streams, space)?;
+    let mut done = Membership::default();
+    for (account, level) in &current {
+        if account == own {
+            continue;
+        }
+        match wanted.iter().find(|(a, _)| a == account) {
+            None => {
+                remove_member(streams, space, account)?;
+                done.removed.push(account.clone());
+            }
+            Some((_, wanted_level)) if wanted_level != level => remove_member(streams, space, account)?,
+            Some(_) => {}
+        }
+    }
+    for (account, level) in wanted {
+        if account == own {
+            continue;
+        }
+        if let Some(code) = add_member(streams, space, account, *level)? {
+            done.codes.push((account.clone(), code));
+        }
+    }
+    Ok(done)
 }
 
 /// Ends an account's membership: its person leaves – what is written from now on is out of its reach.
@@ -368,6 +484,19 @@ pub fn remove_member(streams: &mut Streams, space: &SpaceId, account: &str) -> R
         streams.remove_person(space, &person)?;
     }
     Ok(())
+}
+
+/// Reads what is new; a device removed from the vault – its person left, maybe to come in again at another level –
+/// forgets it and says so (`false`), for the caller to come in again with the account's code.
+pub fn sync(streams: &mut Streams, space: &SpaceId) -> Result<bool> {
+    match streams.sync(space) {
+        Ok(_) => Ok(true),
+        Err(error) if Streams::is_removed(&error) => {
+            streams.forget(space)?;
+            Ok(false)
+        }
+        Err(error) => Err(error),
+    }
 }
 
 /// The device setting under which this device's name in its vaults is kept.

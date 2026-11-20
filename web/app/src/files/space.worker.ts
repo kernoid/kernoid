@@ -70,7 +70,7 @@ const CHANGES = new Set([
   "setTrashed",
   "moveTo",
   "remove",
-  "addMember",
+  "setMembers",
   "removeMember",
 ]);
 

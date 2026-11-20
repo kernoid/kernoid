@@ -27,7 +27,7 @@ use serde_json::{Value, json};
 mod spaces;
 mod vault;
 
-pub use spaces::{Entry, SPACE_VAULTS, Vaults, relay_url};
+pub use spaces::{Entry, Level, SPACE_VAULTS, Vaults, relay_url};
 
 use crate::{
     Client, Error, MAIL, Result, SUBMISSION,

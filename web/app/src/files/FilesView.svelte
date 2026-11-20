@@ -223,6 +223,15 @@
   }
 
   function renameNode(node: FileNode): void {
+    if (node["kernoid:space"]) {
+      const name = window.prompt(t("Rename the vault"), label(node));
+      if (!name?.trim()) return;
+      void run(async () => {
+        await spaces.renameVault(jmap, account, node, name.trim());
+        spaceNames = { ...spaceNames, [node.id]: name.trim() };
+      });
+      return;
+    }
     const name = window.prompt(t("New name"), node.name);
     if (!name?.trim() || name.trim() === node.name) return;
     if (inVault(node)) void run(() => renameIn(jmap, account, node, name.trim()));
@@ -424,7 +433,7 @@
                     <Copy size={17} />
                   </button>
                 {/if}
-                {#if rights.mayRename && !node.locked && !node["kernoid:space"]}
+                {#if rights.mayRename && !node.locked && (!node["kernoid:space"] || e2e.unlocked)}
                   <button type="button" class="quiet icon small" disabled={busy} aria-label={t("Rename")} data-tip={t("Rename")} onclick={() => renameNode(node)}><Pencil size={17} /></button>
                 {/if}
                 {#if rights.mayDelete}
