@@ -68,8 +68,8 @@ space is its program's – under another scheme it is not there.
 - **Administration:** a tenant's spaces (identity, program, founder, size, last write) and removing one – REST
   (`/v1/relay/spaces`), GraphQL (`relaySpaces`, `removeRelaySpace`), CLI (`kernoid relay`).
 
-aktujo's own relay in SQLite, for a person who runs one on their computer, stays aktujo's program (aktujo RFC 0004);
-kernoid's is the one for servers.
+kernoid's relay is the only one – for a person on their own computer as for a provider: aktujo's own relay in SQLite
+is gone (aktujo RFC 0012, 2026-11-20), a relay for aktujo is a kernoid with `relay.domains = ["aktujo"]`.
 
 ## 5. Files and vaults
 
