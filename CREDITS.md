@@ -45,6 +45,12 @@ that source would be marked as derived and be `AGPL-3.0-only`.
   messages until 2026-11-20. kernoid's own XML signatures and encryption (`crates/kernoid-oidc/src/saml/`) replaced
   it; they were written from the W3C Recommendations and SAML 2.0, without reading bergshamra's source – nothing of it
   was taken over.
+- **Written from the specifications instead of taken as libraries** (2026-11-20; nothing of the former libraries'
+  source was read): the ACME client (RFC 8555, in place of instant-acme), certificates and certificate requests
+  (RFC 5280, RFC 2986, on x509-cert and aws-lc-rs, in place of rcgen), the OTLP trace exporter (OpenTelemetry Protocol,
+  in place of opentelemetry and tracing-opentelemetry), the Prometheus text format (in place of
+  metrics-exporter-prometheus, on the `metrics` facade), the QR encoder (ISO/IEC 18004, in place of qrcode), the
+  embedding of the web builds (in place of rust-embed) and reading a password without echo (in place of rpassword).
 - **IBM Plex** (SIL OFL 1.1) is the typeface of the brand, the documentation and the web app.
 - **[falkoss/starterpack](https://github.com/falkoss/starterpack)** gave the repository its shape (REUSE, DCO,
   documentation).

@@ -96,20 +96,21 @@ impl SpKey {
     /// A new RSA key (2048 bits) with a certificate for `entity_id`, valid for ten years – the certificate only
     /// carries the key; providers trust it because it is in kernoid's metadata, not because of who signed it.
     pub fn generate(entity_id: &str) -> Result<Self, SamlError> {
-        let failed = |e: rcgen::Error| SamlError(format!("cannot make kernoid's SAML key: {e}"));
-        let key =
-            rcgen::KeyPair::generate_rsa_for(&rcgen::PKCS_RSA_SHA256, rcgen::RsaKeySize::_2048).map_err(failed)?;
-        let mut params = rcgen::CertificateParams::new(Vec::<String>::new()).map_err(failed)?;
-        let name: String = entity_id.chars().take(64).collect();
-        params.distinguished_name.push(rcgen::DnType::CommonName, name);
-        let today = jiff::tz::Offset::UTC.to_datetime(Timestamp::now()).date();
-        let year = i32::from(today.year());
-        let month = u8::try_from(today.month()).unwrap_or(1);
-        let day = u8::try_from(today.day().min(28)).unwrap_or(1);
-        params.not_before = rcgen::date_time_ymd(year, month, day);
-        params.not_after = rcgen::date_time_ymd(year + 10, month, day);
+        use kernoid_identity::certificate::{Algorithm, KeyPair, Params};
+        let failed = |e: kernoid_identity::certificate::CertificateError| {
+            SamlError(format!("cannot make kernoid's SAML key: {e}"))
+        };
+        let key = KeyPair::generate(Algorithm::Rsa2048).map_err(failed)?;
+        let now = Timestamp::now();
+        let params = Params {
+            common_name: Some(entity_id.chars().take(64).collect()),
+            dns_names: Vec::new(),
+            ca: false,
+            not_before: now - jiff::SignedDuration::from_hours(24),
+            not_after: now + jiff::SignedDuration::from_hours(24 * 3653),
+        };
         let certificate = params.self_signed(&key).map_err(failed)?;
-        Ok(Self { private: zeroize::Zeroizing::new(key.serialize_der()), certificate: certificate.der().to_vec() })
+        Ok(Self { private: zeroize::Zeroizing::new(key.pkcs8_der().to_vec()), certificate: certificate.der().to_vec() })
     }
 
     /// Signs the octets of a redirect-binding message with RSA-SHA256.

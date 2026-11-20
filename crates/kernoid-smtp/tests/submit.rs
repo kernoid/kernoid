@@ -21,20 +21,18 @@ fn provider() -> Arc<rustls::crypto::CryptoProvider> {
 
 /// A CA, the relay's certificate for `localhost`, and the client's configuration trusting the CA.
 fn certificates() -> (Arc<ServerConfig>, Arc<ClientConfig>) {
-    let ca_key = rcgen::KeyPair::generate().unwrap();
-    let mut ca = rcgen::CertificateParams::new(Vec::<String>::new()).unwrap();
-    ca.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
-    let ca_cert = ca.self_signed(&ca_key).unwrap();
-    let issuer = rcgen::Issuer::new(ca, ca_key);
-    let key = rcgen::KeyPair::generate().unwrap();
-    let cert = rcgen::CertificateParams::new(vec!["localhost".to_owned()]).unwrap().signed_by(&key, &issuer).unwrap();
+    use kernoid_identity::certificate::{Algorithm, KeyPair, Params};
+    let ca_key = KeyPair::generate(Algorithm::EcdsaP256).unwrap();
+    let ca_cert = Params::ca("kernoid test CA").self_signed(&ca_key).unwrap();
+    let key = KeyPair::generate(Algorithm::EcdsaP256).unwrap();
+    let cert = Params::new(["localhost"]).signed_by(&key, &ca_cert, &ca_key).unwrap();
     let server = ServerConfig::builder_with_provider(provider())
         .with_safe_default_protocol_versions()
         .unwrap()
         .with_no_client_auth()
         .with_single_cert(
             vec![CertificateDer::from(cert.der().to_vec())],
-            PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(key.serialize_der())),
+            PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(key.pkcs8_der().to_vec())),
         )
         .unwrap();
     let mut roots = RootCertStore::empty();

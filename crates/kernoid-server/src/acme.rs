@@ -22,14 +22,13 @@ use axum::{
     response::{IntoResponse, Redirect, Response},
     routing::get,
 };
-use instant_acme::{
-    Account, AccountCredentials, AuthorizationStatus, ChallengeType, Identifier, NewAccount, NewOrder, OrderStatus,
-    RetryPolicy,
-};
 use jiff::Timestamp;
 use jiff_sqlx::ToSqlx;
 use kernoid_config::Acme;
-use kernoid_identity::Identity;
+use kernoid_identity::{
+    Identity,
+    certificate::{Algorithm, KeyPair, signing_request},
+};
 use kernoid_store::{MainKeys, PgPool, lock::Lock};
 use rustls::{
     server::{ClientHello, ResolvesServerCert},
@@ -37,8 +36,14 @@ use rustls::{
 };
 use rustls_pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject};
 
+pub mod client;
+
+use client::{Account, Ca, Credentials, Status};
+
 /// Most certificates ordered in one round.
 pub const ORDERS_PER_ROUND: i64 = 10;
+/// How long kernoid waits for the CA to check the challenges, and to issue.
+const PATIENCE: Duration = Duration::from_secs(120);
 /// How long a challenge answer is kept.
 const CHALLENGE_LIFETIME: Duration = Duration::from_secs(60 * 60);
 
@@ -47,7 +52,7 @@ pub enum AcmeError {
     #[error("{0}")]
     Config(String),
     #[error("ACME: {0}")]
-    Acme(#[from] instant_acme::Error),
+    Acme(#[from] client::Error),
     #[error(transparent)]
     Store(#[from] sqlx::Error),
     #[error("{0}")]
@@ -235,9 +240,6 @@ pub struct Orderer {
 
 impl Orderer {
     pub fn new(pool: PgPool, main: MainKeys, config: Acme) -> Result<Self, AcmeError> {
-        // instant-acme's HTTP client takes the process's rustls provider; make it the one kernoid uses everywhere
-        // (AWS-LC). Elsewhere kernoid names its provider explicitly, so this changes nothing there.
-        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
         if !config.terms_agreed {
             return Err(AcmeError::Config(
                 "http.acme.terms_agreed must be true: read the CA's terms of service first".into(),
@@ -247,11 +249,7 @@ impl Orderer {
     }
 
     /// The installation's account at the CA – made at first use.
-    async fn account(&self) -> Result<Account, AcmeError> {
-        let builder = || match &self.config.ca_root {
-            Some(root) => Account::builder_with_root(root),
-            None => Account::builder(),
-        };
+    async fn account<'a>(&self, ca: &'a Ca) -> Result<Account<'a>, AcmeError> {
         let context = account_context(&self.config.directory);
         let stored = sqlx::query_scalar!(
             "SELECT credentials_sealed FROM acme_accounts WHERE directory = $1",
@@ -262,13 +260,11 @@ impl Orderer {
         if let Some(sealed) = stored {
             let (json, _) =
                 self.main.open_secret(&context, &sealed).map_err(|e| AcmeError::Certificate(e.to_string()))?;
-            let credentials: AccountCredentials =
+            let credentials: Credentials =
                 serde_json::from_slice(&json).map_err(|e| AcmeError::Certificate(e.to_string()))?;
-            return Ok(builder()?.from_credentials(credentials).await?);
+            return Ok(Account::find(ca, &credentials).await?);
         }
-        let contact: Vec<&str> = self.config.contact.iter().map(String::as_str).collect();
-        let new = NewAccount { contact: &contact, terms_of_service_agreed: true, only_return_existing: false };
-        let (account, credentials) = builder()?.create(&new, self.config.directory.clone(), None).await?;
+        let (account, credentials) = Account::create(ca, &self.config.contact).await?;
         let json = zeroize::Zeroizing::new(
             serde_json::to_vec(&credentials).map_err(|e| AcmeError::Certificate(e.to_string()))?,
         );
@@ -312,7 +308,8 @@ impl Orderer {
         if due.is_empty() {
             return Ok(done);
         }
-        let account = self.account().await?;
+        let ca = Ca::connect(&self.config.directory, self.config.ca_root.as_deref()).await?;
+        let account = self.account(&ca).await?;
         for domain in due {
             match self.order(&account, &domain).await {
                 Ok(()) => {
@@ -346,42 +343,50 @@ impl Orderer {
     }
 
     /// One order: the HTTP-01 challenge answered through PostgreSQL, a new key, the chain stored.
-    async fn order(&self, account: &Account, domain: &str) -> Result<(), AcmeError> {
-        let identifiers = [Identifier::Dns(domain.to_owned())];
-        let mut order = account.new_order(&NewOrder::new(&identifiers)).await?;
-        let mut authorizations = order.authorizations();
-        while let Some(authorization) = authorizations.next().await {
-            let mut authorization = authorization?;
+    async fn order(&self, account: &Account<'_>, domain: &str) -> Result<(), AcmeError> {
+        let names = [domain.to_owned()];
+        let order = account.new_order(&names).await?;
+        for url in &order.authorizations {
+            let authorization = account.authorization(url).await?;
             match authorization.status {
-                AuthorizationStatus::Pending => {}
-                AuthorizationStatus::Valid => continue,
+                Status::Pending => {}
+                Status::Valid => continue,
                 status => return Err(AcmeError::Certificate(format!("the authorization is {status:?}"))),
             }
-            let mut challenge = authorization
-                .challenge(ChallengeType::Http01)
+            let challenge = authorization
+                .challenges
+                .iter()
+                .find(|challenge| challenge.kind == "http-01")
                 .ok_or_else(|| AcmeError::Certificate("the CA offers no HTTP-01 challenge".into()))?;
-            let answer = challenge.key_authorization();
+            let answer = account.key_authorization(&challenge.token);
             sqlx::query!(
                 "INSERT INTO acme_challenges (token, key_authorization, expires_at)
                  VALUES ($1, $2, now() + make_interval(secs => $3))
                  ON CONFLICT (token) DO UPDATE SET key_authorization = excluded.key_authorization",
                 challenge.token,
-                answer.as_str(),
+                answer,
                 CHALLENGE_LIFETIME.as_secs() as f64,
             )
             .execute(&self.pool)
             .await?;
-            challenge.set_ready().await?;
+            account.ready(challenge).await?;
         }
-        let patience = RetryPolicy::new().timeout(Duration::from_secs(120));
-        let status = order.poll_ready(&patience).await?;
-        if status != OrderStatus::Ready {
-            return Err(AcmeError::Certificate(format!("the order is {status:?}")));
+        let order = account.settle(&order.url, PATIENCE).await?;
+        if order.status != Status::Ready {
+            let why = order.error.map(|problem| format!(": {problem}")).unwrap_or_default();
+            return Err(AcmeError::Certificate(format!("the order is {:?}{why}", order.status)));
         }
-        let key_pem = zeroize::Zeroizing::new(order.finalize().await?);
-        let chain = order.poll_certificate(&patience).await?;
+        let key = KeyPair::generate(Algorithm::EcdsaP256).map_err(|e| AcmeError::Certificate(e.to_string()))?;
+        let csr = signing_request(&names, &key).map_err(|e| AcmeError::Certificate(e.to_string()))?;
+        account.finalize(&order, &csr).await?;
+        let order = account.settle(&order.url, PATIENCE).await?;
+        let Some(url) = order.certificate.filter(|_| order.status == Status::Valid) else {
+            let why = order.error.map(|problem| format!(": {problem}")).unwrap_or_default();
+            return Err(AcmeError::Certificate(format!("the order is {:?}{why}", order.status)));
+        };
+        let chain = account.certificate(&url).await?;
         let key =
-            PrivateKeyDer::from_pem_slice(key_pem.as_bytes()).map_err(|e| AcmeError::Certificate(e.to_string()))?;
+            PrivateKeyDer::try_from(key.pkcs8_der().to_vec()).map_err(|e| AcmeError::Certificate(e.to_string()))?;
         certified_key(&chain, key.secret_der())?;
         let sealed = self
             .main

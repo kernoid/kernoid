@@ -227,17 +227,12 @@ mod tests {
 
     /// A CA and a certificate for `names` it signed: (leaf, CA).
     fn chain(names: &[&str]) -> (CertificateDer<'static>, CertificateDer<'static>) {
-        let mut ca_params = rcgen::CertificateParams::new(Vec::<String>::new()).unwrap();
-        ca_params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
-        let ca = rcgen::CertifiedIssuer::self_signed(ca_params, rcgen::KeyPair::generate().unwrap()).unwrap();
-        let names: Vec<String> = names.iter().map(|name| (*name).to_owned()).collect();
-        let leaf = rcgen::CertifiedIssuer::signed_by(
-            rcgen::CertificateParams::new(names).unwrap(),
-            rcgen::KeyPair::generate().unwrap(),
-            &ca,
-        )
-        .unwrap();
-        (leaf.as_ref().der().clone(), ca.as_ref().der().clone())
+        use kernoid_identity::certificate::{Algorithm, KeyPair, Params};
+        let ca_key = KeyPair::generate(Algorithm::EcdsaP256).unwrap();
+        let ca = Params::ca("kernoid test CA").self_signed(&ca_key).unwrap();
+        let key = KeyPair::generate(Algorithm::EcdsaP256).unwrap();
+        let leaf = Params::new(names.iter().copied()).signed_by(&key, &ca, &ca_key).unwrap();
+        (CertificateDer::from(leaf.der().to_vec()), CertificateDer::from(ca.der().to_vec()))
     }
 
     fn record(end_entity: bool, spki: bool, matching: TlsaMatching, certificate: &[u8]) -> TlsaEntry {

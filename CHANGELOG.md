@@ -81,6 +81,16 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   `XDG_DOWNLOAD_DIR`. **Upgrading:** on macOS the key is read where it was. On Linux and Windows the entry is looked up
   under the names written down in `docs/tui.md`; if an earlier version kept it under other ones, the app makes a new key
   and the vaults' store on that computer is fetched again from the relay.
+- **Fewer libraries in the server**, each replaced by kernoid's own code written from the specification: the ACME
+  client (RFC 8555; accounts stored before keep working), certificates and certificate requests
+  (`kernoid_identity::certificate`, in place of rcgen; stored SAML keys stay readable), OTLP traces (in place of
+  opentelemetry and tracing-opentelemetry; `log.otlp_endpoint` as before, `OTEL_RESOURCE_ATTRIBUTES` is read), the
+  Prometheus metrics (in place of metrics-exporter-prometheus), the TOTP QR codes (in place of qrcode; the same
+  symbols), the embedded web builds (a build script in place of rust-embed) and the password prompt (in place of
+  rpassword). **Upgrading:** `kernoid_http_request_duration_seconds` is a histogram now (buckets from 5 ms to 10 s),
+  no longer a summary with quantiles – queries on `quantile` become `histogram_quantile(…, rate(…_bucket[…]))`.
+  Debug builds embed the web builds too (they no longer read `web/*/dist` at run time; `http.login_ui` and
+  `http.web_app` still serve a directory).
 - JSCalendar as JMAP shows it: participants' ids come from their addresses (the same in a series and its overrides),
   overrides are written back as whole components, a zone only a calendar defines is shown in UTC.
 ### Changed

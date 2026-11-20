@@ -10,17 +10,17 @@ use kernoid_config::{Http, Tls};
 use rustls::{ClientConfig, ClientConnection, NamedGroup, ServerConnection, pki_types::ServerName};
 
 fn server() -> (Arc<rustls::ServerConfig>, rustls::RootCertStore, tempfile::TempDir) {
-    let key = rcgen::KeyPair::generate().unwrap();
-    let certificate =
-        rcgen::CertificateParams::new(vec!["mail.example.org".to_owned()]).unwrap().self_signed(&key).unwrap();
+    use kernoid_identity::certificate::{Algorithm, KeyPair, Params};
+    let key = KeyPair::generate(Algorithm::EcdsaP256).unwrap();
+    let certificate = Params::new(["mail.example.org"]).self_signed(&key).unwrap();
     let directory = tempfile::tempdir().unwrap();
     let tls = Tls { certificate: directory.path().join("cert.pem"), key: directory.path().join("key.pem") };
     std::fs::write(&tls.certificate, certificate.pem()).unwrap();
-    std::fs::write(&tls.key, key.serialize_pem()).unwrap();
+    std::fs::write(&tls.key, key.pkcs8_pem().as_bytes()).unwrap();
     let http = Http { tls: Some(tls), ..Http::default() };
     let config = kernoid_server::mail_tls(&http, None, None).unwrap().unwrap();
     let mut roots = rustls::RootCertStore::empty();
-    roots.add(certificate.der().clone()).unwrap();
+    roots.add(rustls::pki_types::CertificateDer::from(certificate.der().to_vec())).unwrap();
     (config, roots, directory)
 }
 

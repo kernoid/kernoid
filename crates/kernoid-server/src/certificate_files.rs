@@ -83,10 +83,11 @@ mod tests {
     use super::*;
 
     fn write_pair(directory: &Path, name: &str) -> String {
-        let key = rcgen::KeyPair::generate().unwrap();
-        let certificate = rcgen::CertificateParams::new(vec![name.to_owned()]).unwrap().self_signed(&key).unwrap();
+        use kernoid_identity::certificate::{Algorithm, KeyPair, Params};
+        let key = KeyPair::generate(Algorithm::EcdsaP256).unwrap();
+        let certificate = Params::new([name]).self_signed(&key).unwrap();
         std::fs::write(directory.join("cert.pem"), certificate.pem()).unwrap();
-        std::fs::write(directory.join("key.pem"), key.serialize_pem()).unwrap();
+        std::fs::write(directory.join("key.pem"), key.pkcs8_pem().as_bytes()).unwrap();
         certificate.pem()
     }
 

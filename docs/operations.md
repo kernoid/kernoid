@@ -138,9 +138,25 @@ terms_agreed = true          # you have read the CA's terms of service; kernoid 
 - **Everything lives in PostgreSQL** – the account key and the certificates' keys sealed with the main key – so any
   `api` process answers any challenge and serves any certificate; they pick up new ones within a minute.
 - `kernoid acme status` lists every instance domain with the end of its certificate, or why ordering one failed.
+- The **account** at the CA is made at the first order (ECDSA P-256, requests signed with ES256) and kept for the
+  directory; before each round kernoid asks the CA for it again (`onlyReturnExisting`). Certificates get a new P-256
+  key each time. When the CA refuses an order, `kernoid acme status` shows its error document, e.g.
+  `rateLimited: … (again after 3600 s)`.
 - Testing: point `directory` at a test CA such as [Pebble](https://github.com/letsencrypt/pebble), with its root in
   `ca_root`. Let's Encrypt's staging directory (`https://acme-staging-v02.api.letsencrypt.org/directory`) has higher
-  limits than production.
+  limits than production. The ignored test `orders_from_a_test_ca` (`crates/kernoid-server/tests/acme.rs`) orders
+  from Pebble:
+
+  ```sh
+  docker network create pebble
+  docker run -d --name challtestsrv --network pebble ghcr.io/letsencrypt/pebble-challtestsrv:2.8.0 \
+    -defaultIPv4 192.168.65.254 -defaultIPv6 ""          # the address under which containers reach this host
+  docker run -d --name pebble --network pebble -p 14000:14000 -e PEBBLE_VA_NOSLEEP=1 \
+    ghcr.io/letsencrypt/pebble:2.8.0 -config test/config/pebble-config.json -dnsserver challtestsrv:8053
+  docker cp pebble:/test/certs/pebble.minica.pem /tmp/pebble.minica.pem
+  KERNOID_TEST_ACME_DIRECTORY=https://localhost:14000/dir KERNOID_TEST_ACME_ROOT=/tmp/pebble.minica.pem \
+    KERNOID_TEST_ACME_HTTP=0.0.0.0:5002 cargo test -p kernoid-server --test acme -- --ignored
+  ```
 
 ## Database and migrations
 
@@ -173,8 +189,15 @@ before it, with mail and files in it (`scripts/upgrade-check.sh`, CI job `upgrad
 |---|---|
 | `GET /healthz` | the process runs – nothing about its dependencies, so an orchestrator does not restart every process when the database is away |
 | `GET /readyz` | PostgreSQL and object storage answer; `503` otherwise |
-| `/metrics` | Prometheus metrics on `http.metrics_listen` – keep that address internal |
+| `/metrics` | Prometheus metrics on `http.metrics_listen` – keep that address internal: `kernoid_http_requests_total` (counter) and `kernoid_http_request_duration_seconds` (histogram with Prometheus's default buckets, 5 ms to 10 s), by `method`, `route` (the pattern, not the path) and `status` |
 | logs | text or JSON on stdout (`log.format`); traces to OpenTelemetry with `log.otlp_endpoint` |
+
+**Traces** go to the collector over OTLP/HTTP with binary protobuf, in batches (at most 512 spans, at least every five
+seconds); `log.otlp_endpoint` is the full URL of the traces, `…/v1/traces`. The resource is `service.name = kernoid`
+plus whatever `OTEL_RESOURCE_ATTRIBUTES` names (`key=value,…`). A span carries its fields as attributes and the
+events logged in it as span events; an `ERROR` event marks it failed. Trace ids start with each request – kernoid
+neither reads nor sends `traceparent`. When the collector is away, spans are dropped (at most 2048 wait), and
+kernoid says so once on stderr; at exit it waits up to five seconds for the last batch.
 
 ## Keys
 

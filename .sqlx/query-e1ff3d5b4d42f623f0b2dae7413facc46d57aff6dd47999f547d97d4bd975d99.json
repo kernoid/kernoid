@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM tls_certificates",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "e1ff3d5b4d42f623f0b2dae7413facc46d57aff6dd47999f547d97d4bd975d99"
+}

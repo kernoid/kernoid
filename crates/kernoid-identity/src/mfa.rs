@@ -7,6 +7,8 @@
 //! - **Checking:** HMAC-SHA1, six digits, 30-second steps, one step of tolerance either way. Every code works once –
 //!   the last accepted step is kept. Failed codes are limited like failed passwords (5 per 15 minutes per account).
 
+pub mod qr;
+
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use aws_lc_rs::hmac;
@@ -38,16 +40,9 @@ pub struct TotpSetup {
 /// needs no QR library and builds no markup.
 fn qr_code(uri: &str) -> Result<String> {
     use base64::{Engine, engine::general_purpose::STANDARD};
-    let code = qrcode::QrCode::with_error_correction_level(uri.as_bytes(), qrcode::EcLevel::M)
-        .map_err(|error| IdentityError::Refused(format!("no QR code: {error}")))?;
-    let svg = code
-        .render::<qrcode::render::svg::Color<'_>>()
-        .min_dimensions(200, 200)
-        .dark_color(qrcode::render::svg::Color("#000000"))
-        .light_color(qrcode::render::svg::Color("#ffffff"))
-        .quiet_zone(true)
-        .build();
-    Ok(format!("data:image/svg+xml;base64,{}", STANDARD.encode(svg)))
+    let code = qr::QrCode::encode(uri.as_bytes())
+        .map_err(|_| IdentityError::Refused("no QR code: the URI is too long".into()))?;
+    Ok(format!("data:image/svg+xml;base64,{}", STANDARD.encode(code.svg(200))))
 }
 
 fn context(account: Uuid) -> Vec<u8> {

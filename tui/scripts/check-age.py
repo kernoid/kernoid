@@ -26,6 +26,7 @@ SECURITY_FIXES = {
     ("rustls-webpki", "0.103.16"): "RUSTSEC-2026-0382",
     ("webpki-roots", "1.0.10"): "RUSTSEC-2026-0381",
     ("webpki-root-certs", "1.0.10"): "RUSTSEC-2026-0383",
+    ("rustix", "1.1.6"): "RUSTSEC-2026-0486",
     ("jiff", "1.0.1"): "RUSTSEC-2026-0543",
     ("jiff-core", "1.0.1"): "RUSTSEC-2026-0543",
     ("jiff-static", "1.0.1"): "RUSTSEC-2026-0543",
