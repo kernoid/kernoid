@@ -35,6 +35,9 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 - The SDK shows HTML mail as text with its own converter (`kernoid_client::html`, MIT, written from the HTML
   standard) in place of html2text: blocks become lines, lists keep their markers, quotations are quoted with `>`,
   links read `text <url>`, scripts, styles and the head are dropped, and the work stays linear on hostile input.
+- The kit has one HTTP stack: `kernoid-spaces` (feature `native`, and with it `kernoid-vault`) reaches relays through
+  reqwest, the SDK's client, on a small runtime of the transport's own, in place of ureq – rustls on AWS-LC with
+  post-quantum key exchange preferred, the system's trust store, as before. The `Transport` trait is unchanged.
 - JSCalendar as JMAP shows it: participants' ids come from their addresses (the same in a series and its overrides),
   overrides are written back as whole components, a zone only a calendar defines is shown in UTC.
 ### Changed

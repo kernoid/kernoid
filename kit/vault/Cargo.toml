@@ -22,7 +22,7 @@ crate-type = ["cdylib", "rlib"]
 
 [features]
 default = ["native"]
-# Relays reached through ureq (kernoid-spaces' `native`).
+# Relays reached through reqwest (kernoid-spaces' `native`).
 native = ["kernoid-spaces/native"]
 # The web app's bindings (`wasm-bindgen`), built with `scripts/build-wasm.sh`: the relay reached through a function of
 # the page's worker, the store kept as bytes by the page.
