@@ -68,7 +68,7 @@ There is **one implementation**: [rpgp](https://github.com/rpgp/rpgp) (crate `pg
 feature `pqc`. The server uses it for what it does (5.2, 4.4); the apps use it through `kit/e2e` (MIT, section 10),
 compiled to WebAssembly for the web app and natively for the terminal app – the same code everywhere. rpgp's ML-KEM
 and ML-DSA come from RustCrypto's `ml-kem` 0.2 and `ml-dsa` 0.0.4, which have had no external audit: part of the
-audit before 1.0 (whitepaper), like bergshamra. `ml-dsa` 0.0.4 signs in variable time (RUSTSEC-2025-0144, fixed in
+audit before 1.0 (whitepaper), like kernoid's own SAML signatures. `ml-dsa` 0.0.4 signs in variable time (RUSTSEC-2025-0144, fixed in
 0.1, which rpgp 0.21 does not take yet); signing happens only in the user's own client, so nobody can time it on
 request – **OPEN** until rpgp moves on. Secret keys of other kinds (RSA, NIST curves, X448) are not taken: their
 arithmetic in rpgp's dependencies is not constant-time (RUSTSEC-2023-0071, RUSTSEC-2026-0387).

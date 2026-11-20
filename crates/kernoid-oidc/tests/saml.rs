@@ -1,18 +1,22 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Verifying SAML Responses: genuine ones pass; tampered, foreign, wrapped and expired ones do not. Responses are
-//! signed with a key and certificate made for the test (rcgen) by bergshamra.
+//! signed with a key and certificate made for the test (rcgen) by kernoid's own XML signatures (`saml::xmldsig`).
 
 use std::collections::HashMap;
 
 use base64::{Engine, engine::general_purpose::STANDARD};
-use bergshamra::{DsigContext, KeysManager};
 use jiff::{SignedDuration, Timestamp};
 use kernoid_events::EventStore;
 use kernoid_identity::{DomainName, Identity, session::ClientMeta};
 use kernoid_oidc::{
     Oidc,
     federation::{IdpSettings, SamlSettings},
-    saml::{Expected, verify_response},
+    saml::{
+        Expected,
+        keys::{PublicKey, SigningKey},
+        verify_response,
+        xmldsig::{self, Style},
+    },
 };
 use kernoid_store::{MainKeys, crypto::Key};
 use sqlx::PgPool;
@@ -24,29 +28,31 @@ const REQUEST: &str = "_req-1";
 
 struct Signer {
     certificate: Vec<u8>,
-    context: DsigContext,
-    key: bergshamra::Key,
+    key: SigningKey,
 }
 
 fn new_signer() -> Signer {
     let made = rcgen::generate_simple_self_signed(vec!["idp.example".to_owned()]).unwrap();
-    let key = bergshamra::keys::loader::load_pem_auto(made.signing_key.serialize_pem().as_bytes(), None).unwrap();
-    let mut keys = KeysManager::new();
-    keys.add_key(key.clone());
-    Signer { certificate: made.cert.der().to_vec(), context: DsigContext::new(keys), key }
+    let key = SigningKey::from_pkcs8(&made.signing_key.serialize_der()).unwrap();
+    Signer { certificate: made.cert.der().to_vec(), key }
 }
 
-/// A Response whose Assertion carries an enveloped signature template; `name_id` and `audience` can be varied.
+/// A Response with an Assertion `_a1` to sign; `name_id` and `audience` can be varied.
 fn template(name_id: &str, audience: &str, in_response_to: &str, ends: jiff::Timestamp) -> String {
     let now = Timestamp::now().strftime("%Y-%m-%dT%H:%M:%SZ");
     let ends = ends.strftime("%Y-%m-%dT%H:%M:%SZ");
     format!(
-        r##"<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_r1" Version="2.0" IssueInstant="{now}" Destination="{ACS}" InResponseTo="{in_response_to}"><saml:Issuer>{IDP}</saml:Issuer><samlp:Status><samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/></samlp:Status><saml:Assertion ID="_a1" Version="2.0" IssueInstant="{now}"><saml:Issuer>{IDP}</saml:Issuer><ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#"><ds:SignedInfo><ds:CanonicalizationMethod Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/><ds:SignatureMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha256"/><ds:Reference URI="#_a1"><ds:Transforms><ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/><ds:Transform Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/></ds:Transforms><ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/><ds:DigestValue></ds:DigestValue></ds:Reference></ds:SignedInfo><ds:SignatureValue></ds:SignatureValue></ds:Signature><saml:Subject><saml:NameID Format="urn:oasis:names:tc:SAML:2.0:nameid-format:persistent">{name_id}</saml:NameID><saml:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer"><saml:SubjectConfirmationData InResponseTo="{in_response_to}" NotOnOrAfter="{ends}" Recipient="{ACS}"/></saml:SubjectConfirmation></saml:Subject><saml:Conditions NotBefore="{now}" NotOnOrAfter="{ends}"><saml:AudienceRestriction><saml:Audience>{audience}</saml:Audience></saml:AudienceRestriction></saml:Conditions><saml:AuthnStatement AuthnInstant="{now}" SessionIndex="_s1"><saml:AuthnContext><saml:AuthnContextClassRef>http://schemas.microsoft.com/claims/multipleauthn</saml:AuthnContextClassRef></saml:AuthnContext></saml:AuthnStatement><saml:AttributeStatement><saml:Attribute Name="http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"><saml:AttributeValue>bob@firma.de</saml:AttributeValue></saml:Attribute><saml:Attribute Name="displayName"><saml:AttributeValue>Bob</saml:AttributeValue></saml:Attribute></saml:AttributeStatement></saml:Assertion></samlp:Response>"##
+        r##"<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_r1" Version="2.0" IssueInstant="{now}" Destination="{ACS}" InResponseTo="{in_response_to}"><saml:Issuer>{IDP}</saml:Issuer><samlp:Status><samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/></samlp:Status><saml:Assertion ID="_a1" Version="2.0" IssueInstant="{now}"><saml:Issuer>{IDP}</saml:Issuer><saml:Subject><saml:NameID Format="urn:oasis:names:tc:SAML:2.0:nameid-format:persistent">{name_id}</saml:NameID><saml:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer"><saml:SubjectConfirmationData InResponseTo="{in_response_to}" NotOnOrAfter="{ends}" Recipient="{ACS}"/></saml:SubjectConfirmation></saml:Subject><saml:Conditions NotBefore="{now}" NotOnOrAfter="{ends}"><saml:AudienceRestriction><saml:Audience>{audience}</saml:Audience></saml:AudienceRestriction></saml:Conditions><saml:AuthnStatement AuthnInstant="{now}" SessionIndex="_s1"><saml:AuthnContext><saml:AuthnContextClassRef>http://schemas.microsoft.com/claims/multipleauthn</saml:AuthnContextClassRef></saml:AuthnContext></saml:AuthnStatement><saml:AttributeStatement><saml:Attribute Name="http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"><saml:AttributeValue>bob@firma.de</saml:AttributeValue></saml:Attribute><saml:Attribute Name="displayName"><saml:AttributeValue>Bob</saml:AttributeValue></saml:Attribute></saml:AttributeStatement></saml:Assertion></samlp:Response>"##
     )
 }
 
+/// Signs the Assertion `_a1` of a Response.
 fn sign(signer: &Signer, xml: &str) -> String {
-    bergshamra::sign(&signer.context, xml).unwrap()
+    sign_id(signer, xml, "_a1")
+}
+
+fn sign_id(signer: &Signer, xml: &str, id: &str) -> String {
+    xmldsig::sign(xml, id, &signer.key, &Style::default()).unwrap()
 }
 
 fn encode(xml: &str) -> String {
@@ -209,7 +215,7 @@ async fn a_saml_login_creates_the_account_once(pool: PgPool) {
 }
 
 /// Encrypts the Assertion of a signed Response for kernoid's certificate, the way providers do: AES-256-GCM for the
-/// Assertion, RSA-OAEP for the key – done here with aws-lc-rs, independently of bergshamra.
+/// Assertion, RSA-OAEP for the key – done here with aws-lc-rs, independently of kernoid's decryption.
 fn encrypt_assertion(response: &str, certificate: &[u8]) -> String {
     use aws_lc_rs::{aead, rand, rsa};
     let start = response.find("<saml:Assertion").unwrap();
@@ -222,7 +228,7 @@ fn encrypt_assertion(response: &str, certificate: &[u8]) -> String {
     let mut data = response.as_bytes()[start..end].to_vec();
     sealing.seal_in_place_append_tag(aead::Nonce::assume_unique_for_key(iv), aead::Aad::empty(), &mut data).unwrap();
     let cipher = [iv.as_slice(), &data].concat();
-    let spki = bergshamra::keys::loader::load_x509_cert_der(certificate).unwrap().data.to_spki_der().unwrap();
+    let spki = PublicKey::from_certificate(certificate).unwrap().spki().to_vec();
     let public = rsa::OaepPublicEncryptingKey::new(rsa::PublicEncryptingKey::from_der(&spki).unwrap()).unwrap();
     let mut wrapped = vec![0; public.ciphertext_size()];
     let wrapped = public.encrypt(&rsa::OAEP_SHA1_MGF1SHA1, &key, &mut wrapped, None).unwrap().to_vec();
@@ -249,10 +255,9 @@ fn redirect_query(parameter: &str, xml: &str, relay_state: &str, signer: Option<
     let deflated = miniz_oxide::deflate::compress_to_vec(xml.as_bytes(), 6);
     let mut query = format!("{parameter}={}&RelayState={}", encode(&STANDARD.encode(deflated)), encode(relay_state));
     if let Some(signer) = signer {
-        let algorithm = "http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha256";
+        let algorithm = signer.key.algorithm().uri();
         query.push_str(&format!("&SigAlg={}", encode(algorithm)));
-        let key = signer.key.software_key().unwrap().unwrap();
-        let signature = bergshamra::crypto::sign::from_uri(algorithm).unwrap().sign(&key, query.as_bytes()).unwrap();
+        let signature = signer.key.sign(query.as_bytes()).unwrap();
         query.push_str(&format!("&Signature={}", encode(&STANDARD.encode(signature))));
     }
     query
@@ -393,10 +398,10 @@ async fn single_logout_both_ways(pool: PgPool) {
     assert_eq!(message.relay_state.as_deref(), Some("r"));
 }
 
-/// A LogoutRequest of the provider with an enveloped signature template, for the HTTP-POST binding.
+/// A LogoutRequest of the provider, to sign for the HTTP-POST binding.
 fn logout_request_template(id: &str) -> String {
     format!(
-        r##"<samlp:LogoutRequest xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="{id}" Version="2.0" IssueInstant="2026-01-01T00:00:00Z" Destination="https://login.firma.de/idp/saml/slo"><saml:Issuer>{IDP}</saml:Issuer><ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#"><ds:SignedInfo><ds:CanonicalizationMethod Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/><ds:SignatureMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha256"/><ds:Reference URI="#{id}"><ds:Transforms><ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/><ds:Transform Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/></ds:Transforms><ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/><ds:DigestValue></ds:DigestValue></ds:Reference></ds:SignedInfo><ds:SignatureValue></ds:SignatureValue></ds:Signature><saml:NameID>ext-bob</saml:NameID><samlp:SessionIndex>_s1</samlp:SessionIndex></samlp:LogoutRequest>"##
+        r##"<samlp:LogoutRequest xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="{id}" Version="2.0" IssueInstant="2026-01-01T00:00:00Z" Destination="https://login.firma.de/idp/saml/slo"><saml:Issuer>{IDP}</saml:Issuer><saml:NameID>ext-bob</saml:NameID><samlp:SessionIndex>_s1</samlp:SessionIndex></samlp:LogoutRequest>"##
     )
 }
 
@@ -409,8 +414,8 @@ async fn single_logout_in_the_post_binding(pool: PgPool) {
     let unsigned = logout_request_template("_post-lo");
     assert!(s.oidc.saml_slo_message(&s.instance, post(&unsigned)).await.is_err());
     let other = new_signer();
-    assert!(s.oidc.saml_slo_message(&s.instance, post(&sign(&other, &unsigned))).await.is_err());
-    let signed = sign(&s.signer, &unsigned);
+    assert!(s.oidc.saml_slo_message(&s.instance, post(&sign_id(&other, &unsigned, "_post-lo"))).await.is_err());
+    let signed = sign_id(&s.signer, &unsigned, "_post-lo");
     let tampered = signed.replace(">ext-bob<", ">ext-alice<");
     assert!(s.oidc.saml_slo_message(&s.instance, post(&tampered)).await.is_err());
     s.identity.session(s.instance.id, &session.token).await.unwrap();
