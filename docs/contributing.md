@@ -64,8 +64,8 @@ enters (`scripts/check-sel.sh`), and the dependencies: known vulnerabilities, li
 - **Every API operation in REST and GraphQL**, with the same permission checks – they live in one place
   (`kernoid_identity::admin`, the admin functions of `kernoid-oidc`).
 - **Exact versions everywhere** – container images, GitHub Actions (by commit), Rust, crates.
-- **Licences:** own code AGPL-3.0-or-later; code taken over from Stalwart or derived from Zitadel stays
-  AGPL-3.0-only and says where it comes from.
+- **Licences:** own code AGPL-3.0-or-later (the kit MIT); code taken over from elsewhere, or derived from Zitadel,
+  keeps its licence (AGPL-3.0-only) and says where it comes from – today there is none.
 - **Facts need a source;** what is not settled is marked `OPEN`.
 
 ## Design changes

@@ -142,9 +142,9 @@ agreement. Security problems: [SECURITY.md](SECURITY.md).
 - The RFCs in `rfcs/` and the documentation's text in `docs/`: [CC BY 4.0](LICENSES/CC-BY-4.0.txt); the API
   descriptions (`docs/_data/openapi.json`, `docs/api/`) [MIT](LICENSES/MIT.txt), so that clients may be generated from
   them.
-- Code taken over from Stalwart and Zitadel keeps its licence, the GNU AGPL-3.0-only, and is marked in every file –
-  see the whitepaper, chapter "Building on Stalwart and Zitadel", and [CREDITS.md](CREDITS.md) for what came from
-  where.
+- kernoid started from code of Stalwart and from Zitadel's concepts; since 2026-11-20 everything is kernoid's own,
+  written from the RFCs – [CREDITS.md](CREDITS.md) tells the history. Code taken over again would keep its licence
+  (the GNU AGPL-3.0-only) and be marked in every file.
 - Copies of the logo and icons from [kernoid/brand](https://github.com/kernoid/brand) (`docs/assets/`, the web apps'
   `public/`): [CC BY-ND 4.0](LICENSES/CC-BY-ND-4.0.txt) – passed on unchanged.
 - The name and logo "kernoid" are not covered by these licences; they belong to falkOSS – Falcon Lake Open Source

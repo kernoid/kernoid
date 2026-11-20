@@ -200,10 +200,11 @@ the code.
   `kernoid migrate`, not on start.
 - **Secrets** are `kernoid_config::Secret` and never logged.
 - **Licences:** every file carries `SPDX-License-Identifier` (own code `AGPL-3.0-or-later`); files without a header are
-  covered in `REUSE.toml`. Code taken over from Stalwart keeps `AGPL-3.0-only` plus its copyright and a note of its
-  origin; its header `AGPL-3.0-only OR LicenseRef-SEL` becomes `AGPL-3.0-only`. Nothing under `LicenseRef-SEL` – no
-  file, no `SPDX-SnippetBegin` section – ever enters; `scripts/check-sel.sh` enforces it. Code written while reading
-  Zitadel's source is marked as derived from Zitadel and is `AGPL-3.0-only`.
+  covered in `REUSE.toml`. Since 2026-11-20 no code of Stalwart is left (`CREDITS.md`). Should code be taken over
+  again, it keeps its licence (Stalwart's and Zitadel's: `AGPL-3.0-only`, with the licence text back in `LICENSES/`),
+  its copyright and a note of its origin; nothing under `LicenseRef-SEL` – no file, no `SPDX-SnippetBegin` section –
+  ever enters (`scripts/check-sel.sh`). Code written while reading Zitadel's source is marked as derived from Zitadel
+  and is `AGPL-3.0-only`.
 - **Names:** a crate is `kernoid-` and one word (`kernoid-spaces`, not `kernoid-space-store`); what does not fit one
   word is a module of a crate.
 - **Commits** are signed off (`git commit -s`, DCO).
