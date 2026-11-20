@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! The kernoid program: one binary, one container image; the configuration decides which roles a process takes on.
 
+mod no_echo;
+
 use std::{io::IsTerminal, path::PathBuf, sync::Arc};
 
 use anyhow::Context;
@@ -2136,11 +2138,21 @@ fn address(value: &str) -> anyhow::Result<Address> {
 
 /// One line from standard input; on a terminal, asked for without echo.
 fn read_password(prompt: &str) -> anyhow::Result<String> {
+    let mut line = zeroize::Zeroizing::new(String::new());
     if std::io::stdin().is_terminal() {
-        return Ok(rpassword::prompt_password(prompt)?);
+        use std::io::Write as _;
+        let mut stderr = std::io::stderr();
+        write!(stderr, "{prompt}")?;
+        stderr.flush()?;
+        let read = {
+            let _quiet = no_echo::NoEcho::on_stdin()?;
+            std::io::stdin().read_line(&mut line)
+        };
+        writeln!(stderr)?;
+        read?;
+    } else {
+        std::io::stdin().read_line(&mut line)?;
     }
-    let mut line = String::new();
-    std::io::stdin().read_line(&mut line)?;
     Ok(line.trim_end_matches(['\r', '\n']).to_owned())
 }
 

@@ -38,10 +38,14 @@ metrics-exporter-prometheus = { version = "0.18.3", default-features = false }
 opentelemetry = { version = "0.33.1", default-features = false, features = ["trace"] }
 opentelemetry-otlp = { version = "0.33.1", default-features = false, features = ["http-proto", "reqwest-blocking-client", "trace"] }
 opentelemetry_sdk = { version = "0.33.1", default-features = false, features = ["trace"] }
-rpassword = "7.5.4"
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "signal"] }
 tokio-util = "0.7.20"
 tracing = "0.1.44"
 tracing-opentelemetry = { version = "0.34.0", default-features = false }
+zeroize = "1.9.1"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json"] }
 uuid = "1.28.0"
+
+[target.'cfg(unix)'.dependencies]
+# The terminal's echo off while a secret is typed (`no_echo`).
+rustix = { version = "1.1.5", default-features = false, features = ["std", "termios"] }
