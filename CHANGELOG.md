@@ -38,6 +38,13 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 - The kit has one HTTP stack: `kernoid-spaces` (feature `native`, and with it `kernoid-vault`) reaches relays through
   reqwest, the SDK's client, on a small runtime of the transport's own, in place of ureq – rustls on AWS-LC with
   post-quantum key exchange preferred, the system's trust store, as before. The `Transport` trait is unchanged.
+- The terminal app talks to the system in its own code (`tui/src/system.rs`) in place of keyring, rpassword and
+  directories: the vaults' key stays in the Keychain (macOS, through security-framework), the Credential Manager
+  (Windows) or the Secret Service, which it now reaches through kernoid's own D-Bus client (`tui/src/dbus.rs`, no
+  libdbus, no zbus); the password prompt turns the terminal's echo off itself; the download directory follows
+  `XDG_DOWNLOAD_DIR`. **Upgrading:** on macOS the key is read where it was. On Linux and Windows the entry is looked up
+  under the names written down in `docs/tui.md`; if an earlier version kept it under other ones, the app makes a new key
+  and the vaults' store on that computer is fetched again from the relay.
 - JSCalendar as JMAP shows it: participants' ids come from their addresses (the same in a series and its overrides),
   overrides are written back as whole components, a zone only a calendar defines is shown in UTC.
 ### Changed

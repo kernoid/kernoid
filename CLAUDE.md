@@ -103,7 +103,7 @@ editor – messages (`src/compose.rs`), events and contacts (`src/forms.rs`) –
 (`kernoid_tui::RUNTIME`): the screen waits for each with `block`, the push stream and transfers run on it in the
 background. A **Cargo workspace of its own** like the kit – its dependencies are its own (and stay out of the server's
 image: `.dockerignore`), and CI checks it in a job of its own. The password comes from `KERNOID_PASSWORD`, a command or
-a prompt, never an argument. Dependencies are exact (`=` in `Cargo.toml`) and at least two weeks old when taken –
+a prompt (read without echo, `src/system.rs`), never an argument. What it asks of the system is its own code in `src/system.rs` – the key store (the Keychain through security-framework, the Credential Manager through windows-sys, elsewhere the Secret Service through kernoid's own synchronous D-Bus client `src/dbus.rs`, tested alone against GNOME Keyring with `rustc --test src/dbus.rs`), the terminal's echo (termios through libc, the console's mode), the download directory; the app's only unsafe code is there (`unsafe_code` is denied elsewhere). Dependencies are exact (`=` in `Cargo.toml`) and at least two weeks old when taken –
 `tui/scripts/check-age.py [--fix]` lists the younger ones in `Cargo.lock` (and sets them back); run it after
 changing the lock file.
 

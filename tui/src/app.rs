@@ -3224,23 +3224,24 @@ fn link_expiry(text: &str) -> Result<Option<String>, String> {
 /// The key the vaults on spaces of `account` are sealed with on this computer: 32 random bytes, made the first time
 /// and kept in the system's key store (Keychain, Credential Manager, Secret Service) – never in a file.
 fn vaults_key(account: &str) -> Result<[u8; 32], String> {
-    let entry = keyring::Entry::new("kernoid-tui vaults", account).map_err(|e| e.to_string())?;
-    match entry.get_password() {
-        Ok(kept) => {
+    const SERVICE: &str = "kernoid-tui vaults";
+    match kernoid_tui::system::get_secret(SERVICE, account)? {
+        Some(kept) => {
             let bytes: Vec<u8> = (0..kept.len())
                 .step_by(2)
-                .filter_map(|i| kept.get(i..i + 2).and_then(|pair| u8::from_str_radix(pair, 16).ok()))
+                .filter_map(|i| {
+                    kept.get(i..i + 2).and_then(|pair| u8::from_str_radix(std::str::from_utf8(pair).ok()?, 16).ok())
+                })
                 .collect();
             bytes.try_into().map_err(|_| "a key that is not one in the key store".to_owned())
         }
-        Err(keyring::Error::NoEntry) => {
+        None => {
             let mut key = [0u8; 32];
             getrandom::fill(&mut key).map_err(|e| e.to_string())?;
             let hex: String = key.iter().map(|b| format!("{b:02x}")).collect();
-            entry.set_password(&hex).map_err(|e| e.to_string())?;
+            kernoid_tui::system::set_secret(SERVICE, account, hex.as_bytes())?;
             Ok(key)
         }
-        Err(error) => Err(error.to_string()),
     }
 }
 
