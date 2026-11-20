@@ -5,7 +5,7 @@
 //!
 //! `/webdav/` lists the stores the caller reaches – its own, those shared with it, the tenant's drives – each named
 //! as JMAP names it; below a store the path is the names of the nodes. Rights and locks are `kernoid-files`'s; the
-//! XML is Stalwart's dav-proto (`kernoid_dav::proto`). A caller logs in like a JMAP program.
+//! XML and WebDAV's headers are `kernoid_dav::proto`'s, as for CalDAV. A caller logs in like a JMAP program.
 
 use axum::{
     Router,
@@ -16,14 +16,10 @@ use axum::{
 };
 use kernoid_dav::proto::{
     Depth, RequestHeaders, Timeout,
-    parser::{DavParser, tokenizer::Tokenizer},
     schema::{
-        property::{
-            ActiveLock, DavProperty, DavValue, LockDiscovery, LockScope, ResourceType, Rfc1123DateTime, SupportedLock,
-            WebDavProperty,
-        },
-        request::{DavPropertyValue, LockInfo, PropFind, PropertyUpdate},
-        response::{List, MultiStatus, PropResponse, PropStat, Response as DavResponse},
+        property::{ActiveLock, DavProperty, DavPropertyValue, DavValue, LockScope, ResourceType, WebDavProperty},
+        request::{LockInfo, PropFind, PropertyUpdate},
+        response::{MultiStatus, PropResponse, PropStat, Response as DavResponse},
     },
 };
 use kernoid_files::{
@@ -206,19 +202,6 @@ fn names(view: &View, node: &NodeInfo) -> Vec<String> {
     out
 }
 
-/// The lock tokens the client names in its `If` header.
-fn tokens(headers: &RequestHeaders<'_>) -> Vec<String> {
-    headers
-        .if_
-        .iter()
-        .flat_map(|condition| condition.list.iter())
-        .filter_map(|condition| match condition {
-            kernoid_dav::proto::Condition::StateToken { is_not: false, token } => Some((*token).to_owned()),
-            _ => None,
-        })
-        .collect()
-}
-
 /// A media type for a file by its name, where the client sent none of use.
 pub(crate) fn guess(name: &str) -> &'static str {
     let extension = name.rsplit_once('.').map(|(_, extension)| extension.to_ascii_lowercase()).unwrap_or_default();
@@ -262,7 +245,7 @@ fn etag(node: &NodeInfo) -> String {
     }
 }
 
-/// A response of `kernoid_dav::proto`, which writes the XML declaration itself.
+/// A response of `kernoid_dav::proto`, which writes the XML declaration itself – once.
 fn xml(status: StatusCode, body: impl std::fmt::Display) -> Response {
     let mut response = (status, body.to_string()).into_response();
     response.headers_mut().insert(header::CONTENT_TYPE, HeaderValue::from_static("application/xml; charset=utf-8"));
@@ -311,12 +294,7 @@ async fn dispatch(
     raw_headers: &HeaderMap,
     body: Body,
 ) -> Result<Response> {
-    let mut headers = RequestHeaders::new(path);
-    for (name, value) in raw_headers {
-        if let Ok(value) = value.to_str() {
-            headers.parse(name.as_str(), value);
-        }
-    }
+    let headers = RequestHeaders::from_map(raw_headers);
     let path_names = segments(path).ok_or(StatusCode::NOT_FOUND)?;
     let (files, stores) = stores(state, caller).await?;
     // The top: the stores, read-only.
@@ -339,7 +317,8 @@ async fn dispatch(
     };
     let store = stores.iter().find(|store| &store.name == store_name).ok_or(StatusCode::NOT_FOUND)?;
     let view = files.view(store.access.clone()).await?;
-    let tokens = tokens(&headers);
+    // The lock tokens the client names in its `If` header.
+    let tokens = headers.state_tokens();
     match method.as_str() {
         "PROPFIND" => {
             let propfind = parse_propfind(xml_body(body).await?)?;
@@ -453,7 +432,7 @@ async fn dispatch(
         }
         "COPY" | "MOVE" => {
             let node = resolve(&view, below)?.ok_or(StatusCode::FORBIDDEN)?;
-            let target = headers.destination.and_then(destination).ok_or(StatusCode::BAD_REQUEST)?;
+            let target = headers.destination.as_deref().and_then(destination).ok_or(StatusCode::BAD_REQUEST)?;
             let (target_store, target_below) = target.split_first().ok_or(StatusCode::FORBIDDEN)?;
             // Into another store the caller reaches – a drive, a store shared with them – as well as within this one.
             let other = stores.iter().find(|other| &other.name == target_store).ok_or(StatusCode::BAD_GATEWAY)?;
@@ -495,15 +474,14 @@ async fn dispatch(
             if let Some(node) = node {
                 files.check_unlocked(&store.access, node.id, false, &tokens).await?;
             }
-            let update = PropertyUpdate::parse(&mut Tokenizer::new(&xml_body(body).await?))
-                .map_err(|_| StatusCode::BAD_REQUEST)?;
+            let update = PropertyUpdate::parse(&xml_body(body).await?).map_err(|_| StatusCode::BAD_REQUEST)?;
             // Properties programs set (Windows' times and attributes) are accepted and not kept (OPEN).
             let changed: Vec<DavPropertyValue> = update
                 .set
                 .into_iter()
                 .map(|value| value.property)
                 .chain(update.remove)
-                .map(|property| DavPropertyValue::new(property, DavValue::Null))
+                .map(DavPropertyValue::empty)
                 .collect();
             let item = node.map_or(Item::Store(store), |node| Item::Node(store, node));
             let response = DavResponse::new_propstat(item.href(&view), vec![PropStat::new_list(changed)]);
@@ -523,7 +501,7 @@ async fn dispatch(
                 let node = view.node(lock.node).ok_or(StatusCode::NOT_FOUND)?;
                 return Ok(lock_response(StatusCode::OK, &lock, &href(&store.name, &names(&view, node), false), None));
             }
-            let info = LockInfo::parse(&mut Tokenizer::new(&body)).map_err(|_| StatusCode::BAD_REQUEST)?;
+            let info = LockInfo::parse(&body).map_err(|_| StatusCode::BAD_REQUEST)?;
             // A lock on a name that is free makes an empty file there (RFC 4918, 9.10.4).
             let (node, status) = match resolve(&view, below) {
                 Ok(Some(node)) => (node.clone(), StatusCode::OK),
@@ -539,7 +517,7 @@ async fn dispatch(
                 }
             };
             let request = LockRequest {
-                exclusive: info.lock_scope == LockScope::Exclusive,
+                exclusive: info.scope == LockScope::Exclusive,
                 deep: headers.depth != Depth::Zero && node.node_type == NodeType::Directory,
                 owner_info: None,
                 timeout,
@@ -549,7 +527,7 @@ async fn dispatch(
             Ok(lock_response(status, &lock, &href(&store.name, &names(&view, &node), collection), info.owner))
         }
         "UNLOCK" => {
-            let token = headers.lock_token.ok_or(StatusCode::BAD_REQUEST)?;
+            let token = headers.lock_token.as_deref().ok_or(StatusCode::BAD_REQUEST)?;
             files.unlock(&store.access, token).await?;
             Ok(StatusCode::NO_CONTENT.into_response())
         }
@@ -558,32 +536,30 @@ async fn dispatch(
 }
 
 /// A LOCK's answer: the lock in `lockdiscovery`, and its token in `Lock-Token`.
-fn lock_response(
-    status: StatusCode,
-    lock: &kernoid_files::Lock,
-    root: &str,
-    owner: Option<kernoid_dav::proto::types::dead_property::DeadProperty>,
-) -> Response {
-    let seconds = (lock.expires_at - jiff::Timestamp::now()).as_secs().max(1) as u64;
-    let scope = if lock.exclusive { LockScope::Exclusive } else { LockScope::Shared };
-    let active = ActiveLock::new(root, scope)
-        .with_depth(if lock.deep { Depth::Infinity } else { Depth::Zero })
-        .with_timeout(seconds)
-        .with_owner_opt(owner)
-        .with_lock_token(lock.token.clone());
-    let discovery = DavPropertyValue::new(WebDavProperty::LockDiscovery, DavValue::ActiveLocks(List(vec![active])));
-    let mut response = xml(status, PropResponse::new(vec![discovery]));
+fn lock_response(status: StatusCode, lock: &kernoid_files::Lock, root: &str, owner: Option<String>) -> Response {
+    let active = active_lock(lock, root, owner, Some(lock.token.clone()));
+    let discovery = DavPropertyValue::new(WebDavProperty::LockDiscovery, DavValue::Locks(vec![active]));
+    let mut response = xml(status, PropResponse(vec![discovery]));
     if let Ok(value) = HeaderValue::from_str(&format!("<{}>", lock.token)) {
         response.headers_mut().insert("lock-token", value);
     }
     response
 }
 
-fn parse_propfind(body: Vec<u8>) -> Result<PropFind> {
-    if body.is_empty() {
-        return Ok(PropFind::AllProp(Vec::new()));
+/// A lock as `lockdiscovery` shows it; the token only to the one who took it.
+fn active_lock(lock: &kernoid_files::Lock, root: &str, owner: Option<String>, token: Option<String>) -> ActiveLock {
+    ActiveLock {
+        root: root.to_owned(),
+        scope: if lock.exclusive { LockScope::Exclusive } else { LockScope::Shared },
+        depth: if lock.deep { Depth::Infinity } else { Depth::Zero },
+        timeout: Some((lock.expires_at - jiff::Timestamp::now()).as_secs().max(1) as u64),
+        owner,
+        token,
     }
-    PropFind::parse(&mut Tokenizer::new(&body)).map_err(|_| StatusCode::BAD_REQUEST.into())
+}
+
+fn parse_propfind(body: Vec<u8>) -> Result<PropFind> {
+    PropFind::parse(&body).map_err(|_| StatusCode::BAD_REQUEST.into())
 }
 
 /// What a PROPFIND answers for.
@@ -627,11 +603,11 @@ async fn props(propfind: &PropFind, item: &Item<'_>, href: String, files: &Files
     let mut found = Vec::new();
     let mut missing = Vec::new();
     for property in wanted {
-        let value = if names_only { Some(DavValue::Null) } else { value(&property, item, files).await };
+        let value = if names_only { Some(DavValue::Empty) } else { value(&property, item, &href, files).await };
         match value {
             Some(value) => found.push(DavPropertyValue::new(property, value)),
             None if !matches!(propfind, PropFind::Prop(_)) => {}
-            None => missing.push(DavPropertyValue::new(property, DavValue::Null)),
+            None => missing.push(DavPropertyValue::empty(property)),
         }
     }
     let mut propstat = Vec::new();
@@ -644,7 +620,7 @@ async fn props(propfind: &PropFind, item: &Item<'_>, href: String, files: &Files
     DavResponse::new_propstat(href, propstat)
 }
 
-async fn value(property: &DavProperty, item: &Item<'_>, files: &Files) -> Option<DavValue> {
+async fn value(property: &DavProperty, item: &Item<'_>, href: &str, files: &Files) -> Option<DavValue> {
     let DavProperty::WebDav(property) = property else { return None };
     let node = match item {
         Item::Node(_, node) => Some(*node),
@@ -658,37 +634,25 @@ async fn value(property: &DavProperty, item: &Item<'_>, files: &Files) -> Option
             Item::Node(_, node) => node.name.clone(),
         })),
         WebDavProperty::ResourceType => {
-            Some(DavValue::ResourceTypes(List(if collection { vec![ResourceType::Collection] } else { Vec::new() })))
+            Some(DavValue::ResourceTypes(if collection { vec![ResourceType::Collection] } else { Vec::new() }))
         }
-        WebDavProperty::GetContentLength => node.and_then(|node| node.size).map(DavValue::Uint64),
+        WebDavProperty::GetContentLength => node.and_then(|node| node.size).map(DavValue::Number),
         WebDavProperty::GetContentType => node.and_then(|node| node.media_type.clone()).map(DavValue::String),
         WebDavProperty::GetETag => node.map(|node| DavValue::String(etag(node))),
-        WebDavProperty::GetLastModified => {
-            node.map(|node| DavValue::Rfc1123Date(Rfc1123DateTime::new(node.modified.as_second())))
-        }
-        WebDavProperty::CreationDate => node.map(|node| DavValue::Timestamp(node.created.as_second())),
-        WebDavProperty::SupportedLock => Some(SupportedLock::default().into()),
+        WebDavProperty::GetLastModified => node.map(|node| DavValue::HttpDate(node.modified.as_second())),
+        WebDavProperty::CreationDate => node.map(|node| DavValue::CreationDate(node.created.as_second())),
+        WebDavProperty::SupportedLock => Some(DavValue::SupportedLocks),
         WebDavProperty::LockDiscovery => {
-            let Item::Node(store, node) = item else { return Some(DavValue::ActiveLocks(List(Vec::new()))) };
+            let Item::Node(_, node) = item else { return Some(DavValue::Locks(Vec::new())) };
             let locks = files.locks(node.id).await.unwrap_or_default();
-            let active = locks
-                .into_iter()
-                .map(|lock| {
-                    let scope = if lock.exclusive { LockScope::Exclusive } else { LockScope::Shared };
-                    let seconds = (lock.expires_at - jiff::Timestamp::now()).as_secs().max(1) as u64;
-                    ActiveLock::new(href(&store.name, &[], true), scope)
-                        .with_depth(if lock.deep { Depth::Infinity } else { Depth::Zero })
-                        .with_timeout(seconds)
-                })
-                .collect();
-            Some(LockDiscovery(List(active)).into())
+            Some(DavValue::Locks(locks.iter().map(|lock| active_lock(lock, href, None, None)).collect()))
         }
         WebDavProperty::QuotaUsedBytes | WebDavProperty::QuotaAvailableBytes => {
             let Item::Store(store) = item else { return None };
             let (used, quota) = files.usage(store.owner).await.ok()?;
             match property {
-                WebDavProperty::QuotaUsedBytes => Some(DavValue::Uint64(used)),
-                _ => quota.map(|quota| DavValue::Uint64(quota.saturating_sub(used))),
+                WebDavProperty::QuotaUsedBytes => Some(DavValue::Number(used)),
+                _ => quota.map(|quota| DavValue::Number(quota.saturating_sub(used))),
             }
         }
         _ => None,

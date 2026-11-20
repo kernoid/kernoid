@@ -25,8 +25,8 @@ scheduling ([RFC 6638](https://www.rfc-editor.org/rfc/rfc6638)), CardDAV
   Apache-2.0 OR MIT; kernoid takes it over from there (v1.0.1, `crates/calcard`, with `crates/jmap-tools`) under
   `AGPL-3.0-only`. The MIT SDK keeps 0.3.14.
 - **The WebDAV, CalDAV and CardDAV protocol** – parsing requests and writing responses in XML, and headers – is
-  taken over from Stalwart (`crates/dav-proto`), as it is, like IMAP's (RFC 0002, 11.2). So is the logic of
-  **scheduling** (`crates/groupware/src/scheduling`: what an organizer or attendee sends when an event changes, and
+  kernoid's own, written from the RFCs (`kernoid_dav::proto`; until 0.5 it was Stalwart's `crates/dav-proto`). Taken
+  over from Stalwart is the logic of **scheduling** (`crates/groupware/src/scheduling`: what an organizer or attendee sends when an event changes, and
   how a received message changes an event), and the filters of CalDAV and CardDAV queries
   (`crates/dav/src/calendar/query.rs`, `card/query.rs`, `calendar/freebusy.rs`). Everything that stores is
   kernoid's: Stalwart's storage is its own key-value store.

@@ -3184,7 +3184,6 @@ name = "kernoid-dav"
 version = "0.5.1"
 dependencies = [
  "calcard",
- "hashify 0.2.9",
  "http",
  "jiff",
  "kernoid-events",
@@ -3192,7 +3191,6 @@ dependencies = [
  "kernoid-identity",
  "kernoid-mail",
  "kernoid-store",
- "mail-parser 1.0.0",
  "object_store",
  "quick-xml",
  "serde",

@@ -1,144 +1,63 @@
-/*
- * SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
- *
- * SPDX-License-Identifier: AGPL-3.0-only
- */
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//! The protocol of WebDAV (RFC 4918, with RFC 3744, 4331, 5397, 5689 and 6578), CalDAV (RFC 4791, 6638, 7809) and
+//! CardDAV (RFC 6352) as kernoid speaks it: request bodies read into typed requests, responses written as XML, and the
+//! headers WebDAV adds to HTTP. Both servers use it – calendars and contacts at `/dav/` (`crate::Dav`) and files at
+//! `/webdav/` (`kernoid-server`).
+//!
+//! - [`xml`] reads a body into a tree (namespaces resolved; DTDs refused; only the predefined entities and character
+//!   references; bounded in size, depth and number of elements) and writes responses with one XML declaration and
+//!   fixed prefixes declared on the root.
+//! - [`schema::property`] names the properties and their values, [`schema::request`] the requests (`PROPFIND`,
+//!   `PROPPATCH`, `MKCOL`/`MKCALENDAR`, `LOCK`, the reports), [`schema::response`] the responses (multi-status, error
+//!   bodies with their preconditions, the scheduling response).
+//! - [`headers`] reads `Depth`, `Timeout`, `If`, `Lock-Token`, `Destination` and `Overwrite`.
+//!
+//! What a server does with a request is not decided here.
 
-//! WebDAV, CalDAV and CardDAV requests and responses, taken over from Stalwart's `crates/dav-proto` (v0.16.27,
-//! RFC 0004 8.1): the XML tokenizer and parsers of request bodies and headers, the writers of multistatus and other
-//! responses. Changed for kernoid: Stalwart's internal types replaced (`types.rs`), the conversion of request headers
-//! for Stalwart's tracing and the archived (rkyv) dead properties left out.
-
-use calcard::vcard::VCardVersion;
-
-pub mod parser;
-pub mod requests;
-pub mod responses;
+pub mod headers;
 pub mod schema;
 pub mod types;
+pub mod xml;
 
-pub fn xml_pretty_print(xml_string: &str) -> String {
-    // Create a reader
-    let mut reader = quick_xml::Reader::from_str(xml_string);
-    let mut writer = quick_xml::Writer::new_with_indent(std::io::Cursor::new(Vec::new()), b' ', 2);
-    let mut buf = Vec::new();
-    loop {
-        match reader.read_event_into(&mut buf) {
-            Ok(quick_xml::events::Event::Eof) => break,
-            Ok(event) => {
-                writer.write_event(event).unwrap();
-            }
-            Err(e) => panic!("Error at position {}: {:?}", reader.buffer_position(), e),
+pub use headers::{Depth, IfCondition, IfList, RequestHeaders, Timeout};
+
+/// Why a request body could not be read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Error {
+    /// The body is larger than [`xml::MAX_BODY`].
+    TooLarge,
+    /// The body is not UTF-8.
+    NotUtf8,
+    /// A document type declaration: refused, as are entities other than XML's own.
+    Dtd,
+    /// An entity reference other than the five XML predefines, or a character reference to no character.
+    Entity,
+    /// Nested deeper or with more elements than allowed.
+    TooComplex,
+    /// Not well-formed XML.
+    Malformed(String),
+    /// Well-formed, but not the request the method expects (another root, a missing element, a bad value).
+    Invalid(&'static str),
+    /// A report kernoid does not know (RFC 3253, 3.6: `supported-report`).
+    UnsupportedReport,
+    /// A collation kernoid does not know (RFC 4791, 7.5.1; RFC 6352, 8.3.1: `supported-collation`).
+    UnsupportedCollation,
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::TooLarge => f.write_str("the body is too large"),
+            Self::NotUtf8 => f.write_str("the body is not UTF-8"),
+            Self::Dtd => f.write_str("document type declarations are refused"),
+            Self::Entity => f.write_str("unknown entity"),
+            Self::TooComplex => f.write_str("the document is nested too deep or has too many elements"),
+            Self::Malformed(reason) => write!(f, "not well-formed: {reason}"),
+            Self::Invalid(reason) => write!(f, "invalid request: {reason}"),
+            Self::UnsupportedReport => f.write_str("unsupported report"),
+            Self::UnsupportedCollation => f.write_str("unsupported collation"),
         }
-        buf.clear();
     }
-
-    let result = writer.into_inner().into_inner();
-    String::from_utf8(result).unwrap()
 }
 
-#[derive(Debug, Default, PartialEq, Eq)]
-pub struct RequestHeaders<'x> {
-    pub uri: &'x str,
-    pub depth: Depth,
-    pub timeout: Timeout,
-    pub content_type: Option<&'x str>,
-    pub destination: Option<&'x str>,
-    pub lock_token: Option<&'x str>,
-    pub vcard_version: Option<VCardVersion>,
-    pub no_schedule_reply: bool,
-    pub if_schedule_tag: Option<u32>,
-    pub overwrite_fail: bool,
-    pub no_timezones: bool,
-    pub ret: Return,
-    pub depth_no_root: bool,
-    pub if_: Vec<If<'x>>,
-    pub range: Option<ByteRange>,
-    pub if_range: Option<&'x str>,
-}
-
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum ByteRange {
-    Offset { start: u64, end: Option<u64> },
-    Suffix(u64),
-}
-
-pub struct ResourceState<T: AsRef<str>> {
-    pub resource: Option<T>,
-    pub etag: T,
-    pub state_token: T,
-}
-
-#[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
-pub enum Return {
-    Minimal,
-    Representation,
-    #[default]
-    Default,
-}
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct If<'x> {
-    pub resource: Option<&'x str>,
-    pub list: Vec<Condition<'x>>,
-}
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub enum Condition<'x> {
-    StateToken { is_not: bool, token: &'x str },
-    ETag { is_not: bool, tag: &'x str },
-    Exists { is_not: bool },
-}
-
-#[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
-#[cfg_attr(test, derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(test, serde(tag = "type", content = "data"))]
-pub enum Timeout {
-    Infinite,
-    Second(u64),
-    #[default]
-    None,
-}
-
-#[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
-#[cfg_attr(test, derive(serde::Serialize, serde::Deserialize))]
-pub enum Depth {
-    Zero,
-    One,
-    Infinity,
-    #[default]
-    None,
-}
-
-/*
-
-
-Implemented:
-
-RFC4918 - HTTP Extensions for Web Distributed Authoring and Versioning (WebDAV)
-RFC5689 - Extended MKCOL for Web Distributed Authoring and Versioning (WebDAV)
-RFC6578 - Collection Synchronization for Web Distributed Authoring and Versioning (WebDAV)
-RFC3744 - Web Distributed Authoring and Versioning (WebDAV) Access Control Protocol
-RFC4331 - Quota and Size Properties for Distributed Authoring and Versioning (DAV) Collections
-RFC5397 - WebDAV Current Principal Extension
-RFC8144 - Use of the Prefer Header Field in Web Distributed Authoring and Versioning (WebDAV)
-RFC4791 - Calendaring Extensions to WebDAV (CalDAV)
-RFC7809 - Calendaring Extensions to WebDAV (CalDAV) Time Zones by Reference
-RFC6638 - Scheduling Extensions to CalDAV
-RFC6352 - CardDAV vCard Extensions to Web Distributed Authoring and Versioning (WebDAV)
-RFC6764 - Locating Services for Calendaring Extensions to WebDAV (CalDAV) and vCard Extensions to WebDAV (CardDAV)
-
-Out of scope:
-
-RFC5842 - Binding Extensions to Web Distributed Authoring and Versioning (WebDAV)
-RFC4316 - Datatypes for Web Distributed Authoring and Versioning (WebDAV) Properties
-RFC4709 - Mounting Web Distributed Authoring and Versioning (WebDAV) Servers
-RFC3648 - Web Distributed Authoring and Versioning (WebDAV) Ordered Collections Protocol
-RFC4437 - Web Distributed Authoring and Versioning (WebDAV) Redirect Reference Resources
-RFC8607 - Calendaring Extensions to WebDAV (CalDAV) Managed Attachments
-RFC5995 - Using POST to Add Members to Web Distributed Authoring and Versioning (WebDAV) Collections
-RFC3253 - Versioning Extensions to WebDAV (Web Distributed Authoring and Versioning)
-RFC5323 - Web Distributed Authoring and Versioning (WebDAV) SEARCH
-
-
-*/
+impl std::error::Error for Error {}

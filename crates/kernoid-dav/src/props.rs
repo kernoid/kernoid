@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Properties of principals, homes, collections and objects for `PROPFIND` and reports (RFC 4918, 4791, 6352, 6638,
-//! 3744, 5397, 6578), read-only ACLs included. Which value each property has follows what Stalwart answers
-//! (`crates/dav/src/common/propfind.rs`, v0.16.27), so that the same clients work.
+//! 3744, 5397, 6578), read-only ACLs included, with the values the clients of RFC 0004, 8.1 (Apple's Calendar and
+//! Contacts, Thunderbird, DAVx⁵) read.
 
 use calcard::{
     Entry, Parser,
@@ -16,17 +16,17 @@ use crate::{
     node::{Collection, Node},
     path,
     proto::{
-        requests::NsDeadProperty,
         schema::{
-            Collation, Namespace,
+            Collation,
             property::{
-                CalDavProperty, CardDavProperty, Comp, DavProperty, DavValue, PrincipalProperty, Privilege, ReportSet,
-                ResourceType, SupportedCollation, WebDavProperty,
+                Ace, CalDavName, CalDavProperty, CalendarData, CardDavName, CardDavProperty, DavProperty,
+                DavPropertyValue, DavValue, Privilege, PropertyName, ReportName, ResourceType, SupportedPrivilege,
+                WebDavProperty,
             },
-            request::{DavPropertyValue, PropFind},
-            response::{Ace, AclRestrictions, GrantDeny, Href, Principal, PropStat, Response, SupportedPrivilege},
+            request::PropFind,
+            response::{Condition, PropStat, Response},
         },
-        types::dead_property::DeadProperty,
+        types::DeadProperties,
     },
     query::{self, Instance},
 };
@@ -65,29 +65,29 @@ fn prop_names(node: &Node) -> Vec<DavProperty> {
     ]);
     match node {
         Node::Principal(_) => props.extend([
-            DavProperty::Principal(PrincipalProperty::PrincipalURL),
-            DavProperty::Principal(PrincipalProperty::CalendarHomeSet),
-            DavProperty::Principal(PrincipalProperty::AddressbookHomeSet),
-            DavProperty::Principal(PrincipalProperty::CalendarUserAddressSet),
-            DavProperty::Principal(PrincipalProperty::ScheduleInboxURL),
-            DavProperty::Principal(PrincipalProperty::ScheduleOutboxURL),
+            WebDavProperty::PrincipalUrl.into(),
+            CalDavName::CalendarHomeSet.into(),
+            CardDavName::AddressbookHomeSet.into(),
+            CalDavName::CalendarUserAddressSet.into(),
+            CalDavName::ScheduleInboxUrl.into(),
+            CalDavName::ScheduleOutboxUrl.into(),
         ]),
         Node::Collection(Collection::Calendar { .. }) => props.extend([
-            DavProperty::WebDav(WebDavProperty::SyncToken),
-            DavProperty::WebDav(WebDavProperty::GetCTag),
-            DavProperty::CalDav(CalDavProperty::CalendarDescription),
-            DavProperty::CalDav(CalDavProperty::SupportedCalendarComponentSet),
-            DavProperty::CalDav(CalDavProperty::SupportedCalendarData),
-            DavProperty::CalDav(CalDavProperty::MaxResourceSize),
+            WebDavProperty::SyncToken.into(),
+            DavProperty::GetCTag,
+            CalDavName::CalendarDescription.into(),
+            CalDavName::SupportedCalendarComponentSet.into(),
+            CalDavName::SupportedCalendarData.into(),
+            CalDavName::MaxResourceSize.into(),
         ]),
         Node::Collection(Collection::Addressbook { .. }) => props.extend([
-            DavProperty::WebDav(WebDavProperty::SyncToken),
-            DavProperty::WebDav(WebDavProperty::GetCTag),
-            DavProperty::CardDav(CardDavProperty::AddressbookDescription),
-            DavProperty::CardDav(CardDavProperty::SupportedAddressData),
-            DavProperty::CardDav(CardDavProperty::MaxResourceSize),
+            WebDavProperty::SyncToken.into(),
+            DavProperty::GetCTag,
+            CardDavName::AddressbookDescription.into(),
+            CardDavName::SupportedAddressData.into(),
+            CardDavName::MaxResourceSize.into(),
         ]),
-        Node::Event(..) => props.push(DavProperty::CalDav(CalDavProperty::ScheduleTag)),
+        Node::Event(..) => props.push(CalDavName::ScheduleTag.into()),
         _ => {}
     }
     props
@@ -103,12 +103,12 @@ fn privileges(node: &Node) -> Vec<Privilege> {
         _ => return vec![Privilege::Read, Privilege::ReadCurrentUserPrivilegeSet],
     };
     match collection {
-        Collection::Inbox { .. } => Privilege::scheduling(true, true),
-        Collection::Outbox { .. } => Privilege::scheduling(false, true),
+        Collection::Inbox { .. } => scheduling_privileges(true),
+        Collection::Outbox { .. } => scheduling_privileges(false),
         _ => {
             let is_calendar = collection.is_calendar();
             match collection.level() {
-                Level::Admin => Privilege::all(is_calendar),
+                Level::Admin => all_privileges(is_calendar),
                 Level::Write => {
                     let mut privileges = vec![
                         Privilege::Read,
@@ -136,22 +136,126 @@ fn privileges(node: &Node) -> Vec<Privilege> {
     }
 }
 
-fn dead_properties(node: &Node) -> Option<DeadProperty> {
+/// What the owner of a collection may do: everything but changing the ACL, which is read-only (RFC 0004, 8.1).
+fn all_privileges(is_calendar: bool) -> Vec<Privilege> {
+    let mut privileges = vec![
+        Privilege::Read,
+        Privilege::ReadAcl,
+        Privilege::ReadCurrentUserPrivilegeSet,
+        Privilege::Write,
+        Privilege::WriteProperties,
+        Privilege::WriteContent,
+        Privilege::Bind,
+        Privilege::Unbind,
+    ];
+    if is_calendar {
+        privileges.push(Privilege::ReadFreeBusy);
+    }
+    privileges
+}
+
+/// What the owner may do in their scheduling inbox or outbox (RFC 6638, 6.1).
+fn scheduling_privileges(inbox: bool) -> Vec<Privilege> {
+    let mut privileges = vec![Privilege::Read, Privilege::ReadCurrentUserPrivilegeSet];
+    privileges.extend(match inbox {
+        true => [
+            Privilege::ScheduleDeliver,
+            Privilege::ScheduleDeliverInvite,
+            Privilege::ScheduleDeliverReply,
+            Privilege::ScheduleQueryFreebusy,
+        ],
+        false => [
+            Privilege::ScheduleSend,
+            Privilege::ScheduleSendInvite,
+            Privilege::ScheduleSendReply,
+            Privilege::ScheduleSendFreebusy,
+        ],
+    });
+    if inbox {
+        privileges.push(Privilege::Unbind);
+    }
+    privileges
+}
+
+/// The privileges a collection supports, as their tree (RFC 3744, 5.3; RFC 4791, 6.1.1; RFC 6638, 6.1).
+fn supported_privileges(collection: Option<&Collection>) -> SupportedPrivilege {
+    let read = |is_calendar: bool| {
+        let mut read = SupportedPrivilege::new(Privilege::Read, "Read").with([
+            SupportedPrivilege::new(Privilege::ReadAcl, "Read the access control list"),
+            SupportedPrivilege::new(Privilege::ReadCurrentUserPrivilegeSet, "Read one's own privileges"),
+        ]);
+        if is_calendar {
+            read = read.with([SupportedPrivilege::new(Privilege::ReadFreeBusy, "Read free/busy")]);
+        }
+        read
+    };
+    let all = SupportedPrivilege { is_abstract: true, ..SupportedPrivilege::new(Privilege::All, "Everything") };
+    match collection {
+        Some(Collection::Inbox { .. }) => all.with([
+            read(false),
+            SupportedPrivilege::new(Privilege::ScheduleDeliver, "Deliver scheduling messages").with([
+                SupportedPrivilege::new(Privilege::ScheduleDeliverInvite, "Deliver invitations"),
+                SupportedPrivilege::new(Privilege::ScheduleDeliverReply, "Deliver replies"),
+                SupportedPrivilege::new(Privilege::ScheduleQueryFreebusy, "Query free/busy"),
+            ]),
+            SupportedPrivilege::new(Privilege::Unbind, "Remove"),
+        ]),
+        Some(Collection::Outbox { .. }) => all.with([
+            read(false),
+            SupportedPrivilege::new(Privilege::ScheduleSend, "Send scheduling messages").with([
+                SupportedPrivilege::new(Privilege::ScheduleSendInvite, "Send invitations"),
+                SupportedPrivilege::new(Privilege::ScheduleSendReply, "Send replies"),
+                SupportedPrivilege::new(Privilege::ScheduleSendFreebusy, "Ask for free/busy"),
+            ]),
+        ]),
+        collection => all.with([
+            read(collection.is_none_or(Collection::is_calendar)),
+            SupportedPrivilege::new(Privilege::Write, "Write").with([
+                SupportedPrivilege::new(Privilege::WriteProperties, "Write properties"),
+                SupportedPrivilege::new(Privilege::WriteContent, "Write content"),
+                SupportedPrivilege::new(Privilege::Bind, "Add"),
+                SupportedPrivilege::new(Privilege::Unbind, "Remove"),
+            ]),
+            SupportedPrivilege::new(Privilege::WriteAcl, "Write the access control list"),
+        ]),
+    }
+}
+
+/// The reports of a principal, an address book or a calendar (`supported-report-set`).
+fn reports(node: &Node) -> Vec<ReportName> {
+    let mut reports = vec![
+        ReportName::ExpandProperty,
+        ReportName::PrincipalMatch,
+        ReportName::PrincipalPropertySearch,
+        ReportName::PrincipalSearchPropertySet,
+        ReportName::AclPrincipalPropSet,
+    ];
+    match node {
+        Node::Principal(_) | Node::Principals | Node::Root => {}
+        Node::Collection(Collection::Addressbook { .. }) | Node::Contact(..) | Node::AddressbookHome => {
+            reports.extend([ReportName::SyncCollection, ReportName::AddressbookQuery, ReportName::AddressbookMultiget]);
+        }
+        _ => reports.extend([
+            ReportName::SyncCollection,
+            ReportName::CalendarQuery,
+            ReportName::CalendarMultiget,
+            ReportName::FreeBusyQuery,
+        ]),
+    }
+    reports
+}
+
+fn dead_properties(node: &Node) -> Option<DeadProperties> {
     let value = match node {
         Node::Collection(Collection::Calendar { info, .. }) => &info.dead_properties,
         Node::Collection(Collection::Addressbook { info, .. }) => &info.dead_properties,
         _ => return None,
     };
-    serde_json::from_value(value.clone()).ok()
+    Some(DeadProperties::from_stored(value))
 }
 
 /// The calendar data of an event as asked for, or `None` for too many instances.
-fn calendar_data(
-    text: &str,
-    data: &crate::proto::schema::property::CalendarData,
-    content: &Content,
-    instances_limit: &mut usize,
-) -> Option<String> {
+fn calendar_data(text: &str, data: &CalendarData, content: &Content, instances_limit: &mut usize) -> Option<String> {
     if data.properties.is_empty() && data.expand.is_none() && data.limit_recurrence.is_none() {
         return Some(text.to_owned());
     }
@@ -180,19 +284,11 @@ impl Dav {
                 let mut props = all_props(node);
                 props.extend(include.iter().cloned());
                 if let Some(dead) = dead_properties(node) {
-                    let mut depth = 0;
-                    for tag in &dead.0 {
-                        match tag {
-                            crate::proto::types::dead_property::DeadPropertyTag::ElementStart(start) => {
-                                if depth == 0 {
-                                    props.push(DavProperty::DeadProperty(start.clone()));
-                                }
-                                depth += 1;
-                            }
-                            crate::proto::types::dead_property::DeadPropertyTag::ElementEnd => depth -= 1,
-                            _ => {}
-                        }
-                    }
+                    props.extend(
+                        dead.0
+                            .into_iter()
+                            .map(|property| DavProperty::Dead(PropertyName { ns: property.ns, name: property.name })),
+                    );
                 }
                 (props, false)
             }
@@ -236,28 +332,26 @@ impl Dav {
             _ => None,
         };
         let is_object = !node.is_collection();
+        let etag = |modseq: i64| Some(DavValue::String(format!("\"{modseq}\"")));
         Ok(match prop {
             DavProperty::WebDav(property) => match property {
-                WebDavProperty::ResourceType => Some(
-                    match node {
-                        Node::Principal(_) => vec![ResourceType::Collection, ResourceType::Principal],
-                        Node::Collection(Collection::Calendar { .. }) => {
-                            vec![ResourceType::Collection, ResourceType::Calendar]
-                        }
-                        Node::Collection(Collection::Inbox { .. }) => {
-                            vec![ResourceType::Collection, ResourceType::ScheduleInbox]
-                        }
-                        Node::Collection(Collection::Outbox { .. }) => {
-                            vec![ResourceType::Collection, ResourceType::ScheduleOutbox]
-                        }
-                        Node::Collection(Collection::Addressbook { .. }) => {
-                            vec![ResourceType::Collection, ResourceType::AddressBook]
-                        }
-                        Node::Event(..) | Node::Contact(..) => vec![],
-                        _ => vec![ResourceType::Collection],
+                WebDavProperty::ResourceType => Some(DavValue::ResourceTypes(match node {
+                    Node::Principal(_) => vec![ResourceType::Collection, ResourceType::Principal],
+                    Node::Collection(Collection::Calendar { .. }) => {
+                        vec![ResourceType::Collection, ResourceType::Calendar]
                     }
-                    .into(),
-                ),
+                    Node::Collection(Collection::Inbox { .. }) => {
+                        vec![ResourceType::Collection, ResourceType::ScheduleInbox]
+                    }
+                    Node::Collection(Collection::Outbox { .. }) => {
+                        vec![ResourceType::Collection, ResourceType::ScheduleOutbox]
+                    }
+                    Node::Collection(Collection::Addressbook { .. }) => {
+                        vec![ResourceType::Collection, ResourceType::AddressBook]
+                    }
+                    Node::Event(..) | Node::Contact(..) => vec![],
+                    _ => vec![ResourceType::Collection],
+                })),
                 WebDavProperty::DisplayName => match node {
                     Node::Principal(principal) => Some(principal.display_name.clone().into()),
                     Node::Collection(Collection::Calendar { info, .. }) => Some(info.name.clone().into()),
@@ -267,19 +361,10 @@ impl Dav {
                     _ => None,
                 },
                 WebDavProperty::GetETag => match node {
-                    Node::Event(_, event) => Some(format!("\"{}\"", event.modseq).into()),
-                    Node::Contact(_, contact) => Some(format!("\"{}\"", contact.modseq).into()),
-                    Node::Collection(Collection::Calendar { info, .. }) => Some(format!("\"{}\"", info.modseq).into()),
-                    Node::Collection(Collection::Addressbook { info, .. }) => {
-                        Some(format!("\"{}\"", info.modseq).into())
-                    }
-                    _ => None,
-                },
-                WebDavProperty::GetCTag => match node {
-                    Node::Collection(Collection::Calendar { info, .. }) => Some(format!("\"{}\"", info.modseq).into()),
-                    Node::Collection(Collection::Addressbook { info, .. }) => {
-                        Some(format!("\"{}\"", info.modseq).into())
-                    }
+                    Node::Event(_, event) => etag(event.modseq),
+                    Node::Contact(_, contact) => etag(contact.modseq),
+                    Node::Collection(Collection::Calendar { info, .. }) => etag(info.modseq),
+                    Node::Collection(Collection::Addressbook { info, .. }) => etag(info.modseq),
                     _ => None,
                 },
                 WebDavProperty::SyncToken => match collection {
@@ -301,54 +386,40 @@ impl Dav {
                     Node::Contact(_, contact) => Some((contact.size as u64).into()),
                     _ => None,
                 },
-                WebDavProperty::CurrentUserPrincipal => Some(vec![Href(path::principal(user.id))].into()),
-                WebDavProperty::PrincipalCollectionSet => {
-                    Some(vec![Href(format!("{}/principals/", path::BASE))].into())
-                }
-                WebDavProperty::Owner => match (node, collection) {
-                    (Node::Principal(principal), _) => Some(vec![Href(path::principal(principal.id))].into()),
-                    (_, Some(collection)) => Some(vec![Href(path::principal(collection.owner()))].into()),
-                    (Node::CalendarHome | Node::AddressbookHome, _) => {
-                        Some(vec![Href(path::principal(user.id))].into())
-                    }
+                WebDavProperty::CurrentUserPrincipal => Some(DavValue::href(path::principal(user.id))),
+                WebDavProperty::PrincipalCollectionSet => Some(DavValue::href(format!("{}/principals/", path::BASE))),
+                WebDavProperty::PrincipalUrl => match node {
+                    Node::Principal(principal) => Some(DavValue::href(path::principal(principal.id))),
                     _ => None,
                 },
-                WebDavProperty::Group => Some(DavValue::Null),
-                WebDavProperty::SupportedReportSet => Some(
+                WebDavProperty::GroupMembership | WebDavProperty::GroupMemberSet | WebDavProperty::AlternateUriSet => {
                     match node {
-                        Node::Principal(_) | Node::Principals | Node::Root => ReportSet::principal(),
-                        Node::Collection(Collection::Addressbook { .. })
-                        | Node::Contact(..)
-                        | Node::AddressbookHome => ReportSet::addressbook(),
-                        _ => ReportSet::calendar(),
+                        Node::Principal(_) => Some(DavValue::Hrefs(Vec::new())),
+                        _ => None,
                     }
-                    .into(),
-                ),
-                WebDavProperty::CurrentUserPrivilegeSet => Some(privileges(node).into()),
-                WebDavProperty::SupportedPrivilegeSet => Some(
-                    vec![match collection {
-                        Some(Collection::Inbox { .. }) => SupportedPrivilege::all_scheduling_privileges(true),
-                        Some(Collection::Outbox { .. }) => SupportedPrivilege::all_scheduling_privileges(false),
-                        Some(collection) => SupportedPrivilege::all_privileges(collection.is_calendar()),
-                        None => SupportedPrivilege::all_privileges(true),
-                    }]
-                    .into(),
-                ),
+                }
+                WebDavProperty::Owner => match (node, collection) {
+                    (Node::Principal(principal), _) => Some(DavValue::href(path::principal(principal.id))),
+                    (_, Some(collection)) => Some(DavValue::href(path::principal(collection.owner()))),
+                    (Node::CalendarHome | Node::AddressbookHome, _) => Some(DavValue::href(path::principal(user.id))),
+                    _ => None,
+                },
+                WebDavProperty::Group => Some(DavValue::Empty),
+                WebDavProperty::SupportedReportSet => Some(DavValue::Reports(reports(node))),
+                WebDavProperty::CurrentUserPrivilegeSet => Some(DavValue::Privileges(privileges(node))),
+                WebDavProperty::SupportedPrivilegeSet => {
+                    Some(DavValue::SupportedPrivileges(vec![supported_privileges(collection)]))
+                }
                 WebDavProperty::Acl => collection.map(|collection| {
                     // Read-only (RFC 0004, 8.1): the owner has everything; sharing is changed elsewhere.
-                    vec![
-                        Ace::new(
-                            Principal::Href(Href(path::principal(collection.owner()))),
-                            GrantDeny::grant(Privilege::all(collection.is_calendar())),
-                        )
-                        .with_protected(),
-                    ]
-                    .into()
+                    DavValue::Acl(vec![Ace {
+                        principal: path::principal(collection.owner()),
+                        grant: vec![Privilege::All],
+                        protected: true,
+                    }])
                 }),
-                WebDavProperty::AclRestrictions => {
-                    Some(AclRestrictions::default().with_no_invert().with_grant_only().into())
-                }
-                WebDavProperty::InheritedAclSet => Some(DavValue::Null),
+                WebDavProperty::AclRestrictions => Some(DavValue::AclRestrictions),
+                WebDavProperty::InheritedAclSet => Some(DavValue::Empty),
                 WebDavProperty::QuotaUsedBytes | WebDavProperty::QuotaAvailableBytes => match collection {
                     Some(collection) if !is_object => {
                         let (used, limit) =
@@ -361,162 +432,141 @@ impl Dav {
                     }
                     _ => None,
                 },
-                WebDavProperty::SupportedLock | WebDavProperty::LockDiscovery => Some(DavValue::Null),
+                WebDavProperty::SupportedLock | WebDavProperty::LockDiscovery => Some(DavValue::Empty),
                 WebDavProperty::CreationDate | WebDavProperty::GetLastModified | WebDavProperty::GetContentLanguage => {
                     None
                 }
             },
-            DavProperty::Principal(property) => {
-                let Node::Principal(principal) = node else { return Ok(None) };
-                match property {
-                    PrincipalProperty::PrincipalURL => Some(vec![Href(path::principal(principal.id))].into()),
-                    PrincipalProperty::CalendarHomeSet => Some(vec![Href(path::calendar_home(principal.id))].into()),
-                    PrincipalProperty::AddressbookHomeSet => {
-                        Some(vec![Href(path::addressbook_home(principal.id))].into())
-                    }
-                    PrincipalProperty::CalendarUserAddressSet => {
-                        let mut hrefs: Vec<Href> =
-                            principal.addresses.iter().map(|address| Href(format!("mailto:{address}"))).collect();
-                        hrefs.push(Href(path::principal(principal.id)));
-                        Some(hrefs.into())
-                    }
-                    PrincipalProperty::CalendarUserType => Some("INDIVIDUAL".into()),
-                    PrincipalProperty::ScheduleInboxURL => {
-                        Some(vec![Href(format!("{}inbox/", path::calendar_home(principal.id)))].into())
-                    }
-                    PrincipalProperty::ScheduleOutboxURL => {
-                        Some(vec![Href(format!("{}outbox/", path::calendar_home(principal.id)))].into())
-                    }
-                    PrincipalProperty::GroupMembership
-                    | PrincipalProperty::GroupMemberSet
-                    | PrincipalProperty::AlternateURISet => Some(Vec::<Href>::new().into()),
-                    PrincipalProperty::PrincipalAddress => None,
+            DavProperty::GetCTag => match node {
+                Node::Collection(Collection::Calendar { info, .. }) => etag(info.modseq),
+                Node::Collection(Collection::Addressbook { info, .. }) => etag(info.modseq),
+                _ => None,
+            },
+            DavProperty::CalDav(CalDavProperty::Named(property)) => match (property, node) {
+                (CalDavName::CalendarHomeSet, Node::Principal(principal)) => {
+                    Some(DavValue::href(path::calendar_home(principal.id)))
                 }
-            }
-            DavProperty::CalDav(property) => match (property, node) {
-                (CalDavProperty::CalendarDescription, Node::Collection(Collection::Calendar { info, .. })) => {
+                (CalDavName::CalendarUserAddressSet, Node::Principal(principal)) => {
+                    let mut hrefs: Vec<String> =
+                        principal.addresses.iter().map(|address| format!("mailto:{address}")).collect();
+                    hrefs.push(path::principal(principal.id));
+                    Some(DavValue::Hrefs(hrefs))
+                }
+                (CalDavName::CalendarUserType, Node::Principal(_)) => Some("INDIVIDUAL".into()),
+                (CalDavName::ScheduleInboxUrl, Node::Principal(principal)) => {
+                    Some(DavValue::href(format!("{}inbox/", path::calendar_home(principal.id))))
+                }
+                (CalDavName::ScheduleOutboxUrl, Node::Principal(principal)) => {
+                    Some(DavValue::href(format!("{}outbox/", path::calendar_home(principal.id))))
+                }
+                (CalDavName::CalendarDescription, Node::Collection(Collection::Calendar { info, .. })) => {
                     info.description.clone().map(Into::into)
                 }
-                (CalDavProperty::TimezoneId, Node::Collection(Collection::Calendar { info, .. })) => {
+                (CalDavName::TimezoneId, Node::Collection(Collection::Calendar { info, .. })) => {
                     info.timezone.clone().map(Into::into)
                 }
-                (CalDavProperty::CalendarTimezone, Node::Collection(Collection::Calendar { info, .. })) => {
-                    info.timezone.as_deref().and_then(vtimezone).map(DavValue::CData)
+                (CalDavName::CalendarTimezone, Node::Collection(Collection::Calendar { info, .. })) => {
+                    info.timezone.as_deref().and_then(vtimezone).map(DavValue::Data)
+                }
+                (CalDavName::SupportedCalendarComponentSet, Node::Collection(Collection::Calendar { info, .. })) => {
+                    Some(DavValue::Components(
+                        info.components
+                            .iter()
+                            .filter(|name| matches!(name.as_str(), "VEVENT" | "VTODO" | "VJOURNAL"))
+                            .cloned()
+                            .collect(),
+                    ))
                 }
                 (
-                    CalDavProperty::SupportedCalendarComponentSet,
-                    Node::Collection(Collection::Calendar { info, .. }),
-                ) => Some(
-                    info.components
-                        .iter()
-                        .filter_map(|name| match name.as_str() {
-                            "VEVENT" => Some(Comp(ICalendarComponentType::VEvent)),
-                            "VTODO" => Some(Comp(ICalendarComponentType::VTodo)),
-                            "VJOURNAL" => Some(Comp(ICalendarComponentType::VJournal)),
-                            _ => None,
-                        })
-                        .collect::<Vec<_>>()
-                        .into(),
-                ),
-                (
-                    CalDavProperty::SupportedCalendarComponentSet,
+                    CalDavName::SupportedCalendarComponentSet,
                     Node::Collection(Collection::Inbox { .. } | Collection::Outbox { .. }),
-                ) => Some(DavValue::all_calendar_components()),
-                (CalDavProperty::SupportedCalendarData, Node::Collection(Collection::Calendar { .. })) => {
+                ) => {
+                    Some(DavValue::Components(["VEVENT", "VTODO", "VJOURNAL", "VFREEBUSY"].map(str::to_owned).to_vec()))
+                }
+                (CalDavName::SupportedCalendarData, Node::Collection(Collection::Calendar { .. })) => {
                     Some(DavValue::SupportedCalendarData)
                 }
-                (CalDavProperty::SupportedCollationSet, Node::Collection(Collection::Calendar { .. })) => {
-                    Some(collations(Namespace::CalDav))
+                (CalDavName::SupportedCollationSet, Node::Collection(Collection::Calendar { .. })) => {
+                    Some(collations())
                 }
-                (CalDavProperty::MaxResourceSize, Node::Collection(Collection::Calendar { .. })) => {
+                (CalDavName::MaxResourceSize, Node::Collection(Collection::Calendar { .. })) => {
                     Some((ical::MAX_OBJECT_SIZE as u64).into())
                 }
-                (CalDavProperty::MaxInstances, Node::Collection(Collection::Calendar { .. })) => {
+                (CalDavName::MaxInstances, Node::Collection(Collection::Calendar { .. })) => {
                     Some((ical::MAX_INSTANCES as u64).into())
                 }
-                (CalDavProperty::MinDateTime, Node::Collection(Collection::Calendar { .. })) => {
-                    Some("0001-01-01T00:00:00Z".into())
+                (CalDavName::MinDateTime, Node::Collection(Collection::Calendar { .. })) => {
+                    Some("00010101T000000Z".into())
                 }
-                (CalDavProperty::MaxDateTime, Node::Collection(Collection::Calendar { .. })) => {
-                    Some("9999-12-31T23:59:59Z".into())
+                (CalDavName::MaxDateTime, Node::Collection(Collection::Calendar { .. })) => {
+                    Some("99991231T235959Z".into())
                 }
-                (CalDavProperty::ScheduleCalendarTransp, Node::Collection(Collection::Calendar { .. })) => {
-                    Some(DeadProperty::single_with_ns(Namespace::CalDav, "opaque").into())
+                (CalDavName::ScheduleCalendarTransp, Node::Collection(Collection::Calendar { .. })) => {
+                    Some(DavValue::Opaque(true))
                 }
-                (CalDavProperty::ScheduleDefaultCalendarURL, Node::Collection(Collection::Inbox { owner })) => {
+                (CalDavName::ScheduleDefaultCalendarUrl, Node::Collection(Collection::Inbox { owner })) => {
                     let default = self.groupware.default_calendar(*owner).await?;
-                    Some(
-                        vec![Href(format!(
-                            "{}{}/",
-                            path::calendar_home(user.id),
-                            path::encode(&default.resource_name)
-                        ))]
-                        .into(),
-                    )
+                    Some(DavValue::href(format!(
+                        "{}{}/",
+                        path::calendar_home(user.id),
+                        path::encode(&default.resource_name)
+                    )))
                 }
-                (CalDavProperty::ScheduleTag, Node::Event(_, event)) => {
-                    Some(format!("\"{}\"", event.schedule_tag).into())
-                }
-                (CalDavProperty::CalendarData(data), Node::Event(..)) => match &content.text {
-                    Some(text) => match calendar_data(text, data, content, instances_limit) {
-                        Some(text) => Some(DavValue::CData(text)),
-                        None => {
-                            return Err(Error::Condition(
-                                StatusCode::FORBIDDEN,
-                                crate::proto::schema::response::CalCondition::MaxInstances.into(),
-                            ));
-                        }
-                    },
-                    None => None,
+                (CalDavName::ScheduleTag, Node::Event(_, event)) => etag(event.schedule_tag),
+                _ => None,
+            },
+            DavProperty::CalDav(CalDavProperty::CalendarData(data)) => match (node, &content.text) {
+                (Node::Event(..), Some(text)) => match calendar_data(text, data, content, instances_limit) {
+                    Some(text) => Some(DavValue::Data(text)),
+                    None => return Err(Error::Condition(StatusCode::FORBIDDEN, Condition::MaxInstances)),
                 },
                 _ => None,
             },
-            DavProperty::CardDav(property) => match (property, node) {
-                (CardDavProperty::AddressbookDescription, Node::Collection(Collection::Addressbook { info, .. })) => {
+            DavProperty::CardDav(CardDavProperty::Named(property)) => match (property, node) {
+                (CardDavName::AddressbookHomeSet, Node::Principal(principal)) => {
+                    Some(DavValue::href(path::addressbook_home(principal.id)))
+                }
+                (CardDavName::AddressbookDescription, Node::Collection(Collection::Addressbook { info, .. })) => {
                     info.description.clone().map(Into::into)
                 }
-                (CardDavProperty::SupportedAddressData, Node::Collection(Collection::Addressbook { .. })) => {
+                (CardDavName::SupportedAddressData, Node::Collection(Collection::Addressbook { .. })) => {
                     Some(DavValue::SupportedAddressData)
                 }
-                (CardDavProperty::SupportedCollationSet, Node::Collection(Collection::Addressbook { .. })) => {
-                    Some(collations(Namespace::CardDav))
+                (CardDavName::SupportedCollationSet, Node::Collection(Collection::Addressbook { .. })) => {
+                    Some(collations())
                 }
-                (CardDavProperty::MaxResourceSize, Node::Collection(Collection::Addressbook { .. })) => {
+                (CardDavName::MaxResourceSize, Node::Collection(Collection::Addressbook { .. })) => {
                     Some((ical::MAX_OBJECT_SIZE as u64).into())
-                }
-                (CardDavProperty::AddressData { properties, version }, Node::Contact(..)) => {
-                    content.text.as_deref().map(|text| match Parser::new(text).entry() {
-                        Entry::VCard(card) => {
-                            let version = version.unwrap_or_else(|| card.version().unwrap_or(VCardVersion::V4_0));
-                            if properties.is_empty() && version == card.version().unwrap_or(VCardVersion::V4_0) {
-                                DavValue::CData(text.to_owned())
-                            } else {
-                                DavValue::CData(query::serialize_vcard(&card, properties, version))
-                            }
-                        }
-                        _ => DavValue::CData(text.to_owned()),
-                    })
                 }
                 _ => None,
             },
-            DavProperty::DeadProperty(tag) => {
-                let stored = dead_properties(node).and_then(|dead| dead.find_tag(&tag.name));
-                match stored {
-                    Some(value) => Some(value.into()),
-                    // Colours and order set through JMAP or the web app show in Apple's properties as well.
-                    None => match (tag.name.as_str(), node) {
-                        ("calendar-color", Node::Collection(Collection::Calendar { info, .. })) => {
-                            info.color.clone().map(|color| {
-                                DeadProperty(vec![crate::proto::types::dead_property::DeadPropertyTag::Text(color)])
-                                    .into()
-                            })
+            DavProperty::CardDav(CardDavProperty::AddressData(data)) => match (node, &content.text) {
+                (Node::Contact(..), Some(text)) => Some(DavValue::Data(match Parser::new(text).entry() {
+                    Entry::VCard(card) => {
+                        let stored = card.version().unwrap_or(VCardVersion::V4_0);
+                        let version = data.version.unwrap_or(stored);
+                        if data.properties.is_empty() && version == stored {
+                            text.to_owned()
+                        } else {
+                            query::serialize_vcard(&card, &data.properties, version)
                         }
-                        ("calendar-order", Node::Collection(Collection::Calendar { info, .. })) => Some(
-                            DeadProperty(vec![crate::proto::types::dead_property::DeadPropertyTag::Text(
-                                info.sort_order.to_string(),
-                            )])
-                            .into(),
-                        ),
+                    }
+                    _ => text.to_owned(),
+                })),
+                _ => None,
+            },
+            DavProperty::Dead(name) => {
+                let stored = dead_properties(node).and_then(|dead| dead.get(&name.ns, &name.name).cloned());
+                match stored {
+                    Some(property) => Some(DavValue::Xml(property.xml)),
+                    // Colours and order set through JMAP or the web app show in Apple's properties as well.
+                    None => match (name.name.as_str(), node) {
+                        ("calendar-color", Node::Collection(Collection::Calendar { info, .. })) => {
+                            info.color.clone().map(DavValue::String)
+                        }
+                        ("calendar-order", Node::Collection(Collection::Calendar { info, .. })) => {
+                            Some(DavValue::String(info.sort_order.to_string()))
+                        }
                         _ => None,
                     },
                 }
@@ -525,12 +575,8 @@ impl Dav {
     }
 }
 
-fn collations(namespace: Namespace) -> DavValue {
-    vec![
-        SupportedCollation { collation: Collation::AsciiCasemap, namespace },
-        SupportedCollation { collation: Collation::UnicodeCasemap, namespace },
-    ]
-    .into()
+fn collations() -> DavValue {
+    DavValue::Collations(vec![Collation::AsciiCasemap, Collation::UnicodeCasemap])
 }
 
 /// A calendar with only the time zone a calendar names (`calendar-timezone`, RFC 4791, 5.2.2), its rules from a year
