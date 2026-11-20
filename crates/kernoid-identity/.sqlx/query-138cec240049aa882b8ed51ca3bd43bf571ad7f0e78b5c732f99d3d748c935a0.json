@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM registrations WHERE instance_id = $1 AND email = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "138cec240049aa882b8ed51ca3bd43bf571ad7f0e78b5c732f99d3d748c935a0"
+}

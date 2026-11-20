@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE relay_spaces SET bytes = greatest(bytes - $2, 0), written_at = now() WHERE space = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "10ff6558258bd0e17a4943646dc12b388a42d2ebd1498fa02fd7c012a380c71b"
+}

@@ -1,0 +1,83 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT i.id, i.name, i.login_ui_url, i.passkey_rp_id, p.domain AS \"primary_domain?\",\n                      ARRAY(SELECT x.domain FROM instance_domains x WHERE x.instance_id = i.id\n                            ORDER BY x.is_primary DESC, x.domain) AS \"domains!\"\n               FROM instance_domains d\n               JOIN instances i ON i.id = d.instance_id\n               LEFT JOIN instance_domains p ON p.instance_id = i.id AND p.is_primary\n               WHERE d.domain = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "instances",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "instances",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "login_ui_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "instances",
+            "name": "login_ui_url"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "passkey_rp_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "instances",
+            "name": "passkey_rp_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "primary_domain?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "instance_domains",
+            "name": "domain"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "domains!",
+        "type_info": "TextArray",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      null
+    ]
+  },
+  "hash": "fffc52d3b42876b86c923ca5f9611231ec043763f5dc3fe04692a9e484aaf866"
+}

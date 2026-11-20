@@ -13,7 +13,7 @@ rust-version = "1.94"
 license = "AGPL-3.0-or-later"
 repository = "https://github.com/kernoid/kernoid"
 description = "kernoid in the terminal: mail, files, calendars and contacts over JMAP"
-publish = false
+homepage = "https://kernoid.dev"
 
 [[bin]]
 name = "kernoid-tui"
@@ -27,7 +27,7 @@ getrandom = "=0.3.4"
 jiff = "=1.0.1"
 # kernoid's Rust SDK (MIT): JMAP, push, end-to-end encryption, DNS, iCalendar and vCard files – async; the app waits for
 # it on a runtime of its own (`block`).
-kernoid-client = { path = "../kit/client" }
+kernoid-client = { version = "0.5.1", path = "../kit/client" }
 ratatui = "=0.30.2"
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.154"

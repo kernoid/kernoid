@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT stream FROM relay_streams WHERE space = $1 AND stream = $2 FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "stream",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "relay_streams",
+            "name": "stream"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "659e23c2566deb0daf826571ce20895308882cc1c8dbd7e30618f059b2da8af5"
+}

@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT m.tenant_id FROM emails e JOIN mail_accounts m ON m.account_id = e.account_id\n             WHERE e.id = $1 AND e.account_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tenant_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "mail_accounts",
+            "name": "tenant_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "a8105f5e935b63709ddd70d1d3cc96785d14e95693acd4545b1d29f3b5b5f5d9"
+}

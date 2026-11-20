@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM relay_streams WHERE space = $1 AND stream = $2 RETURNING bytes",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "bytes",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "relay_streams",
+            "name": "bytes"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "a0c1519c61d6094cc2683fa0e5339cce2f1e991d82fd34b4b6aa7bb79f6526f2"
+}

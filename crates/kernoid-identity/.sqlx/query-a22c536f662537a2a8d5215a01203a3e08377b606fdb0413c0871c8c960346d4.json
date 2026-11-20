@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM project_authorizations\n                     WHERE project_id = $1 AND principal_kind = $2 AND principal_id = $3 AND role = $4",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a22c536f662537a2a8d5215a01203a3e08377b606fdb0413c0871c8c960346d4"
+}

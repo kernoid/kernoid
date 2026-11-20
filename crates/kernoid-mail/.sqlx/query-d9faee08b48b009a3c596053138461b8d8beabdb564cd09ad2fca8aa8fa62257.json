@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT e.thread_id FROM email_thread_refs r JOIN emails e ON e.id = r.email_id\n         WHERE r.account_id = $1 AND r.subject_hash = $2 AND r.message_ref = ANY($3)\n         ORDER BY e.id\n         LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "thread_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "emails",
+            "name": "thread_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bytea",
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d9faee08b48b009a3c596053138461b8d8beabdb564cd09ad2fca8aa8fa62257"
+}

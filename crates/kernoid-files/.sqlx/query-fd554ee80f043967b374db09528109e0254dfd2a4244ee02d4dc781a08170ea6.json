@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH RECURSIVE tree AS (\n               SELECT id FROM file_nodes WHERE id = $1 AND account_id = $2\n               UNION ALL\n               SELECT n.id FROM file_nodes n JOIN tree ON n.parent_id = tree.id)\n           SELECT id AS \"id!\" FROM tree LIMIT $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "fd554ee80f043967b374db09528109e0254dfd2a4244ee02d4dc781a08170ea6"
+}

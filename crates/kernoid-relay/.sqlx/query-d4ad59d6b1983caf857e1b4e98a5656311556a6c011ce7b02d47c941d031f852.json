@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM relay_space_removals WHERE space = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d4ad59d6b1983caf857e1b4e98a5656311556a6c011ce7b02d47c941d031f852"
+}

@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (SELECT 1 FROM relay_spaces WHERE space = $1 AND account_id = $2 AND domain = 'kernoid'\n                                 AND protocol = 2) AS \"founded!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "founded!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "a5fddfe65a7e625682f282c5bb63cbbc80822cf12f8f6eb42ecb342738c5910b"
+}

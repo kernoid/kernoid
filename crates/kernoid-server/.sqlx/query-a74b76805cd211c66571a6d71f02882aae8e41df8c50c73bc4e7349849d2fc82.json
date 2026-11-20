@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO account_avatars (account_id, tenant_id, version, media_type, size) VALUES ($1, $2, $3, $4, $5)\n         ON CONFLICT (account_id) DO UPDATE\n         SET version = EXCLUDED.version, media_type = EXCLUDED.media_type, size = EXCLUDED.size, updated_at = now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a74b76805cd211c66571a6d71f02882aae8e41df8c50c73bc4e7349849d2fc82"
+}

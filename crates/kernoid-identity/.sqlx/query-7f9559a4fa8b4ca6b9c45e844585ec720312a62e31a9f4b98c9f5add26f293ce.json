@@ -1,0 +1,163 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT s.id, s.token_hash, s.checks, s.created_at, s.expires_at, s.instance_id, s.tenant_id,\n                      a.id AS account_id, a.display_name, coalesce(a.primary_address, a.username, a.email, '') AS \"primary_address!\", a.primary_address IS NOT NULL AS \"native!\", a.active AS account_active,\n                      t.active AS tenant_active\n               FROM sessions s\n               JOIN accounts a ON a.id = s.account_id\n               JOIN tenants t ON t.id = s.tenant_id\n               WHERE s.id = $1 AND s.instance_id = $2 AND s.terminated_at IS NULL AND s.expires_at > now()",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "sessions",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "token_hash",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "sessions",
+            "name": "token_hash"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "checks",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "sessions",
+            "name": "checks"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "sessions",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "expires_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "sessions",
+            "name": "expires_at"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "instance_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "sessions",
+            "name": "instance_id"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "tenant_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "sessions",
+            "name": "tenant_id"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "account_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "accounts",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "display_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "accounts",
+            "name": "display_name"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "primary_address!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 10,
+        "name": "native!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 11,
+        "name": "account_active",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "accounts",
+            "name": "active"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "tenant_active",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "tenants",
+            "name": "active"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      null,
+      null,
+      false,
+      false
+    ]
+  },
+  "hash": "7f9559a4fa8b4ca6b9c45e844585ec720312a62e31a9f4b98c9f5add26f293ce"
+}

@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM account_avatars WHERE account_id = $1 RETURNING version",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "version",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "account_avatars",
+            "name": "version"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3fa4e2f6652e0552d8ff84939daa5d8d95032f65dce152946a8a933dbcef5cad"
+}

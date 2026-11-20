@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT d.domain FROM instance_domains d\n             LEFT JOIN tls_certificates c ON c.domain = d.domain\n             LEFT JOIN acme_orders o ON o.domain = d.domain\n             WHERE (c.domain IS NULL OR c.not_after < now() + make_interval(days => $1))\n               AND (o.domain IS NULL OR o.next_attempt_at <= now())\n             ORDER BY c.not_after NULLS FIRST, d.domain LIMIT $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "domain",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "instance_domains",
+            "name": "domain"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "bd11ac23e9905d61cbe8d2996930bcf6bddc456b98c0d6557ea5054fecd7be5d"
+}

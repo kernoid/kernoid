@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, count(*) OVER () AS \"total!\" FROM groups\n               WHERE tenant_id = $1 AND ($2::text IS NULL OR name = $2) AND ($3::text IS NULL OR external_id = $3)\n               ORDER BY\n                 CASE WHEN $6 = 'displayname' AND NOT $7 THEN lower(name) END ASC,\n                 CASE WHEN $6 = 'displayname' AND $7 THEN lower(name) END DESC,\n                 CASE WHEN $6 = 'externalid' AND NOT $7 THEN external_id END ASC,\n                 CASE WHEN $6 = 'externalid' AND $7 THEN external_id END DESC,\n                 CASE WHEN $6 IN ('created', 'username') AND $7 THEN created_at END DESC,\n                 created_at, id\n               OFFSET $4 LIMIT $5",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "groups",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "total!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Int8",
+        "Int8",
+        "Text",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "ffc789db215080820751aa222554a2a8e34225a4e48966daf1e1190787085d09"
+}

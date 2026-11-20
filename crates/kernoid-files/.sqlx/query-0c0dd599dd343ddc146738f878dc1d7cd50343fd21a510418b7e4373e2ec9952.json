@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO file_nodes (id, account_id, node_type, name, role, created, modified, accessed)\n         VALUES ($1, $2, 'directory', 'Trash', 'trash', now(), now(), now())",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0c0dd599dd343ddc146738f878dc1d7cd50343fd21a510418b7e4373e2ec9952"
+}

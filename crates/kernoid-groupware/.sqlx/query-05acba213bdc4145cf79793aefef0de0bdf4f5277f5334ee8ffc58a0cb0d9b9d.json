@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE addressbooks b SET collection_key = $3 WHERE b.id = $1 AND b.account_id = $2 AND NOT b.is_default\n                 AND b.collection_key IS NULL AND NOT EXISTS (SELECT 1 FROM contacts c WHERE c.addressbook_id = b.id)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "05acba213bdc4145cf79793aefef0de0bdf4f5277f5334ee8ffc58a0cb0d9b9d"
+}

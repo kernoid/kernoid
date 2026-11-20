@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM access_tokens WHERE account_id = $1 AND application_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "abff37a1f92573d9978a5c24e810562b6f39ce3ca5cfe71ef2de54c13f459a0f"
+}

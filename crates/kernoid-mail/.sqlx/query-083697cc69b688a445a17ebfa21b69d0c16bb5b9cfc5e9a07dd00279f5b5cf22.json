@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE emails SET body_search = to_tsvector('simple', $2) WHERE id = $1 AND body_search IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "083697cc69b688a445a17ebfa21b69d0c16bb5b9cfc5e9a07dd00279f5b5cf22"
+}

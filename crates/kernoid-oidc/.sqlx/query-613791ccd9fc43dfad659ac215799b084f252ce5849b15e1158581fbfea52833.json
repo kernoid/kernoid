@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE auth_requests SET session_id = $2 WHERE id = $1 AND session_id IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "613791ccd9fc43dfad659ac215799b084f252ce5849b15e1158581fbfea52833"
+}

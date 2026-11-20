@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO project_grants (project_id, tenant_id, roles) VALUES ($1, $2, $3)\n                     ON CONFLICT (project_id, tenant_id) DO UPDATE SET roles = excluded.roles",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "de33af746e5bdac1959129316b0931bba1e32e72385e299728022db7d10e1eff"
+}

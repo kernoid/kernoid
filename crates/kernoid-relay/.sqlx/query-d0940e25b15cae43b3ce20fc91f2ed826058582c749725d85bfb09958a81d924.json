@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT space FROM relay_spaces WHERE space = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "space",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "relay_spaces",
+            "name": "space"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d0940e25b15cae43b3ce20fc91f2ed826058582c749725d85bfb09958a81d924"
+}

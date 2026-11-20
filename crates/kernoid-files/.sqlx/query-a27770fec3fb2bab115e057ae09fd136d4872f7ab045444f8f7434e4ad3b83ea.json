@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH RECURSIVE down AS (\n               SELECT id, 0 AS height FROM file_nodes WHERE id = $1\n               UNION ALL\n               SELECT n.id, down.height + 1 FROM file_nodes n JOIN down ON n.parent_id = down.id\n               WHERE down.height < $2)\n           SELECT max(height) AS \"height!\" FROM down",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "height!",
+        "type_info": "Int4",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "a27770fec3fb2bab115e057ae09fd136d4872f7ab045444f8f7434e4ad3b83ea"
+}

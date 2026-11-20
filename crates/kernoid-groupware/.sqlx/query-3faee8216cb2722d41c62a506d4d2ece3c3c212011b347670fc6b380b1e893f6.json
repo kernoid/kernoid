@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (SELECT 1 FROM calendars WHERE id = $1 AND collection_key IS NOT NULL)\n               OR EXISTS (SELECT 1 FROM addressbooks WHERE id = $1 AND collection_key IS NOT NULL) AS \"sealed!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "sealed!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "3faee8216cb2722d41c62a506d4d2ece3c3c212011b347670fc6b380b1e893f6"
+}

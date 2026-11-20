@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# For sqlx-cli run at the workspace root (`cargo sqlx prepare`): the database comes from KERNOID_DATABASE_URL, as the
+# crates' own sqlx.toml say.
+[common]
+database-url-var = "KERNOID_DATABASE_URL"

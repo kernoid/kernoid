@@ -1,0 +1,54 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT modseq, object_id, change FROM mail_changes\n                     WHERE account_id = $1 AND object_type = $2 AND modseq = $3\n                     ORDER BY object_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "modseq",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "mail_changes",
+            "name": "modseq"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "object_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "mail_changes",
+            "name": "object_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "change",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "mail_changes",
+            "name": "change"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "e08db9ab06eea4eaad3c70bad75ec585f38dc83e11c75221ef580469fabed73c"
+}

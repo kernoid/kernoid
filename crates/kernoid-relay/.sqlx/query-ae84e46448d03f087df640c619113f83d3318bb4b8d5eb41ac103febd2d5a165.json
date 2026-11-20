@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM relay_requests WHERE space = $1 AND member = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ae84e46448d03f087df640c619113f83d3318bb4b8d5eb41ac103febd2d5a165"
+}

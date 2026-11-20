@@ -1,0 +1,42 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT content, blob FROM relay_stream_originals WHERE space = $1 AND stream = $2 AND hash = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "content",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "relay_stream_originals",
+            "name": "content"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "blob",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "relay_stream_originals",
+            "name": "blob"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "4f2d0ec31fb1bef2075008102488b41e5944fae3d9592f89a7a2f1278dc0ae11"
+}

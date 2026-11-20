@@ -1,0 +1,62 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, account_id, envelope_from, recipients FROM email_submissions\n                 WHERE undo_status = 'pending' AND send_at <= now()\n                 ORDER BY send_at LIMIT 1 FOR UPDATE SKIP LOCKED",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "email_submissions",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "account_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "email_submissions",
+            "name": "account_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "envelope_from",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "email_submissions",
+            "name": "envelope_from"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "recipients",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "email_submissions",
+            "name": "recipients"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "693718e0a68f7465511b0fa019b79ddaae867a8d5c3092520065c5222480696f"
+}

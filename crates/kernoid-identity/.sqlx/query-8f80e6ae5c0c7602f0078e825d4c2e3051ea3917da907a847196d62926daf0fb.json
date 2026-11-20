@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT t.mfa_required,\n                      (EXISTS (SELECT 1 FROM account_totp WHERE account_id = a.id AND confirmed_at IS NOT NULL)\n                       OR EXISTS (SELECT 1 FROM account_passkeys WHERE account_id = a.id)) AS \"has_factor!\"\n               FROM accounts a JOIN tenants t ON t.id = a.tenant_id WHERE a.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "mfa_required",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "tenants",
+            "name": "mfa_required"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "has_factor!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "8f80e6ae5c0c7602f0078e825d4c2e3051ea3917da907a847196d62926daf0fb"
+}

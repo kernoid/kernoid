@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO account_emails (instance_id, email, account_id)\n                         SELECT instance_id, $2, $1 FROM tenants WHERE id = $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9ef2ce17e898c3196b83b38ecdad0a0a4cc40100de3ac4a8b50cd3ad0bf475de"
+}

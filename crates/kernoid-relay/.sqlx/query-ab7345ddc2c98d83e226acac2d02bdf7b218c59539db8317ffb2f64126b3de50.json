@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT e.blob AS \"blob!\" FROM relay_envelopes e JOIN relay_spaces s ON s.space = e.space\n               WHERE s.space = $1 AND s.tenant_id = $2 AND e.blob IS NOT NULL",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "blob!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "relay_envelopes",
+            "name": "blob"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "ab7345ddc2c98d83e226acac2d02bdf7b218c59539db8317ffb2f64126b3de50"
+}

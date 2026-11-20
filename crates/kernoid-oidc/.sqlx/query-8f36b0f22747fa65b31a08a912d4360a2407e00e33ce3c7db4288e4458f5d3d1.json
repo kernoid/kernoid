@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM auth_requests r WHERE r.expires_at < now() - make_interval(secs => $1)\n             AND NOT EXISTS (SELECT 1 FROM refresh_tokens t WHERE t.family = r.id)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8f36b0f22747fa65b31a08a912d4360a2407e00e33ce3c7db4288e4458f5d3d1"
+}

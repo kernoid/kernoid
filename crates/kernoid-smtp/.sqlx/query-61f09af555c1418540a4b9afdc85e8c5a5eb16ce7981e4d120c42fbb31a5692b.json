@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT selector FROM dkim_keys WHERE domain = $1 AND algorithm = $2 AND state = 'next'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "selector",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "dkim_keys",
+            "name": "selector"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "61f09af555c1418540a4b9afdc85e8c5a5eb16ce7981e4d120c42fbb31a5692b"
+}

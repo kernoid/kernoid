@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT changes_floor FROM mail_accounts WHERE account_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "changes_floor",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "mail_accounts",
+            "name": "changes_floor"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "4cce6b9fc4f7d8cd83455c323ae2a8d57aa94d1d08afb850d4dd3a60172d27d2"
+}

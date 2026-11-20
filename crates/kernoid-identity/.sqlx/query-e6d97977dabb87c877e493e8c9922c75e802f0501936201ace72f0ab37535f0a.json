@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM file_access WHERE owner_id = $1 AND node_id IS NOT DISTINCT FROM $2\n                     AND grantee_account IS NOT DISTINCT FROM $3 AND grantee_group IS NOT DISTINCT FROM $4",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e6d97977dabb87c877e493e8c9922c75e802f0501936201ace72f0ab37535f0a"
+}

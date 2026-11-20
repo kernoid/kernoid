@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE authorization_codes SET used_at = now() WHERE code_hash = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2b788a7b821052b67a45559b15c609d508cc8fe51fc2070388b7038d6ece88a5"
+}

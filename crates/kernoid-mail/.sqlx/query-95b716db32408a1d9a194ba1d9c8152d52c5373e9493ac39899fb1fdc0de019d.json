@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT array(SELECT mailbox_id FROM email_mailboxes WHERE email_id = e.id) AS \"mailboxes!\"\n               FROM emails e WHERE id = $1 AND account_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "mailboxes!",
+        "type_info": "UuidArray",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "95b716db32408a1d9a194ba1d9c8152d52c5373e9493ac39899fb1fdc0de019d"
+}

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO acme_accounts (directory, credentials_sealed) VALUES ($1, $2)\n             ON CONFLICT (directory) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6c8d27d512396e3c1909b534d39524c2b34c2e0c0be9822ed3ae2d2c5f72230a"
+}

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM calendar_notifications WHERE id IN (\n             SELECT id FROM calendar_notifications WHERE created_at < now() - interval '30 days' LIMIT $1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b3d1bb5c5b27abc73241583e27f11bb22382249affb32f1ce14c56911e3a08db"
+}

@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO relay_envelopes (space, position, id, canonical, blob, size) VALUES ($1, $2, $3, $4, $5, $6)\n         ON CONFLICT (space, id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8",
+        "Text",
+        "Bytea",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "954b159efb2ec7dc2f93d57554056de0c3eb5266201c28d5d0ad1488f3238a51"
+}

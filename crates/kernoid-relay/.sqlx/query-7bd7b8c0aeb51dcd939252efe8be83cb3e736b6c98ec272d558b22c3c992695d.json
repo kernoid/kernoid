@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO relay_spaces (space, domain, tenant_id, account_id) VALUES ($1, $2, $3, $4)\n             ON CONFLICT (space) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7bd7b8c0aeb51dcd939252efe8be83cb3e736b6c98ec272d558b22c3c992695d"
+}

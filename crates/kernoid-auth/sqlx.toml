@@ -6,3 +6,9 @@
 
 [migrate]
 table-name = "_kernoid_auth_migrations"
+
+# The macros read the database of kernoid's own build from KERNOID_DATABASE_URL, not DATABASE_URL: a program that builds
+# kernoid's crates in and sets DATABASE_URL for its own queries must not have kernoid's checked against its database.
+# Without KERNOID_DATABASE_URL the macros take the offline data in `.sqlx`.
+[common]
+database-url-var = "KERNOID_DATABASE_URL"

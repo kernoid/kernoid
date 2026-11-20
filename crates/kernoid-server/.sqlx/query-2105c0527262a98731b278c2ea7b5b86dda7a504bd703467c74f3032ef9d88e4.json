@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO tls_certificates (domain, chain_pem, key_sealed, not_after, updated_at)\n             VALUES ($1, $2, $3, $4, now())\n             ON CONFLICT (domain) DO UPDATE SET chain_pem = $2, key_sealed = $3, not_after = $4, updated_at = now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Bytea",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2105c0527262a98731b278c2ea7b5b86dda7a504bd703467c74f3032ef9d88e4"
+}

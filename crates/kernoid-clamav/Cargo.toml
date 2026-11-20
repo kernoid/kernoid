@@ -6,7 +6,8 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-publish.workspace = true
+homepage.workspace = true
+description = "kernoid's module clamav: content checked for malware by ClamAV's daemon"
 
 [lints]
 workspace = true

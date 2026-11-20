@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE project_roles SET display_name = $3, role_group = $4 WHERE project_id = $1 AND key = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "94d5ef003a36871c43f3cd684e01016f2d276237007caa0dae59e1af0b2934e4"
+}

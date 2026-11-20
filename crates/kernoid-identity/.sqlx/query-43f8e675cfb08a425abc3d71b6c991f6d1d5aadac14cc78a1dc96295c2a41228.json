@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (\n                   SELECT 1 FROM collection_access\n                   WHERE owner_id = $2 AND collection_id = $3 AND level = 'admin'\n                     AND (grantee_account = $1\n                          OR grantee_group IN (SELECT group_id FROM group_members WHERE account_id = $1))) AS \"may!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "may!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "43f8e675cfb08a425abc3d71b6c991f6d1d5aadac14cc78a1dc96295c2a41228"
+}

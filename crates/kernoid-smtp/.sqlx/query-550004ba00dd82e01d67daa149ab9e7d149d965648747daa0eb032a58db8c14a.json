@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT selector, algorithm, private_sealed FROM dkim_keys\n         WHERE domain = $1 AND state = 'active' ORDER BY algorithm DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "selector",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "dkim_keys",
+            "name": "selector"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "algorithm",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "dkim_keys",
+            "name": "algorithm"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "private_sealed",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "dkim_keys",
+            "name": "private_sealed"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "550004ba00dd82e01d67daa149ab9e7d149d965648747daa0eb032a58db8c14a"
+}

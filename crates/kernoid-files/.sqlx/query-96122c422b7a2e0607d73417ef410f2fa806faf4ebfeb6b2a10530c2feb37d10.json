@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT vault_id FROM file_nodes WHERE id = $1 AND account_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "vault_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "file_nodes",
+            "name": "vault_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "96122c422b7a2e0607d73417ef410f2fa806faf4ebfeb6b2a10530c2feb37d10"
+}

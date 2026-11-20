@@ -1,0 +1,84 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT c.collection_type, c.collection_id, c.grantee_account, c.grantee_group, c.level,\n                      coalesce(a.primary_address, a.display_name, '$' || g.name) AS \"name!\"\n               FROM collection_access c\n               LEFT JOIN accounts a ON a.id = c.grantee_account\n               LEFT JOIN groups g ON g.id = c.grantee_group\n               WHERE c.owner_id = $1 AND ($2::uuid IS NULL OR c.collection_id = $2)\n               ORDER BY c.collection_id, 6",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "collection_type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "collection_access",
+            "name": "collection_type"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "collection_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "collection_access",
+            "name": "collection_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "grantee_account",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "collection_access",
+            "name": "grantee_account"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "grantee_group",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "collection_access",
+            "name": "grantee_group"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "level",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "collection_access",
+            "name": "level"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "name!",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      false,
+      null
+    ]
+  },
+  "hash": "8bf8639dad2ae5c6b72e5a97b983125fbe302ad433060ebd3847864c6c15a00e"
+}

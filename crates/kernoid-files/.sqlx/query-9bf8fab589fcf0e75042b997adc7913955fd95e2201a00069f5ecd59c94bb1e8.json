@@ -1,0 +1,59 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT f.tenant_id, f.modseq, f.used_bytes, coalesce(a.files_quota, t.default_files_quota) AS files_quota\n             FROM file_accounts f JOIN accounts a ON a.id = f.account_id JOIN tenants t ON t.id = a.tenant_id\n             WHERE f.account_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tenant_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "file_accounts",
+            "name": "tenant_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "modseq",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "file_accounts",
+            "name": "modseq"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "used_bytes",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "file_accounts",
+            "name": "used_bytes"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "files_quota",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "9bf8fab589fcf0e75042b997adc7913955fd95e2201a00069f5ecd59c94bb1e8"
+}

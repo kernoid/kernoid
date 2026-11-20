@@ -16,3 +16,4 @@ web/e2e/node_modules
 web/e2e/dist
 web/vault/node_modules
 web/vault/dist
+crates/kernoid-web/dist

@@ -6,7 +6,8 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-publish.workspace = true
+homepage.workspace = true
+description = "kernoid's HTTP server: REST, GraphQL, JMAP, WebDAV and the login UI – or identity alone"
 
 [lints]
 workspace = true
@@ -50,6 +51,8 @@ kernoid-relay = { version = "0.5.1", path = "../kernoid-relay", optional = true 
 # Always its client (kernoid's own messages through a relay); its server with `data`.
 kernoid-smtp = { version = "0.5.1", path = "../kernoid-smtp", default-features = false }
 kernoid-store = { version = "0.5.1", path = "../kernoid-store" }
+# The login UI and the web app, built (served at /login and /app unless `http.login_ui`/`http.web_app` name a directory).
+kernoid-web = { version = "0.5.1", path = "../kernoid-web" }
 kernoid-mime = { version = "0.5.1", path = "../../kit/mime", optional = true }
 metrics = "0.24.6"
 percent-encoding = "2.3.2"

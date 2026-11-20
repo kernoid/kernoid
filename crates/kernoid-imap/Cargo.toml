@@ -6,7 +6,8 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-publish.workspace = true
+homepage.workspace = true
+description = "IMAP4rev2 and POP3 on kernoid's mail store"
 
 [lints]
 workspace = true

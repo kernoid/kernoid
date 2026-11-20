@@ -1,0 +1,53 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT addressbook_id, resource_name, uid FROM contacts WHERE id = $1 AND account_id = $2 FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "addressbook_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "contacts",
+            "name": "addressbook_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "resource_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "contacts",
+            "name": "resource_name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "uid",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "contacts",
+            "name": "uid"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "feaac418e643041ae7bb2e6463e4aabbcf82c16256a11db74c0b9df0cff13f11"
+}

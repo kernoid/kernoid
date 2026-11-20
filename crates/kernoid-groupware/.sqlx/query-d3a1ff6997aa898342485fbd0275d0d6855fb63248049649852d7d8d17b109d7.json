@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.id FROM accounts a\n               WHERE a.tenant_id = $1 AND a.active\n                 AND EXISTS (SELECT 1 FROM account_services s WHERE s.account_id = a.id AND s.service = 'mail' AND s.state = 'on')\n                 AND (lower(a.display_name) LIKE $2\n                      OR EXISTS (SELECT 1 FROM addresses d WHERE d.account_id = a.id AND lower(d.address) LIKE $2))\n               ORDER BY a.display_name, a.id LIMIT $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "accounts",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d3a1ff6997aa898342485fbd0275d0d6855fb63248049649852d7d8d17b109d7"
+}

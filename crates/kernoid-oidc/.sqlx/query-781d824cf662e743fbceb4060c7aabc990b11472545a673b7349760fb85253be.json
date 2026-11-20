@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE idp_logins SET proposal_account = $2, subject = $3, email = $4, display_name = $5, checks = $6,\n                 handoff_hash = $7\n             WHERE id = $1 AND handoff_hash IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "TextArray",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "781d824cf662e743fbceb4060c7aabc990b11472545a673b7349760fb85253be"
+}

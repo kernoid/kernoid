@@ -65,11 +65,16 @@ This is the way for a **suite**: one kernoid, many programs, one login.
 ## kernoid built in
 
 A program that runs on its own can build kernoid's identity into its process instead – `kernoid-server` without
-its default features compiles nothing of mail, calendars or files:
+its default features compiles nothing of mail, calendars or files. kernoid's crates are on crates.io from the release
+after 0.5.1 (before, take them from git, `git = "https://github.com/kernoid/kernoid", tag = "v0.5.1"`):
 
 ```toml
-kernoid-server = { git = "https://github.com/kernoid/kernoid", tag = "v0.5.1", default-features = false }
+kernoid-server = { version = "<the release>", default-features = false }
 ```
+
+kernoid's crates carry their checked queries (sqlx's offline data) and read the database of their own build from
+`KERNOID_DATABASE_URL`, not `DATABASE_URL` – a program that sets `DATABASE_URL` for its own queries builds kernoid's
+crates from the offline data, untouched.
 
 ```rust
 use kernoid_server::embedded::{Embedded, Session};

@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM file_link_arrivals\n             WHERE link_id IN (SELECT link_id FROM file_link_arrivals GROUP BY link_id\n                               HAVING max(added_at) <= now() - make_interval(secs => $1))\n             RETURNING link_id, name, size, added_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "link_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "file_link_arrivals",
+            "name": "link_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "file_link_arrivals",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "size",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "file_link_arrivals",
+            "name": "size"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "added_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "file_link_arrivals",
+            "name": "added_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Float8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "98557bde51fb62aaf1044a9225ec6b06d9562681e71c7b7dbdef464194ada4c1"
+}

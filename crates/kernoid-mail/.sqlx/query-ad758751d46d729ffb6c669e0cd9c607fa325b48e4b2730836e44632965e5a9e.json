@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT g.name, ad.address FROM group_members m\n             JOIN groups g ON g.id = m.group_id JOIN addresses ad ON ad.group_id = g.id\n             WHERE m.account_id = $1 AND g.members_send_as ORDER BY ad.address",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "groups",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "address",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "addresses",
+            "name": "address"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "ad758751d46d729ffb6c669e0cd9c607fa325b48e4b2730836e44632965e5a9e"
+}

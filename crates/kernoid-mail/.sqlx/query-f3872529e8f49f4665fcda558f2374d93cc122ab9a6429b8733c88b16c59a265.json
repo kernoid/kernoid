@@ -1,0 +1,88 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT is_enabled, from_date, to_date, subject, text_body, html_body FROM vacation_responses\n             WHERE account_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "is_enabled",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "vacation_responses",
+            "name": "is_enabled"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "from_date",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "vacation_responses",
+            "name": "from_date"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "to_date",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "vacation_responses",
+            "name": "to_date"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "subject",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "vacation_responses",
+            "name": "subject"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "text_body",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "vacation_responses",
+            "name": "text_body"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "html_body",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "vacation_responses",
+            "name": "html_body"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "f3872529e8f49f4665fcda558f2374d93cc122ab9a6429b8733c88b16c59a265"
+}

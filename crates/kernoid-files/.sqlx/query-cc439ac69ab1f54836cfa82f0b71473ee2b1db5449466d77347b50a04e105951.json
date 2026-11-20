@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM file_locks WHERE expires_at <= now() AND account_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cc439ac69ab1f54836cfa82f0b71473ee2b1db5449466d77347b50a04e105951"
+}

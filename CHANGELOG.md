@@ -14,6 +14,13 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   names, a calendar's own `VTIMEZONE`), vCard 4.0, 3.0 and 2.1 (quoted-printable), JSCalendar and JSContact with the
   conversions both ways, JMAP patches. What it does not understand goes back out unchanged (`iCalProps`,
   `iCalComponents`, `vCardProps`).
+- **The server's crates go to crates.io** with each release, so that other programs build kernoid in – identity
+  alone with `kernoid-server` and `default-features = false` (RFC 0009, 3): every crate of `crates/`, the terminal
+  app (`kernoid-tui`) and the operator (`kernoid-operator`). Each crate with queries carries those of its library in
+  its own `.sqlx` (`scripts/sqlx-crates.sh`, checked in CI).
+- **`kernoid-web`** (`crates/kernoid-web`): the login UI and the web app, built, as tables of files – in place of
+  kernoid-server's build script. In the repository it takes `web/login/dist` and `web/app/dist` as before; its package
+  on crates.io carries a copy without source maps (`scripts/web-crate.sh`).
 - **`kernoid-mime`** (`kit/mime`, MIT, a crate of the kit): kernoid's own library of Internet mail, written from the
   RFCs – messages with the byte ranges of every part, header fields in their forms (encoded words, addresses and
   groups, dates, message ids), RFC 2231 parameters, transfer encodings, charsets (encoding_rs and UTF-7), what a reader

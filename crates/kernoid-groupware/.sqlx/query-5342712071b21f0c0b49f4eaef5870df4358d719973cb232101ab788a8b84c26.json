@@ -1,0 +1,125 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, calendar_id, resource_name, uid, component, organized, size, schedule_tag, modseq\n             FROM calendar_events WHERE account_id = $1 AND uid = $2 ORDER BY id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "calendar_events",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "calendar_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "calendar_events",
+            "name": "calendar_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "resource_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "calendar_events",
+            "name": "resource_name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "uid",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "calendar_events",
+            "name": "uid"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "component",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "calendar_events",
+            "name": "component"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "organized",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "calendar_events",
+            "name": "organized"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "size",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "calendar_events",
+            "name": "size"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "schedule_tag",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "calendar_events",
+            "name": "schedule_tag"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "modseq",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "calendar_events",
+            "name": "modseq"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "5342712071b21f0c0b49f4eaef5870df4358d719973cb232101ab788a8b84c26"
+}

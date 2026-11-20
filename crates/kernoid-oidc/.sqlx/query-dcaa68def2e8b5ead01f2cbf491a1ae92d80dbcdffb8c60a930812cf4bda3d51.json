@@ -1,0 +1,50 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT kid, instance_id, private_sealed FROM signing_keys",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kid",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "signing_keys",
+            "name": "kid"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "instance_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "signing_keys",
+            "name": "instance_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "private_sealed",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "signing_keys",
+            "name": "private_sealed"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "dcaa68def2e8b5ead01f2cbf491a1ae92d80dbcdffb8c60a930812cf4bda3d51"
+}

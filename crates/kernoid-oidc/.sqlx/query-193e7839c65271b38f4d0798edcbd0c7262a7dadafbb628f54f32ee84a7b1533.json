@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM logout_notifications WHERE created_at < now() - interval '7 days'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "193e7839c65271b38f4d0798edcbd0c7262a7dadafbb628f54f32ee84a7b1533"
+}

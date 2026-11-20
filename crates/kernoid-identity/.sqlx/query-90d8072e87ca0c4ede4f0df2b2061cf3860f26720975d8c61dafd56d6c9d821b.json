@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE tenants SET e2e_mail = $2, e2e_vaults = $3, e2e_collections = $4, e2e_recovery = $5\n                     WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "90d8072e87ca0c4ede4f0df2b2061cf3860f26720975d8c61dafd56d6c9d821b"
+}

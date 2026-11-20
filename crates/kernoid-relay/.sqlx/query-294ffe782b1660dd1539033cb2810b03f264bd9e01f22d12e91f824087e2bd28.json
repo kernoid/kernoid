@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE relay_streams SET bytes = bytes + $3 WHERE space = $1 AND stream = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "294ffe782b1660dd1539033cb2810b03f264bd9e01f22d12e91f824087e2bd28"
+}

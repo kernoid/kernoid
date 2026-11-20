@@ -10,7 +10,7 @@ license.workspace = true
 repository.workspace = true
 # On crates.io, so that the servers of other programs can depend on it (RFC 0009, 2).
 publish = true
-homepage = "https://kernoid.dev"
+homepage.workspace = true
 readme = "README.md"
 keywords = ["kernoid", "openid-connect", "oidc", "login", "axum"]
 categories = ["authentication", "web-programming"]
