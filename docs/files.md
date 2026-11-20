@@ -84,9 +84,13 @@ space beside it (**Move onto a space**), keeping the old one until it is removed
 the browser's storage of the page; a new browser comes in with the account's code. The relay must be on
 (`services.relay`, on wherever files are); making a vault needs a login by token or the web app, not an app password.
 
+Sharing such a vault follows the level of each share: reading, editing, or editing and sharing on – changing it,
+the member comes in again at the new level by themselves. The terminal app and the folders the apps keep in step
+(**Folders on this computer**) open these vaults too; there, deleting moves into the vault's own trash.
+
 {: .note }
-OPEN: the terminal app and the file sync on vaults on spaces; files in such vaults are not shown in Finder or Explorer
-yet.
+OPEN: files in such vaults are not shown in Finder or Explorer yet; levels change only where someone shares in an app
+or the web app.
 
 ## Search and the trash
 

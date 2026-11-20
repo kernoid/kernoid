@@ -1678,7 +1678,8 @@ impl Kernoid {
 
     /// One round of keeping a folder of the device in step with a store (kernoid-sync): what changed on both sides is
     /// carried over, conflicts keep both versions. `state` is the round's database, outside the folder and one per
-    /// folder. Vaults are kept in step while the account's key is unlocked, else left as they are.
+    /// folder. Vaults are kept in step while the account's key is unlocked, else left as they are; vaults on spaces
+    /// once this device has them (or comes in with the key) and their store is open.
     pub async fn sync_folder(
         &self,
         account_id: String,
@@ -1686,11 +1687,13 @@ impl Kernoid {
         state: String,
     ) -> Result<SyncReport, KernoidError> {
         let (client, e2e) = (self.client.clone(), self.e2e.clone());
+        // Vaults on spaces too, once their store is open here (RFC 0010, 5).
+        let vaults = self.vaults.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone();
         let report = RUNTIME
             .spawn(async move {
                 let mut folder = kernoid_sync::Folder::open(&root, &account_id, std::path::Path::new(&state))?;
                 let mut e2e = e2e.lock().await;
-                folder.sync_with(&client, Some(&mut e2e)).await
+                folder.sync_all(&client, Some(&mut e2e), vaults.as_ref()).await
             })
             .await
             .map_err(|error| KernoidError { message: error.to_string(), unauthorized: false })?
@@ -2617,24 +2620,42 @@ impl Kernoid {
         run(async move { vaults.remove(&space_vault(vault_id, space), parent.as_deref(), &entry).await }).await
     }
 
-    /// After sharing a vault on a space: makes those shared with members. Returns those who wait – groups, and
-    /// people without a key.
+    /// After sharing a vault on a space: brings its members in line with `shares` (principal and level `read`, `edit`
+    /// or `full`) – new ones get a code sealed to their key, those gone leave, those with another level come in again.
+    /// Returns those who wait – groups, and people without a key.
     pub async fn share_space_vault(
         &self,
         account_id: String,
         vault_id: String,
         space: String,
-        principal_ids: Vec<String>,
+        shares: Vec<FileShare>,
     ) -> Result<Vec<Principal>, KernoidError> {
         let (client, e2e, vaults) = (self.client.clone(), self.e2e.clone(), self.vaults()?);
         let waiting = run(async move {
-            let ids: Vec<&str> = principal_ids.iter().map(String::as_str).collect();
-            let people = files::principals(&client, &ids).await?;
+            let ids: Vec<&str> = shares.iter().map(|s| s.principal_id.as_str()).collect();
+            let found = files::principals(&client, &ids).await?;
+            let people: Vec<(files::Principal, client::e2e::Level)> = found
+                .into_iter()
+                .map(|p| {
+                    let level = match shares.iter().find(|s| s.principal_id == p.id).map(|s| s.level.as_str()) {
+                        Some("full") => client::e2e::Level::Full,
+                        Some("edit") => client::e2e::Level::Edit,
+                        _ => client::e2e::Level::Read,
+                    };
+                    (p, level)
+                })
+                .collect();
             let mut e2e = e2e.lock().await;
             vaults.share(&client, &mut e2e, &account_id, &space_vault(vault_id, space), &people).await
         })
         .await?;
         Ok(waiting.into_iter().map(principal).collect())
+    }
+
+    /// Renames a vault on a space.
+    pub async fn rename_space_vault(&self, vault_id: String, space: String, name: String) -> Result<(), KernoidError> {
+        let vaults = self.vaults()?;
+        run(async move { vaults.rename_vault(&space_vault(vault_id, space), name.trim()).await }).await
     }
 
     /// Ends a member's membership of a vault on a space: what is written from now on is out of their reach.

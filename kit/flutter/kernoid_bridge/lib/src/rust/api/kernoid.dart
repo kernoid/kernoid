@@ -260,6 +260,10 @@ abstract class Kernoid implements RustOpaqueInterface {
 
   Future<void> renameMailbox({String? accountId, required String id, required String name});
 
+  /// Renames a vault on a space.
+  /// Vaults on spaces (RFC 0010, 5): what lies in one is kept end to end through the foundation's streams.
+  Future<void> renameSpaceVault({required String vaultId, required String space, required String name});
+
   /// A reply (`reply`, `replyAll`) to or a forward (`forward`) of an email: recipients, `Re:`/`Fwd:`, the text quoted
   /// – an encrypted email's decrypted text, when the key is unlocked –, the thread, the attachments forwarded.
   /// The email is read from `account_id` (a shared mailbox) or the user's own; the draft is the user's own.
@@ -336,14 +340,15 @@ abstract class Kernoid implements RustOpaqueInterface {
   /// Sets with whom a directory is shared, replacing what was.
   Future<void> shareDirectory({required String accountId, required String id, required List<FileShare> shares});
 
-  /// After sharing a vault on a space: makes those shared with members. Returns those who wait – groups, and
-  /// people without a key.
+  /// After sharing a vault on a space: brings its members in line with `shares` (principal and level `read`, `edit`
+  /// or `full`) – new ones get a code sealed to their key, those gone leave, those with another level come in again.
+  /// Returns those who wait – groups, and people without a key.
   /// Vaults on spaces (RFC 0010, 5): what lies in one is kept end to end through the foundation's streams.
   Future<List<Principal>> shareSpaceVault({
     required String accountId,
     required String vaultId,
     required String space,
-    required List<String> principalIds,
+    required List<FileShare> shares,
   });
 
   /// Signs out: a login with OpenID Connect is revoked at the server – the browser's session there stays.
@@ -356,7 +361,8 @@ abstract class Kernoid implements RustOpaqueInterface {
 
   /// One round of keeping a folder of the device in step with a store (kernoid-sync): what changed on both sides is
   /// carried over, conflicts keep both versions. `state` is the round's database, outside the folder and one per
-  /// folder. Vaults are kept in step while the account's key is unlocked, else left as they are.
+  /// folder. Vaults are kept in step while the account's key is unlocked, else left as they are; vaults on spaces
+  /// once this device has them (or comes in with the key) and their store is open.
   Future<SyncReport> syncFolder({required String accountId, required String root, required String state});
 
   /// Unlocks the key with the recovery code; it stays in this process's memory only.

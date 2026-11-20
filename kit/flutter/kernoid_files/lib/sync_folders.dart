@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: MIT
+import 'space_vault.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -203,6 +205,12 @@ class SyncFolders extends ChangeNotifier {
     _changed();
     try {
       await (await _directory()).create(recursive: true);
+      // Vaults on spaces are kept in step too, from their store on this device.
+      try {
+        await openVaults(account);
+      } catch (_) {
+        // Without it, they are left as they are.
+      }
       final report = await account.syncFolder(
         accountId: folder.store,
         root: _pathOf(folder),

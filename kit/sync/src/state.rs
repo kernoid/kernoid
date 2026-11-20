@@ -30,6 +30,9 @@ pub struct Node {
     pub sealed_name: Option<String>,
     /// In a vault whose key was not at hand: `name` is only the node's id there.
     pub locked: bool,
+    /// A vault on a space (RFC 0010, 5): its space – on its directory, and on what lies in the space (whose nodes are
+    /// its streams, not the store's).
+    pub space: Option<String>,
 }
 
 /// An upload in pieces under way: the file it was for (size and modification time), the pieces sent, and when it
@@ -85,6 +88,17 @@ impl State {
                  COMMIT;",
             )?;
         }
+        // 2 (0.5.0): vaults on spaces – the store is read whole once, so that their directories say their space.
+        let version: i64 = db.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+        if version < 2 {
+            db.execute_batch(
+                "BEGIN;
+                 ALTER TABLE remote ADD COLUMN space TEXT;
+                 DELETE FROM meta WHERE key = 'state';
+                 PRAGMA user_version = 2;
+                 COMMIT;",
+            )?;
+        }
         Ok(State { db: Mutex::new(db) })
     }
 
@@ -104,8 +118,9 @@ impl State {
 
     pub fn remote(&self) -> Result<BTreeMap<String, Node>> {
         let db = self.db();
-        let mut query =
-            db.prepare("SELECT id, parent, name, directory, blob, size, role, vault, sealed_name, locked FROM remote")?;
+        let mut query = db.prepare(
+            "SELECT id, parent, name, directory, blob, size, role, vault, sealed_name, locked, space FROM remote",
+        )?;
         let rows = query.query_map([], |row| {
             Ok(Node {
                 id: row.get(0)?,
@@ -118,6 +133,7 @@ impl State {
                 vault: row.get(7)?,
                 sealed_name: row.get(8)?,
                 locked: row.get(9)?,
+                space: row.get(10)?,
             })
         })?;
         let mut out = BTreeMap::new();
@@ -135,8 +151,8 @@ impl State {
         tx.execute("DELETE FROM remote", [])?;
         {
             let mut insert = tx.prepare(
-                "INSERT INTO remote (id, parent, name, directory, blob, size, role, vault, sealed_name, locked)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                "INSERT INTO remote (id, parent, name, directory, blob, size, role, vault, sealed_name, locked, space)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             )?;
             for node in nodes.values() {
                 insert.execute(params![
@@ -149,7 +165,8 @@ impl State {
                     node.role,
                     node.vault,
                     node.sealed_name,
-                    node.locked
+                    node.locked,
+                    node.space
                 ])?;
             }
         }
@@ -304,6 +321,7 @@ mod tests {
             vault: Some("v".into()),
             sealed_name: Some("c2VhbGVk".into()),
             locked: false,
+            space: None,
         };
         state.set_remote(&BTreeMap::from([("n1".to_owned(), node.clone())]), "7").unwrap();
         let base = Base {

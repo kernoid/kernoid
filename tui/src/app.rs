@@ -22,7 +22,7 @@ use kernoid_tui::{
         self, Client, MAIL,
         calendars::{self, Calendar, Event, EventForm},
         contacts::{self, AddressBook, Card, CardForm},
-        e2e::{E2e, Outgoing, Plan},
+        e2e::{E2e, Outgoing, Plan, Vaults},
         files::{self, FileLink, FileNode, Found, Level, LinkMode, Principal, Store, Version},
         mail::{self, Conversation, Email, EmailSummary, Identity, Mailbox, Vacation},
         push::Push,
@@ -88,6 +88,11 @@ pub enum Prompt {
     },
     /// Upload the local file typed into the current directory.
     Upload,
+    /// Save a file of the vault on a space open, decrypted here, to the path typed.
+    VaultSave {
+        id: String,
+        name: String,
+    },
     NewFolder,
     Rename {
         id: String,
@@ -344,6 +349,8 @@ pub struct FilesState {
     /// What the store is searched for; while set, `nodes` are the hits and `found` where they are.
     pub search: String,
     pub found: Vec<Found>,
+    /// A vault on a space open (RFC 0010, 5): its directory, in `path` too; what `nodes` lists then is its entries.
+    pub vault: Option<FileNode>,
 }
 
 #[derive(Debug, Default)]
@@ -395,6 +402,8 @@ pub struct App {
     pub e2e: E2e,
     /// The recovery code from the environment, until it unlocked the key.
     recovery: Option<String>,
+    /// Vaults on spaces on this computer, their store opened at the first use.
+    vaults: Option<Vaults>,
     background: Sender<Background>,
     next_transfer: u64,
 }
@@ -500,6 +509,7 @@ impl App {
             regions: Regions::default(),
             e2e: E2e::default(),
             recovery,
+            vaults: None,
             background,
             next_transfer: 0,
         };
@@ -1088,10 +1098,93 @@ impl App {
             self.info("this account has no files");
         }
         self.files.path.clear();
+        self.files.vault = None;
         self.load_nodes();
     }
 
+    /// The store of vaults on spaces of this account on this computer – in `$XDG_STATE_HOME/kernoid` (or
+    /// `~/.local/state/kernoid`), one file per account –, opened at the first use.
+    fn vaults(&mut self) -> Option<Vaults> {
+        if let Some(vaults) = &self.vaults {
+            return Some(vaults.clone());
+        }
+        let base = std::env::var_os("XDG_STATE_HOME")
+            .map(PathBuf::from)
+            .filter(|path| path.is_absolute())
+            .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/state")))?;
+        let directory = base.join("kernoid");
+        if let Err(error) = std::fs::create_dir_all(&directory) {
+            self.fail(format!("{}: {error}", directory.display()));
+            return None;
+        }
+        let name: String =
+            self.client.session.username.chars().map(|c| if c.is_alphanumeric() { c } else { '_' }).collect();
+        let vaults = self.attempt(|_| Vaults::open(&directory.join(format!("vaults-{name}.db")), "terminal"))?;
+        self.vaults = Some(vaults.clone());
+        Some(vaults)
+    }
+
+    /// The vault on a space open, and the directory of it shown – `None`: its top.
+    fn vault_here(&self) -> Option<(FileNode, Option<String>)> {
+        let vault = self.files.vault.clone()?;
+        let directory = self.files.path.last().map(|n| n.id.clone()).filter(|id| *id != vault.id);
+        Some((vault, directory))
+    }
+
+    /// Opens a vault on a space: this computer comes in with the account's code (the key unlocked) the first time.
+    fn open_vault(&mut self, node: FileNode) {
+        let Some(store) = self.store().map(|s| s.id.clone()) else { return };
+        let Some(vaults) = self.vaults() else { return };
+        let entered = {
+            let (client, e2e) = (&self.client, &mut self.e2e);
+            block(vaults.enter(client, e2e, &store, &node))
+        };
+        match entered {
+            Ok(true) => {
+                let mut node = node;
+                if let Ok(Some(name)) = block(vaults.name(&node)) {
+                    node.name = name;
+                }
+                self.files.vault = Some(node.clone());
+                self.files.path.push(node);
+                self.files.list.select(None);
+                self.load_nodes();
+                select(&mut self.files.list, self.files.nodes.len(), 0);
+            }
+            Ok(false) => self.info("no member has given you this vault yet"),
+            Err(_) if self.e2e.has_key() && !self.e2e.is_unlocked() => {
+                self.info("unlock your key (K) to open the vault the first time");
+            }
+            Err(error) => self.fail(error),
+        }
+    }
+
     fn load_nodes(&mut self) {
+        if let Some((vault, directory)) = self.vault_here() {
+            let Some(vaults) = self.vaults() else { return };
+            let selected = self.selected_node().map(|n| n.id.clone());
+            if let Some(entries) = self.attempt(|_| block(vaults.list(&vault, directory.as_deref()))) {
+                self.files.nodes = entries
+                    .into_iter()
+                    .filter(|e| !e.trashed)
+                    .map(|e| FileNode {
+                        kind: if e.directory { "Directory" } else { "File" }.into(),
+                        id: e.id,
+                        parent_id: directory.clone().or_else(|| Some(vault.id.clone())),
+                        name: e.name,
+                        size: (!e.directory).then_some(e.size),
+                        media_type: e.media_type,
+                        modified: e.modified,
+                        vault: Some(vault.id.clone()),
+                        space: vault.space.clone(),
+                        ..FileNode::default()
+                    })
+                    .collect();
+                let index = selected.and_then(|id| self.files.nodes.iter().position(|n| n.id == id)).unwrap_or(0);
+                select(&mut self.files.list, self.files.nodes.len(), index);
+            }
+            return;
+        }
         let Some(store) = self.store().map(|s| s.id.clone()) else {
             self.files.nodes.clear();
             return;
@@ -1109,7 +1202,18 @@ impl App {
         }
         self.files.found.clear();
         let parent = self.files.path.last().map(|n| n.id.clone());
-        if let Some(nodes) = self.attempt(|app| block(files::children(&app.client, &store, parent.as_deref()))) {
+        if let Some(mut nodes) = self.attempt(|app| block(files::children(&app.client, &store, parent.as_deref()))) {
+            // A vault on a space is named in its space: known once this computer has it.
+            if nodes.iter().any(|n| n.space.is_some() && n.vault.as_deref() == Some(n.id.as_str()))
+                && let Some(vaults) = self.vaults()
+            {
+                for node in nodes.iter_mut().filter(|n| n.space.is_some()) {
+                    node.name = match block(vaults.name(node)) {
+                        Ok(Some(name)) => name,
+                        _ => "(vault)".into(),
+                    };
+                }
+            }
             self.files.nodes = nodes;
             let index = selected.and_then(|id| self.files.nodes.iter().position(|n| n.id == id)).unwrap_or(0);
             select(&mut self.files.list, self.files.nodes.len(), index);
@@ -1136,14 +1240,28 @@ impl App {
             }
             return;
         }
-        if node.is_directory() {
+        if node.space.is_some() && self.files.vault.is_none() {
+            self.open_vault(node);
+        } else if node.is_directory() {
             self.files.path.push(node);
             self.files.list.select(None);
             self.load_nodes();
             select(&mut self.files.list, self.files.nodes.len(), 0);
+        } else if self.files.vault.is_some() {
+            self.save_from_vault(&node);
         } else {
             self.show_versions();
         }
+    }
+
+    /// Asks where a file of the vault goes, decrypted here.
+    fn save_from_vault(&mut self, node: &FileNode) {
+        let path = free_path(&self.downloads, &node.name);
+        self.prompt(
+            Prompt::VaultSave { id: node.id.clone(), name: node.name.clone() },
+            "Save as",
+            path.display().to_string(),
+        );
     }
 
     fn leave_directory(&mut self) {
@@ -1153,6 +1271,9 @@ impl App {
             return;
         }
         if let Some(left) = self.files.path.pop() {
+            if self.files.vault.as_ref().is_some_and(|vault| vault.id == left.id) {
+                self.files.vault = None;
+            }
             self.load_nodes();
             if let Some(index) = self.files.nodes.iter().position(|n| n.id == left.id) {
                 self.files.list.select(Some(index));
@@ -1229,6 +1350,19 @@ impl App {
         self.popup = Some(Popup::Info { title: node.name, text });
     }
 
+    /// Moves what is selected in the vault into the vault's trash, from where an app brings it back.
+    fn trash_in_vault(&mut self) {
+        let (Some((vault, directory)), Some(node), Some(vaults)) =
+            (self.vault_here(), self.selected_node().cloned(), self.vaults())
+        else {
+            return;
+        };
+        if self.attempt(|_| block(vaults.set_trashed(&vault, directory.as_deref(), &node.id, true))).is_some() {
+            self.info(format!("{} moved to the vault's trash", node.name));
+            self.load_nodes();
+        }
+    }
+
     fn delete_node(&mut self) {
         let (Some(store), Some(node)) = (self.store().map(|s| s.id.clone()), self.selected_node().cloned()) else {
             return;
@@ -1298,6 +1432,36 @@ impl App {
             .await;
             let _ = out.send(Background::Finished { id, result });
         });
+    }
+
+    /// Puts a file of this computer into the vault's directory shown – a file of the same name gets a new version.
+    fn upload_into_vault(&mut self, path: PathBuf) {
+        let (Some((vault, directory)), Some(vaults)) = (self.vault_here(), self.vaults()) else { return };
+        let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let data = match std::fs::read(&path) {
+            Ok(data) => data,
+            Err(error) => {
+                self.fail(format!("{}: {error}", path.display()));
+                return;
+            }
+        };
+        let existing = self.files.nodes.iter().find(|n| n.name == name && !n.is_directory()).map(|n| n.id.clone());
+        let kind = files::media_type(&name);
+        let modified = std::fs::metadata(&path)
+            .ok()
+            .and_then(|meta| meta.modified().ok())
+            .and_then(|time| Timestamp::try_from(time).ok())
+            .map(|time| format!("{time:.0}"));
+        if self
+            .attempt(|_| {
+                let (parent, modified) = (directory.as_deref(), modified.as_deref());
+                block(vaults.put_file(&vault, parent, &name, data, Some(kind), modified, existing.as_deref()))
+            })
+            .is_some()
+        {
+            self.info(format!("uploaded {name} into the vault"));
+            self.load_nodes();
+        }
     }
 
     fn upload(&mut self, path: PathBuf) {
@@ -2294,7 +2458,34 @@ impl App {
                 }
                 self.download(account, blob, name, kind, path);
             }
+            Prompt::Upload if !text.is_empty() && self.files.vault.is_some() => self.upload_into_vault(expand(&text)),
             Prompt::Upload if !text.is_empty() => self.upload(expand(&text)),
+            Prompt::VaultSave { id, name } if !text.is_empty() => {
+                let mut path = expand(&text);
+                if path.is_dir() {
+                    path = free_path(&path, &name);
+                }
+                let Some((vault, _)) = self.vault_here() else { return };
+                let Some(vaults) = self.vaults() else { return };
+                if let Some(data) = self.attempt(|_| block(vaults.read_file(&vault, &id))) {
+                    match write_new_bytes(&path, &data) {
+                        Ok(()) => self.info(format!("saved to {} (decrypted here)", path.display())),
+                        Err(error) => self.fail(error),
+                    }
+                }
+            }
+            Prompt::NewFolder if !text.is_empty() && self.files.vault.is_some() => {
+                let (Some((vault, directory)), Some(vaults)) = (self.vault_here(), self.vaults()) else { return };
+                if self.attempt(|_| block(vaults.make_directory(&vault, directory.as_deref(), &text))).is_some() {
+                    self.load_nodes();
+                }
+            }
+            Prompt::Rename { id } if !text.is_empty() && self.files.vault.is_some() => {
+                let (Some((vault, directory)), Some(vaults)) = (self.vault_here(), self.vaults()) else { return };
+                if self.attempt(|_| block(vaults.rename(&vault, directory.as_deref(), &id, &text))).is_some() {
+                    self.load_nodes();
+                }
+            }
             Prompt::ExportEvent { account, id } if !text.is_empty() => self.export_event(&account, &id, expand(&text)),
             Prompt::ImportEvents if !text.is_empty() => self.import_events(expand(&text)),
             Prompt::ExportCards if !text.is_empty() => self.export_cards(expand(&text)),
@@ -2732,6 +2923,7 @@ impl App {
             (FilesFocus::Stores, _) if up || down => {
                 step(&mut self.files.store_list, self.files.stores.len(), if up { -1 } else { 1 });
                 self.files.path.clear();
+                self.files.vault = None;
                 self.files.list.select(None);
                 self.load_nodes();
             }
@@ -2750,6 +2942,17 @@ impl App {
                 } else {
                     self.leave_directory();
                 }
+            }
+            (FilesFocus::Nodes, KeyCode::Char('d')) if self.files.vault.is_some() => {
+                if let Some(node) = self.selected_node().cloned().filter(|n| !n.is_directory()) {
+                    self.save_from_vault(&node);
+                }
+            }
+            (FilesFocus::Nodes, KeyCode::Char('v' | 'S' | 'L' | 'm')) if self.files.vault.is_some() => {
+                self.fail("not in a vault on a space – share the vault itself from where it lies");
+            }
+            (FilesFocus::Nodes, KeyCode::Char('D') | KeyCode::Delete) if self.files.vault.is_some() => {
+                self.trash_in_vault();
             }
             (FilesFocus::Nodes, KeyCode::Char('d')) => {
                 let (Some(store), Some(node)) = (self.store().map(|s| s.id.clone()), self.selected_node().cloned())

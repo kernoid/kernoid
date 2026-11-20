@@ -1980,9 +1980,11 @@ dependencies = [
  "jiff",
  "kernoid-client",
  "kernoid-e2e",
+ "reqwest",
  "rusqlite",
  "serde_json",
  "tokio",
+ "url",
 ]
 
 [[package]]

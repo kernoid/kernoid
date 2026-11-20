@@ -31,7 +31,7 @@ use std::{
 
 use kernoid_client::{
     Client, FILENODE,
-    e2e::E2e,
+    e2e::{E2e, Vaults},
     files::{self, FileNode},
 };
 use serde_json::{Value, json};
@@ -194,10 +194,47 @@ impl Folder {
     }
 
     /// One round, with the account's end-to-end key (RFC 0006): vaults whose key it opens are kept in step too.
-    pub async fn sync_with(&mut self, client: &Client, mut e2e: Option<&mut E2e>) -> Result<Report> {
+    pub async fn sync_with(&mut self, client: &Client, e2e: Option<&mut E2e>) -> Result<Report> {
+        self.sync_all(client, e2e, None).await
+    }
+
+    /// One round with vaults on spaces too (RFC 0010, 5): those this device has – or comes into with the account's
+    /// key – are kept in step through `vaults`; the others are left as they are.
+    pub async fn sync_all(
+        &mut self,
+        client: &Client,
+        mut e2e: Option<&mut E2e>,
+        vaults: Option<&Vaults>,
+    ) -> Result<Report> {
         let mut report = Report::default();
         let mut nodes = self.read_store(client, e2e.as_deref_mut()).await?;
-        let remote = tree_with(&nodes, self.names, &mut report.skipped);
+        // Vaults on spaces: their names from the space, what is in them below them; locked where not at hand.
+        let mut spaces: BTreeMap<String, String> = BTreeMap::new();
+        for node in nodes.values_mut().filter(|node| node.space.is_some() && node.vault.as_deref() == Some(&node.id)) {
+            let opened = match vaults {
+                Some(vaults) => open_space(client, e2e.as_deref_mut(), &self.store, vaults, node).await,
+                None => None,
+            };
+            match opened {
+                Some(name) => {
+                    node.name = name;
+                    node.locked = false;
+                    spaces.insert(node.id.clone(), node.space.clone().unwrap_or_default());
+                }
+                None => node.locked = true,
+            }
+        }
+        let mut remote = tree_with(&nodes, self.names, &mut report.skipped);
+        if let Some(vaults) = vaults {
+            let roots: Vec<(RelPath, Node)> = remote
+                .iter()
+                .filter(|(_, (node, _))| spaces.contains_key(&node.id))
+                .map(|(path, (node, _))| (path.clone(), node.clone()))
+                .collect();
+            for (path, root) in roots {
+                space_tree(vaults, &root, &path, self.names, &mut remote, &mut report.skipped).await?;
+            }
+        }
         let mut local = scan(&self.root)?;
         let mut base = self.state.base()?;
         // Vaults whose key is not at hand stay as they are on both sides: what was known of them is kept, nothing
@@ -215,8 +252,25 @@ impl Folder {
             if let Action::Download { path, .. } = &action {
                 downloading.push(path.clone());
             }
-            let result =
-                self.run(client, e2e.as_deref_mut(), &action, &remote, &mut base, &mut trash, &mut touched).await;
+            // What lies in a vault on a space goes to the space; so does renaming the vault's directory (its name is
+            // there). Everything else about that directory is the store's.
+            let in_space = match &action {
+                Action::MoveRemote { id, .. } if spaces.contains_key(id) => Some(id.clone()),
+                Action::MakeRemoteDirectory(_)
+                | Action::Upload { .. }
+                | Action::Download { .. }
+                | Action::DeleteRemote { .. }
+                | Action::MoveRemote { .. } => vault_of(plan::parent(action_path(&action)), &remote, &base),
+                // What happens here only is the same as elsewhere.
+                _ => None,
+            }
+            .and_then(|vault| spaces.get(&vault).map(|space| (vault, space.clone())));
+            let result = match (in_space, vaults) {
+                (Some((vault, space)), Some(vaults)) => {
+                    self.run_in_space(vaults, &vault, &space, &action, &remote, &mut base).await
+                }
+                _ => self.run(client, e2e.as_deref_mut(), &action, &remote, &mut base, &mut trash, &mut touched).await,
+            };
             match result {
                 Ok(()) => count(&mut report, &action),
                 Err(error) => report.failed.push((path, error.to_string())),
@@ -454,6 +508,104 @@ impl Folder {
         Ok(())
     }
 
+    /// An action on what lies in a vault on a space – or on the vault's directory itself, which the store keeps.
+    async fn run_in_space(
+        &self,
+        vaults: &Vaults,
+        vault: &str,
+        space: &str,
+        action: &Action,
+        remote: &BTreeMap<RelPath, (Node, Remote)>,
+        base: &mut BTreeMap<RelPath, Base>,
+    ) -> Result<()> {
+        let node = FileNode { id: vault.to_owned(), space: Some(space.to_owned()), ..FileNode::default() };
+        // The stream of the directory a path lies in: none for the vault's top.
+        let parent_of = |path: &str, base: &BTreeMap<RelPath, Base>| -> Result<Option<String>> {
+            let parent = plan::parent(path);
+            let id = base
+                .get(parent)
+                .map(|entry| entry.remote.id.clone())
+                .or_else(|| remote.get(parent).map(|(node, _)| node.id.clone()))
+                .ok_or_else(|| gone(parent))?;
+            Ok((id != vault).then_some(id))
+        };
+        let name_of = |path: &str| path.rsplit('/').next().unwrap_or(path).to_owned();
+        match action {
+            Action::MakeRemoteDirectory(path) => {
+                let parent = parent_of(path, base)?;
+                let id = vaults.make_directory(&node, parent.as_deref(), &name_of(path)).await?;
+                let remote = Remote { id, directory: true, blob: None, size: 0, vault: Some(vault.to_owned()) };
+                base.insert(path.clone(), Base { remote, local: stat(&self.local(path))? });
+            }
+            Action::Upload { path, id } => {
+                let at = self.local(path);
+                let local = stat(&at)?;
+                let data = tokio::fs::read(&at).await?;
+                let size = data.len() as u64;
+                let parent = parent_of(path, base)?;
+                let name = name_of(path);
+                let modified = std::fs::metadata(&at)
+                    .ok()
+                    .and_then(|meta| meta.modified().ok())
+                    .and_then(|time| jiff::Timestamp::try_from(time).ok())
+                    .map(|time| format!("{time:.0}"));
+                let kind = files::media_type(&name);
+                let stream = vaults
+                    .put_file(&node, parent.as_deref(), &name, data, Some(kind), modified.as_deref(), id.as_deref())
+                    .await?;
+                let version = vaults
+                    .list(&node, parent.as_deref())
+                    .await?
+                    .into_iter()
+                    .find(|entry| entry.id == stream)
+                    .map(|entry| entry.version);
+                let remote =
+                    Remote { id: stream, directory: false, blob: version, size, vault: Some(vault.to_owned()) };
+                base.insert(path.clone(), Base { remote, local });
+            }
+            Action::Download { path, id, .. } => {
+                let (_, known) = remote.get(path).filter(|(n, _)| &n.id == id).ok_or_else(|| gone(path))?;
+                let at = self.local(path);
+                let data = vaults.read_file(&node, id).await?;
+                let partial = partial_of(&at);
+                let mut file = tokio::fs::File::create(&partial).await?;
+                file.write_all(&data).await?;
+                file.sync_all().await?;
+                drop(file);
+                tokio::fs::rename(&partial, &at).await?;
+                base.insert(path.clone(), Base { remote: known.clone(), local: stat(&at)? });
+            }
+            Action::DeleteRemote { path, id } if id != vault => {
+                // Into the vault's own trash, from where an app can bring it back.
+                let parent = parent_of(path, base)?;
+                vaults.set_trashed(&node, parent.as_deref(), id, true).await?;
+                forget(base, path);
+            }
+            Action::MoveRemote { from, to, id } if id != vault => {
+                let (old, new) = (parent_of(from, base)?, parent_of(to, base)?);
+                if old != new {
+                    vaults.move_to(&node, old.as_deref(), id, new.as_deref()).await?;
+                }
+                if name_of(from) != name_of(to) {
+                    vaults.rename(&node, new.as_deref(), id, &name_of(to)).await?;
+                }
+                plan::rename(base, from, to);
+            }
+            Action::MoveRemote { from, to, .. } => {
+                // The vault's directory: its name is in the space. Moving it elsewhere in the store is left to the
+                // apps (**OPEN**).
+                if plan::parent(from) != plan::parent(to) {
+                    return Err(Error::State(format!("{to}: a vault on a space is moved in an app, not here")));
+                }
+                vaults.rename_vault(&node, &name_of(to)).await?;
+                plan::rename(base, from, to);
+            }
+            // What happens here only is the same as elsewhere.
+            _ => return Err(Error::State("not an action in a vault on a space".into())),
+        }
+        Ok(())
+    }
+
     /// Downloads a blob to a path through its partial file – going on with one that broke off for the same blob.
     async fn download(&self, client: &Client, path: &str, blob: &str, at: &Path) -> Result<()> {
         let partial = partial_of(at);
@@ -572,6 +724,73 @@ impl Folder {
     }
 }
 
+/// Brings this device into a vault on a space (with the account's key, where it is not in yet) and reads what is new;
+/// its name, or `None` where it is not at hand.
+async fn open_space(
+    client: &Client,
+    e2e: Option<&mut E2e>,
+    store: &str,
+    vaults: &Vaults,
+    node: &Node,
+) -> Option<String> {
+    let file = FileNode { id: node.id.clone(), space: node.space.clone(), ..FileNode::default() };
+    let entered = match e2e {
+        Some(e2e) => vaults.enter(client, e2e, store, &file).await.ok()?,
+        None => vaults.sync(&file).await.is_ok(),
+    };
+    if !entered {
+        return None;
+    }
+    vaults.name(&file).await.ok().flatten()
+}
+
+/// What lies in a vault on a space, below its directory at `root_path`: its streams as nodes of the tree (trashed ones
+/// left out), a file's version as its blob.
+async fn space_tree(
+    vaults: &Vaults,
+    root: &Node,
+    root_path: &str,
+    names: Names,
+    tree: &mut BTreeMap<RelPath, (Node, Remote)>,
+    skipped: &mut Vec<String>,
+) -> Result<()> {
+    let file = FileNode { id: root.id.clone(), space: root.space.clone(), ..FileNode::default() };
+    let mut pending: Vec<(Option<String>, String)> = vec![(None, root_path.to_owned())];
+    while let Some((directory, at)) = pending.pop() {
+        let mut seen: Vec<String> = Vec::new();
+        for entry in vaults.list(&file, directory.as_deref()).await? {
+            let key = if names.ignore_case { entry.name.to_lowercase() } else { entry.name.clone() };
+            if entry.trashed || !names.usable(&entry.name) || seen.contains(&key) {
+                if !entry.trashed {
+                    skipped.push(entry.name.clone());
+                }
+                continue;
+            }
+            seen.push(key);
+            let path = format!("{at}/{}", entry.name);
+            let node = Node {
+                id: entry.id.clone(),
+                parent: Some(directory.clone().unwrap_or_else(|| root.id.clone())),
+                name: entry.name.clone(),
+                directory: entry.directory,
+                blob: (!entry.directory).then(|| entry.version.clone()),
+                size: entry.size,
+                role: None,
+                vault: Some(root.id.clone()),
+                sealed_name: None,
+                locked: false,
+                space: root.space.clone(),
+            };
+            let remote = remote_of(&node);
+            if entry.directory {
+                pending.push((Some(entry.id.clone()), path.clone()));
+            }
+            tree.insert(path, (node, remote));
+        }
+    }
+    Ok(())
+}
+
 fn gone(path: &str) -> Error {
     Error::State(format!("{path}: not in the store (any more)"))
 }
@@ -673,6 +892,7 @@ fn node_of(node: &FileNode) -> Node {
         sealed_name: node.encrypted_name.clone(),
         // Opened when the key is at hand (`read_store`).
         locked: node.vault.is_some() && node.encrypted_name.is_some(),
+        space: node.space.clone(),
     }
 }
 
@@ -826,6 +1046,7 @@ mod tests {
                 vault: None,
                 sealed_name: None,
                 locked: false,
+                space: None,
             },
         )
     }

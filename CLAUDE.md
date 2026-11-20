@@ -83,7 +83,8 @@ off its runtime; with `--features wasm` (and `--no-default-features`: no ureq) i
 `scripts/build-wasm.sh` turns into `web/vault/dist` (`@kernoid/vault`, not checked in) – SQLite is compiled for the
 browser by sqlite-wasm-rs, which needs a clang that knows wasm32 and llvm-ar (Apple's ar writes no WebAssembly objects;
 the script takes Homebrew's LLVM on macOS). The web app runs it in a worker (`web/app/src/files/space.worker.ts`):
-the relay by synchronous requests, the store kept in IndexedDB.
+the relay by synchronous requests, the store kept in IndexedDB. kernoid-sync (`Folder::sync_all`) and the terminal app
+take a `Vaults` too: a vault's entries become paths of the folder, a file's `version` its blob.
 
 `kit/sync` (MIT) is `kernoid-sync`, the file sync of kernoid's apps on the SDK: one round (`Folder::sync`) reads the
 store's changes (`FileNode/changes`, the whole store when the state is too old), scans the folder (size and modification

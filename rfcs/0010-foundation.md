@@ -111,10 +111,19 @@ move, as built so far:
    only a worker may make (`kernoid_replica::transport::Transport`). The page founds with its session cookie, which the
    relay takes with the CSRF header and an `Origin` of the instance.
 
-**OPEN:** `kernoid-sync` and the terminal app; making a vault needs a login by token or the web app's session (the
-relay takes no app passwords); keys of streams are kept in the store – in the browser in IndexedDB – not in a key store
-of the system; members' permissions follow the
-grant only when they are made (`members` for everyone shared with), not when it changes; groups as members.
+6. **Levels follow the grant.** Sharing brings the members in line with whom the vault's directory is shared with and
+   how far (`kernoid_vault::set_members`): read is a person without permissions, edit `write`, edit and share `write`,
+   `members` and `purge`. A person's permissions are fixed in the roster, so another level means the person leaves and
+   comes in again with a new code; its devices find themselves removed, forget the vault and come in again with it
+   (`kernoid_vault::sync`). Renaming the vault is an event of the space stream.
+7. **Everywhere.** The web app, the apps (through the bridge), the terminal app (`$XDG_STATE_HOME/kernoid`) and the
+   file sync (`Folder::sync_all`: a vault's entries are paths of the folder, a file's version its blob; deleting goes
+   into the vault's trash) keep vaults on spaces.
+
+**OPEN:** making a vault needs a login by token or the web app's session (the relay takes no app passwords); keys of
+streams are kept in the store – in the browser in IndexedDB – not in a key store of the system; levels change only
+where someone shares in an app (not through the administration API); groups as members; moving a vault's directory
+in the store from the file sync; Finder and Explorer do not show what is in such vaults yet.
 
 ## 6. Post-quantum
 

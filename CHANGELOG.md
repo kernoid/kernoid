@@ -40,6 +40,11 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   kept in IndexedDB. New vaults are made there, OpenPGP vaults can be moved onto a space, sharing makes members. The
   replica reaches relays through a `Transport` (ureq natively, feature `native`), the store can be kept as bytes
   (`kernoid-space-store`, feature `serialize`), and the relay takes the web app's session cookie of a founder.
+- **Vaults on spaces everywhere:** the file sync keeps them in step (`Folder::sync_all`; state version 2), the terminal
+  app opens them (folders, saving decrypted, uploads, new folders, renaming, deleting into the vault's trash), and
+  every app renames them. Sharing follows the level of each share (`kernoid_vault::set_members`: read, edit, full) –
+  a member at another level comes in again with a new code, their devices forget the vault and come in by themselves
+  (`Streams::forget`). A device without `write` makes its own person's stream at the relay.
 
 ### Changed
 

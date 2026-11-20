@@ -245,5 +245,87 @@ async fn a_vault_is_kept_in_step_with_the_key() {
     assert_eq!((report.moved, report.downloaded), (1, 0), "{report:?}");
     assert_eq!(read(&a.join("Tresor/brief.txt")), "nur für Mitglieder");
 
+    space_vault_in_step(&store, &mut e2e, &client, &mut one, &mut two, &a, &b).await;
     std::fs::remove_dir_all(&work).unwrap();
+}
+
+/// A client logged in by a session token – what the relay takes to found a space.
+async fn by_token(address: &str, password: &str) -> Client {
+    let server = std::env::var("KERNOID_TEST_SERVER").unwrap();
+    let (address, password) = (std::env::var(address).unwrap(), std::env::var(password).unwrap());
+    let host = url::Url::parse(&server).unwrap();
+    let http = reqwest::Client::builder()
+        .resolve(host.host_str().unwrap(), std::net::SocketAddr::from(([127, 0, 0, 1], host.port().unwrap_or(443))))
+        .build()
+        .unwrap();
+    let session: serde_json::Value = http
+        .post(format!("{server}/v1/sessions"))
+        .json(&serde_json::json!({ "address": address, "password": password }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let token = session["token"].as_str().unwrap_or_else(|| panic!("no session: {session}"));
+    let url = kernoid_client::session_url(Some(&server), &address).unwrap();
+    Client::connect_with_token(&url, token, &Options::default()).await.unwrap()
+}
+
+/// A vault on a space (RFC 0010, 5) in two folders: made in one, it reaches the other through the account's code;
+/// changes, moves and deletions carry over – a deletion into the vault's trash.
+#[allow(clippy::too_many_arguments)]
+async fn space_vault_in_step(
+    store: &str,
+    e2e: &mut kernoid_client::e2e::E2e,
+    client: &Client,
+    one: &mut Folder,
+    two: &mut Folder,
+    a: &Path,
+    b: &Path,
+) {
+    use kernoid_client::e2e::Vaults;
+    let by_token = by_token("KERNOID_TEST_VAULT_ADDRESS", "KERNOID_TEST_VAULT_PASSWORD").await;
+    let (here, there) = (Vaults::in_memory("folder a").unwrap(), Vaults::in_memory("folder b").unwrap());
+    let vault = here.create(&by_token, e2e, store, None, "Raum").await.unwrap();
+    one.sync_all(client, Some(e2e), Some(&here)).await.unwrap();
+    assert!(a.join("Raum").is_dir(), "the vault by its name in the space");
+
+    std::fs::create_dir_all(a.join("Raum/Plan")).unwrap();
+    std::fs::write(a.join("Raum/Plan/plan.txt"), "erster Entwurf").unwrap();
+    let report = one.sync_all(client, Some(e2e), Some(&here)).await.unwrap();
+    assert_eq!((report.uploaded, report.directories, report.failed.len()), (1, 1, 0), "{report:?}");
+    // The store sees nothing in it.
+    assert!(files::children(client, store, Some(&vault)).await.unwrap().is_empty());
+
+    let report = two.sync_all(client, Some(e2e), Some(&there)).await.unwrap();
+    assert_eq!((report.downloaded, report.failed.len()), (1, 0), "{report:?}");
+    assert_eq!(read(&b.join("Raum/Plan/plan.txt")), "erster Entwurf");
+    let report = two.sync_all(client, Some(e2e), Some(&there)).await.unwrap();
+    assert_eq!((report.downloaded, report.uploaded, report.moved, report.failed.len()), (0, 0, 0, 0), "{report:?}");
+
+    // Moved there, it moves here; changed here, it changes there.
+    std::fs::rename(b.join("Raum/Plan/plan.txt"), b.join("Raum/plan.txt")).unwrap();
+    let report = two.sync_all(client, Some(e2e), Some(&there)).await.unwrap();
+    assert_eq!((report.moved, report.uploaded, report.failed.len()), (1, 0, 0), "{report:?}");
+    let report = one.sync_all(client, Some(e2e), Some(&here)).await.unwrap();
+    assert_eq!((report.moved, report.downloaded, report.failed.len()), (1, 0, 0), "{report:?}");
+    assert_eq!(read(&a.join("Raum/plan.txt")), "erster Entwurf");
+    tick().await;
+    std::fs::write(a.join("Raum/plan.txt"), "zweiter Entwurf").unwrap();
+    let report = one.sync_all(client, Some(e2e), Some(&here)).await.unwrap();
+    assert_eq!((report.uploaded, report.failed.len()), (1, 0), "{report:?}");
+    let report = two.sync_all(client, Some(e2e), Some(&there)).await.unwrap();
+    assert_eq!((report.downloaded, report.failed.len()), (1, 0), "{report:?}");
+    assert_eq!(read(&b.join("Raum/plan.txt")), "zweiter Entwurf");
+
+    // Deleted there: into the vault's trash, and gone here.
+    std::fs::remove_file(b.join("Raum/plan.txt")).unwrap();
+    let report = two.sync_all(client, Some(e2e), Some(&there)).await.unwrap();
+    assert_eq!((report.deleted_there, report.failed.len()), (1, 0), "{report:?}");
+    let report = one.sync_all(client, Some(e2e), Some(&here)).await.unwrap();
+    assert_eq!((report.deleted_here, report.failed.len()), (1, 0), "{report:?}");
+    assert!(!a.join("Raum/plan.txt").exists());
+    let node = files::get(client, store, &vault).await.unwrap();
+    assert!(here.list(&node, None).await.unwrap().iter().any(|e| e.name == "plan.txt" && e.trashed));
 }
