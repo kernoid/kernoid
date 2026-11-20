@@ -167,7 +167,9 @@ then go. kernoid's own vaults move onto `v2` with [0010](0010-foundation.md), 5.
 
 - **OPEN:** a review of sections 3 to 5, `kernoid_crypt::stream` and `kernoid_crypt::pq` by someone who reviews
   cryptography, besides their author.
-- **OPEN:** keys of streams and seeds are kept in the store on the device, not yet in the key store of the operating
+- Settled for kernoid's vaults ([0010](0010-foundation.md), 5, 9): their store is kept sealed under a key of the
+  system's key store. **OPEN** for the foundation's other programs: keys of streams and seeds are kept in the store on
+  the device, not yet in the key store of the operating
   system (as for protocol 1).
 - **OPEN:** whether the relay's `follow` hides which streams a device asks for together (it does not, by decision 5 of
   aktujo RFC 0009).

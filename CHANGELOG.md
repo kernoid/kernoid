@@ -45,6 +45,12 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   every app renames them. Sharing follows the level of each share (`kernoid_vault::set_members`: read, edit, full) –
   a member at another level comes in again with a new code, their devices forget the vault and come in by themselves
   (`Streams::forget`). A device without `write` makes its own person's stream at the relay.
+- **Vaults on spaces, rounded off:** a grant changed elsewhere reaches the members when someone who may share opens the
+  vault (`Vaults::reconcile`); groups make their members members (principals carry `kernoid:members`); readers are
+  offered nothing to change; the file sync moves a vault's folder; a device keeps its vaults sealed
+  (`kernoid_vault::sealed`, XChaCha20-Poly1305, the key in the apps' secure storage or the terminal app's keyring; in
+  the browser AES-GCM with a non-extractable key); Finder, Android's Files and Explorer show and change what is in
+  vaults on spaces – each shell a device of its own, handed a sealed store and the codes with its login.
 
 ### Changed
 

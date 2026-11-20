@@ -120,10 +120,22 @@ move, as built so far:
    file sync (`Folder::sync_all`: a vault's entries are paths of the folder, a file's version its blob; deleting goes
    into the vault's trash) keep vaults on spaces.
 
-**OPEN:** making a vault needs a login by token or the web app's session (the relay takes no app passwords); keys of
-streams are kept in the store – in the browser in IndexedDB – not in a key store of the system; levels change only
-where someone shares in an app (not through the administration API); groups as members; moving a vault's directory
-in the store from the file sync; Finder and Explorer do not show what is in such vaults yet.
+8. **Grants changed elsewhere** – through the administration API, another app – reach the members the next time a
+   device that may add members opens the vault (`Vaults::reconcile`). A **group** shared with makes each of its
+   members a member at the group's level (principals name a group's members in `kernoid:members`). A device that may
+   only read is offered nothing it could change.
+9. **Kept sealed.** A device keeps its vaults' store – keys of streams and persons, names, what was read – sealed:
+   in a file under XChaCha20-Poly1305 with a key of the system's key store (`kernoid_vault::sealed`: the apps'
+   secure storage, the terminal app's keyring), in the browser under AES-GCM with a key the browser keeps as a
+   non-extractable `CryptoKey`.
+10. **In the system's file manager** each shell is a device of its own: the app hands it, with the login kept for it,
+    a sealed store and a sealed file of codes, into which it writes the code of each vault it enters; the shell comes
+    in with it. An entry is an item `s|<vault's directory>|<stream>`; changes of what is in the vaults make the shell
+    read everything again (the anchor carries a digest).
+
+**OPEN:** making a vault needs a login by token or the web app's session (the relay takes no app passwords); Apple's
+File Provider reads the shell's files only from the app group's container, which needs the signing team; a review of
+the cryptography by someone besides its author.
 
 ## 6. Post-quantum
 

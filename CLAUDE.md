@@ -84,7 +84,10 @@ off its runtime; with `--features wasm` (and `--no-default-features`: no ureq) i
 browser by sqlite-wasm-rs, which needs a clang that knows wasm32 and llvm-ar (Apple's ar writes no WebAssembly objects;
 the script takes Homebrew's LLVM on macOS). The web app runs it in a worker (`web/app/src/files/space.worker.ts`):
 the relay by synchronous requests, the store kept in IndexedDB. kernoid-sync (`Folder::sync_all`) and the terminal app
-take a `Vaults` too: a vault's entries become paths of the folder, a file's `version` its blob.
+take a `Vaults` too: a vault's entries become paths of the folder, a file's `version` its blob. On devices the store is
+kept sealed (`kernoid_vault::sealed`, `Vaults::open_sealed`) under a key of the system's key store; the file shells'
+core (`kernoid_bridge::provider`, `provider/spaces.rs`) is a device of its own, handed its store and the codes with the
+login the app keeps for it.
 
 `kit/sync` (MIT) is `kernoid-sync`, the file sync of kernoid's apps on the SDK: one round (`Folder::sync`) reads the
 store's changes (`FileNode/changes`, the whole store when the state is too old), scans the folder (size and modification

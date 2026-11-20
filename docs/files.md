@@ -88,9 +88,13 @@ Sharing such a vault follows the level of each share: reading, editing, or editi
 the member comes in again at the new level by themselves. The terminal app and the folders the apps keep in step
 (**Folders on this computer**) open these vaults too; there, deleting moves into the vault's own trash.
 
+Sharing with a group makes each of its members a member; a share changed in the administration reaches the vault the
+next time someone who may share opens it. Someone who may only read is offered nothing to change. What a device keeps
+of its vaults is sealed with a key of the system's key store – in the browser, with a key the browser does not let out.
+Finder, the Files app on Android and Explorer show what is in such vaults once the app has opened them.
+
 {: .note }
-OPEN: files in such vaults are not shown in Finder or Explorer yet; levels change only where someone shares in an app
-or the web app.
+OPEN: on Apple's systems, Finder shows vaults on spaces only once the app is signed with a team (its app group).
 
 ## Search and the trash
 
