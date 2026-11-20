@@ -129,8 +129,9 @@ serves each tenant's people and groups as such a directory (LDAPv3, [RFC 4511](h
 read only: the directory is kept with kernoid's API, SCIM and the web app, never over LDAP.
 
 - **Process role `ldap`**, listening when `[ldap]` is set: LDAP with `StartTLS` (389) and LDAPS (636), with the
-  certificates of the mail protocols. Messages are parsed and written by
-  [ldap3_proto](https://crates.io/crates/ldap3_proto) (MPL-2.0, from Kanidm); the server is kernoid's own.
+  certificates of the mail protocols. Messages and server are kernoid's own: BER as RFC 4511, 5.1 restricts it
+  (definite lengths, one-byte tags), with the simple paged results control (RFC 2696); up to 0.5.1 ldap3_proto read
+  and wrote them.
 - **The tree:** one per tenant, `o=<tenant id>` – stable whatever the tenant's names and domains –, with
   `ou=people` and `ou=groups`. A person is an active account of the kind `person` (no shared mailboxes, no drives) at
   `uid=<login>,ou=people,o=<tenant>` – the login of section 2 –, an `inetOrgPerson` with `uid`, `cn` and

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The directory over LDAP against PostgreSQL, with TLS over in-memory connections and ldap3_proto as the client;
+//! The directory over LDAP against PostgreSQL, with TLS over in-memory connections and kernoid's own codec as the client;
 //! set `DATABASE_URL` as for the other crates' tests.
 
 use std::{net::IpAddr, sync::Arc, time::Duration};
@@ -7,15 +7,11 @@ use std::{net::IpAddr, sync::Arc, time::Duration};
 use futures_util::{SinkExt, StreamExt};
 use kernoid_events::EventStore;
 use kernoid_identity::{Address, DomainName, Identity};
-use kernoid_ldap::{Io, Server, Settings};
-use ldap3_proto::{
-    LdapCodec,
-    control::LdapControl,
-    proto::{
-        LdapBindCred, LdapBindRequest, LdapDerefAliases, LdapExtendedRequest, LdapFilter, LdapMsg, LdapOp,
-        LdapResultCode, LdapSearchRequest, LdapSearchScope,
-    },
+use kernoid_ldap::proto::{
+    BindAuth, BindRequest, Codec, Control, DerefAliases, ExtendedRequest, Filter, Message, Op, ResultCode, Scope,
+    SearchRequest,
 };
+use kernoid_ldap::{Io, Server, Settings};
 use sqlx::PgPool;
 use tokio_util::codec::Framed;
 use uuid::Uuid;
@@ -48,7 +44,7 @@ async fn setup(pool: PgPool) -> Setup {
     Setup { identity, tenant: tenants[0], other: tenants[1], server_tls, client_tls }
 }
 
-type Client = Framed<Box<dyn Io>, LdapCodec>;
+type Client = Framed<Box<dyn Io>, Codec>;
 
 impl Setup {
     fn server(&self, implicit_tls: bool, max_entries: usize) -> Server {
@@ -75,20 +71,20 @@ impl Setup {
         tokio::spawn(async move { server.session(served, remote).await });
         let stream: Box<dyn Io> = Box::new(client_end);
         let stream = if implicit_tls { self.tls(stream).await } else { stream };
-        Framed::new(stream, LdapCodec::default())
+        Framed::new(stream, Codec)
     }
 }
 
 /// Sends `op` as message `id`; the responses up to the last one for it.
-async fn call(client: &mut Client, id: i32, op: LdapOp, controls: Vec<LdapControl>) -> Vec<LdapMsg> {
-    let mut message = LdapMsg::new(id, op);
-    message.ctrl = controls;
+async fn call(client: &mut Client, id: i32, op: Op, controls: Vec<Control>) -> Vec<Message> {
+    let mut message = Message::new(id, op);
+    message.controls = controls;
     client.send(message).await.unwrap();
     let mut out = Vec::new();
     loop {
         let response = tokio::time::timeout(Duration::from_secs(5), client.next()).await.unwrap().unwrap().unwrap();
-        assert_eq!(response.msgid, id);
-        let last = !matches!(response.op, LdapOp::SearchResultEntry(_));
+        assert_eq!(response.id, id);
+        let last = !matches!(response.op, Op::SearchResultEntry(_));
         out.push(response);
         if last {
             return out;
@@ -96,47 +92,49 @@ async fn call(client: &mut Client, id: i32, op: LdapOp, controls: Vec<LdapContro
     }
 }
 
-fn bind(dn: &str, password: &str) -> LdapOp {
-    LdapOp::BindRequest(LdapBindRequest { dn: dn.into(), cred: LdapBindCred::Simple(password.into()) })
+fn bind(dn: &str, password: &str) -> Op {
+    Op::BindRequest(BindRequest { version: 3, dn: dn.into(), auth: BindAuth::Simple(password.into()) })
 }
 
-fn code(response: &LdapMsg) -> LdapResultCode {
+fn code(response: &Message) -> ResultCode {
     match &response.op {
-        LdapOp::BindResponse(response) => response.res.code.clone(),
-        LdapOp::SearchResultDone(result)
-        | LdapOp::ModifyResponse(result)
-        | LdapOp::AddResponse(result)
-        | LdapOp::DelResponse(result) => result.code.clone(),
-        LdapOp::ExtendedResponse(response) => response.res.code.clone(),
+        Op::BindResponse(response) => response.result.code,
+        Op::SearchResultDone(result)
+        | Op::ModifyResponse(result)
+        | Op::AddResponse(result)
+        | Op::DelResponse(result) => result.code,
+        Op::ExtendedResponse(response) => response.result.code,
         other => panic!("not a result: {other:?}"),
     }
 }
 
-fn search(base: &str, scope: LdapSearchScope, filter: LdapFilter, attrs: &[&str]) -> LdapOp {
-    LdapOp::SearchRequest(LdapSearchRequest {
+fn search(base: &str, scope: Scope, filter: Filter, attrs: &[&str]) -> Op {
+    Op::SearchRequest(SearchRequest {
         base: base.into(),
         scope,
-        aliases: LdapDerefAliases::Never,
-        sizelimit: 0,
-        timelimit: 0,
-        typesonly: false,
+        deref: DerefAliases::Never,
+        size_limit: 0,
+        time_limit: 0,
+        types_only: false,
         filter,
-        attrs: attrs.iter().map(|name| (*name).to_owned()).collect(),
+        attributes: attrs.iter().map(|name| (*name).to_owned()).collect(),
     })
 }
 
 /// The DNs of a search's entries, and the attribute `name` of each.
-fn found(responses: &[LdapMsg], name: &str) -> Vec<(String, Vec<String>)> {
+fn found(responses: &[Message], name: &str) -> Vec<(String, Vec<String>)> {
     responses
         .iter()
         .filter_map(|response| match &response.op {
-            LdapOp::SearchResultEntry(entry) => Some((
+            Op::SearchResultEntry(entry) => Some((
                 entry.dn.clone(),
                 entry
                     .attributes
                     .iter()
-                    .filter(|attribute| attribute.atype.eq_ignore_ascii_case(name))
-                    .flat_map(|attribute| attribute.vals.iter().map(|value| String::from_utf8(value.clone()).unwrap()))
+                    .filter(|attribute| attribute.name.eq_ignore_ascii_case(name))
+                    .flat_map(|attribute| {
+                        attribute.values.iter().map(|value| String::from_utf8(value.clone()).unwrap())
+                    })
                     .collect(),
             )),
             _ => None,
@@ -158,41 +156,28 @@ async fn a_bound_account_reads_its_tenants_directory(pool: PgPool) {
 
     let mut client = setup.connect(false, 100).await;
     // The root DSE without a bind; nothing else.
-    let root = call(
-        &mut client,
-        1,
-        search("", LdapSearchScope::Base, LdapFilter::Present("objectClass".into()), &["+", "*"]),
-        vec![],
-    )
-    .await;
+    let root =
+        call(&mut client, 1, search("", Scope::Base, Filter::Present("objectClass".into()), &["+", "*"]), vec![]).await;
     assert_eq!(found(&root, "supportedExtension")[0].1, ["1.3.6.1.4.1.1466.20037", "1.3.6.1.4.1.4203.1.11.3"]);
     assert!(found(&root, "namingContexts")[0].1.is_empty());
-    let denied = call(
-        &mut client,
-        2,
-        search(&base, LdapSearchScope::Subtree, LdapFilter::Present("objectClass".into()), &[]),
-        vec![],
-    )
-    .await;
-    assert_eq!(code(&denied[0]), LdapResultCode::InsufficentAccessRights);
+    let denied =
+        call(&mut client, 2, search(&base, Scope::Subtree, Filter::Present("objectClass".into()), &[]), vec![]).await;
+    assert_eq!(code(&denied[0]), ResultCode::InsufficientAccessRights);
 
     // No password in plain text; StartTLS first.
     let plain = call(&mut client, 3, bind(&alice_dn, PASSWORD), vec![]).await;
-    assert_eq!(code(&plain[0]), LdapResultCode::ConfidentialityRequired);
-    let start = LdapOp::ExtendedRequest(LdapExtendedRequest { name: "1.3.6.1.4.1.1466.20037".into(), value: None });
-    assert_eq!(code(&call(&mut client, 4, start, vec![]).await[0]), LdapResultCode::Success);
+    assert_eq!(code(&plain[0]), ResultCode::ConfidentialityRequired);
+    let start = Op::ExtendedRequest(ExtendedRequest { name: "1.3.6.1.4.1.1466.20037".into(), value: None });
+    assert_eq!(code(&call(&mut client, 4, start, vec![]).await[0]), ResultCode::Success);
     let stream = client.into_inner();
-    let mut client = Framed::new(setup.tls(stream).await, LdapCodec::default());
+    let mut client = Framed::new(setup.tls(stream).await, Codec);
 
-    assert_eq!(
-        code(&call(&mut client, 5, bind(&alice_dn, "wrong"), vec![]).await[0]),
-        LdapResultCode::InvalidCredentials
-    );
-    assert_eq!(code(&call(&mut client, 6, bind(&alice_dn, ""), vec![]).await[0]), LdapResultCode::UnwillingToPerform);
-    assert_eq!(code(&call(&mut client, 7, bind(&alice_dn, PASSWORD), vec![]).await[0]), LdapResultCode::Success);
-    let whoami = LdapOp::ExtendedRequest(LdapExtendedRequest { name: "1.3.6.1.4.1.4203.1.11.3".into(), value: None });
+    assert_eq!(code(&call(&mut client, 5, bind(&alice_dn, "wrong"), vec![]).await[0]), ResultCode::InvalidCredentials);
+    assert_eq!(code(&call(&mut client, 6, bind(&alice_dn, ""), vec![]).await[0]), ResultCode::UnwillingToPerform);
+    assert_eq!(code(&call(&mut client, 7, bind(&alice_dn, PASSWORD), vec![]).await[0]), ResultCode::Success);
+    let whoami = Op::ExtendedRequest(ExtendedRequest { name: "1.3.6.1.4.1.4203.1.11.3".into(), value: None });
     match &call(&mut client, 8, whoami, vec![]).await[0].op {
-        LdapOp::ExtendedResponse(response) => {
+        Op::ExtendedResponse(response) => {
             assert_eq!(response.value.as_deref(), Some(format!("dn:{alice_dn}").as_bytes()))
         }
         other => panic!("{other:?}"),
@@ -204,11 +189,11 @@ async fn a_bound_account_reads_its_tenants_directory(pool: PgPool) {
         9,
         search(
             &format!("ou=people,{base}"),
-            LdapSearchScope::OneLevel,
-            LdapFilter::Equality("objectClass".into(), "inetOrgPerson".into()),
+            Scope::OneLevel,
+            Filter::Equality("objectClass".into(), "inetOrgPerson".into()),
             &["mail", "memberOf"],
         ),
-        vec![LdapControl::SimplePagedResults { size: 50, cookie: Vec::new() }],
+        vec![Control::PagedResults { size: 50, cookie: Vec::new() }],
     )
     .await;
     assert_eq!(
@@ -221,17 +206,17 @@ async fn a_bound_account_reads_its_tenants_directory(pool: PgPool) {
     assert_eq!(found(&people, "memberOf")[0].1, [format!("cn=Staff,ou=groups,{base}")]);
     assert!(found(&people, "cn").iter().all(|(_, values)| values.is_empty()), "only what was asked for");
     let done = people.last().unwrap();
-    assert_eq!(code(done), LdapResultCode::Success);
-    assert!(matches!(done.ctrl.as_slice(), [LdapControl::SimplePagedResults { cookie, .. }] if cookie.is_empty()));
+    assert_eq!(code(done), ResultCode::Success);
+    assert!(matches!(done.controls.as_slice(), [Control::PagedResults { cookie, .. }] if cookie.is_empty()));
     let groups = call(
         &mut client,
         10,
         search(
             &base,
-            LdapSearchScope::Subtree,
-            LdapFilter::And(vec![
-                LdapFilter::Equality("objectClass".into(), "groupOfNames".into()),
-                LdapFilter::Equality("member".into(), alice_dn.to_uppercase()),
+            Scope::Subtree,
+            Filter::And(vec![
+                Filter::Equality("objectClass".into(), "groupOfNames".into()),
+                Filter::Equality("member".into(), alice_dn.to_uppercase()),
             ]),
             &["cn"],
         ),
@@ -244,13 +229,13 @@ async fn a_bound_account_reads_its_tenants_directory(pool: PgPool) {
     let elsewhere = call(
         &mut client,
         11,
-        search(&format!("o={}", setup.other), LdapSearchScope::Subtree, LdapFilter::Present("objectClass".into()), &[]),
+        search(&format!("o={}", setup.other), Scope::Subtree, Filter::Present("objectClass".into()), &[]),
         vec![],
     )
     .await;
-    assert_eq!(code(&elsewhere[0]), LdapResultCode::NoSuchObject);
-    let delete = call(&mut client, 12, LdapOp::DelRequest(alice_dn.clone()), vec![]).await;
-    assert_eq!(code(&delete[0]), LdapResultCode::UnwillingToPerform);
+    assert_eq!(code(&elsewhere[0]), ResultCode::NoSuchObject);
+    let delete = call(&mut client, 12, Op::DelRequest(alice_dn.clone()), vec![]).await;
+    assert_eq!(code(&delete[0]), ResultCode::UnwillingToPerform);
 }
 
 #[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
@@ -263,25 +248,21 @@ async fn ldaps_binds_with_an_address_and_limits_searches(pool: PgPool) {
     let mut client = setup.connect(true, 2).await;
     assert_eq!(
         code(&call(&mut client, 1, bind("alice@firma.example", &app_password), vec![]).await[0]),
-        LdapResultCode::Success
+        ResultCode::Success
     );
     let root = call(
         &mut client,
         2,
-        search("", LdapSearchScope::Base, LdapFilter::Present("objectClass".into()), &["namingContexts"]),
+        search("", Scope::Base, Filter::Present("objectClass".into()), &["namingContexts"]),
         vec![],
     )
     .await;
     assert_eq!(found(&root, "namingContexts")[0].1, std::slice::from_ref(&base));
-    let all = call(
-        &mut client,
-        3,
-        search(&base, LdapSearchScope::Subtree, LdapFilter::Present("objectClass".into()), &["1.1"]),
-        vec![],
-    )
-    .await;
+    let all =
+        call(&mut client, 3, search(&base, Scope::Subtree, Filter::Present("objectClass".into()), &["1.1"]), vec![])
+            .await;
     assert_eq!(found(&all, "x").len(), 2);
-    assert_eq!(code(all.last().unwrap()), LdapResultCode::SizeLimitExceeded);
+    assert_eq!(code(all.last().unwrap()), ResultCode::SizeLimitExceeded);
 }
 
 /// A CA, a certificate for the server signed by it, and the TLS configurations of both sides.

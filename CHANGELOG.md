@@ -21,6 +21,8 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   OpenSSL any more: building needs neither `pkg-config` nor `libssl-dev`. Passkeys registered before keep working and
   are written in kernoid's form at their next use; a ceremony started before the upgrade (five minutes at most) has to
   be started again. Registration now prefers a discoverable passkey (`residentKey: preferred`) and offers EdDSA.
+- **LDAP messages read and written by kernoid itself** (`kernoid_ldap::proto`, BER as RFC 4511 has it) in place of
+  ldap3_proto; the directory answers as before (checked with OpenLDAP's `ldapsearch`, `ldapwhoami`, `ldapdelete`).
 
 ## [0.5.1] – 2026-11-20
 
