@@ -10,6 +10,7 @@
   import { touch, useJmap } from "../app.svelte.js";
   import Failure from "../Failure.svelte";
   import { locale, t } from "../i18n.js";
+  import { ask } from "../ui/ask.svelte.js";
   import FileIcon from "../ui/FileIcon.svelte";
   import { kindOf } from "./kind.js";
   import { type FileNode, formatSize } from "./model.js";
@@ -86,13 +87,13 @@
     });
   }
 
-  function newDirectory(): void {
-    const directoryName = window.prompt(t("Name of the new folder"));
+  async function newDirectory(): Promise<void> {
+    const directoryName = await ask(t("Name of the new folder"));
     if (directoryName?.trim()) void run(async () => void (await spaces.makeDirectory(jmap, vault, here, directoryName.trim())));
   }
 
-  function renameEntry(entry: spaces.Entry): void {
-    const newName = window.prompt(t("New name"), entry.name);
+  async function renameEntry(entry: spaces.Entry): Promise<void> {
+    const newName = await ask(t("New name"), entry.name);
     if (newName?.trim() && newName.trim() !== entry.name) void run(() => spaces.rename(jmap, vault, here, entry.id, newName.trim()));
   }
 
@@ -139,7 +140,7 @@
   <span class="grow"></span>
   {#if entered}
     {#if !showTrash && !reader}
-      <button type="button" disabled={busy} onclick={newDirectory}><FolderPlus size={17} />{t("New folder")}</button>
+      <button type="button" disabled={busy} onclick={() => void newDirectory()}><FolderPlus size={17} />{t("New folder")}</button>
       <label class="button primary" class:disabled={busy}>
         <Upload size={17} />{t("Upload")}
         <input type="file" multiple hidden disabled={busy} onchange={(event) => upload(event.currentTarget.files)} />
@@ -196,7 +197,7 @@
             ><Trash2 size={17} /></button>
           {:else}
             <button type="button" class="quiet icon small" disabled={busy} aria-label={t("Move to …")} data-tip={t("Move to …")} onclick={() => void chooseTarget(entry)}><FolderInput size={17} /></button>
-            <button type="button" class="quiet icon small" disabled={busy} aria-label={t("Rename")} data-tip={t("Rename")} onclick={() => renameEntry(entry)}><Pencil size={17} /></button>
+            <button type="button" class="quiet icon small" disabled={busy} aria-label={t("Rename")} data-tip={t("Rename")} onclick={() => void renameEntry(entry)}><Pencil size={17} /></button>
             <button type="button" class="quiet icon small danger" disabled={busy} aria-label={t("Delete")} data-tip={t("Delete")} onclick={() => void run(() => spaces.setTrashed(jmap, vault, here, entry.id, true))}><Trash2 size={17} /></button>
           {/if}
         </td>

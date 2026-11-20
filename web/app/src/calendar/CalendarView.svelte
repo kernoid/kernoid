@@ -8,6 +8,7 @@
   import { changed, loaded, resource, touch, useJmap } from "../app.svelte.js";
   import Failure from "../Failure.svelte";
   import { locale, t } from "../i18n.js";
+  import { ask } from "../ui/ask.svelte.js";
   import { identities } from "../mail/model.js";
   import EventDialog, { type EventStart } from "./EventDialog.svelte";
   import { type CalendarEvent, calendars, encrypted, instances } from "./model.js";
@@ -161,8 +162,8 @@
   void refreshE2e(jmap).catch(() => undefined);
   let making = $state<unknown>();
 
-  function newEncryptedCalendar(): void {
-    const name = window.prompt(t("Name of the new encrypted calendar"));
+  async function newEncryptedCalendar(): Promise<void> {
+    const name = await ask(t("Name of the new encrypted calendar"));
     if (!name?.trim()) return;
     making = undefined;
     createSealedCollection(jmap, CALENDARS, "Calendar", jmap.account(CALENDARS), name.trim())
@@ -254,7 +255,7 @@
         class="quiet small"
         disabled={!e2e.unlocked}
         data-tip={e2e.unlocked ? t("Its events only those it is shared with can read") : t("Unlock your key on the account page first")}
-        onclick={newEncryptedCalendar}><Lock size={13} />{t("New encrypted calendar")}</button
+        onclick={() => void newEncryptedCalendar()}><Lock size={13} />{t("New encrypted calendar")}</button
       >
     {/if}
   </div>

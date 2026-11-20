@@ -7,6 +7,7 @@
   import { changed, resource, touch, useJmap } from "../app.svelte.js";
   import Failure from "../Failure.svelte";
   import { t } from "../i18n.js";
+  import { ask } from "../ui/ask.svelte.js";
   import CardDialog from "./CardDialog.svelte";
   import { type Card, addressBooks, cards, encryptedBook, fullName, remove } from "./model.js";
   import { current, e2e, refresh as refreshE2e } from "../e2e/e2e.svelte.js";
@@ -32,8 +33,8 @@
   void refreshE2e(jmap).catch(() => undefined);
   let making = $state<unknown>();
 
-  function newEncryptedBook(): void {
-    const name = window.prompt(t("Name of the new encrypted address book"));
+  async function newEncryptedBook(): Promise<void> {
+    const name = await ask(t("Name of the new encrypted address book"));
     if (!name?.trim()) return;
     making = undefined;
     createSealedCollection(jmap, CONTACTS, "AddressBook", jmap.account(CONTACTS), name.trim())
@@ -81,7 +82,7 @@
           class="quiet small"
           disabled={!e2e.unlocked}
           data-tip={e2e.unlocked ? t("Its contacts only those it is shared with can read") : t("Unlock your key on the account page first")}
-          onclick={newEncryptedBook}><Lock size={13} />{t("New encrypted address book")}</button
+          onclick={() => void newEncryptedBook()}><Lock size={13} />{t("New encrypted address book")}</button
         >
       </div>
     {/if}

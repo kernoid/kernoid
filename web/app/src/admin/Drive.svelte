@@ -3,6 +3,7 @@
 <script lang="ts">
   import { loaded } from "../app.svelte.js";
   import { t } from "../i18n.js";
+  import { ask } from "../ui/ask.svelte.js";
   import { type DriveView, type FilesOverviewView, admin, need } from "./api.svelte.js";
   import Grants, { FILE_LEVELS as LEVELS } from "./Grants.svelte";
   import Buttons from "./ui/Buttons.svelte";
@@ -33,8 +34,8 @@
       type="button"
       class="quiet"
       disabled={action.busy}
-      onclick={() => {
-        const text = window.prompt(t("Quota (e.g. 50 GB; empty: the tenant's default)"), shown?.quota != null ? bytes(shown.quota) : "");
+      onclick={async () => {
+        const text = await ask(t("Quota (e.g. 50 GB; empty: the tenant's default)"), shown?.quota != null ? bytes(shown.quota) : "");
         if (text !== null)
           void action
             .run(

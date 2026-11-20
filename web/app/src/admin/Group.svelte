@@ -3,6 +3,7 @@
      as the group. -->
 <script lang="ts">
   import { t } from "../i18n.js";
+  import { ask } from "../ui/ask.svelte.js";
   import { type GroupView, admin, need } from "./api.svelte.js";
   import Form from "./ui/Form.svelte";
   import { useDirectory } from "./ui.svelte.js";
@@ -21,8 +22,8 @@
       type="button"
       class="quiet"
       disabled={busy}
-      onclick={() => {
-        const name = window.prompt(t("New name"), group.name)?.trim();
+      onclick={async () => {
+        const name = (await ask(t("New name"), group.name))?.trim();
         if (name) void change(() => need(admin.PATCH("/v1/groups/{id}", { params: { path: id }, body: { name } })));
       }}
     >

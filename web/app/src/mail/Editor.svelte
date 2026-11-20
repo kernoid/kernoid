@@ -23,6 +23,7 @@
   } from "@lucide/svelte";
 
   import { t } from "../i18n.js";
+  import { ask } from "../ui/ask.svelte.js";
 
   let {
     content = "",
@@ -72,10 +73,10 @@
     return editor?.isActive(name, attributes) ?? false;
   }
 
-  function link(): void {
+  async function link(): Promise<void> {
     if (!editor) return;
     const current = editor.getAttributes("link").href as string | undefined;
-    const href = window.prompt(t("Link to (empty removes it)"), current ?? "https://");
+    const href = await ask(t("Link to (empty removes it)"), current ?? "https://");
     if (href === null) return;
     if (href.trim() === "") editor.chain().focus().extendMarkRange("link").unsetLink().run();
     else editor.chain().focus().extendMarkRange("link").setLink({ href: href.trim() }).run();
@@ -91,7 +92,7 @@
     { label: "List", icon: List, active: on("bulletList"), run: () => chain()?.toggleBulletList().run() },
     { label: "Numbered list", icon: ListOrdered, active: on("orderedList"), run: () => chain()?.toggleOrderedList().run() },
     { label: "Quote", icon: Quote, active: on("blockquote"), run: () => chain()?.toggleBlockquote().run() },
-    { label: "Link", icon: Link, active: on("link"), run: link },
+    { label: "Link", icon: Link, active: on("link"), run: () => void link() },
     null,
     { label: "Remove formatting", icon: RemoveFormatting, active: false, run: () => chain()?.unsetAllMarks().clearNodes().run() },
     { label: "Undo", icon: Undo2, active: false, run: () => chain()?.undo().run() },

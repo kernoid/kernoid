@@ -3,6 +3,7 @@
 <script lang="ts">
   import { loaded } from "../app.svelte.js";
   import { t } from "../i18n.js";
+  import { ask } from "../ui/ask.svelte.js";
   import { admin, need, setTenant } from "./api.svelte.js";
   import { Action, go } from "./ui.svelte.js";
   import Buttons from "./ui/Buttons.svelte";
@@ -55,8 +56,8 @@
             type="button"
             class="quiet"
             disabled={action.busy}
-            onclick={() => {
-              const name = window.prompt(t("New name"), entry.name)?.trim();
+            onclick={async () => {
+              const name = (await ask(t("New name"), entry.name))?.trim();
               if (name) void change(() => need(admin.PATCH("/v1/instance/tenants/{id}", { params: { path: { id: entry.id } }, body: { name } })));
             }}
           >

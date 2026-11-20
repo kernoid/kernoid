@@ -30,6 +30,7 @@
   import { changed, resource, touch, useJmap } from "../app.svelte.js";
   import Failure from "../Failure.svelte";
   import { locale, t } from "../i18n.js";
+  import { ask } from "../ui/ask.svelte.js";
   import CopyDialog from "./CopyDialog.svelte";
   import LinkDialog from "./LinkDialog.svelte";
   import {
@@ -199,15 +200,15 @@
     });
   }
 
-  function newDirectory(): void {
-    const name = window.prompt(t("Name of the new folder"));
+  async function newDirectory(): Promise<void> {
+    const name = await ask(t("Name of the new folder"));
     if (!name?.trim()) return;
     if (vaultHere && directory) void run(() => createDirectoryIn(jmap, account, vaultHere, directory, name.trim()));
     else void run(() => createDirectory(jmap, account, directory, name.trim()));
   }
 
-  function newVault(): void {
-    const name = window.prompt(t("Name of the new vault"));
+  async function newVault(): Promise<void> {
+    const name = await ask(t("Name of the new vault"));
     if (!name?.trim()) return;
     // New vaults are spaces where the server has the relay for them (RFC 0010, 5).
     if (spaces.available(jmap)) void run(async () => void (await spaces.create(jmap, account, directory, name.trim())));
@@ -222,9 +223,9 @@
     });
   }
 
-  function renameNode(node: FileNode): void {
+  async function renameNode(node: FileNode): Promise<void> {
     if (node["kernoid:space"]) {
-      const name = window.prompt(t("Rename the vault"), label(node));
+      const name = await ask(t("Rename the vault"), label(node));
       if (!name?.trim()) return;
       void run(async () => {
         await spaces.renameVault(jmap, account, node, name.trim());
@@ -232,7 +233,7 @@
       });
       return;
     }
-    const name = window.prompt(t("New name"), node.name);
+    const name = await ask(t("New name"), node.name);
     if (!name?.trim() || name.trim() === node.name) return;
     if (inVault(node)) void run(() => renameIn(jmap, account, node, name.trim()));
     else void run(() => rename(jmap, account, node, name.trim()));
@@ -335,13 +336,13 @@
         <Cable size={18} />
       </button>
       {#if !inTrash && here.mayAddChildren}
-        <button type="button" disabled={busy} onclick={newDirectory}><FolderPlus size={17} />{t("New folder")}</button>
+        <button type="button" disabled={busy} onclick={() => void newDirectory()}><FolderPlus size={17} />{t("New folder")}</button>
         {#if !vaultHere && e2e.available && e2e.settings?.policy.vaults !== "forbidden"}
           <button
             type="button"
             disabled={busy || !e2e.unlocked}
             data-tip={e2e.unlocked ? t("Only those it is shared with can read what is in it") : t("Unlock your key on the account page first")}
-            onclick={newVault}><FolderLock size={17} />{t("New vault")}</button
+            onclick={() => void newVault()}><FolderLock size={17} />{t("New vault")}</button
           >
         {/if}
         <label class="button primary" class:disabled={busy}>
@@ -434,7 +435,7 @@
                   </button>
                 {/if}
                 {#if rights.mayRename && !node.locked && (!node["kernoid:space"] || e2e.unlocked)}
-                  <button type="button" class="quiet icon small" disabled={busy} aria-label={t("Rename")} data-tip={t("Rename")} onclick={() => renameNode(node)}><Pencil size={17} /></button>
+                  <button type="button" class="quiet icon small" disabled={busy} aria-label={t("Rename")} data-tip={t("Rename")} onclick={() => void renameNode(node)}><Pencil size={17} /></button>
                 {/if}
                 {#if rights.mayDelete}
                   <button

@@ -18,6 +18,7 @@
   import AdminView from "./admin/AdminView.svelte";
   import { type Theme, setTheme, theme } from "./theme.svelte.js";
   import Toasts from "./ui/Toasts.svelte";
+  import Ask from "./ui/Ask.svelte";
   import Tooltip from "./ui/Tooltip.svelte";
   import UserMenu from "./ui/UserMenu.svelte";
 
@@ -155,4 +156,5 @@
   </svelte:boundary>
   <Tooltip />
   <Toasts />
+  <Ask />
 </div>
