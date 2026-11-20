@@ -3,13 +3,9 @@
 //! 3744, 5397, 6578), read-only ACLs included, with the values the clients of RFC 0004, 8.1 (Apple's Calendar and
 //! Contacts, Thunderbird, DAVx⁵) read.
 
-use calcard::{
-    Entry, Parser,
-    icalendar::{ICalendar, ICalendarComponentType},
-    vcard::VCardVersion,
-};
 use http::StatusCode;
 use kernoid_groupware::{Level, PrincipalInfo, ical};
+use kernoid_pim::{Component, vcard};
 
 use crate::{
     Dav, Error,
@@ -259,10 +255,10 @@ fn calendar_data(text: &str, data: &CalendarData, content: &Content, instances_l
     if data.properties.is_empty() && data.expand.is_none() && data.limit_recurrence.is_none() {
         return Some(text.to_owned());
     }
-    let Entry::ICalendar(ical) = Parser::new(text).entry() else { return Some(text.to_owned()) };
+    let Ok(ical) = kernoid_pim::ical::parse(text) else { return Some(text.to_owned()) };
     let mut instances = match (&content.instances, data.expand.or(data.limit_recurrence)) {
         (Some(instances), _) => instances.clone(),
-        (None, Some(range)) => query::instances(&ical, calcard::common::timezone::Tz::UTC, Some(range)),
+        (None, Some(range)) => query::instances(&ical, jiff::tz::TimeZone::UTC, Some(range)),
         (None, None) => Vec::new(),
     };
     query::serialize_ical(&ical, data, &mut instances, instances_limit)
@@ -541,9 +537,9 @@ impl Dav {
                 _ => None,
             },
             DavProperty::CardDav(CardDavProperty::AddressData(data)) => match (node, &content.text) {
-                (Node::Contact(..), Some(text)) => Some(DavValue::Data(match Parser::new(text).entry() {
-                    Entry::VCard(card) => {
-                        let stored = card.version().unwrap_or(VCardVersion::V4_0);
+                (Node::Contact(..), Some(text)) => Some(DavValue::Data(match vcard::parse(text) {
+                    Ok(card) => {
+                        let stored = card.version;
                         let version = data.version.unwrap_or(stored);
                         if data.properties.is_empty() && version == stored {
                             text.to_owned()
@@ -551,7 +547,7 @@ impl Dav {
                             query::serialize_vcard(&card, &data.properties, version)
                         }
                     }
-                    _ => text.to_owned(),
+                    Err(_) => text.to_owned(),
                 })),
                 _ => None,
             },
@@ -582,21 +578,11 @@ fn collations() -> DavValue {
 /// A calendar with only the time zone a calendar names (`calendar-timezone`, RFC 4791, 5.2.2), its rules from a year
 /// back to ten years ahead.
 fn vtimezone(name: &str) -> Option<String> {
-    use calcard::icalendar::{ICalendarComponent, ICalendarEntry, ICalendarProperty, ICalendarValue};
-    let text = |property, value: &str| ICalendarEntry {
-        name: property,
-        params: vec![],
-        values: smallvec::smallvec![ICalendarValue::Text(value.into())],
-    };
-    let mut ical = ICalendar {
-        components: vec![ICalendarComponent {
-            component_type: ICalendarComponentType::VCalendar,
-            entries: vec![text(ICalendarProperty::Version, "2.0"), text(ICalendarProperty::Prodid, crate::PROD_ID)],
-            component_ids: vec![],
-        }],
-    };
-    let now = jiff::Timestamp::now().as_second();
-    ical.add_timezone(name, now - 366 * 86_400, now + 10 * 366 * 86_400)?;
+    let mut ical = Component::calendar(crate::PROD_ID);
+    let now = jiff::Timestamp::now();
+    let from = now.checked_sub(jiff::SignedDuration::from_hours(366 * 24)).ok()?;
+    let to = now.checked_add(jiff::SignedDuration::from_hours(10 * 366 * 24)).ok()?;
+    ical.components.push(kernoid_pim::tz::vtimezone(name, from, to)?);
     Some(ical.to_string())
 }
 

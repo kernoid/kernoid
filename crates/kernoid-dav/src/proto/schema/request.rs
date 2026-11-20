@@ -6,17 +6,13 @@
 //! Elements a request does not need are skipped, so that extensions do not fail it; a missing element it needs, or a
 //! value that cannot be read, does.
 
-use calcard::{
-    icalendar::{ICalendarComponentType, ICalendarParameterName, ICalendarProperty},
-    vcard::{VCardParameterName, VCardProperty},
-};
-
 use super::{
     Namespace, TextMatch,
     property::{DavProperty, DavPropertyValue, LockScope, component_name, ical_property, vcard_name},
 };
 use crate::proto::{
     Error,
+    names::{ICalendarComponentType, ICalendarParameterName, ICalendarProperty, VCardParameterName, VCardProperty},
     types::TimeRange,
     xml::{self, Element},
 };
@@ -197,7 +193,8 @@ pub struct VCardPropertyWithGroup {
     pub group: Option<String>,
 }
 
-/// The time zone of a `calendar-query`: `timezone` (a VTIMEZONE, by its TZID) or `timezone-id` (RFC 7809).
+/// The time zone of a `calendar-query`: `timezone` (the text of a `VCALENDAR` with its `VTIMEZONE`) or `timezone-id`
+/// (RFC 7809).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum Timezone {
     Name(String),
@@ -249,7 +246,7 @@ fn comp_filter(
                 }
                 for param in params {
                     let name = param.attr("name").ok_or(Error::Invalid("param-filter needs a name"))?;
-                    let param_name = ICalendarParameterName::parse(&name.trim().to_ascii_uppercase());
+                    let param_name = ICalendarParameterName::new(name);
                     let op = ops_of_param(param, Namespace::CalDav)?;
                     out.push(Filter::Parameter { comp: path.clone(), prop: prop.clone(), param: param_name, op });
                 }
@@ -288,6 +285,11 @@ fn addressbook_filters(filter: Option<&Element>) -> Result<Vec<AddressbookFilter
     for prop in props {
         let (group, name) = vcard_name(prop.attr("name").ok_or(Error::Invalid("prop-filter needs a name"))?);
         let prop_name = VCardPropertyWithGroup { name, group };
+        // Each prop-filter's own test (RFC 6352, 10.5.1), before its conditions.
+        out.push(match prop.attr("test").map(str::trim) {
+            Some("allof") => Filter::AllOf,
+            _ => Filter::AnyOf,
+        });
         let ops = ops(prop, Namespace::CardDav)?;
         let params: Vec<_> = prop.children_named(Namespace::CardDav, "param-filter").collect();
         if ops.is_empty() && params.is_empty() {
@@ -298,21 +300,12 @@ fn addressbook_filters(filter: Option<&Element>) -> Result<Vec<AddressbookFilter
         }
         for param in params {
             let name = param.attr("name").ok_or(Error::Invalid("param-filter needs a name"))?;
-            let param_name = VCardParameterName::parse(&name.trim().to_ascii_uppercase());
+            let param_name = VCardParameterName::new(name);
             let op = ops_of_param(param, Namespace::CardDav)?;
             out.push(Filter::Parameter { comp: (), prop: prop_name.clone(), param: param_name, op });
         }
     }
     Ok(out)
-}
-
-/// The TZID of a VTIMEZONE's text, if it has one on a line of its own.
-fn tzid(text: &str) -> Option<String> {
-    text.lines()
-        .map(str::trim)
-        .find_map(|line| line.get(..5).filter(|name| name.eq_ignore_ascii_case("TZID:")).and(line.get(5..)))
-        .map(|id| id.trim().to_owned())
-        .filter(|id| !id.is_empty())
 }
 
 /// A `calendar-query` (RFC 4791, 7.8).
@@ -410,9 +403,12 @@ impl Report {
             (Some(Namespace::CalDav), "calendar-query") => {
                 let timezone = if let Some(id) = root.child(Namespace::CalDav, "timezone-id") {
                     Timezone::Id(id.text().trim().to_owned())
-                } else if let Some(name) = root.child(Namespace::CalDav, "timezone").and_then(|zone| tzid(&zone.text()))
+                } else if let Some(text) = root
+                    .child(Namespace::CalDav, "timezone")
+                    .map(|zone| zone.text())
+                    .filter(|text| !text.trim().is_empty())
                 {
-                    Timezone::Name(name)
+                    Timezone::Name(text)
                 } else {
                     Timezone::None
                 };
@@ -580,32 +576,36 @@ END:VCALENDAR</C:timezone>
         )
         .unwrap();
         let Report::CalendarQuery(query) = report else { panic!() };
-        assert_eq!(query.timezone, Timezone::Name("Europe/Berlin".into()));
+        assert!(
+            matches!(&query.timezone, Timezone::Name(text) if text.contains("TZID:Europe/Berlin")),
+            "{:?}",
+            query.timezone
+        );
         let PropFind::Prop(props) = &query.properties else { panic!() };
         assert!(matches!(props[1], DavProperty::CalDav(CalDavProperty::CalendarData(_))));
-        let event = vec![ICalendarComponentType::VCalendar, ICalendarComponentType::VEvent];
+        let event = vec![ICalendarComponentType::new("VCALENDAR"), ICalendarComponentType::new("VEVENT")];
         assert_eq!(
             query.filters,
             vec![
-                Filter::Component { comp: vec![ICalendarComponentType::VCalendar], op: FilterOp::Exists },
+                Filter::Component { comp: vec![ICalendarComponentType::new("VCALENDAR")], op: FilterOp::Exists },
                 Filter::Component {
                     comp: event.clone(),
                     op: FilterOp::TimeRange(TimeRange::new(1_796_083_200, 1_797_292_800))
                 },
                 Filter::Property {
                     comp: event.clone(),
-                    prop: ICalendarProperty::Summary,
+                    prop: ICalendarProperty::new("SUMMARY"),
                     op: FilterOp::TextMatch(TextMatch { text: "x".into(), negate: true, ..TextMatch::default() }),
                 },
                 Filter::Parameter {
                     comp: event.clone(),
-                    prop: ICalendarProperty::Attendee,
-                    param: ICalendarParameterName::Partstat,
+                    prop: ICalendarProperty::new("ATTENDEE"),
+                    param: ICalendarParameterName::new("PARTSTAT"),
                     op: FilterOp::TextMatch(TextMatch { text: "NEEDS-ACTION".into(), ..TextMatch::default() }),
                 },
-                Filter::Property { comp: event, prop: ICalendarProperty::Description, op: FilterOp::Undefined },
+                Filter::Property { comp: event, prop: ICalendarProperty::new("DESCRIPTION"), op: FilterOp::Undefined },
                 Filter::Component {
-                    comp: vec![ICalendarComponentType::VCalendar, ICalendarComponentType::VTodo],
+                    comp: vec![ICalendarComponentType::new("VCALENDAR"), ICalendarComponentType::new("VTODO")],
                     op: FilterOp::Undefined
                 },
             ]
@@ -639,11 +639,12 @@ END:VCALENDAR</C:timezone>
         };
         assert_eq!(query.limit, Some(10));
         assert_eq!(query.filters[0], Filter::AllOf);
+        assert_eq!(query.filters[1], Filter::AnyOf);
         assert_eq!(
-            query.filters[1],
+            query.filters[2],
             Filter::Property {
                 comp: (),
-                prop: VCardPropertyWithGroup { name: VCardProperty::Email, group: None },
+                prop: VCardPropertyWithGroup { name: VCardProperty::new("EMAIL"), group: None },
                 op: FilterOp::TextMatch(TextMatch {
                     text: "carol".into(),
                     match_type: MatchType::StartsWith,
@@ -652,12 +653,13 @@ END:VCALENDAR</C:timezone>
                 }),
             }
         );
+        assert_eq!(query.filters[3], Filter::AnyOf);
         assert_eq!(
-            query.filters[2],
+            query.filters[4],
             Filter::Parameter {
                 comp: (),
-                prop: VCardPropertyWithGroup { name: VCardProperty::Tel, group: Some("item1".into()) },
-                param: VCardParameterName::Type,
+                prop: VCardPropertyWithGroup { name: VCardProperty::new("TEL"), group: Some("item1".into()) },
+                param: VCardParameterName::new("TYPE"),
                 op: FilterOp::Exists,
             }
         );

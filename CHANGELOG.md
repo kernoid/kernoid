@@ -7,6 +7,14 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 ## [Unreleased]
 
+### Added
+
+- **`kernoid-pim`** (`kit/pim`, MIT, a crate of the kit): kernoid's own library of calendars and contacts, written
+  from the RFCs – iCalendar with every part of recurrence rules, overrides and time zones (IANA, prefixed and Windows
+  names, a calendar's own `VTIMEZONE`), vCard 4.0, 3.0 and 2.1 (quoted-printable), JSCalendar and JSContact with the
+  conversions both ways, JMAP patches. What it does not understand goes back out unchanged (`iCalProps`,
+  `iCalComponents`, `vCardProps`).
+
 ### Changed
 
 - **Sieve has kernoid's own interpreter** (`crates/kernoid-sieve`, AGPL-3.0-or-later), written from the RFCs; it
@@ -21,6 +29,11 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 - The SMTP session, the handling of received messages, the SMTP client of the queue, DANE, MTA-STS and threading are
   kernoid's own code now (`AGPL-3.0-or-later`), written from the RFCs; replies and stored messages stay as they were.
   mail-auth is at 0.15.1, on the server's mail-parser 1.0.
+- The server and the SDK read and write iCalendar and vCard with `kernoid-pim` instead of calcard and jmap-tools
+  (Stalwart's, `AGPL-3.0-only`, removed); scheduling (iTIP) and the filters of CalDAV and CardDAV queries are kernoid's
+  own now, no longer derived from Stalwart's. The SDK drops calcard 0.3.14 – `kernoid-client`'s API is unchanged.
+- JSCalendar as JMAP shows it: participants' ids come from their addresses (the same in a series and its overrides),
+  overrides are written back as whole components, a zone only a calendar defines is shown in UTC.
 
 ## [0.5.1] – 2026-11-20
 

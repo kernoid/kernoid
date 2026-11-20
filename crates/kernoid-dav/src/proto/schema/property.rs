@@ -3,16 +3,13 @@
 //! resource types, privileges and ACLs (RFC 3744), reports, locks (RFC 4918, 15), `calendar-data` (RFC 4791, 9.6) and
 //! `address-data` (RFC 6352, 10.4).
 
-use calcard::{
-    common::IanaParse,
-    icalendar::{ICalendarComponentType, ICalendarProperty},
-    vcard::{VCardProperty, VCardVersion},
-};
+use kernoid_pim::vcard::Version as VCardVersion;
 use quick_xml::escape::escape;
 
 use super::{Collation, Namespace};
 use crate::proto::{
     Depth, Error,
+    names::{ICalendarComponentType, ICalendarProperty, VCardProperty},
     types::TimeRange,
     xml::{Element, Writer},
 };
@@ -548,14 +545,12 @@ impl AddressData {
 
 /// An iCalendar component by name; unknown names are kept.
 pub(crate) fn component_name(name: &str) -> ICalendarComponentType {
-    let name = name.trim().to_ascii_uppercase();
-    ICalendarComponentType::parse(name.as_bytes()).unwrap_or(ICalendarComponentType::Other(name))
+    ICalendarComponentType::new(name)
 }
 
 /// An iCalendar property by name; unknown names are kept.
 pub(crate) fn ical_property(name: &str) -> ICalendarProperty {
-    let name = name.trim().to_ascii_uppercase();
-    ICalendarProperty::parse(name.as_bytes()).unwrap_or(ICalendarProperty::Other(name))
+    ICalendarProperty::new(name)
 }
 
 /// A vCard property by name, maybe with a group (`item1.EMAIL`).
@@ -565,8 +560,7 @@ pub(crate) fn vcard_name(name: &str) -> (Option<String>, VCardProperty) {
         Some((group, name)) => (Some(group.to_owned()), name),
         None => (None, name),
     };
-    let name = name.to_ascii_uppercase();
-    (group, VCardProperty::parse(name.as_bytes()).unwrap_or(VCardProperty::Other(name)))
+    (group, VCardProperty::new(name))
 }
 
 /// A property's value.
@@ -854,9 +848,9 @@ mod tests {
         };
         assert_eq!(data.expand.unwrap().start, 1_796_083_200);
         assert_eq!(data.properties.len(), 3);
-        assert_eq!(data.properties[2].name, Some(ICalendarProperty::Dtstart));
+        assert_eq!(data.properties[2].name, Some(ICalendarProperty::new("DTSTART")));
         assert!(data.properties[2].no_value);
-        assert_eq!(data.properties[1].component, Some(ICalendarComponentType::VEvent));
+        assert_eq!(data.properties[1].component, Some(ICalendarComponentType::new("VEVENT")));
 
         let all = parse(br#"<C:calendar-data xmlns:C="urn:ietf:params:xml:ns:caldav"><C:comp name="VCALENDAR"><C:allprop/><C:comp name="VEVENT"><C:allprop/></C:comp></C:comp></C:calendar-data>"#).unwrap();
         let DavProperty::CalDav(CalDavProperty::CalendarData(data)) = DavProperty::from_element(&all).unwrap() else {
@@ -873,10 +867,10 @@ mod tests {
             panic!()
         };
         assert_eq!(data.version, Some(VCardVersion::V3_0));
-        assert_eq!(data.properties[0].name, VCardProperty::Fn);
+        assert_eq!(data.properties[0].name, VCardProperty::new("FN"));
         assert_eq!(
             data.properties[1],
-            CardDavPropertyName { name: VCardProperty::Email, group: Some("item1".into()), no_value: true }
+            CardDavPropertyName { name: VCardProperty::new("EMAIL"), group: Some("item1".into()), no_value: true }
         );
     }
 

@@ -202,6 +202,6 @@ a note after the blank line. Something the server did not take, or that could no
 | Files | JMAP for files ([draft-ietf-jmap-filenode-19](https://datatracker.ietf.org/doc/draft-ietf-jmap-filenode/)): `FileNode` with `shareWith`; kernoid's `FileVersion/get` (`https://kernoid.dev/jmap/file-versions`); principals (RFC 9670) to find people and groups |
 | Calendars | JMAP for Calendars (draft-ietf-jmap-calendars): `Calendar`, `CalendarEvent/query` with `expandRecurrences`, `CalendarEvent/set` with `sendSchedulingMessages` (invitations, answers, cancellations through iTIP) |
 | Contacts | JMAP for Contacts (RFC 9610): `AddressBook`, `ContactCard` (`/set` too) |
-| Files of events and contacts | iCalendar and vCard read and written by calcard, the library kernoid stores them with; imported into the first calendar or address book you may write, without invitations; a file that is there already is not written over |
+| Files of events and contacts | iCalendar and vCard read and written by kernoid-pim, the library kernoid stores them with; imported into the first calendar or address book you may write, without invitations; a file that is there already is not written over |
 | Finding the server | SRV records `_jmap._tcp` (RFC 8620, 2.2), DNS messages through hickory-proto |
 | Push | the event source of RFC 8620, 7.3 – the app opens it again after a break (the dot next to the address shows whether it is open) |

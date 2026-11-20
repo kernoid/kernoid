@@ -15,6 +15,7 @@
 //! What a server does with a request is not decided here.
 
 pub mod headers;
+pub mod names;
 pub mod schema;
 pub mod types;
 pub mod xml;

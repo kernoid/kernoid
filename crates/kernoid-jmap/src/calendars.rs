@@ -9,7 +9,7 @@
 
 use std::collections::HashMap;
 
-use calcard::{Entry, Parser, common::timezone::Tz};
+use jiff::tz::TimeZone;
 use kernoid_groupware::{CalendarInfo, CalendarUpdate, CollectionAccess, Expect, Level, NewCalendar, ical};
 use serde_json::{Map, Value, json};
 use uuid::Uuid;
@@ -105,23 +105,20 @@ fn local(timestamp: i64, time_zone: Option<&str>) -> String {
 
 /// Whether an iCalendar object repeats: an `RRULE` or `RDATE` in one of its components.
 fn recurs(text: &str) -> bool {
-    let Entry::ICalendar(parsed) = Parser::new(text).entry() else { return false };
-    parsed.components.iter().any(|component| {
-        component.property(&calcard::icalendar::ICalendarProperty::Rrule).is_some()
-            || component.property(&calcard::icalendar::ICalendarProperty::Rdate).is_some()
-    })
+    let Ok(parsed) = kernoid_pim::ical::parse(text) else { return false };
+    parsed.schedulable().any(kernoid_pim::expand::repeats)
 }
 
 /// The instances of an iCalendar object as (start, end) in seconds since 1970, in a time window.
-fn instances(text: &str, default_tz: Tz, after: Option<i64>, before: Option<i64>) -> Vec<(i64, i64)> {
-    let Entry::ICalendar(parsed) = Parser::new(text).entry() else { return Vec::new() };
-    let expanded = parsed.expand_dates(default_tz, ical::MAX_INSTANCES);
+fn instances(text: &str, default_tz: TimeZone, after: Option<i64>, before: Option<i64>) -> Vec<(i64, i64)> {
+    let Ok(parsed) = kernoid_pim::ical::parse(text) else { return Vec::new() };
+    let expanded = kernoid_pim::expand::expand(&parsed, &default_tz, None, ical::MAX_INSTANCES);
     let mut out: Vec<(i64, i64)> = expanded
-        .events
+        .instances
         .into_iter()
-        .map(|event| {
-            let start = event.start.timestamp();
-            (start, event.end.timestamp().max(start))
+        .map(|instance| {
+            let start = instance.start.as_second();
+            (start, instance.end.as_second().max(start))
         })
         .filter(|(start, end)| after.is_none_or(|after| *end > after) && before.is_none_or(|before| *start < before))
         .collect();

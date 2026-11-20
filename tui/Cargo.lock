@@ -64,19 +64,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ahash"
-version = "0.8.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a15f179cd60c4584b8a8c596927aadc462e27f2ca70c04e0071964a73ba7a75"
-dependencies = [
- "cfg-if",
- "getrandom 0.3.4",
- "once_cell",
- "version_check",
- "zerocopy 0.8.63",
-]
-
-[[package]]
 name = "aho-corasick"
 version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -548,24 +535,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
 
 [[package]]
-name = "calcard"
-version = "0.3.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c601473ec15a875626bce73db1a1f0fc81e9c949ca25f1463b714947c0a70a1f"
-dependencies = [
- "ahash",
- "chrono",
- "chrono-tz",
- "hashify",
- "jmap-tools",
- "mail-builder",
- "mail-parser",
- "serde",
- "serde_json",
- "uuid",
-]
-
-[[package]]
 name = "camellia"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -657,30 +626,6 @@ dependencies = [
  "chacha20",
  "cipher 0.5.2",
  "poly1305",
-]
-
-[[package]]
-name = "chrono"
-version = "0.4.45"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1aa79e62e7697b8e29b513a68abacf485adcd1fe8284a4316c5ae868e6633327"
-dependencies = [
- "iana-time-zone",
- "js-sys",
- "num-traits",
- "serde",
- "wasm-bindgen",
- "windows-link",
-]
-
-[[package]]
-name = "chrono-tz"
-version = "0.10.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a6139a8597ed92cf816dfb33f5dd6cf0bb93a6adc938f11039f371bc5bcd26c3"
-dependencies = [
- "chrono",
- "phf 0.12.1",
 ]
 
 [[package]]
@@ -2372,17 +2317,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "jmap-tools"
-version = "0.1.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5bdcd368dcd58a5efaac10c142fb8cddb4d2949af1297b624df3ff0db4cbff54"
-dependencies = [
- "hashify",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "jni"
 version = "0.22.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2534,7 +2468,6 @@ version = "0.5.1"
 dependencies = [
  "base64 0.22.1",
  "bytes",
- "calcard",
  "futures-util",
  "getrandom 0.3.4",
  "hickory-proto",
@@ -2544,6 +2477,7 @@ dependencies = [
  "kernoid-base",
  "kernoid-crypt",
  "kernoid-e2e",
+ "kernoid-pim",
  "kernoid-spaces",
  "kernoid-vault",
  "reqwest",
@@ -2599,6 +2533,14 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "kernoid-pim"
+version = "0.5.1"
+dependencies = [
+ "jiff",
+ "serde_json",
 ]
 
 [[package]]
@@ -2803,12 +2745,6 @@ dependencies = [
  "nix 0.31.3",
  "windows-sys 0.61.2",
 ]
-
-[[package]]
-name = "mail-builder"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ccbc27cb02a58a311a404769a22f5abf63fe3173b290d80be7c534f9c7023151"
 
 [[package]]
 name = "mail-parser"
@@ -3453,15 +3389,6 @@ dependencies = [
 
 [[package]]
 name = "phf"
-version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "913273894cec178f401a31ec4b656318d95473527be05c0752cc41cdc32be8b7"
-dependencies = [
- "phf_shared 0.12.1",
-]
-
-[[package]]
-name = "phf"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c1562dc717473dbaa4c1f85a36410e03c047b2e7df7f45ee938fbef64ae7fadf"
@@ -3528,15 +3455,6 @@ name = "phf_shared"
 version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "67eabc2ef2a60eb7faa00097bd1ffdb5bd28e62bf39990626a582201b7a754e5"
-dependencies = [
- "siphasher",
-]
-
-[[package]]
-name = "phf_shared"
-version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "06005508882fb681fd97892ecff4b7fd0fee13ef1aa569f8695dae7ab9099981"
 dependencies = [
  "siphasher",
 ]
@@ -4477,12 +4395,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sha1_smol"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bbfa15b3dddfee50a0fff136974b3e1bde555604ba463834a7eb7deb6417705d"
-
-[[package]]
 name = "sha2"
 version = "0.10.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5360,7 +5272,6 @@ dependencies = [
  "atomic",
  "getrandom 0.4.3",
  "js-sys",
- "sha1_smol",
  "wasm-bindgen",
 ]
 

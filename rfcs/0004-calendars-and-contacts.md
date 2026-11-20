@@ -20,16 +20,16 @@ scheduling ([RFC 6638](https://www.rfc-editor.org/rfc/rfc6638)), CardDAV
 
 - **iCalendar and vCard** are parsed, written, expanded (recurrences) and converted to JSCalendar
   ([RFC 8984](https://www.rfc-editor.org/rfc/rfc8984)) and JSContact ([RFC 9553](https://www.rfc-editor.org/rfc/rfc9553))
-  by calcard (by Stalwart Labs) – kernoid has no parser of its own for these formats. calcard moved into Stalwart's
-  repository (`crates/calcard`, `AGPL-3.0-only OR LicenseRef-SEL`) after 0.3.14, its last release on crates.io under
-  Apache-2.0 OR MIT; kernoid takes it over from there (v1.0.1, `crates/calcard`, with `crates/jmap-tools`) under
-  `AGPL-3.0-only`. The MIT SDK keeps 0.3.14.
+  by kernoid's own library `kernoid-pim` (`kit/pim`, MIT, in the kit – RFC 0008): the server stores and schedules
+  with it, the SDK reads and writes files with it, so both see the same objects. It replaced calcard and jmap-tools
+  (Stalwart's, taken over at v1.1.0 until 2026-11-20), written anew from the RFCs (5545, 6350, 8984, 9553, 9555, 7986,
+  7529) and draft-ietf-calext-jscalendar-icalendar, without their code.
 - **The WebDAV, CalDAV and CardDAV protocol** – parsing requests and writing responses in XML, and headers – is
-  kernoid's own, written from the RFCs (`kernoid_dav::proto`; until 0.5 it was Stalwart's `crates/dav-proto`). Taken
-  over from Stalwart is the logic of **scheduling** (`crates/groupware/src/scheduling`: what an organizer or attendee sends when an event changes, and
-  how a received message changes an event), and the filters of CalDAV and CardDAV queries
-  (`crates/dav/src/calendar/query.rs`, `card/query.rs`, `calendar/freebusy.rs`). Everything that stores is
-  kernoid's: Stalwart's storage is its own key-value store.
+  kernoid's own, written from the RFCs (`kernoid_dav::proto`; until 0.5 it was Stalwart's `crates/dav-proto`). So are
+  **scheduling** (what an organizer or attendee sends when an event changes, and how a received message changes an
+  event: `kernoid-groupware`'s `scheduling`) and the filters, partial retrieval and free/busy of CalDAV and CardDAV
+  queries (`kernoid-dav`'s `query`), written from RFC 5546, 6638, 4791 and 6352 (until 2026-11-20 they were derived
+  from Stalwart's). Everything that stores is kernoid's: Stalwart's storage is its own key-value store.
 - Taken-over files keep `AGPL-3.0-only`, their copyright and a note of their origin (RFC 0001, licences).
 
 ## 2. Data, not events; the account's store
@@ -66,7 +66,7 @@ What PostgreSQL holds in the clear is what finding needs, protected like the res
   contact by address.
 
 Everything else – text matches, exact times of recurring instances – is decided in kernoid after opening the
-candidates the index finds. Recurrences are expanded by calcard, in the calendar's time zone for floating times.
+candidates the index finds. Recurrences are expanded by kernoid-pim, in the calendar's time zone for floating times.
 Limits: 1 MiB per object; at most 3 000 instances of a recurrence are expanded for one query (the rest is not matched).
 
 ## 4. Calendars and events
@@ -182,22 +182,24 @@ The capabilities `urn:ietf:params:jmap:calendars` and `urn:ietf:params:jmap:cont
 with the same states (one `modseq` per account) and push.
 
 - **Contacts (RFC 9610):** `AddressBook/get`, `/changes`, `/set`; `ContactCard/get`, `/changes`, `/query`,
-  `/queryChanges` (`cannotCalculateChanges`), `/set`, `/copy`. Contacts are stored as vCard and converted with calcard.
+  `/queryChanges` (`cannotCalculateChanges`), `/set`, `/copy`. Contacts are stored as vCard and converted with kernoid-pim.
 - **Calendars (the draft):** `Calendar/get`, `/changes`, `/set`; `CalendarEvent/get`, `/changes`, `/query`, `/set`,
   `/parse`; `CalendarEventNotification/get`, `/changes`, `/set` (destroy only); `ParticipantIdentity/get` (the
   account's addresses). `CalendarEvent/query` expands recurrences when asked (`expandRecurrences`), with the limit of
-  section 3. Events are stored as iCalendar and converted with calcard. The draft still changes: kernoid follows
-  what calcard implements and records deviations here:
-  - the objects are JSCalendar 2.0 as calcard writes them – a recurrence is `recurrenceRule` (one rule), not
-    `recurrenceRules`;
+  section 3. Events are stored as iCalendar and converted with kernoid-pim. The draft still changes: kernoid records
+  deviations here:
+  - the objects are JSCalendar 2.0 – a recurrence is `recurrenceRule` (one rule; `recurrenceRules` is read too),
+    the organizer `organizerCalendarAddress`, a participant's address `calendarAddress`; what has no JSCalendar
+    property is kept in `iCalProps` (properties as written) and `iCalComponents` (their text), so that it goes back
+    unchanged; a zone only the calendar's `VTIMEZONE` defines is shown in UTC (**OPEN:** `timeZones`);
   - with `expandRecurrences`, each instance has the id `<event id>.<start in seconds since 1970>`; `CalendarEvent/get`
     answers it with the event's properties, its override applied, `recurrenceId`, `baseEventId`, `utcStart` and
     `utcEnd`. Instances are read-only (**OPEN:** changing one instance; for now through the event's
     `recurrenceOverrides`);
   - an instance an override moved keeps the recurrence id it was moved from, not its new start, so `CalendarEvent/get`
     shows it with the override's changes;
-  - calcard writes an override as a component with only what it changes, so an override without a duration of its
-    own takes the series' duration when it is stored – otherwise a moved instance would last to the end of its day;
+  - an override is written back as a whole component (the series with the patch applied), and one without an end of
+    its own lasts as its series;
   - a video meeting (the module `jitsi`, docs: Modules) is a `virtualLocations` entry, iCalendar `CONFERENCE`, which
     the web app also adds as a line in the description for calendar programs that show no conference;
   - `shareWith` is null: sharing is changed through the administration API (section 9). **OPEN:** JMAP Sharing.

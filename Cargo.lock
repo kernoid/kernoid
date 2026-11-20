@@ -79,19 +79,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ahash"
-version = "0.8.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a15f179cd60c4584b8a8c596927aadc462e27f2ca70c04e0071964a73ba7a75"
-dependencies = [
- "cfg-if",
- "getrandom 0.3.4",
- "once_cell",
- "version_check",
- "zerocopy 0.8.63",
-]
-
-[[package]]
 name = "aho-corasick"
 version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -887,29 +874,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72f5acc6cb2ba439de613abc23857ec3d78374d8ed5ac84e9d11336e87da8649"
 
 [[package]]
-name = "bytecheck"
-version = "0.8.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26333eeac754f0ad8a6bcd0eb0ac012156302e4e16b852b72ee399aea4f12c29"
-dependencies = [
- "bytecheck_derive",
- "ptr_meta",
- "rancor",
- "simdutf8",
-]
-
-[[package]]
-name = "bytecheck_derive"
-version = "0.8.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46d07918caa9eeaaf06b7873925c53a61daac173539b4f7715090745e44e4e69"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 3.0.9",
-]
-
-[[package]]
 name = "byteorder"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -922,26 +886,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
 dependencies = [
  "serde",
-]
-
-[[package]]
-name = "calcard"
-version = "1.1.0"
-dependencies = [
- "ahash",
- "encodify",
- "hashify 0.3.1",
- "jiff",
- "jmap-tools",
- "mail-parser 1.0.0",
- "memchr",
- "rkyv",
- "serde",
- "serde_json",
- "sha1 0.11.0",
- "simdutf8",
- "smallvec",
- "uuid",
 ]
 
 [[package]]
@@ -2881,12 +2825,10 @@ dependencies = [
  "jiff-static",
  "jiff-tzdb",
  "jiff-tzdb-platform",
- "js-sys",
  "log",
  "portable-atomic",
  "portable-atomic-util",
  "serde_core",
- "wasm-bindgen",
  "windows-link",
 ]
 
@@ -2935,15 +2877,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc65b284afcfa8f6cf189c7274c805505314a7ab975c60e1f548bff56525420e"
 dependencies = [
  "jiff-tzdb",
-]
-
-[[package]]
-name = "jmap-tools"
-version = "1.1.0"
-dependencies = [
- "rkyv",
- "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -3183,19 +3116,18 @@ dependencies = [
 name = "kernoid-dav"
 version = "0.5.1"
 dependencies = [
- "calcard",
  "http",
  "jiff",
  "kernoid-events",
  "kernoid-groupware",
  "kernoid-identity",
  "kernoid-mail",
+ "kernoid-pim",
  "kernoid-store",
  "object_store",
  "quick-xml",
  "serde",
  "serde_json",
- "smallvec",
  "sqlx",
  "tokio",
  "tracing",
@@ -3254,14 +3186,12 @@ dependencies = [
 name = "kernoid-groupware"
 version = "0.5.1"
 dependencies = [
- "ahash",
- "calcard",
- "indexmap",
  "jiff",
  "jiff-sqlx",
  "kernoid-events",
  "kernoid-identity",
  "kernoid-mail",
+ "kernoid-pim",
  "kernoid-store",
  "mail-builder",
  "mail-parser 1.0.0",
@@ -3269,7 +3199,6 @@ dependencies = [
  "percent-encoding",
  "serde",
  "serde_json",
- "smallvec",
  "sqlx",
  "thiserror 2.0.21",
  "tokio",
@@ -3364,7 +3293,6 @@ version = "0.5.1"
 dependencies = [
  "base64 0.22.1",
  "bytes",
- "calcard",
  "futures-util",
  "jiff",
  "jiff-sqlx",
@@ -3374,6 +3302,7 @@ dependencies = [
  "kernoid-groupware",
  "kernoid-identity",
  "kernoid-mail",
+ "kernoid-pim",
  "kernoid-store",
  "mail-builder",
  "mail-parser 1.0.0",
@@ -3494,6 +3423,14 @@ dependencies = [
  "url",
  "uuid",
  "zeroize",
+]
+
+[[package]]
+name = "kernoid-pim"
+version = "0.5.1"
+dependencies = [
+ "jiff",
+ "serde_json",
 ]
 
 [[package]]
@@ -4071,26 +4008,6 @@ name = "multiversion_no_op"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "743fb55ba31b18fb1ecef6bdc9aa2743314978ac084044301a7eee33fb99a20d"
-
-[[package]]
-name = "munge"
-version = "0.4.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e17401f259eba956ca16491461b6e8f72913a0a114e39736ce404410f915a0c"
-dependencies = [
- "munge_macro",
-]
-
-[[package]]
-name = "munge_macro"
-version = "0.4.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4568f25ccbd45ab5d5603dc34318c1ec56b117531781260002151b8530a9f931"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.119",
-]
 
 [[package]]
 name = "ndk-context"
@@ -4922,26 +4839,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ptr_meta"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "743da816b98c921cdbe8628ef7381b76f25ecf4da599fc80aca90eae7ef70cc0"
-dependencies = [
- "ptr_meta_derive",
-]
-
-[[package]]
-name = "ptr_meta_derive"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c8d9ca532f185d5d4db7a7c9d51420b452168ea1c2b913953281bd6fe1fcbd0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 3.0.9",
-]
-
-[[package]]
 name = "qrcode"
 version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5055,15 +4952,6 @@ name = "radium"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc33ff2d4973d518d823d61aa239014831e521c75da58e3df4840d3f47749d09"
-
-[[package]]
-name = "rancor"
-version = "0.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b534442d0fcdb55d66f373d9cac6d33b6293a2335bc2136dbd06ce0e87d2572"
-dependencies = [
- "ptr_meta",
-]
 
 [[package]]
 name = "rand"
@@ -5231,15 +5119,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
-name = "rend"
-version = "0.5.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "663ba70707f96e871406fe10d68128412e619b06d1d47cb91c3a4c6501176240"
-dependencies = [
- "bytecheck",
-]
-
-[[package]]
 name = "replace_with"
 version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5325,37 +5204,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bd124222d17ad93a644ed9d011a40f4fb64aa54275c08cc216524a9ea82fb09f"
 dependencies = [
  "digest 0.10.7",
-]
-
-[[package]]
-name = "rkyv"
-version = "0.8.18"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d9776093b7ca170454ab1406954f7b7d97a57c51dc6c0642957fb2ef25c2d399"
-dependencies = [
- "bytecheck",
- "bytes",
- "hashbrown 0.17.1",
- "indexmap",
- "munge",
- "ptr_meta",
- "rancor",
- "rend",
- "rkyv_derive",
- "smallvec",
- "tinyvec",
- "uuid",
-]
-
-[[package]]
-name = "rkyv_derive"
-version = "0.8.18"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c25ef604ac7dd839d44d64648952ea23c97866f124ff671b0ed2cf3ad9bb06e"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 3.0.9",
 ]
 
 [[package]]

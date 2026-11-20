@@ -1,141 +1,66 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! JSCalendar (RFC 8984) and JSContact (RFC 9553) as JMAP shows them (RFC 0004, 8.2): the stored iCalendar and vCard
-//! converted by calcard, and back. Patches of `*/set` (RFC 8620, 5.3) apply to the JSON.
+//! converted by kernoid-pim, and back. Patches of `*/set` (RFC 8620, 5.3) apply to the JSON.
 
-use calcard::{
-    Entry, Parser,
-    jscalendar::JSCalendar,
-    jscontact::JSContact,
-    vcard::{VCardProperty, VCardValue, VCardVersion},
-};
+use kernoid_pim::{ical, jscalendar, jscontact, vcard};
 use serde_json::{Map, Value};
 
 /// A vCard as a JSContact Card object.
 pub(crate) fn card_to_json(text: &str) -> Option<Map<String, Value>> {
-    let Entry::VCard(card) = Parser::new(text).entry() else { return None };
-    let card: JSContact<'static, String, String> = card.into_jscontact();
-    match serde_json::to_value(&card.0).ok()? {
-        Value::Object(map) => Some(map),
-        _ => None,
-    }
+    let card = vcard::parse(text).ok()?;
+    Some(jscontact::from_vcard(&card))
 }
 
 /// The words of a vCard to search in: the text values of its properties, lower-cased – not the property names, nor
-/// the values of UID, PRODID, REV and VERSION, which say nothing about the person.
+/// the values of UID, PRODID, REV and VERSION, which say nothing about the person, nor inline media.
 pub(crate) fn card_text(text: &str) -> String {
-    let Entry::VCard(card) = Parser::new(text).entry() else { return String::new() };
+    let Ok(card) = vcard::parse(text) else { return String::new() };
     let mut words = String::new();
-    for entry in card.entries {
-        if matches!(
-            entry.name,
-            VCardProperty::Uid | VCardProperty::Prodid | VCardProperty::Rev | VCardProperty::Version
-        ) {
+    for property in &card.properties {
+        if ["UID", "PRODID", "REV", "VERSION", "PHOTO", "LOGO", "SOUND", "KEY"].iter().any(|name| property.is(name)) {
             continue;
         }
-        for value in entry.values {
-            match value {
-                VCardValue::Text(text) => words.push_str(&text),
-                VCardValue::Component(parts) => words.push_str(&parts.join(" ")),
-                _ => continue,
-            }
-            words.push('\n');
-        }
+        let fields: Vec<String> = property.fields().into_iter().filter(|field| !field.is_empty()).collect();
+        words.push_str(&fields.join(" "));
+        words.push('\n');
     }
     words.to_lowercase()
 }
 
 /// A JSContact Card object as a vCard 4.0.
 pub(crate) fn json_to_card(object: &Map<String, Value>) -> Result<String, String> {
-    let json = serde_json::to_string(object).map_err(|error| error.to_string())?;
-    let card: JSContact<'_, String, String> = JSContact::parse(&json)?;
-    let card = card.into_vcard().map_err(|error| error.to_string())?;
-    let mut out = String::new();
-    card.write_to(&mut out, VCardVersion::V4_0).map_err(|error| error.to_string())?;
-    Ok(out)
+    let card = jscontact::to_vcard(object).map_err(|error| error.to_string())?;
+    Ok(card.write(vcard::Version::V4_0))
 }
 
 /// An iCalendar object as a JSCalendar object (an Event, a Task, or a Group of them).
 pub(crate) fn event_to_json(text: &str) -> Option<Map<String, Value>> {
-    let Entry::ICalendar(ical) = Parser::new(text).entry() else { return None };
-    let event: JSCalendar<'static, String, String> = ical.into_jscalendar();
-    let mut map = match serde_json::to_value(&event.0).ok()? {
-        Value::Object(map) => map,
-        _ => return None,
-    };
+    let calendar = ical::parse(text).ok()?;
+    let mut objects = jscalendar::from_icalendar(&calendar);
     // One object holds one event and its exceptions (RFC 0004, 4): the event itself, not a group of one.
-    if map.get("@type").and_then(Value::as_str) == Some("Group")
-        && let Some(Value::Array(entries)) = map.get("entries")
-        && entries.len() == 1
-        && let Some(Value::Object(entry)) = entries.first()
-    {
-        map = entry.clone();
+    match objects.len() {
+        0 => None,
+        1 => objects.pop(),
+        _ => Some(jscalendar::group(objects, calendar.text("PRODID").as_deref())),
     }
-    Some(map)
 }
 
-/// A JSCalendar object as an iCalendar object. calcard converts times and time zones only inside a `Group`, so a
-/// single event is wrapped in one.
+/// A JSCalendar object (or a `Group`) as an iCalendar object.
 pub(crate) fn json_to_event(object: &Map<String, Value>) -> Result<String, String> {
-    // calcard drops a start it cannot read and keeps the event without one; refuse it instead.
+    // A start that is not a LocalDateTime is refused, not dropped.
     if let Some(start) = object.get("start")
         && !start.as_str().is_some_and(is_local_date_time)
     {
         return Err("start: a LocalDateTime, e.g. 2026-11-02T00:00:00".into());
     }
-    let object = &with_override_durations(object);
-    let wrapped;
-    let object = if object.get("@type").and_then(Value::as_str) == Some("Group") {
-        object
-    } else {
-        let mut group = Map::new();
-        group.insert("@type".into(), Value::String("Group".into()));
-        group.insert("prodId".into(), Value::String(kernoid_groupware::PROD_ID.into()));
-        group.insert("entries".into(), Value::Array(vec![Value::Object(object.clone())]));
-        wrapped = group;
-        &wrapped
-    };
-    let json = serde_json::to_string(object).map_err(|error| error.to_string())?;
-    let event: JSCalendar<'_, String, String> = JSCalendar::parse(&json)?;
-    let ical = event.into_icalendar().map_err(|error| error.to_string())?;
-    Ok(ical.to_string())
-}
-
-/// The event with its duration in every override that does not leave its instance out and has none of its own.
-/// calcard writes an override as a component of what it changes only, and an instance without `DURATION` or `DTEND`
-/// ends with its day (RFC 5545, 3.6.1) – not as the series' instances do.
-fn with_override_durations(object: &Map<String, Value>) -> Map<String, Value> {
-    let mut object = object.clone();
-    let Some(duration) = object.get("duration").cloned() else { return object };
-    if let Some(Value::Object(overrides)) = object.get_mut("recurrenceOverrides") {
-        for patch in overrides.values_mut().filter_map(Value::as_object_mut) {
-            let excluded = patch.get("excluded").and_then(Value::as_bool).unwrap_or(false);
-            if !excluded && !patch.contains_key("duration") {
-                patch.insert("duration".into(), duration.clone());
-            }
-        }
-    }
-    object
+    let calendar = jscalendar::to_icalendar(std::slice::from_ref(object), kernoid_groupware::PROD_ID)
+        .map_err(|error| error.to_string())?;
+    Ok(calendar.to_string())
 }
 
 /// Applies a patch (RFC 8620, 5.3): keys are JSON pointers, `null` removes.
 pub(crate) fn patch(object: &mut Map<String, Value>, patch: &Map<String, Value>) -> Result<(), String> {
-    for (path, value) in patch {
-        let parts: Vec<String> = path.split('/').map(|part| part.replace("~1", "/").replace("~0", "~")).collect();
-        let (last, parents) = parts.split_last().ok_or("an empty path")?;
-        let mut current = &mut *object;
-        for part in parents {
-            current = match current.get_mut(part) {
-                Some(Value::Object(next)) => next,
-                _ => return Err(format!("{path}: no such object")),
-            };
-        }
-        if value.is_null() {
-            current.remove(last);
-        } else {
-            current.insert(last.clone(), value.clone());
-        }
-    }
-    Ok(())
+    kernoid_pim::jmap::patch(object, patch).map_err(|error| error.to_string())
 }
 
 /// `YYYY-MM-DDTHH:MM:SS` with an optional fraction – JSCalendar's LocalDateTime (RFC 8984, 1.4.4).

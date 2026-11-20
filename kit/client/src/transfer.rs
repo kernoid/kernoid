@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 //! `.ics` and `.vcf` files: events and contacts read from iCalendar and vCard and written to them – converted by
-//! calcard, the library kernoid stores them with, to the JSCalendar and JSContact objects JMAP speaks.
+//! kernoid-pim, the library kernoid stores them with, to the JSCalendar and JSContact objects JMAP speaks.
 
-use calcard::{Entry, Parser, jscalendar::JSCalendar, jscontact::JSContact, vcard::VCardVersion};
-use serde_json::{Map, Value, json};
+use kernoid_pim::{ical, jscalendar, jscontact, vcard};
+use serde_json::{Map, Value};
 
 /// What the server sets: not taken from a file, nor written to one.
 const SERVER_SET: [&str; 9] =
@@ -18,65 +18,43 @@ fn own_properties(mut object: Map<String, Value>) -> Map<String, Value> {
 
 /// The events of an iCalendar text, as JSCalendar objects – an event with its exceptions is one.
 pub fn events_from_ics(text: &str) -> Result<Vec<Map<String, Value>>, String> {
-    let mut parser = Parser::new(text);
-    let mut out = Vec::new();
-    loop {
-        match parser.entry() {
-            Entry::ICalendar(ical) => {
-                let calendar: JSCalendar<'static, String, String> = ical.into_jscalendar();
-                let value = serde_json::to_value(&calendar.0).map_err(|error| error.to_string())?;
-                match value {
-                    // calcard gives a Group of what the file holds.
-                    Value::Object(group) if group.get("@type").and_then(Value::as_str) == Some("Group") => {
-                        let entries = group.get("entries").and_then(Value::as_array).cloned().unwrap_or_default();
-                        out.extend(entries.into_iter().filter_map(|entry| match entry {
-                            Value::Object(entry) if entry.get("@type").and_then(Value::as_str) == Some("Event") => {
-                                Some(own_properties(entry))
-                            }
-                            _ => None,
-                        }));
-                    }
-                    Value::Object(event) => out.push(own_properties(event)),
-                    _ => {}
-                }
-            }
-            Entry::Eof => break,
-            Entry::VCard(_) => return Err("a vCard, not an iCalendar file".into()),
-            other => return Err(format!("not an iCalendar file: {other:?}")),
+    let calendars = ical::parse_all(text).map_err(|_| {
+        if vcard::parse_all(text).is_ok() {
+            "a vCard, not an iCalendar file".to_owned()
+        } else {
+            "not an iCalendar file".to_owned()
         }
-    }
+    })?;
+    let out: Vec<Map<String, Value>> = calendars
+        .iter()
+        .flat_map(jscalendar::from_icalendar)
+        .filter(|object| object.get("@type").and_then(Value::as_str) == Some("Event"))
+        .map(own_properties)
+        .collect();
     if out.is_empty() {
         return Err("no events in the file".into());
     }
     Ok(out)
 }
 
-/// Events as one iCalendar text. calcard converts times and time zones only inside a Group.
+/// Events as one iCalendar text.
 pub fn ics_from_events(events: &[Map<String, Value>]) -> Result<String, String> {
-    let entries: Vec<Value> = events.iter().cloned().map(|event| Value::Object(own_properties(event))).collect();
-    let group = json!({ "@type": "Group", "prodId": "-//kernoid//kernoid-client//EN", "entries": entries });
-    let text = serde_json::to_string(&group).map_err(|error| error.to_string())?;
-    let calendar: JSCalendar<'_, String, String> = JSCalendar::parse(&text)?;
-    Ok(calendar.into_icalendar().ok_or("not a calendar")?.to_string())
+    let events: Vec<Map<String, Value>> = events.iter().cloned().map(own_properties).collect();
+    let calendar =
+        jscalendar::to_icalendar(&events, "-//kernoid//kernoid-client//EN").map_err(|error| error.to_string())?;
+    Ok(calendar.to_string())
 }
 
 /// The contacts of a vCard text, as JSContact Card objects.
 pub fn cards_from_vcf(text: &str) -> Result<Vec<Map<String, Value>>, String> {
-    let mut parser = Parser::new(text);
-    let mut out = Vec::new();
-    loop {
-        match parser.entry() {
-            Entry::VCard(card) => {
-                let card: JSContact<'static, String, String> = card.into_jscontact();
-                if let Value::Object(card) = serde_json::to_value(&card.0).map_err(|error| error.to_string())? {
-                    out.push(own_properties(card));
-                }
-            }
-            Entry::Eof => break,
-            Entry::ICalendar(_) => return Err("an iCalendar file, not a vCard".into()),
-            other => return Err(format!("not a vCard file: {other:?}")),
+    let cards = vcard::parse_all(text).map_err(|_| {
+        if ical::parse_all(text).is_ok() {
+            "an iCalendar file, not a vCard".to_owned()
+        } else {
+            "not a vCard file".to_owned()
         }
-    }
+    })?;
+    let out: Vec<Map<String, Value>> = cards.iter().map(|card| own_properties(jscontact::from_vcard(card))).collect();
     if out.is_empty() {
         return Err("no contacts in the file".into());
     }
@@ -87,12 +65,8 @@ pub fn cards_from_vcf(text: &str) -> Result<Vec<Map<String, Value>>, String> {
 pub fn vcf_from_cards(cards: &[Map<String, Value>]) -> Result<String, String> {
     let mut out = String::new();
     for card in cards {
-        let text = serde_json::to_string(&own_properties(card.clone())).map_err(|error| error.to_string())?;
-        let card: JSContact<'_, String, String> = JSContact::parse(&text)?;
-        card.into_vcard()
-            .ok_or("not a contact card")?
-            .write_to(&mut out, VCardVersion::V4_0)
-            .map_err(|error| error.to_string())?;
+        let card = jscontact::to_vcard(&own_properties(card.clone())).map_err(|error| error.to_string())?;
+        out.push_str(&card.write(vcard::Version::V4_0));
     }
     Ok(out)
 }
