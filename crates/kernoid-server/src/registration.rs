@@ -139,7 +139,7 @@ pub(crate) async fn begin(
         return Err(IdentityError::Refused("registering by email is not possible here".into()));
     };
     let hostname = from.rsplit_once('@').map_or("kernoid", |(_, domain)| domain);
-    let sent = kernoid_smtp_client::submit(
+    let sent = kernoid_smtp::client::submit(
         relay,
         hostname,
         &from,

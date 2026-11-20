@@ -131,7 +131,7 @@ pub struct AppState {
     /// The sender of kernoid's own messages (`mail.notification_from`).
     pub notification_from: Option<String>,
     /// The operator's relay for them where kernoid keeps no mail (`mail.notification_relay`).
-    pub notification_relay: Option<Arc<kernoid_smtp_client::Relay>>,
+    pub notification_relay: Option<Arc<kernoid_smtp::client::Relay>>,
     /// Where mail programs connect (`smtp.hostname`), for their autoconfiguration; None without `[smtp]`.
     pub mail_host: Option<String>,
     /// Whether kernoid serves IMAP too.
@@ -213,7 +213,7 @@ impl AppState {
 
     /// Sends them through the operator's relay instead, where kernoid keeps no mail (`mail.notification_relay`).
     pub fn with_notification_relay(mut self, relay: &kernoid_config::SmtpRelay) -> Self {
-        self.notification_relay = Some(Arc::new(kernoid_smtp_client::Relay {
+        self.notification_relay = Some(Arc::new(kernoid_smtp::client::Relay {
             host: relay.host.clone(),
             port: relay.port,
             implicit_tls: relay.implicit_tls,

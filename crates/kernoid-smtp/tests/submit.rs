@@ -3,7 +3,7 @@
 
 use std::{sync::Arc, time::Duration};
 
-use kernoid_smtp_client::{Relay, submit_with};
+use kernoid_smtp::client::{Relay, submit_with};
 use rustls::{
     ClientConfig, RootCertStore, ServerConfig,
     pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer},
