@@ -450,7 +450,7 @@ impl Streams {
     }
 
     /// Adds a person without asking them: the person, its key, the space stream linked to it, and a recovery code
-    /// whose device brings the person's first device in ([`Streams::recover`]) with `permissions` (and `write`). For
+    /// whose device brings the person's first device in ([`Streams::recover`]) with `permissions` – none: reading. For
     /// handing a space to someone over another channel – kernoid's vaults give the code to an account's OpenPGP key
     /// (RFC 0010, 5). Whoever adds the person knew the code: until the person's devices remove the recovery device, its
     /// maker could act as the person. Needs `members`.
@@ -472,9 +472,8 @@ impl Streams {
         let seed: [u8; 32] = kernoid_base::random();
         let device_name: DeviceId =
             format!("recovery-{}", &recovery.verifying().id().hex()[..12]).parse().expect("a device name");
-        let mut granted = vec![Permission::Write];
-        granted.extend(permissions.iter().copied().filter(|p| *p != Permission::Write));
-        let device = Device::new(&recovery, person.clone(), device_name, Some("Recovery code".into())).with(&granted);
+        let device =
+            Device::new(&recovery, person.clone(), device_name, Some("Recovery code".into())).with(permissions);
         let key = person_key(self.domain, space, &person, 0, &seed, None, &[&device])?;
         let current = roster.space_generation().ok_or_else(|| state_error("no space stream"))?;
         let space_stream = roster.space_stream().cloned().ok_or_else(|| state_error("no space stream"))?;
@@ -503,6 +502,16 @@ impl Streams {
         )?;
         self.store.add_roster_record(self.domain, &record)?;
         Ok((person, code))
+    }
+
+    /// Forgets a space on this device – after it was removed from it, before it comes in again with a recovery code.
+    pub fn forget(&mut self, space: &SpaceId) -> Result<(), SyncError> {
+        Ok(self.store.remove_stream_space(space)?)
+    }
+
+    /// Whether this device was removed from a space it had: its device is no longer in the roster at the relay.
+    pub fn is_removed(error: &SyncError) -> bool {
+        matches!(error, SyncError::State(message) if message.contains("removed from the space"))
     }
 
     /// Whether this device is a device of the space already (it may still wait to be added).
@@ -939,6 +948,11 @@ impl Streams {
     /// A new generation of a stream: registered at the relay, chained to the one before, and linked again for every
     /// parent still there – what is written from now on, nobody removed can read.
     pub fn renew(&mut self, space: &SpaceId, stream: &StreamId) -> Result<u32, SyncError> {
+        // The space stream's generation is a record of the roster, which follows its newest one: read what is new
+        // first (all of it, so that who left since marks the streams due).
+        if self.store.roster(self.domain, space)?.space_stream() == Some(stream) {
+            self.sync(space)?;
+        }
         let (state, keys, roster) = self.context(space)?;
         let client = Client::new(&self.transport, &state.relay, self.domain, &keys);
         let (generation, previous) = self.current(space, stream)?;

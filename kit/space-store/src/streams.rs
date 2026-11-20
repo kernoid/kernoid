@@ -164,6 +164,19 @@ impl Store {
         Ok(())
     }
 
+    /// Forgets a space of streams with all the device kept of it – its roster, streams, keys and settings – when the
+    /// device was removed from it, or leaves it.
+    pub fn remove_stream_space(&mut self, space: &SpaceId) -> Result<(), StoreError> {
+        let transaction = self.connection.transaction()?;
+        for table in
+            ["roster", "streams", "stream_keys", "stream_parents", "stream_records", "stream_events", "settings"]
+        {
+            transaction.execute(&format!("DELETE FROM {table} WHERE space = ?1"), params![space.as_str()])?;
+        }
+        transaction.commit()?;
+        Ok(())
+    }
+
     /// Forgets a stream – purged, or no longer reachable – with what the device kept of it.
     pub fn remove_stream(&mut self, space: &SpaceId, stream: &StreamId) -> Result<(), StoreError> {
         let transaction = self.connection.transaction()?;

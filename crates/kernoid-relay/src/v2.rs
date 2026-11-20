@@ -316,6 +316,12 @@ async fn add_roster_record(
     Ok(StatusCode::CREATED)
 }
 
+/// Whether `stream` is the inbox of the device's own person – the stream every device of the person makes and moves
+/// on to a new generation of the person's key, whatever else it may.
+fn own_inbox(domain: Domain, space: &SpaceId, stream: &StreamId, device: &Device) -> bool {
+    *stream == StreamId::of_person(domain, space, &device.person)
+}
+
 #[derive(Debug, Deserialize)]
 struct Generation {
     generation: i32,
@@ -336,7 +342,11 @@ async fn add_stream(
 ) -> Result<StatusCode, RelayError> {
     let (space, stream) = (space_id(&space)?, stream_id(&stream)?);
     let (domain, _) = relay.held_v2(&scheme, &space).await?;
-    relay.device(domain, &space, &headers, &method, &uri, Some(Permission::Write)).await?;
+    let (_, device) = relay.device(domain, &space, &headers, &method, &uri, None).await?;
+    // Every device makes its own person's inbox, also one that may only read (RFC 0012, 4); else `write`.
+    if !own_inbox(domain, &space, &stream, &device) && !device.may(Permission::Write) {
+        return Err(forbidden("not allowed"));
+    }
     if body.generation != 0 || body.read.0.len() != 32 || body.write.0.len() != 32 {
         return Err(bad("a stream starts with generation 0 and two token hashes of 32 bytes"));
     }
@@ -376,7 +386,10 @@ async fn add_generation(
 ) -> Result<StatusCode, RelayError> {
     let (space, stream) = (space_id(&space)?, stream_id(&stream)?);
     let (domain, _) = relay.held_v2(&scheme, &space).await?;
-    relay.device(domain, &space, &headers, &method, &uri, Some(Permission::Write)).await?;
+    let (_, device) = relay.device(domain, &space, &headers, &method, &uri, None).await?;
+    if !own_inbox(domain, &space, &stream, &device) && !device.may(Permission::Write) {
+        return Err(forbidden("not allowed"));
+    }
     let shown = relay.token(&space, &stream, &headers, WRITE_HEADER).await?;
     let latest = relay.latest_generation(&space, &stream).await?.ok_or_else(not_found)?;
     if shown != latest {

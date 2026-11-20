@@ -123,7 +123,8 @@ The **member list** stays the one strictly ordered list a relay reads – the on
 signed hybrid and name:
 
 - **devices** – verifying and receiving key, their person, and the permissions the relay enforces: `write`, `members`,
-  `purge`, besides being a member at all (reading);
+  `purge`, besides being a member at all (reading) – a device without `write` still makes its own person's stream and
+  its generations *(settled while building)*, which every device of the person needs;
 - **persons** – an identity (`p-` and 26 characters) and their receiving key;
 - **servers** – a device marked `server` (aktujo RFC 0009, 5): every member sees that the server's operator can read
   everything.
