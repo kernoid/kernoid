@@ -17,7 +17,6 @@ use kernoid_module::{Context as ModuleContext, Module, Registry};
 use kernoid_oidc::{Oidc, application::Kind as AppKind};
 use kernoid_server::{AppState, jobs};
 use kernoid_store::{BlobStore, MainKeys, TenantKeys, crypto::Key};
-use metrics_exporter_prometheus::PrometheusBuilder;
 use opentelemetry::trace::TracerProvider as _;
 use opentelemetry_otlp::WithExportConfig as _;
 use opentelemetry_sdk::{Resource, trace::SdkTracerProvider};
@@ -1171,7 +1170,7 @@ async fn serve(config: Config) -> anyhow::Result<()> {
         }
     }
     if let Some(listen) = config.http.metrics_listen {
-        let handle = PrometheusBuilder::new().install_recorder().context("metrics")?;
+        let handle = kernoid_server::metrics::install().context("metrics")?;
         let metrics = Http { listen, ..Http::default() };
         let stop = shutdown.clone().cancelled_owned();
         tasks.spawn(async move {
