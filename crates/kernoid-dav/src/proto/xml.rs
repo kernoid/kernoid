@@ -330,8 +330,10 @@ impl Writer {
         self.close(ns, name);
     }
 
+    /// Text, escaped; a carriage return as `&#13;`, which an XML parser keeps – iCalendar and vCard data in
+    /// `calendar-data` and `address-data` end their lines with CRLF, and a bare CR would become LF on reading.
     pub fn text(&mut self, text: &str) {
-        self.out.push_str(&escape(text));
+        self.out.push_str(&escape(text).replace('\r', "&#13;"));
     }
 
     /// XML written by [`Element::inner_xml`], as it is.
@@ -378,6 +380,13 @@ impl Writer {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn carriage_returns_survive() {
+        let mut writer = Writer::new();
+        writer.text("BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n");
+        assert!(writer.finish().contains("BEGIN:VCALENDAR&#13;\nEND:VCALENDAR&#13;\n"));
+    }
 
     #[test]
     fn namespaces_resolve_and_text_joins_with_references() {
