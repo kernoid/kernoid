@@ -2,9 +2,11 @@
 //! X.509 certificates and certificate requests that kernoid makes itself (RFC 5280, RFC 2986): the self-signed
 //! certificate of an instance's SAML key, the requests of certificates from an ACME CA, and certificates for tests and
 //! development. The structures are x509-cert's, encoded in DER; keys and signatures are aws-lc-rs's – ECDSA P-256
-//! with SHA-256 or RSA (PKCS #1 v1.5) with SHA-256. Keys are kept as PKCS #8.
+//! with SHA-256 or RSA (PKCS #1 v1.5) with SHA-256; for tests also ECDSA P-384 with SHA-384 and Ed25519. Keys are kept
+//! as PKCS #8.
 //!
-//! This builds certificates; it does not read or check them – TLS checks them through rustls, SAML through bergshamra.
+//! This builds certificates; it does not read or check them – TLS checks them through rustls, SAML through
+//! `kernoid_oidc::saml::keys`.
 
 use std::time::SystemTime;
 
@@ -12,7 +14,7 @@ use aws_lc_rs::{
     encoding::AsDer,
     rand::SystemRandom,
     rsa::KeySize,
-    signature::{self, EcdsaKeyPair, KeyPair as _, RsaKeyPair},
+    signature::{self, EcdsaKeyPair, Ed25519KeyPair, KeyPair as _, RsaKeyPair},
 };
 use base64::{Engine, engine::general_purpose::STANDARD};
 use jiff::{SignedDuration, Timestamp};
@@ -39,6 +41,10 @@ use zeroize::Zeroizing;
 const COMMON_NAME: ObjectIdentifier = ObjectIdentifier::new_unwrap("2.5.4.3");
 /// `ecdsa-with-SHA256` (RFC 5758, 3.2).
 const ECDSA_WITH_SHA256: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.2.840.10045.4.3.2");
+/// `ecdsa-with-SHA384` (RFC 5758, 3.2).
+const ECDSA_WITH_SHA384: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.2.840.10045.4.3.3");
+/// `id-Ed25519` (RFC 8410, 3).
+const ED25519: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.3.101.112");
 /// `sha256WithRSAEncryption` (RFC 4055, 5).
 const SHA256_WITH_RSA: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.2.840.113549.1.1.11");
 
@@ -57,6 +63,10 @@ pub enum Algorithm {
     EcdsaP256,
     /// RSA with 2048 bits, PKCS #1 v1.5 signatures with SHA-256 – for SAML, which every provider reads.
     Rsa2048,
+    /// ECDSA on P-384 with SHA-384 – for tests (SAML providers sign with it).
+    EcdsaP384,
+    /// Ed25519 – for tests (a key SAML refuses).
+    Ed25519,
 }
 
 /// A private key with its public part.
@@ -87,16 +97,35 @@ impl KeyPair {
                 .map_err(|e| failed("making a key")(&e))?
                 .as_ref()
                 .to_vec(),
+            Algorithm::EcdsaP384 => {
+                EcdsaKeyPair::generate_pkcs8(&signature::ECDSA_P384_SHA384_ASN1_SIGNING, &SystemRandom::new())
+                    .map_err(|e| failed("making a key")(&e))?
+                    .as_ref()
+                    .to_vec()
+            }
+            Algorithm::Ed25519 => Ed25519KeyPair::generate_pkcs8(&SystemRandom::new())
+                .map_err(|e| failed("making a key")(&e))?
+                .as_ref()
+                .to_vec(),
         };
         Self::from_pkcs8(&pkcs8)
     }
 
-    /// A key stored as PKCS #8 (DER), of either algorithm.
+    /// A key stored as PKCS #8 (DER), of any of the algorithms.
     pub fn from_pkcs8(der: &[u8]) -> Result<Self, CertificateError> {
         let pkcs8 = Zeroizing::new(der.to_vec());
-        if let Ok(key) = EcdsaKeyPair::from_pkcs8(&signature::ECDSA_P256_SHA256_ASN1_SIGNING, der) {
+        for (signing, algorithm) in [
+            (&signature::ECDSA_P256_SHA256_ASN1_SIGNING, Algorithm::EcdsaP256),
+            (&signature::ECDSA_P384_SHA384_ASN1_SIGNING, Algorithm::EcdsaP384),
+        ] {
+            if let Ok(key) = EcdsaKeyPair::from_pkcs8(signing, der) {
+                let public = key.public_key().as_der().map_err(|e| failed("the public key")(&e))?.as_ref().to_vec();
+                return Ok(Self { algorithm, pkcs8, public });
+            }
+        }
+        if let Ok(key) = Ed25519KeyPair::from_pkcs8_maybe_unchecked(der) {
             let public = key.public_key().as_der().map_err(|e| failed("the public key")(&e))?.as_ref().to_vec();
-            return Ok(Self { algorithm: Algorithm::EcdsaP256, pkcs8, public });
+            return Ok(Self { algorithm: Algorithm::Ed25519, pkcs8, public });
         }
         let key = RsaKeyPair::from_pkcs8(der).map_err(|e| failed("not a key kernoid uses")(&e))?;
         let public = key.public_key().as_der().map_err(|e| failed("the public key")(&e))?.as_ref().to_vec();
@@ -125,6 +154,9 @@ impl KeyPair {
     fn signature_algorithm(&self) -> AlgorithmIdentifierOwned {
         match self.algorithm {
             Algorithm::EcdsaP256 => AlgorithmIdentifierOwned { oid: ECDSA_WITH_SHA256, parameters: None },
+            Algorithm::EcdsaP384 => AlgorithmIdentifierOwned { oid: ECDSA_WITH_SHA384, parameters: None },
+            // Ed25519's identifier has no parameters (RFC 8410, 3).
+            Algorithm::Ed25519 => AlgorithmIdentifierOwned { oid: ED25519, parameters: None },
             // RSA's algorithm identifiers carry NULL parameters (RFC 4055, 5).
             Algorithm::Rsa2048 => AlgorithmIdentifierOwned { oid: SHA256_WITH_RSA, parameters: Some(Any::null()) },
         }
@@ -137,6 +169,15 @@ impl KeyPair {
                 let key = EcdsaKeyPair::from_pkcs8(&signature::ECDSA_P256_SHA256_ASN1_SIGNING, &self.pkcs8)
                     .map_err(|e| failed("the key")(&e))?;
                 Ok(key.sign(&rng, message).map_err(|e| failed("signing")(&e))?.as_ref().to_vec())
+            }
+            Algorithm::EcdsaP384 => {
+                let key = EcdsaKeyPair::from_pkcs8(&signature::ECDSA_P384_SHA384_ASN1_SIGNING, &self.pkcs8)
+                    .map_err(|e| failed("the key")(&e))?;
+                Ok(key.sign(&rng, message).map_err(|e| failed("signing")(&e))?.as_ref().to_vec())
+            }
+            Algorithm::Ed25519 => {
+                let key = Ed25519KeyPair::from_pkcs8_maybe_unchecked(&self.pkcs8).map_err(|e| failed("the key")(&e))?;
+                Ok(key.sign(message).as_ref().to_vec())
             }
             Algorithm::Rsa2048 => {
                 let key = RsaKeyPair::from_pkcs8(&self.pkcs8).map_err(|e| failed("the key")(&e))?;
@@ -343,7 +384,7 @@ mod tests {
 
     #[test]
     fn certificates_are_well_formed_and_signed() {
-        for algorithm in [Algorithm::EcdsaP256, Algorithm::Rsa2048] {
+        for algorithm in [Algorithm::EcdsaP256, Algorithm::Rsa2048, Algorithm::EcdsaP384, Algorithm::Ed25519] {
             let key = KeyPair::generate(algorithm).unwrap();
             let again = KeyPair::from_pkcs8(key.pkcs8_der()).unwrap();
             assert_eq!((again.algorithm(), again.public_key_der()), (algorithm, key.public_key_der()));
@@ -360,7 +401,10 @@ mod tests {
             let (verify, bits): (&dyn signature::VerificationAlgorithm, _) = match algorithm {
                 Algorithm::EcdsaP256 => (&signature::ECDSA_P256_SHA256_ASN1, &tbs.subject_public_key_info),
                 Algorithm::Rsa2048 => (&signature::RSA_PKCS1_2048_8192_SHA256, &tbs.subject_public_key_info),
+                Algorithm::EcdsaP384 => (&signature::ECDSA_P384_SHA384_ASN1, &tbs.subject_public_key_info),
+                Algorithm::Ed25519 => (&signature::ED25519, &tbs.subject_public_key_info),
             };
+            assert_eq!(parsed.signature_algorithm, key.signature_algorithm());
             signature::UnparsedPublicKey::new(verify, bits.subject_public_key.raw_bytes())
                 .verify(&tbs.to_der().unwrap(), parsed.signature.raw_bytes())
                 .unwrap();

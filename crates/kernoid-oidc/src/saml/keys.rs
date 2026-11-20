@@ -283,15 +283,17 @@ impl SigningKey {
 mod tests {
     use super::*;
 
-    fn certificate(algorithm: &'static rcgen::SignatureAlgorithm) -> (Vec<u8>, Vec<u8>) {
-        let key = rcgen::KeyPair::generate_for(algorithm).unwrap();
-        let certificate = rcgen::CertificateParams::new(vec!["idp.example".into()]).unwrap().self_signed(&key).unwrap();
-        (certificate.der().to_vec(), key.serialize_der())
+    use kernoid_identity::certificate::{Algorithm, KeyPair, Params};
+
+    fn certificate(algorithm: Algorithm) -> (Vec<u8>, Vec<u8>) {
+        let key = KeyPair::generate(algorithm).unwrap();
+        let certificate = Params::new(["idp.example"]).self_signed(&key).unwrap();
+        (certificate.der().to_vec(), key.pkcs8_der().to_vec())
     }
 
     #[test]
     fn rsa_and_ecdsa_round_trips() {
-        for algorithm in [&rcgen::PKCS_ECDSA_P256_SHA256, &rcgen::PKCS_ECDSA_P384_SHA384] {
+        for algorithm in [Algorithm::EcdsaP256, Algorithm::EcdsaP384] {
             let (certificate, private) = certificate(algorithm);
             let public = PublicKey::from_certificate(&certificate).unwrap();
             let signer = SigningKey::from_pkcs8(&private).unwrap();
@@ -300,10 +302,9 @@ mod tests {
             assert!(!public.verify(signer.algorithm(), b"massage", &value));
             assert!(!public.verify(SignatureAlgorithm::RsaSha256, b"message", &value));
         }
-        let key = rcgen::KeyPair::generate_rsa_for(&rcgen::PKCS_RSA_SHA256, rcgen::RsaKeySize::_2048).unwrap();
-        let certificate = rcgen::CertificateParams::new(vec!["idp.example".into()]).unwrap().self_signed(&key).unwrap();
-        let public = PublicKey::from_certificate(certificate.der()).unwrap();
-        let signer = SigningKey::from_pkcs8(&key.serialize_der()).unwrap();
+        let (certificate, private) = certificate(Algorithm::Rsa2048);
+        let public = PublicKey::from_certificate(&certificate).unwrap();
+        let signer = SigningKey::from_pkcs8(&private).unwrap();
         let value = signer.sign(b"message").unwrap();
         assert_eq!(signer.algorithm(), SignatureAlgorithm::RsaSha256);
         assert!(public.verify(SignatureAlgorithm::RsaSha256, b"message", &value));
@@ -314,9 +315,9 @@ mod tests {
     #[test]
     fn what_is_not_a_certificate_is_refused() {
         assert!(PublicKey::from_certificate(b"no").is_err());
-        let (_, private) = certificate(&rcgen::PKCS_ED25519);
+        let (_, private) = certificate(Algorithm::Ed25519);
         assert!(SigningKey::from_pkcs8(&private).is_err());
-        let (certificate, _) = certificate(&rcgen::PKCS_ED25519);
+        let (certificate, _) = certificate(Algorithm::Ed25519);
         assert!(PublicKey::from_certificate(&certificate).unwrap_err().to_string().contains("neither RSA nor ECDSA"));
     }
 

@@ -5,6 +5,7 @@
 
 use base64::{Engine, engine::general_purpose::STANDARD};
 use jiff::{SignedDuration, Timestamp};
+use kernoid_identity::certificate::{Algorithm, KeyPair, Params};
 use kernoid_oidc::saml::{
     Expected, SamlLogin, SpKey,
     keys::{PublicKey, SigningKey},
@@ -21,18 +22,18 @@ struct Signer {
     key: SigningKey,
 }
 
+fn signer(algorithm: Algorithm) -> Signer {
+    let key = KeyPair::generate(algorithm).unwrap();
+    let certificate = Params::new(["idp.example"]).self_signed(&key).unwrap();
+    Signer { certificate: certificate.der().to_vec(), key: SigningKey::from_pkcs8(key.pkcs8_der()).unwrap() }
+}
+
 fn ecdsa() -> Signer {
-    let made = rcgen::generate_simple_self_signed(vec!["idp.example".to_owned()]).unwrap();
-    Signer {
-        certificate: made.cert.der().to_vec(),
-        key: SigningKey::from_pkcs8(&made.signing_key.serialize_der()).unwrap(),
-    }
+    signer(Algorithm::EcdsaP256)
 }
 
 fn rsa() -> Signer {
-    let key = rcgen::KeyPair::generate_rsa_for(&rcgen::PKCS_RSA_SHA256, rcgen::RsaKeySize::_2048).unwrap();
-    let certificate = rcgen::CertificateParams::new(vec!["idp.example".into()]).unwrap().self_signed(&key).unwrap();
-    Signer { certificate: certificate.der().to_vec(), key: SigningKey::from_pkcs8(&key.serialize_der()).unwrap() }
+    signer(Algorithm::Rsa2048)
 }
 
 fn sign(signer: &Signer, xml: &str, id: &str) -> String {

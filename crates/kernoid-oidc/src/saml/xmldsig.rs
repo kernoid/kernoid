@@ -297,6 +297,7 @@ pub fn sign(xml: &str, id: &str, key: &SigningKey, style: &Style) -> Result<Stri
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kernoid_identity::certificate::{Algorithm, KeyPair, Params};
 
     const KEY_INFO: &str =
         "<ds:KeyInfo><ds:X509Data><ds:X509Certificate>{}</ds:X509Certificate></ds:X509Data></ds:KeyInfo>";
@@ -307,15 +308,11 @@ mod tests {
         certificate: Vec<u8>,
     }
 
-    fn party(algorithm: &'static rcgen::SignatureAlgorithm) -> Party {
-        let key = if *algorithm == rcgen::PKCS_RSA_SHA256 {
-            rcgen::KeyPair::generate_rsa_for(algorithm, rcgen::RsaKeySize::_2048).unwrap()
-        } else {
-            rcgen::KeyPair::generate_for(algorithm).unwrap()
-        };
-        let certificate = rcgen::CertificateParams::new(vec!["idp.example".into()]).unwrap().self_signed(&key).unwrap();
+    fn party(algorithm: Algorithm) -> Party {
+        let key = KeyPair::generate(algorithm).unwrap();
+        let certificate = Params::new(["idp.example"]).self_signed(&key).unwrap();
         Party {
-            key: SigningKey::from_pkcs8(&key.serialize_der()).unwrap(),
+            key: SigningKey::from_pkcs8(key.pkcs8_der()).unwrap(),
             public: PublicKey::from_certificate(certificate.der()).unwrap(),
             certificate: certificate.der().to_vec(),
         }
@@ -336,7 +333,7 @@ mod tests {
 
     #[test]
     fn signatures_round_trip_with_rsa_and_ecdsa() {
-        for algorithm in [&rcgen::PKCS_RSA_SHA256, &rcgen::PKCS_ECDSA_P256_SHA256, &rcgen::PKCS_ECDSA_P384_SHA384] {
+        for algorithm in [Algorithm::Rsa2048, Algorithm::EcdsaP256, Algorithm::EcdsaP384] {
             let signer = party(algorithm);
             for digest in [SHA256, SHA384, SHA512] {
                 let style = Style { digest, ..Style::default() };
@@ -353,7 +350,7 @@ mod tests {
 
     #[test]
     fn a_default_namespace_signature_with_a_prefix_list_verifies() {
-        let signer = party(&rcgen::PKCS_ECDSA_P256_SHA256);
+        let signer = party(Algorithm::EcdsaP256);
         let style = Style { prefix: String::new(), inclusive_prefixes: vec!["saml".into()], ..Style::default() };
         let signed = sign(DOC, "_a", &signer.key, &style).unwrap();
         assert!(signed.contains("<Signature xmlns=\"http://www.w3.org/2000/09/xmldsig#\">"));
@@ -362,7 +359,7 @@ mod tests {
 
     #[test]
     fn changes_after_signing_fail() {
-        let signer = party(&rcgen::PKCS_ECDSA_P256_SHA256);
+        let signer = party(Algorithm::EcdsaP256);
         let signed = sign(DOC, "_a", &signer.key, &Style::default()).unwrap();
         for changed in [
             signed.replace(">u-1<", ">admin<"),
@@ -384,8 +381,8 @@ mod tests {
 
     #[test]
     fn only_configured_keys_count() {
-        let signer = party(&rcgen::PKCS_ECDSA_P256_SHA256);
-        let other = party(&rcgen::PKCS_ECDSA_P256_SHA256);
+        let signer = party(Algorithm::EcdsaP256);
+        let other = party(Algorithm::EcdsaP256);
         // The signer puts its own certificate in KeyInfo: ignored, only the configured key counts.
         let key_info = KEY_INFO.replace("{}", &STANDARD.encode(&signer.certificate));
         let style = Style { key_info: Some(key_info), ..Style::default() };
@@ -402,7 +399,7 @@ mod tests {
 
     #[test]
     fn algorithms_outside_the_profile_are_refused() {
-        let signer = party(&rcgen::PKCS_RSA_SHA256);
+        let signer = party(Algorithm::Rsa2048);
         let keys = [signer.public];
         let cases: Vec<(Style, &str)> = vec![
             (
@@ -488,7 +485,7 @@ mod tests {
 
     #[test]
     fn structures_outside_the_profile_are_refused() {
-        let signer = party(&rcgen::PKCS_ECDSA_P256_SHA256);
+        let signer = party(Algorithm::EcdsaP256);
         let keys = [signer.public];
         let signed = sign(DOC, "_a", &signer.key, &Style::default()).unwrap();
         let cases = [
@@ -526,7 +523,7 @@ mod tests {
 
     #[test]
     fn a_moved_signature_does_not_count_for_its_new_parent() {
-        let signer = party(&rcgen::PKCS_ECDSA_P256_SHA256);
+        let signer = party(Algorithm::EcdsaP256);
         let keys = [signer.public];
         let signed = sign(DOC, "_a", &signer.key, &Style::default()).unwrap();
         // The Assertion's signature put into the Response: it references #_a, not #_r.

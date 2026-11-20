@@ -37,7 +37,6 @@ x509-cert = { version = "0.2.5", default-features = false }
 zeroize = "1.9.1"
 
 [dev-dependencies]
-rcgen = { version = "0.14.10", default-features = false, features = ["aws_lc_rs"] }
 axum = "0.8.9"
 aws-lc-rs = { version = "1.18.2", features = ["ring-io"] }
 base64 = "0.22.1"
