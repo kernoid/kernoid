@@ -173,11 +173,13 @@ async fn graphql_answers_and_refuses_deep_queries() {
 
 /// A self-signed certificate for localhost, written to a temporary directory.
 fn certificate() -> (tempdir::Dir, rustls_pki_types::CertificateDer<'static>) {
-    let issued = rcgen::generate_simple_self_signed(vec!["localhost".to_owned()]).unwrap();
+    use kernoid_identity::certificate::{Algorithm, KeyPair, Params};
+    let key = KeyPair::generate(Algorithm::EcdsaP256).unwrap();
+    let issued = Params::new(["localhost"]).self_signed(&key).unwrap();
     let dir = tempdir::Dir::new();
-    std::fs::write(dir.path("cert.pem"), issued.cert.pem()).unwrap();
-    std::fs::write(dir.path("key.pem"), issued.signing_key.serialize_pem()).unwrap();
-    (dir, issued.cert.der().clone())
+    std::fs::write(dir.path("cert.pem"), issued.pem()).unwrap();
+    std::fs::write(dir.path("key.pem"), key.pkcs8_pem().as_bytes()).unwrap();
+    (dir, rustls_pki_types::CertificateDer::from(issued.der().to_vec()))
 }
 
 mod tempdir {

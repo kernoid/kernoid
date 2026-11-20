@@ -267,26 +267,21 @@ async fn ldaps_binds_with_an_address_and_limits_searches(pool: PgPool) {
 
 /// A CA, a certificate for the server signed by it, and the TLS configurations of both sides.
 fn tls_pair() -> (Arc<rustls::ServerConfig>, Arc<rustls::ClientConfig>) {
-    let mut ca_params = rcgen::CertificateParams::new(Vec::<String>::new()).unwrap();
-    ca_params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
-    let ca = rcgen::CertifiedIssuer::self_signed(ca_params, rcgen::KeyPair::generate().unwrap()).unwrap();
-    let leaf_key = rcgen::KeyPair::generate().unwrap();
-    let leaf_der = rustls::pki_types::PrivateKeyDer::try_from(leaf_key.serialize_der()).unwrap();
-    let leaf = rcgen::CertifiedIssuer::signed_by(
-        rcgen::CertificateParams::new(vec![HOSTNAME.to_owned()]).unwrap(),
-        leaf_key,
-        &ca,
-    )
-    .unwrap();
+    use kernoid_identity::certificate::{Algorithm, KeyPair, Params};
+    let ca_key = KeyPair::generate(Algorithm::EcdsaP256).unwrap();
+    let ca = Params::ca("kernoid test CA").self_signed(&ca_key).unwrap();
+    let leaf_key = KeyPair::generate(Algorithm::EcdsaP256).unwrap();
+    let leaf_der = rustls::pki_types::PrivateKeyDer::try_from(leaf_key.pkcs8_der().to_vec()).unwrap();
+    let leaf = Params::new([HOSTNAME]).signed_by(&leaf_key, &ca, &ca_key).unwrap();
     let provider = Arc::new(rustls::crypto::aws_lc_rs::default_provider());
     let server = rustls::ServerConfig::builder_with_provider(provider.clone())
         .with_safe_default_protocol_versions()
         .unwrap()
         .with_no_client_auth()
-        .with_single_cert(vec![leaf.as_ref().der().clone()], leaf_der)
+        .with_single_cert(vec![rustls::pki_types::CertificateDer::from(leaf.der().to_vec())], leaf_der)
         .unwrap();
     let mut roots = rustls::RootCertStore::empty();
-    roots.add(ca.as_ref().der().clone()).unwrap();
+    roots.add(rustls::pki_types::CertificateDer::from(ca.der().to_vec())).unwrap();
     let client = rustls::ClientConfig::builder_with_provider(provider)
         .with_safe_default_protocol_versions()
         .unwrap()

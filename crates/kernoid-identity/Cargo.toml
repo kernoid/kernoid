@@ -36,9 +36,11 @@ tokio = { version = "1.54.1", features = ["rt"] }
 tracing = "0.1.44"
 url = "2.5.8"
 uuid = { version = "1.28.0", features = ["v7", "serde"] }
+x509-cert = "0.2.5"
 zeroize = "1.9.1"
 
 [dev-dependencies]
+rustls = { version = "0.23.46", default-features = false, features = ["aws-lc-rs", "prefer-post-quantum", "std", "tls12"] }
 argon2 = "0.6.0"
 aws-lc-rs = "1.18.2"
 kernoid-store = { path = "../kernoid-store" }

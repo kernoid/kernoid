@@ -20,6 +20,7 @@ mod address;
 pub mod admin;
 pub mod app_password;
 pub mod audit;
+pub mod certificate;
 pub mod collection_access;
 pub mod consent;
 pub mod directory;

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Verifying SAML Responses: genuine ones pass; tampered, foreign, wrapped and expired ones do not. Responses are
-//! signed with a key and certificate made for the test (rcgen) by bergshamra.
+//! signed with a key and certificate made for the test (`kernoid_identity::certificate`) by bergshamra.
 
 use std::collections::HashMap;
 
@@ -29,11 +29,13 @@ struct Signer {
 }
 
 fn new_signer() -> Signer {
-    let made = rcgen::generate_simple_self_signed(vec!["idp.example".to_owned()]).unwrap();
-    let key = bergshamra::keys::loader::load_pem_auto(made.signing_key.serialize_pem().as_bytes(), None).unwrap();
+    use kernoid_identity::certificate::{Algorithm, KeyPair, Params};
+    let made_key = KeyPair::generate(Algorithm::EcdsaP256).unwrap();
+    let made = Params::new(["idp.example"]).self_signed(&made_key).unwrap();
+    let key = bergshamra::keys::loader::load_pem_auto(made_key.pkcs8_pem().as_bytes(), None).unwrap();
     let mut keys = KeysManager::new();
     keys.add_key(key.clone());
-    Signer { certificate: made.cert.der().to_vec(), context: DsigContext::new(keys), key }
+    Signer { certificate: made.der().to_vec(), context: DsigContext::new(keys), key }
 }
 
 /// A Response whose Assertion carries an enveloped signature template; `name_id` and `audience` can be varied.
