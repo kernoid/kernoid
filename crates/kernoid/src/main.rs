@@ -2,6 +2,7 @@
 //! The kernoid program: one binary, one container image; the configuration decides which roles a process takes on.
 
 mod no_echo;
+mod otlp;
 
 use std::{io::IsTerminal, path::PathBuf, sync::Arc};
 
@@ -17,9 +18,6 @@ use kernoid_module::{Context as ModuleContext, Module, Registry};
 use kernoid_oidc::{Oidc, application::Kind as AppKind};
 use kernoid_server::{AppState, jobs};
 use kernoid_store::{BlobStore, MainKeys, TenantKeys, crypto::Key};
-use opentelemetry::trace::TracerProvider as _;
-use opentelemetry_otlp::WithExportConfig as _;
-use opentelemetry_sdk::{Resource, trace::SdkTracerProvider};
 use tokio_util::sync::CancellationToken;
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 use uuid::Uuid;
@@ -854,7 +852,7 @@ async fn main() -> anyhow::Result<()> {
         Command::Openapi | Command::GraphqlSchema => unreachable!("handled before the configuration"),
     };
     if let Some(traces) = traces {
-        let _ = traces.shutdown();
+        traces.shutdown();
     }
     result
 }
@@ -1295,8 +1293,6 @@ async fn keys(config: &Config, command: KeysCommand) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Logs to stdout as text or JSON; with `log.otlp_endpoint`, traces also go to an OpenTelemetry collector. The
-/// returned provider must be shut down at exit, so that the last traces are sent.
 /// How often the worker looks for verified domains without DKIM keys and for published records of waiting keys.
 const DKIM_EVERY: std::time::Duration = std::time::Duration::from_secs(5 * 60);
 
@@ -2371,30 +2367,27 @@ async fn saml_key(config: &Config, command: SamlKeyCommand) -> anyhow::Result<()
     Ok(())
 }
 
-fn init_logging(config: &Config) -> anyhow::Result<Option<SdkTracerProvider>> {
+/// Logs to stdout as text or JSON; with `log.otlp_endpoint`, traces also go to an OpenTelemetry collector. The
+/// returned exporter must be shut down at exit, so that the last traces are sent.
+fn init_logging(config: &Config) -> anyhow::Result<Option<otlp::Exporter>> {
     let filter = match &config.log.filter {
         Some(filter) => EnvFilter::try_new(filter).context("log.filter")?,
         None => EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
     };
-    let provider = match &config.log.otlp_endpoint {
+    let (otel, exporter) = match &config.log.otlp_endpoint {
         Some(endpoint) => {
-            let exporter = opentelemetry_otlp::SpanExporter::builder()
-                .with_http()
-                .with_endpoint(endpoint)
-                .build()
-                .context("log.otlp_endpoint")?;
-            let resource = Resource::builder().with_service_name("kernoid").build();
-            Some(SdkTracerProvider::builder().with_batch_exporter(exporter).with_resource(resource).build())
+            let (layer, exporter) =
+                otlp::exporter(endpoint).map_err(anyhow::Error::msg).context("log.otlp_endpoint")?;
+            (Some(layer), Some(exporter))
         }
-        None => None,
+        None => (None, None),
     };
-    let otel = provider.as_ref().map(|provider| tracing_opentelemetry::layer().with_tracer(provider.tracer("kernoid")));
     let (text, json) = match config.log.format {
         LogFormat::Text => (Some(tracing_subscriber::fmt::layer()), None),
         LogFormat::Json => (None, Some(tracing_subscriber::fmt::layer().json())),
     };
     tracing_subscriber::registry().with(filter).with(text).with(json).with(otel).init();
-    Ok(provider)
+    Ok(exporter)
 }
 
 async fn shutdown_signal() {
