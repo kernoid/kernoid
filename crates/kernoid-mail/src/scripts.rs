@@ -1,15 +1,19 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Sieve scripts of an account (RFC 0002, 9.4 and 10.6), run with sieve-rs when mail arrives: `keep`, `fileinto` (with
-//! `:create`), `discard` and flags are carried out, `redirect` and `vacation` go through the queue; `reject` and
-//! `notify` are skipped, and the message is then kept.
+//! Sieve scripts of an account (RFC 0002, 9.4 and 10.6), run with kernoid-sieve when mail arrives: `keep`,
+//! `fileinto` (with `:create`), `discard` and flags are carried out, `redirect` and `vacation` go through the queue;
+//! `reject` and `notify` are skipped, and the message is then kept.
 
-use sieve::{Compiler, Envelope, Handler, Mailbox, MessageSource, Recipient, Reply, Runtime, SieveAction, Status};
+use kernoid_sieve::{Action, Context, Environment, Limits, Script};
 use uuid::Uuid;
 
 use crate::{Mail, MailError, Result};
 
 /// Largest script accepted, in bytes.
 const MAX_SCRIPT_SIZE: usize = 64 * 1024;
+
+fn limits() -> Limits {
+    Limits { max_script_size: MAX_SCRIPT_SIZE, ..Limits::default() }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SieveScript {
@@ -19,11 +23,9 @@ pub struct SieveScript {
     pub active: bool,
 }
 
-/// Checks that a script compiles.
+/// Checks that a script compiles; the error says where it does not.
 pub fn check_script(content: &str) -> Result<()> {
-    Compiler::new()
-        .with_max_script_size(MAX_SCRIPT_SIZE)
-        .compile(content.as_bytes())
+    Script::compile(content, &limits())
         .map(drop)
         .map_err(|error| MailError::Invalid(format!("the script does not compile: {error}")))
 }
@@ -45,7 +47,7 @@ pub(crate) struct Send {
     /// `redirect` (the message itself) or `vacation` (a reply).
     pub vacation: bool,
     pub to: String,
-    /// The reply sieve-rs built; `None` for the message itself.
+    /// The reply kernoid-sieve built; `None` for the message itself.
     pub message: Option<Vec<u8>>,
     /// For a vacation reply: who it answers, and for how many seconds it is not sent again (RFC 5230, 4.6).
     pub once: Option<(String, u64)>,
@@ -61,99 +63,57 @@ pub(crate) struct Outcome {
     pub skipped: Vec<&'static str>,
 }
 
-struct Collector<'m> {
-    mailboxes: &'m [String],
-    outcome: Outcome,
-    /// Messages sieve-rs built, by their number.
-    created: std::collections::HashMap<usize, Vec<u8>>,
-    /// The last `:days` check of a vacation, for the reply that follows it.
-    vacation: Option<(String, u64)>,
-}
+/// The account's mailboxes, for `mailboxexists`. Other duplicate checks (RFC 7352) see nothing seen before.
+struct Mailboxes<'m>(&'m [String]);
 
-impl<'x> Handler<'x> for Collector<'_> {
-    fn mailbox_exists(&mut self, _: &sieve::Context<'x>, mailboxes: &[Mailbox<'_>], _: &[&str]) -> Reply<bool> {
-        Reply::Ready(mailboxes.iter().all(|mailbox| match mailbox {
-            Mailbox::Name(name) => {
-                name.eq_ignore_ascii_case("INBOX") || self.mailboxes.iter().any(|known| known == name)
-            }
-            Mailbox::Id(_) => false,
-        }))
-    }
-
-    fn action(&mut self, _: &sieve::Context<'x>, action: SieveAction<'x>) -> Reply<()> {
-        let flags = |flags: &[&str]| flags.iter().map(|flag| (*flag).to_owned()).collect::<Vec<_>>();
-        match action {
-            SieveAction::Keep { flags: kept, .. } => self.outcome.targets.push((Target::Keep, flags(kept))),
-            SieveAction::FileInto { folder, flags: filed, create, .. } => {
-                let target = if folder.eq_ignore_ascii_case("INBOX") {
-                    Target::Keep
-                } else {
-                    Target::Folder { name: folder.to_owned(), create }
-                };
-                self.outcome.targets.push((target, flags(filed)));
-            }
-            SieveAction::Discard => {}
-            SieveAction::Reject { .. } => self.outcome.skipped.push("reject"),
-            SieveAction::SendMessage { source, recipient: Recipient::Address(to), message_id, .. } => {
-                let vacation = source == MessageSource::Vacation;
-                self.outcome.sends.push(Send {
-                    vacation,
-                    to: to.to_owned(),
-                    message: if message_id == 0 { None } else { self.created.remove(&message_id) },
-                    once: if vacation { self.vacation.take() } else { None },
-                });
-            }
-            SieveAction::SendMessage { .. } => self.outcome.skipped.push("sending to a list"),
-            SieveAction::Notify { .. } => self.outcome.skipped.push("notify"),
-            SieveAction::CreatedMessage { message_id, message } => {
-                self.created.insert(message_id, message);
-            }
-            SieveAction::SetEnvelope { .. } => {}
-        }
-        Reply::Ready(())
-    }
-
-    /// Vacation asks whether it answered this sender within `:days`; kernoid answers after the script, from
-    /// `sieve_vacation_sent`, and drops the reply then. Other duplicate checks (RFC 7352) see nothing seen before.
-    fn duplicate_id(&mut self, _: &sieve::Context<'x>, id: &str, expiry: u64, _: bool) -> Reply<bool> {
-        if id.starts_with("_v") {
-            self.vacation = Some((id.to_owned(), expiry));
-        }
-        Reply::Ready(false)
+impl Environment for Mailboxes<'_> {
+    fn mailbox_exists(&self, name: &str) -> bool {
+        name.eq_ignore_ascii_case("INBOX") || self.0.iter().any(|known| known == name)
     }
 }
 
 /// Runs `script` on `raw`; `mailboxes` are the account's mailbox paths, for `mailboxexists`. A script that fails
 /// keeps the message (RFC 5228, 2.10.6).
 pub(crate) fn run(script: &str, raw: &[u8], from: &str, to: &str, mailboxes: &[String]) -> Outcome {
-    let Ok(compiled) = Compiler::new().with_max_script_size(MAX_SCRIPT_SIZE).compile(script.as_bytes()) else {
-        return Outcome { targets: vec![(Target::Keep, Vec::new())], ..Outcome::default() };
+    let kept = || Outcome { targets: vec![(Target::Keep, Vec::new())], ..Outcome::default() };
+    let Ok(compiled) = Script::compile(script, &limits()) else {
+        return kept();
     };
-    let runtime = Runtime::new();
-    let mut arena = sieve::Arena::new();
-    let mut instance = runtime
-        .filter(raw, &compiled, &mut arena)
-        .with_envelope(Envelope::From, from.to_owned())
-        .with_envelope(Envelope::To, to.to_owned())
-        // The account's address without a subaddress: vacation looks for it in To and Cc.
-        .with_user_address(crate::deliver::without_subaddress(to));
-    let mut collector =
-        Collector { mailboxes, outcome: Outcome::default(), created: Default::default(), vacation: None };
-    loop {
-        match instance.run(&mut collector) {
-            Ok(Status::Finished) => break,
-            Ok(Status::Pending) => instance.resume(true),
-            Err(error) => {
-                tracing::warn!(%error, "a Sieve script failed; keeping the message");
-                return Outcome {
-                    targets: vec![(Target::Keep, Vec::new())],
-                    skipped: collector.outcome.skipped,
-                    ..Outcome::default()
+    let mut context = Context::new(from, to);
+    // The account's address without a subaddress: vacation looks for it in To and Cc.
+    context.user_addresses = vec![crate::deliver::without_subaddress(to)];
+    let actions = match compiled.run(raw, &context, &mut Mailboxes(mailboxes)) {
+        Ok(outcome) => outcome.actions,
+        Err(error) => {
+            tracing::warn!(%error, "a Sieve script failed; keeping the message");
+            return kept();
+        }
+    };
+    let mut outcome = Outcome::default();
+    for action in actions {
+        match action {
+            Action::Keep { flags } => outcome.targets.push((Target::Keep, flags)),
+            Action::FileInto { mailbox, flags, create, .. } => {
+                let target = if mailbox.eq_ignore_ascii_case("INBOX") {
+                    Target::Keep
+                } else {
+                    Target::Folder { name: mailbox, create }
                 };
+                outcome.targets.push((target, flags));
             }
+            Action::Redirect { address, .. } => {
+                outcome.sends.push(Send { vacation: false, to: address, message: None, once: None })
+            }
+            Action::Vacation(reply) => outcome.sends.push(Send {
+                vacation: true,
+                to: reply.to,
+                message: Some(reply.message),
+                once: Some((reply.key, reply.seconds)),
+            }),
+            Action::Reject { .. } => outcome.skipped.push("reject"),
+            Action::Notify(_) => outcome.skipped.push("notify"),
         }
     }
-    let mut outcome = collector.outcome;
     // What was skipped would have taken the message somewhere; without it, the message must not get lost.
     if outcome.targets.is_empty() && !outcome.skipped.is_empty() {
         outcome.targets.push((Target::Keep, Vec::new()));
@@ -279,7 +239,7 @@ mod tests {
             [Send { vacation: false, to: "bob@elsewhere.example".into(), message: None, once: None }]
         );
 
-        // A vacation reply: built by sieve-rs, sent once per sender in :days.
+        // A vacation reply: built by kernoid-sieve, sent once per sender in :days.
         let away = run(
             r#"require "vacation"; vacation :days 3 "I am away.";"#,
             b"From: carol@other.example\r\nTo: alice@firma.example\r\nSubject: Hi\r\n\r\nHi\r\n",

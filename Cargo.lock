@@ -740,21 +740,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bit-set"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08807e080ed7f9d5433fa9b275196cfc35414f66a0c79d864dc51a0d825231a3"
-dependencies = [
- "bit-vec 0.8.0",
-]
-
-[[package]]
-name = "bit-vec"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e764a1d40d510daf35e07be9eb06e75770908c27d411ee6c92109c9840eaaf7"
-
-[[package]]
 name = "bit-vec"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1902,17 +1887,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fancy-regex"
-version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20ed7f62ce0ae0da1a8b93c3c7104ab7e0760a74491e097c701fff966e945390"
-dependencies = [
- "bit-set",
- "regex-automata",
- "regex-syntax",
-]
-
-[[package]]
 name = "fast_chemail"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2315,11 +2289,6 @@ name = "hashbrown"
 version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
-dependencies = [
- "allocator-api2",
- "equivalent",
- "foldhash",
-]
 
 [[package]]
 name = "hashify"
@@ -3477,13 +3446,13 @@ dependencies = [
  "kernoid-e2e",
  "kernoid-events",
  "kernoid-identity",
+ "kernoid-sieve",
  "kernoid-store",
  "mail-parser 1.0.0",
  "object_store",
  "serde",
  "serde_json",
  "sha2 0.11.1",
- "sieve-rs",
  "sqlx",
  "thiserror 2.0.21",
  "tokio",
@@ -3625,6 +3594,16 @@ dependencies = [
  "webauthn-rs-proto",
  "x509-cert",
  "zeroize",
+]
+
+[[package]]
+name = "kernoid-sieve"
+version = "0.5.1"
+dependencies = [
+ "getrandom 0.4.3",
+ "mail-builder 2.0.0",
+ "mail-parser 1.0.0",
+ "sha2 0.11.1",
 ]
 
 [[package]]
@@ -3892,7 +3871,6 @@ dependencies = [
  "encoding_rs",
  "hashify 0.3.1",
  "memchr",
- "serde",
  "simdutf8",
 ]
 
@@ -5897,23 +5875,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
 
 [[package]]
-name = "sieve-rs"
-version = "1.1.0"
-dependencies = [
- "ahash",
- "bumpalo",
- "encodify",
- "fancy-regex",
- "hashbrown 0.17.1",
- "hashify 0.3.1",
- "mail-builder 2.0.0",
- "mail-parser 1.0.0",
- "memchr",
- "serde",
- "smallvec",
-]
-
-[[package]]
 name = "signal-hook-registry"
 version = "1.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7670,7 +7631,7 @@ version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b5f6765e852b9b4dc8e2a76843e4d64d1cea8e79bcde0b6901aea8e7c7f08282"
 dependencies = [
- "bit-vec 0.9.1",
+ "bit-vec",
  "time",
 ]
 

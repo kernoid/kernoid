@@ -7,6 +7,18 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 ## [Unreleased]
 
+### Changed
+
+- **Sieve has kernoid's own interpreter** (`crates/kernoid-sieve`, AGPL-3.0-or-later), written from the RFCs; it
+  replaces Stalwart's sieve-rs, which used unsafe code. A script that does not compile is refused with the line and
+  column of the error; a run is bounded in work, actions, redirects and variables. Capabilities: `fileinto`,
+  `envelope`, `encoded-character`, `reject`, `ereject`, `imap4flags`, `variables`, `vacation`, `vacation-seconds`,
+  `relational`, `comparator-i;ascii-numeric`, `body`, `copy`, `date`, `index`, `mailbox`, `subaddress`, `enotify`,
+  `duplicate`. **Upgrading:** a stored script that requires anything else – `regex`, `editheader`, `include`,
+  `environment`, `ihave` and others sieve-rs took – no longer compiles, and then every message is kept in the inbox;
+  check scripts with `kernoid mail sieve put`. Vacation replies remember senders under new keys, so a sender answered
+  just before the upgrade may be answered once more.
+
 ## [0.5.1] – 2026-11-20
 
 kernoid becomes the core of a suite of building blocks ([RFC 0008](rfcs/0008-suite-and-building-blocks.md)–0011): an

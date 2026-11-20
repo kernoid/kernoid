@@ -8,8 +8,8 @@ from each; every file says the same in its SPDX header and its first lines. The 
 ## Stalwart
 
 [Stalwart](https://github.com/stalwartlabs/stalwart) by Stalwart Labs LLC – mail and collaboration server. Code was
-taken from **v0.16.27**, once, and changed for kernoid; it is not merged again – except calcard, jmap-tools and the
-Sieve interpreter, which moved into the repository from crates.io and are taken over as they are, now from **v1.1.0**
+taken from **v0.16.27**, once, and changed for kernoid; it is not merged again – except calcard and jmap-tools,
+which moved into the repository from crates.io and are taken over as they are, now from **v1.1.0**
 (commit `e7cde9b`, 2026-11-09). Only files under `AGPL-3.0-only OR
 LicenseRef-SEL` were taken, under `AGPL-3.0-only`, with Stalwart's copyright (`2020 Stalwart Labs LLC`); nothing under
 the Stalwart Enterprise License, which `scripts/check-sel.sh` enforces.
@@ -22,7 +22,6 @@ the Stalwart Enterprise License, which `scripts/check-sel.sh` enforces.
 | `crates/kernoid-dav/src/proto/` | `crates/dav-proto` – WebDAV, CalDAV and CardDAV requests and responses |
 | `crates/kernoid-groupware/src/scheduling/` | `crates/groupware/src/scheduling` – iTIP (RFC 5546) |
 | `crates/calcard/` | `crates/calcard` – iCalendar, vCard, JSCalendar, JSContact (its files from rust-rrule and bttf keep their licences) |
-| `crates/sieve/` | `crates/sieve` – the Sieve interpreter (sieve-rs), before on crates.io; without its tests, which live in a repository of Stalwart's that is not public |
 | `crates/jmap-tools/` | `crates/jmap-tools` – JMAP objects with JSON Pointer (its JSON files from serde_json_borrow keep their licence) |
 
 **Derived** – written for kernoid's storage, following Stalwart's logic:

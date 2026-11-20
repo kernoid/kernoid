@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+[package]
+name = "kernoid-sieve"
+description = "kernoid's Sieve interpreter (RFC 5228 and extensions), written from the RFCs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+getrandom = "0.4.3"
+mail-builder = "2.0.0"
+mail-parser = { version = "1.0.0", features = ["full_encoding"] }
+sha2 = "0.11.1"

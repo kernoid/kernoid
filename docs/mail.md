@@ -74,6 +74,12 @@ carries out `keep`, `fileinto` (also `:create`, with `/` between the names of ne
 at the next server, and a bounce goes back to the original sender for 21 days; only bounces – mail with an empty
 sender – are taken at such an address); a vacation reply at most once per sender within its `:days`. `reject` and `notify` are skipped, and the message is kept.
 
+kernoid's interpreter is its own (`kernoid-sieve`) and takes these capabilities: `fileinto`, `envelope`,
+`encoded-character`, `reject`, `ereject`, `imap4flags`, `variables`, `vacation`, `vacation-seconds`, `relational`,
+`comparator-i;ascii-numeric`, `body`, `copy`, `date`, `index`, `mailbox`, `subaddress`, `enotify` and `duplicate`.
+A script that does not compile is refused with the line and column of the error. A run is bounded – in work, in
+actions, in redirects (five addresses) and in variables –; a script that goes beyond keeps the message.
+
 ```sh
 kernoid mail sieve put <ACCOUNT> lists lists.sieve --activate
 ```

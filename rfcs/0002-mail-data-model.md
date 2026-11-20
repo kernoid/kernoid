@@ -177,7 +177,7 @@ accepts mail for their addresses and stores it at once. It relays nothing: mail 
   address itself, which every check below depends on.
 - **Vacation response:** JMAP's `VacationResponse` (RFC 8621, 8) of each account, kept in `vacation_responses`
   (data, changed by the owner): while it is on, delivery runs it after the account's script as a generated Sieve
-  `vacation` (RFC 5230) – sieve-rs decides whom to answer, `sieve_vacation_sent` that it is once per sender –, but
+  `vacation` (RFC 5230) – kernoid-sieve decides whom to answer, `sieve_vacation_sent` that it is once per sender –, but
   not for junk or what the script discarded.
 - **Malware:** when a tenant of a recipient (or the tenant of an SRS bounce) switched on a scanning module
   (`clamav`), the message is checked after `DATA` and before it is accepted: malware is refused with `554 5.7.1`
@@ -222,11 +222,17 @@ With [mail-auth](https://crates.io/crates/mail-auth) (Apache-2.0 OR MIT, by Stal
 
 - After the data, kernoid adds `Received`, `Authentication-Results` and `Received-SPF` and delivers to every
   recipient before it answers – there is no queue for incoming mail: `250` means stored.
-- **Sieve** ([RFC 5228](https://www.rfc-editor.org/rfc/rfc5228)) with sieve-rs
-  (by Stalwart Labs; 1.0.2 taken over into `crates/sieve` under AGPL-3.0-only after it left crates.io): an account's active script decides – `keep`, `fileinto` (with `:create`),
+- **Sieve** ([RFC 5228](https://www.rfc-editor.org/rfc/rfc5228)) with kernoid's own interpreter `kernoid-sieve`
+  (written from the RFCs; it replaced Stalwart's sieve-rs, which used unsafe code): an account's active script decides – `keep`, `fileinto` (with `:create`),
   `discard`, flags (`imap4flags`), and `redirect` and `vacation` through the queue (10.6). Scripts are stored per
-  account (`sieve_scripts`), checked when saved, at most one active. Managing scripts (ManageSieve, JMAP Sieve) comes
-  with the protocols.
+  account (`sieve_scripts`), checked when saved – errors name line and column –, at most one active. Managing scripts
+  (ManageSieve, JMAP Sieve) comes with the protocols. The interpreter takes the base language with
+  `encoded-character`, `fileinto`, `envelope`, `reject`/`ereject` (RFC 5429), `imap4flags`, `variables`, `vacation`
+  with `vacation-seconds`, `relational` with `comparator-i;ascii-numeric`, `body`, `copy`, `date` and `index`,
+  `mailbox`, `subaddress`, `enotify` and `duplicate`; it bounds a run's work, actions, redirects (5) and variables.
+  **OPEN:** `regex` (a regular expression engine that cannot be made to run long), `editheader`, `include`,
+  `environment`, `ihave`, `mime`/`foreverypart`/`extracttext`, `spamtest`/`virustest` – scripts that require one do
+  not compile, and a stored one that no longer compiles keeps every message.
 - **Duplicates:** a delivery whose `Message-ID` the account received in the last seven days is skipped, as Stalwart
   does. This also makes a retry safe: if a recipient cannot be stored for now (quota, a database error), kernoid
   answers `451` or `452` for the whole message and the sender's server tries again – the recipients that have it
@@ -325,7 +331,7 @@ HMAC-SHA256 in base32 with the installation's secret in `srs_secret`, good for 2
 next server and bounces find the original sender: the MX takes such an address only from an empty sender and
 sends the bounce on through the queue; an empty sender stays empty. `vacation`
 ([RFC 5230](https://www.rfc-editor.org/rfc/rfc5230)) answers each sender at most once in `:days` (seven by default)
-and never to mailing lists, automatic mail or an empty sender (sieve-rs builds the reply; whom it went to is kept in
+and never to mailing lists, automatic mail or an empty sender (kernoid-sieve builds the reply; whom it went to is kept in
 `sieve_vacation_sent`). **OPEN:** `reject` and `notify`, and the `duplicate` test (RFC 7352), which sees nothing
 as seen before.
 
