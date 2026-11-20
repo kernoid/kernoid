@@ -2,7 +2,7 @@
 # RFC 0011 – The app kit
 
 - **Status:** draft, 2026-11-19; the direction decided by the maintainer the same day (RFC 0008, 1), the mechanism a
-  proposal. Implemented with 0.5.0: the packages in `kit/flutter/`, `KFeature` with `Kernoid.offers` (the server's
+  proposal. Implemented with 0.5.1: the packages in `kit/flutter/`, `KFeature` with `Kernoid.offers` (the server's
   capabilities), kernoid/apps on them. Each feature also adds sections to the account page and keeps what it needs
   while the account is signed in (`KFeatureSession`: the folders kept in step and the tray of `kernoid_files`).
 - **Scope:** how kernoid's apps – and the apps of programs built on kernoid – are put together from Flutter packages
@@ -36,7 +36,7 @@ entitlements –, the integration tests, the release workflow and the app's chan
 has its own (`lib/l10n/<feature>_*.arb`, `flutter gen-l10n` there, a class `<Feature>Localizations`), reached from
 the shared ones as `l.mailText.…`, `l.filesText.…` – no delegate needed. A program's feature with strings of its
 own gives the shell their delegates (`KFeature.localizationsDelegates`) and looks them up as usual (implemented in
-0.5.0).
+0.5.1).
 
 ## 3. Features
 
@@ -92,7 +92,7 @@ with the system; the apps of programs built on kernoid show files inside the app
   apps do with aktujo, and builds the apps.
 - **OPEN:** publishing the packages on pub.dev (RFC 0008, 8) – needed only when apps outside falkOSS want them.
 
-## 7. 0.5.0
+## 7. 0.5.1
 
 1. The packages of section 2 in `kit/flutter/`, with their tests and CI.
 2. `kernoid_shell` builds the side bar from features and hides those the server does not offer.

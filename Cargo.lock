@@ -3103,7 +3103,7 @@ dependencies = [
 
 [[package]]
 name = "kernoid"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "anyhow",
  "bytes",
@@ -3142,7 +3142,7 @@ dependencies = [
 
 [[package]]
 name = "kernoid-auth"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "aws-lc-rs",
  "axum",
@@ -3164,7 +3164,7 @@ dependencies = [
 
 [[package]]
 name = "kernoid-base"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "base64 0.23.1",
  "getrandom 0.4.3",
@@ -3177,7 +3177,7 @@ dependencies = [
 
 [[package]]
 name = "kernoid-clamav"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "bytes",
  "futures-util",
@@ -3190,7 +3190,7 @@ dependencies = [
 
 [[package]]
 name = "kernoid-config"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "ipnet",
  "serde",
@@ -3201,7 +3201,7 @@ dependencies = [
 
 [[package]]
 name = "kernoid-crypt"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "chacha20poly1305",
  "ed25519-dalek 3.0.0",
@@ -3223,7 +3223,7 @@ dependencies = [
 
 [[package]]
 name = "kernoid-dav"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "calcard",
  "hashify 0.2.9",
@@ -3248,7 +3248,7 @@ dependencies = [
 
 [[package]]
 name = "kernoid-e2e"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "base64 0.22.1",
  "mail-parser 0.11.9",
@@ -3261,7 +3261,7 @@ dependencies = [
 
 [[package]]
 name = "kernoid-events"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "jiff",
  "jiff-sqlx",
@@ -3277,7 +3277,7 @@ dependencies = [
 
 [[package]]
 name = "kernoid-files"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "bytes",
  "futures-util",
@@ -3296,7 +3296,7 @@ dependencies = [
 
 [[package]]
 name = "kernoid-groupware"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "ahash",
  "calcard",
@@ -3323,7 +3323,7 @@ dependencies = [
 
 [[package]]
 name = "kernoid-identity"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "argon2 0.6.0",
  "aws-lc-rs",
@@ -3354,7 +3354,7 @@ dependencies = [
 
 [[package]]
 name = "kernoid-imap"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -3379,7 +3379,7 @@ dependencies = [
 
 [[package]]
 name = "kernoid-jitsi"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -3405,7 +3405,7 @@ dependencies = [
 
 [[package]]
 name = "kernoid-jmap"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -3435,7 +3435,7 @@ dependencies = [
 
 [[package]]
 name = "kernoid-ldap"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "futures-util",
  "kernoid-config",
@@ -3455,7 +3455,7 @@ dependencies = [
 
 [[package]]
 name = "kernoid-log"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "kernoid-base",
  "serde",
@@ -3465,7 +3465,7 @@ dependencies = [
 
 [[package]]
 name = "kernoid-mail"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -3494,7 +3494,7 @@ dependencies = [
 
 [[package]]
 name = "kernoid-module"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "axum",
  "futures-util",
@@ -3512,7 +3512,7 @@ dependencies = [
 
 [[package]]
 name = "kernoid-oidc"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "aws-lc-rs",
  "axum",
@@ -3543,7 +3543,7 @@ dependencies = [
 
 [[package]]
 name = "kernoid-relay"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "axum",
  "http-body-util",
@@ -3566,7 +3566,7 @@ dependencies = [
 
 [[package]]
 name = "kernoid-server"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "async-graphql",
  "async-graphql-axum",
@@ -3629,7 +3629,7 @@ dependencies = [
 
 [[package]]
 name = "kernoid-smtp"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "aws-lc-rs",
  "base64 0.22.1",
@@ -3668,7 +3668,7 @@ dependencies = [
 
 [[package]]
 name = "kernoid-store"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "aead-stream",
  "bytes",

@@ -88,7 +88,7 @@ impl State {
                  COMMIT;",
             )?;
         }
-        // 2 (0.5.0): vaults on spaces – the store is read whole once, so that their directories say their space.
+        // 2 (0.5.1): vaults on spaces – the store is read whole once, so that their directories say their space.
         let version: i64 = db.query_row("PRAGMA user_version", [], |row| row.get(0))?;
         if version < 2 {
             db.execute_batch(

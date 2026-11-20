@@ -1,6 +1,6 @@
 {
   "name": "@kernoid/vault",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "license": "AGPL-3.0-or-later",
   "description": "kernoid's vaults on spaces in the browser: kit/vault as WebAssembly (the foundation's streams, SQLite in memory)",
   "type": "module",

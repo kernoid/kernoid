@@ -2027,7 +2027,7 @@ dependencies = [
 
 [[package]]
 name = "kernoid-base"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "base64 0.23.1",
  "getrandom 0.4.3",
@@ -2040,7 +2040,7 @@ dependencies = [
 
 [[package]]
 name = "kernoid-blob"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "kernoid-base",
  "sha2 0.11.1",
@@ -2049,7 +2049,7 @@ dependencies = [
 
 [[package]]
 name = "kernoid-client"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -2077,7 +2077,7 @@ dependencies = [
 
 [[package]]
 name = "kernoid-crypt"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "chacha20poly1305",
  "ed25519-dalek 3.0.0",
@@ -2099,7 +2099,7 @@ dependencies = [
 
 [[package]]
 name = "kernoid-e2e"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "base64 0.22.1",
  "mail-parser",
@@ -2112,7 +2112,7 @@ dependencies = [
 
 [[package]]
 name = "kernoid-log"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "kernoid-base",
  "serde",
@@ -2122,7 +2122,7 @@ dependencies = [
 
 [[package]]
 name = "kernoid-spaces"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "hex",
  "js-sys",
@@ -2140,7 +2140,7 @@ dependencies = [
 
 [[package]]
 name = "kernoid-sync"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "jiff",
  "kernoid-client",
@@ -2151,7 +2151,7 @@ dependencies = [
 
 [[package]]
 name = "kernoid-vault"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "chacha20poly1305",
  "getrandom 0.3.4",

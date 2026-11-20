@@ -4,7 +4,7 @@
 # every platform – an FFI plugin.
 name: kernoid_bridge
 description: "The Rust side of kernoid's apps: the kit's SDK, called from Dart"
-version: 0.5.0
+version: 0.5.1
 publish_to: 'none'
 repository: https://github.com/kernoid/kernoid
 

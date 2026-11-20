@@ -2,7 +2,7 @@
 # RFC 0008 – The suite: building blocks, services and licences
 
 - **Status:** draft, 2026-11-19; the direction decided by the maintainer the same day, the mechanism a proposal.
-  Implemented with 0.5.0 as far as section 7 says.
+  Implemented with 0.5.1 as far as section 7 says.
 - **Scope:** what kernoid is to the programs built on it, how the repository is laid out for that, which parts an
   installation may leave out, and which licence each part carries. [0009](0009-kernoid-in-other-servers.md) says how
   another server uses kernoid's identity, [0010](0010-foundation.md) what the foundation of end-to-end encrypted spaces
@@ -23,7 +23,7 @@ The maintainer decided (2026-11-19):
    apps of the programs built on kernoid –, and as little of it as possible.
 5. **The files, JMAP and end-to-end parts** that aktujo has built so far become kernoid's ([0010](0010-foundation.md));
    aktujo keeps what is about documents.
-6. **Order:** kernoid 0.5.0 completes this and works; then aktujo moves onto it, then notenwart and spezado.
+6. **Order:** kernoid 0.5.1 completes this and works; then aktujo moves onto it, then notenwart and spezado.
 
 ## 2. Layers
 
@@ -91,7 +91,7 @@ it is then as if the installation did not run it: its JMAP capabilities and the 
 missing from the session, CalDAV and CardDAV refuse them (`calendars`), mail programs cannot log in and nothing is
 delivered to them (`mail`), the relay founds no space for them (`relay`). Nothing is removed: the accounts keep their
 services and their content, and switching the service on again brings everything back. Tenant administrators read the
-state (`GET /v1/tenant/services`), they do not change it (implemented in 0.5.0).
+state (`GET /v1/tenant/services`), they do not change it (implemented in 0.5.1).
 
 **Calendars** need the store of mail (RFC 0004 keeps them in the account's mail store), not the mail service: with
 `mail = false` and `calendars = true`, accounts have a mail store without mailboxes, SMTP or IMAP.
@@ -101,7 +101,7 @@ state (`GET /v1/tenant/services`), they do not change it (implemented in 0.5.0).
 - **Identity alone:** `[services]` all `false`, the roles `api` and `worker`. It needs PostgreSQL; **object storage is
   not needed**: with `[blob] kind = "database"` the few objects identity keeps (pictures of accounts) are stored in
   PostgreSQL (`blob_objects`), sealed like any other, up to 4 MiB each. `database` is refused while mail or files is on
-  (implemented in 0.5.0); with the relay, see [0010](0010-foundation.md).
+  (implemented in 0.5.1); with the relay, see [0010](0010-foundation.md).
 - **A relay alone:** `relay = true`, the others `false`, the roles `api`, `worker` and `relay` (or `all`). Spaces are
   founded by accounts of the installation, or by anyone when the relay is open ([0010](0010-foundation.md), section 4).
 - **Everything:** as today.
@@ -129,9 +129,9 @@ maintainer's (checked 2026-11-19, `git log`); code taken over from others keeps 
 `kit/` carries `MIT`, every other source file a licence of the table (REUSE); a kit crate's `Cargo.toml` says
 `license = "MIT"`.
 
-## 7. 0.5.0
+## 7. 0.5.1
 
-kernoid 0.5.0 is done when:
+kernoid 0.5.1 is done when:
 
 1. the repository is laid out as section 3 says, with the licences of section 6 and their checks;
 2. the services of section 4 can be switched off, and identity alone and a relay alone run – each tested in CI;

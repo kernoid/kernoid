@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: CC-BY-4.0 -->
 # RFC 0012 – Streams in the foundation
 
-- **Status:** accepted by the maintainer on 2026-11-19 ("Alles umsetzen"), implemented in 0.5.0 – `kernoid_crypt::stream`,
+- **Status:** accepted by the maintainer on 2026-11-19 ("Alles umsetzen"), implemented in 0.5.1 – `kernoid_crypt::stream`,
   the relay's protocol 2 (`kernoid-relay`, migration 0057), `kernoid_spaces::store::streams` and
   `kernoid_spaces::streams`, checked end to end against kernoid (`kit/spaces/tests/streams.rs`). The direction is
   aktujo RFC 0009; this RFC is the mechanism. Building it settled three points, marked *(settled while building)*

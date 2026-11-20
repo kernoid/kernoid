@@ -21,10 +21,10 @@ workspace = true
 
 [dependencies]
 hex = "0.4.3"
-kernoid-base = { version = "0.5.0", path = "../base" }
-kernoid-blob = { version = "0.5.0", path = "../blob" }
-kernoid-crypt = { version = "0.5.0", path = "../crypt" }
-kernoid-log = { version = "0.5.0", path = "../log" }
+kernoid-base = { version = "0.5.1", path = "../base" }
+kernoid-blob = { version = "0.5.1", path = "../blob" }
+kernoid-crypt = { version = "0.5.1", path = "../crypt" }
+kernoid-log = { version = "0.5.1", path = "../log" }
 # SQLite built in, 3.54.1 – the fix of RUSTSEC-2026-0459 that SQLCipher has too (one version for the kit: kernoid-sync
 # takes the same).
 rusqlite = { version = "0.42.0", features = ["bundled"] }

@@ -2,7 +2,7 @@
 # RFC 0010 – The foundation: spaces, end to end
 
 - **Status:** draft, 2026-11-19; the direction decided by the maintainer the same day (RFC 0008, 1), the mechanism a
-  proposal. Implemented with 0.5.0 as section 7 says: the six crates in `kit/`, `kernoid-relay` and the service
+  proposal. Implemented with 0.5.1 as section 7 says: the six crates in `kit/`, `kernoid-relay` and the service
   `relay`.
 - **Scope:** the crates that end-to-end encrypted data of any program stands on – originals by their hash, a log of
   events per space, keys of the members, storage on a device, sync, and the relay – taken over from aktujo; and how
@@ -18,7 +18,7 @@ takes it over (2026-11-19); the files say where they come from.
 
 It is taken over **as it is at aktujo 0.4.1** – renamed, its licences set as section 2 says, its SQL in kernoid's rules
 (section 4). What aktujo has designed since (streams, a tree of keys, erasure, visibility, a server as a node – aktujo
-RFCs 0007–0011) comes after 0.5.0, in this repository, when aktujo moves onto it (RFC 0008, 1).
+RFCs 0007–0011) comes after 0.5.1, in this repository, when aktujo moves onto it (RFC 0008, 1).
 
 ## 2. The crates
 
@@ -30,7 +30,7 @@ RFCs 0007–0011) comes after 0.5.0, in this repository, when aktujo moves onto 
 | `aktujo-crypt` | `kernoid-crypt` | MIT | members and their keys from a seed, the chain of space keys, envelopes, signed requests, invitations, recovery codes |
 | `aktujo-store` (SQLite), `aktujo-sync` | `kernoid-spaces` | MIT | a device's spaces: their store in SQLite (`store`: events, member records, settings, what was sent) and their synchronisation through a relay – writing, invitations, removing members, recovery (until 0.5.0 `kernoid-space-store` and `kernoid-replica`) |
 | `aktujo-relay` | `kernoid-relay` | **AGPL** | the relay: member lists and envelopes per space over HTTP, on kernoid's PostgreSQL and object storage |
-| `aktujo-store` (PostgreSQL) | – | – | not taken over: a server keeps spaces through `kernoid-relay`; aktujo's own server mode follows aktujo RFC 0011, after 0.5.0 |
+| `aktujo-store` (PostgreSQL) | – | – | not taken over: a server keeps spaces through `kernoid-relay`; aktujo's own server mode follows aktujo RFC 0011, after 0.5.1 |
 
 The MIT crates are in `kit/` (RFC 0008, 3): the apps of every program built on kernoid use them on the device. The
 relay is a server crate.
@@ -74,7 +74,7 @@ kernoid's is the one for servers.
 ## 5. Files and vaults
 
 Files stay as RFC 0005 says – data in tables, the server reads them, WebDAV and JMAP FileNode on top. This is the
-**managed** way of keeping files. Vaults (RFC 0006, 6) were OpenPGP in 0.5.0.
+**managed** way of keeping files. Vaults (RFC 0006, 6) were OpenPGP before 0.5.1.
 
 The **end-to-end** way is spaces. Once streams exist (aktujo RFC 0009: a log per folder and document, keys in a tree),
 vaults move onto them and kernoid has one end-to-end design for files, documents and everything else: a vault becomes
@@ -140,7 +140,7 @@ the cryptography by someone besides its author.
 
 aktujo's keys are classical (Ed25519, X25519 through HPKE); kernoid's rule is to prefer post-quantum where it disturbs
 nothing (RFC 0006, 1). The format of today's spaces stays as it is; the tree of keys of aktujo RFC 0009 is built on
-**hybrid keys** – one change of the format rather than two. They are in `kernoid_crypt::pq` (implemented in 0.5.0):
+**hybrid keys** – one change of the format rather than two. They are in `kernoid_crypt::pq` (implemented in 0.5.1):
 
 - **Receiving:** X-Wing (draft-connolly-cfrg-xwing-kem-11) – ML-KEM-768 and X25519, combined with SHA3-256 –, a key of
   32 bytes, public 1216, ciphertext 1120. Sealing to it is a KEM–DEM: HKDF-SHA256 over X-Wing's secret, bound to the
@@ -157,7 +157,7 @@ the draft's three test vectors; the bytes do not change when the library's X-Win
 version). ML-DSA is ml-dsa 0.1, which signs in constant time – the server signs as a node of a space (aktujo RFC 0009,
 5), on request. **OPEN:** a review of `pq` by someone besides its author, before a space depends on it.
 
-## 7. 0.5.0
+## 7. 0.5.1
 
 1. The six MIT crates in `kit/`, with aktujo's tests; two devices found a space, write offline, sync through
    `kernoid-relay`, add and remove a member, recover – against a real kernoid (`kit/spaces/tests/server.rs`, run by
@@ -169,7 +169,7 @@ version). ML-DSA is ml-dsa 0.1, which signs in constant time – the server sign
 ## 8. Open
 
 - Streams, with what the foundation gives erasure and visibility – purging a stream, removing a person, streams shown to
-  one person, links and their generations –, are [0012](0012-streams.md) (implemented in 0.5.0). Locks, roles and the
+  one person, links and their generations –, are [0012](0012-streams.md) (implemented in 0.5.1). Locks, roles and the
   other permissions of aktujo RFCs 0007–0009 are a program's data in its streams, checked at a record's `at`.
 - **OPEN:** vaults on spaces (section 5) – with streams.
 - **OPEN:** a space's events read by the server for an account that allows it (a node with keys, aktujo RFC 0009) –

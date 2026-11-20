@@ -2,7 +2,7 @@
 # RFC 0009 – kernoid in other servers
 
 - **Status:** draft, 2026-11-19; the direction decided by the maintainer the same day (RFC 0008, 1), the mechanism a
-  proposal. Implemented with 0.5.0: `kernoid-auth` (section 2), `kernoid_server::embedded` with the features of
+  proposal. Implemented with 0.5.1: `kernoid-auth` (section 2), `kernoid_server::embedded` with the features of
   section 3, `database.schema` (section 4), the claim `urn:kernoid:tenant`.
 - **Scope:** how a server of another program – aktujo, notenwart, spezado, or anyone's – gets accounts, logins and
   administration from kernoid instead of building its own: beside a kernoid, or with kernoid's identity built in.
@@ -117,7 +117,7 @@ kernoid's schema (`pg_dump --schema=kernoid`), restore it into the new kernoid's
 schema name and main key, `kernoid migrate`, give the instance its new host as primary domain, and point the program
 at it with `kernoid-auth` (an application of its project). Accounts keep their ids – the subject the program sees –,
 passwords and second factors; passkeys where the RP ID stays. The steps are in `docs/building-on-kernoid.md`;
-`scripts/profile-check.sh` checks them (implemented in 0.5.0).
+`scripts/profile-check.sh` checks them (implemented in 0.5.1).
 
 ## 8. Open
 

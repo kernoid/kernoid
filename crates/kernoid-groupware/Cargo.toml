@@ -17,8 +17,8 @@ ahash = "0.8.12"
 calcard = { version = "1.1.0", path = "../calcard" }
 jiff = { version = "1.0.1", features = ["serde", "tzdb-bundle-always"] }
 jiff-sqlx = { version = "1.0.0", features = ["postgres", "serde"] }
-kernoid-mail = { version = "0.5.0", path = "../kernoid-mail" }
-kernoid-store = { version = "0.5.0", path = "../kernoid-store" }
+kernoid-mail = { version = "0.5.1", path = "../kernoid-mail" }
+kernoid-store = { version = "0.5.1", path = "../kernoid-store" }
 indexmap = "2.14.2"
 mail-builder = "2.0.0"
 mail-parser = { version = "1.0.0", features = ["full_encoding"] }

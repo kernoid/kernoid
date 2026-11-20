@@ -68,7 +68,7 @@ A program that runs on its own can build kernoid's identity into its process ins
 its default features compiles nothing of mail, calendars or files:
 
 ```toml
-kernoid-server = { git = "https://github.com/kernoid/kernoid", tag = "v0.5.0", default-features = false }
+kernoid-server = { git = "https://github.com/kernoid/kernoid", tag = "v0.5.1", default-features = false }
 ```
 
 ```rust

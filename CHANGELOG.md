@@ -7,8 +7,51 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 ## [Unreleased]
 
+## [0.5.1] – DATE
+
+kernoid becomes the core of a suite of building blocks ([RFC 0008](rfcs/0008-suite-and-building-blocks.md)–0011): an
+installation runs only the services it wants, down to identity alone or a relay alone; other programs log in with
+kernoid or build its identity in; the foundation of end-to-end encrypted spaces – aktujo's core – is kernoid's, with a
+relay; and the parts apps use are one kit under MIT, Flutter packages included. Upgrade by pulling the image
+`ghcr.io/kernoid/kernoid:0.5.1` (the Helm chart and the crates follow the version): migrations 0052 to 0058 add tables,
+columns and a function, and installations that keep mail, calendars and files change nothing in their configuration. The web
+SDK, login UI and web app are AGPL now (below). Apps on the kit take its crates 0.5.1; kernoid's app takes the kit's
+Flutter packages from this release.
+
+0.5.0 was never tagged: crates of the foundation went to crates.io as 0.5.0 before the release, and two of them were
+merged afterwards (see Changed). This release carries everything meant for 0.5.0 and what came after.
+
 ### Added
 
+- **Services** (`[services]`: `mail`, `calendars`, `files`, all on by default): a service that is off serves no routes
+  (JMAP's capabilities, REST and GraphQL operations, CalDAV/CardDAV, WebDAV, mail programs' autoconfiguration, the
+  Web Key Directory), runs no background work and is hidden in the web app; `[smtp]` and `[imap]` need `mail`.
+  Calendars and contacts may run without mail. `GET /v1/services` says what an installation runs.
+- **Identity alone without object storage:** `[blob] kind = "database"` keeps objects – pictures of accounts – in
+  PostgreSQL (`blob_objects`, sealed like every object, up to 4 MiB each), for installations without mail and files.
+- **kernoid-auth** (AGPL, on crates.io): other programs' servers log in with kernoid – or any OpenID provider – with
+  PKCE, keep sessions of their own, check access tokens and take back-channel logout; routes and an extractor for axum
+  ([Building on kernoid](https://kernoid.dev/building-on-kernoid/)). The client of external identity providers kernoid
+  uses for its tenants is the same code now.
+- **kernoid built in:** `kernoid_server::embedded` starts kernoid's identity in another program's process; the
+  program's routes join kernoid's, `Session` says who is logged in. `kernoid-server` has the features `mail`,
+  `calendars` and `files` (on by default) – without them, nothing of those is compiled in. `database.schema` puts
+  kernoid's tables into a schema of their own (migration 0053 grants its use).
+- **The foundation** ([RFC 0010](rfcs/0010-foundation.md)): aktujo's core – originals by their hash, the event log of a
+  space, the keys of its members, a device's spaces in SQLite, the replica – as `kernoid-base`, `-blob`, `-log`,
+  `-crypt` and `-spaces` in the kit (MIT, on crates.io), for kernoid, aktujo, notenwart and spezado.
+- **The relay** (`[services] relay = true`, migration 0054): kernoid keeps end-to-end encrypted spaces below
+  `/relay/<program>/v1/` – it checks signatures and member lists, never content; envelopes larger than 64 KiB go to
+  object storage. Spaces are founded by accounts (their token in `kernoid-session`) or, on a relay open for a tenant
+  (`relay.open_for_tenant`), by anyone; `relay.domains` names the programs. A tenant's spaces in REST
+  (`/v1/relay/spaces`), GraphQL and the CLI (`kernoid relay`).
+- The claim `urn:kernoid:tenant` – the account's tenant – in ID tokens, JWT access tokens and userinfo answers.
+- **The app kit** ([RFC 0011](rfcs/0011-app-kit.md)): kernoid's apps as Flutter packages in `kit/flutter/` (MIT) –
+  `kernoid_shell` (the frame, `KFeature`, `runKernoidApp`), `kernoid_mail`, `kernoid_calendar`, `kernoid_contacts`,
+  `kernoid_files`, `kernoid_ui`, `kernoid_l10n` and `kernoid_bridge` (the Rust side, on the kit's SDK by path). An app
+  shows the features its server offers. kernoid/apps is the app around them.
+- RFCs 0008 (the suite: building blocks, services, licences), 0009 (kernoid's identity in other servers), 0010 (the
+  foundation of end-to-end encrypted spaces) and 0011 (the app kit).
 - **Relay quota** per tenant (`tenant.relay_quota_set`, migration 0055): REST `/v1/relay/quota`, GraphQL `relayQuota`
   and `setRelayQuota`, `kernoid relay quota`; an envelope beyond it is refused.
 - **Mail without the service mail:** `[mail.notification_relay]` sends kernoid's own messages (registration codes)
@@ -54,6 +97,13 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 ### Changed
 
+- **The kit:** the Rust SDK, kernoid-e2e and kernoid-sync move from `apps/` to `kit/`, one Cargo workspace under MIT
+  with one lock file; CI checks that nothing in it is under another licence or reaches a server crate. The terminal
+  app moves to `tui/`.
+- **Licence:** the web SDK, the login UI and the web app (`web/`) are AGPL-3.0-or-later now, like the server – no app
+  under MIT uses them (RFC 0008, 6). A web app under another licence logs in with any OpenID Connect library.
+- **JMAP:** an account's mail and its calendars and contacts are separate in the session (`Caller::calendars`), so
+  that each follows its service.
 - **Crate names are `kernoid-` and one word:** `kernoid-replica` and `kernoid-space-store` are one crate,
   `kernoid-spaces` (the store is `kernoid_spaces::store`); the SMTP client is `kernoid_smtp::client` – identity alone
   takes `kernoid-smtp` without its feature `server`. `kernoid-replica` and `kernoid-space-store` 0.5.0 stay on
@@ -64,59 +114,6 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   no longer ring and webpki-roots.
 - **kernoid-auth:** sessions in PostgreSQL (`PgSessions`, feature `postgres`, on by default) – a table in the program's
   database with migrations of their own; ids stored only as hashes.
-
-## [0.5.0] – DATE
-
-kernoid becomes the core of a suite of building blocks ([RFC 0008](rfcs/0008-suite-and-building-blocks.md)–0011): an
-installation runs only the services it wants, down to identity alone or a relay alone; other programs log in with
-kernoid or build its identity in; the foundation of end-to-end encrypted spaces – aktujo's core – is kernoid's, with a
-relay; and the parts apps use are one kit under MIT, Flutter packages included. Upgrade by pulling the image
-`ghcr.io/kernoid/kernoid:0.5.0` (the Helm chart and the crates follow the version): migrations 0052 to 0054 add tables
-and a function, and installations that keep mail, calendars and files change nothing in their configuration. The web
-SDK, login UI and web app are AGPL now (below). Apps on the kit take its crates 0.5.0; kernoid's app takes the kit's
-Flutter packages from this release.
-
-### Added
-
-- **Services** (`[services]`: `mail`, `calendars`, `files`, all on by default): a service that is off serves no routes
-  (JMAP's capabilities, REST and GraphQL operations, CalDAV/CardDAV, WebDAV, mail programs' autoconfiguration, the
-  Web Key Directory), runs no background work and is hidden in the web app; `[smtp]` and `[imap]` need `mail`.
-  Calendars and contacts may run without mail. `GET /v1/services` says what an installation runs.
-- **Identity alone without object storage:** `[blob] kind = "database"` keeps objects – pictures of accounts – in
-  PostgreSQL (`blob_objects`, sealed like every object, up to 4 MiB each), for installations without mail and files.
-- **kernoid-auth** (AGPL, on crates.io): other programs' servers log in with kernoid – or any OpenID provider – with
-  PKCE, keep sessions of their own, check access tokens and take back-channel logout; routes and an extractor for axum
-  ([Building on kernoid](https://kernoid.dev/building-on-kernoid/)). The client of external identity providers kernoid
-  uses for its tenants is the same code now.
-- **kernoid built in:** `kernoid_server::embedded` starts kernoid's identity in another program's process; the
-  program's routes join kernoid's, `Session` says who is logged in. `kernoid-server` has the features `mail`,
-  `calendars` and `files` (on by default) – without them, nothing of those is compiled in. `database.schema` puts
-  kernoid's tables into a schema of their own (migration 0053 grants its use).
-- **The foundation** ([RFC 0010](rfcs/0010-foundation.md)): aktujo's core – originals by their hash, the event log of a
-  space, the keys of its members, a device's spaces in SQLite, the replica – as `kernoid-base`, `-blob`, `-log`,
-  `-crypt` and `-spaces` in the kit (MIT, on crates.io), for kernoid, aktujo, notenwart and spezado.
-- **The relay** (`[services] relay = true`, migration 0054): kernoid keeps end-to-end encrypted spaces below
-  `/relay/<program>/v1/` – it checks signatures and member lists, never content; envelopes larger than 64 KiB go to
-  object storage. Spaces are founded by accounts (their token in `kernoid-session`) or, on a relay open for a tenant
-  (`relay.open_for_tenant`), by anyone; `relay.domains` names the programs. A tenant's spaces in REST
-  (`/v1/relay/spaces`), GraphQL and the CLI (`kernoid relay`).
-- The claim `urn:kernoid:tenant` – the account's tenant – in ID tokens, JWT access tokens and userinfo answers.
-- **The app kit** ([RFC 0011](rfcs/0011-app-kit.md)): kernoid's apps as Flutter packages in `kit/flutter/` (MIT) –
-  `kernoid_shell` (the frame, `KFeature`, `runKernoidApp`), `kernoid_mail`, `kernoid_calendar`, `kernoid_contacts`,
-  `kernoid_files`, `kernoid_ui`, `kernoid_l10n` and `kernoid_bridge` (the Rust side, on the kit's SDK by path). An app
-  shows the features its server offers. kernoid/apps is the app around them.
-- RFCs 0008 (the suite: building blocks, services, licences), 0009 (kernoid's identity in other servers), 0010 (the
-  foundation of end-to-end encrypted spaces) and 0011 (the app kit).
-
-### Changed
-
-- **The kit:** the Rust SDK, kernoid-e2e and kernoid-sync move from `apps/` to `kit/`, one Cargo workspace under MIT
-  with one lock file; CI checks that nothing in it is under another licence or reaches a server crate. The terminal
-  app moves to `tui/`.
-- **Licence:** the web SDK, the login UI and the web app (`web/`) are AGPL-3.0-or-later now, like the server – no app
-  under MIT uses them (RFC 0008, 6). A web app under another licence logs in with any OpenID Connect library.
-- **JMAP:** an account's mail and its calendars and contacts are separate in the session (`Caller::calendars`), so
-  that each follows its service.
 
 ## [0.4.0] – 2026-11-19
 

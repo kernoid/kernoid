@@ -29,11 +29,11 @@ native = ["kernoid-spaces/native"]
 wasm = ["dep:wasm-bindgen", "dep:js-sys"]
 
 [dependencies]
-kernoid-base = { version = "0.5.0", path = "../base" }
-kernoid-crypt = { version = "0.5.0", path = "../crypt" }
-kernoid-log = { version = "0.5.0", path = "../log" }
+kernoid-base = { version = "0.5.1", path = "../base" }
+kernoid-crypt = { version = "0.5.1", path = "../crypt" }
+kernoid-log = { version = "0.5.1", path = "../log" }
 # The store as bytes (`serialize`): sealed into a file on a device (`sealed`), kept in IndexedDB by the web app.
-kernoid-spaces = { version = "0.5.0", path = "../spaces", default-features = false, features = ["serialize"] }
+kernoid-spaces = { version = "0.5.1", path = "../spaces", default-features = false, features = ["serialize"] }
 # The sealed store's file (`sealed`): XChaCha20-Poly1305, as the foundation seals.
 chacha20poly1305 = "0.11.0"
 serde = { version = "1.0.229", features = ["derive"] }
