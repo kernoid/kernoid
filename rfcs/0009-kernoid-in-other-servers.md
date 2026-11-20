@@ -76,8 +76,8 @@ crates on crates.io).
 - **Jobs** (clean-up of sessions, key rotation, ACME) run in the program's process, as the role `worker` would.
 - **Mail kernoid sends** (codes for registration) needs a way out: with the service `mail` off, kernoid submits it
   straight to an SMTP relay the operator names (`[mail.notification_relay]`, over TLS, with or without login) through
-  `kernoid-smtp-client` – the client of the queue, a crate of its own so that identity alone builds without the mail
-  crates. Without a queue there is no retry: a code that cannot be sent is an error the person sees.
+  `kernoid_smtp::client` – the client of the queue; identity alone takes `kernoid-smtp` without its feature `server`,
+  so that it builds without the mail crates. Without a queue there is no retry: a code that cannot be sent is an error the person sees.
 
 The program's routes and kernoid's share one origin; kernoid's paths are fixed (`/login`, `/app`, `/v1`, `/graphql`,
 `/oauth/v2`, `/oidc/v1`, `/idp`, `/scim/v2`, `/.well-known/…`) and a program must not use them.

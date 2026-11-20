@@ -28,8 +28,7 @@ RFCs 0007–0011) comes after 0.5.0, in this repository, when aktujo moves onto 
 | `aktujo-blob` | `kernoid-blob` | MIT | originals by SHA-256: the trait `Blobs`, in memory, in a folder, in object storage (feature `object`) |
 | `aktujo-log` | `kernoid-log` | MIT | devices, hybrid logical clocks, events of any kind, the log of a space, merging, the agreed order |
 | `aktujo-crypt` | `kernoid-crypt` | MIT | members and their keys from a seed, the chain of space keys, envelopes, signed requests, invitations, recovery codes |
-| `aktujo-store` (SQLite) | `kernoid-space-store` | MIT | a device's spaces in SQLite: events, member records, settings, what was sent |
-| `aktujo-sync` | `kernoid-replica` | MIT | a device's replica of its spaces: writing, syncing through a relay, invitations, removing members, recovery |
+| `aktujo-store` (SQLite), `aktujo-sync` | `kernoid-spaces` | MIT | a device's spaces: their store in SQLite (`store`: events, member records, settings, what was sent) and their synchronisation through a relay – writing, invitations, removing members, recovery (until 0.5.0 `kernoid-space-store` and `kernoid-replica`) |
 | `aktujo-relay` | `kernoid-relay` | **AGPL** | the relay: member lists and envelopes per space over HTTP, on kernoid's PostgreSQL and object storage |
 | `aktujo-store` (PostgreSQL) | – | – | not taken over: a server keeps spaces through `kernoid-relay`; aktujo's own server mode follows aktujo RFC 0011, after 0.5.0 |
 
@@ -57,7 +56,7 @@ space is its program's – under another scheme it is not there.
   envelopes larger than 64 KiB through `BlobStore` (sealed with the tenant's key, as all content – a second layer, the
   first is the space's), garbage once their space is removed. One writer per space at a time (`FOR UPDATE`).
 - **Who may found a space:** an account of the installation, with its session or an access token of kernoid's apps in
-  the header `kernoid-session` (`kernoid_replica::Replica::start_sync_for`) – the space is its tenant's; or anyone, on a
+  the header `kernoid-session` (`kernoid_spaces::Replica::start_sync_for`) – the space is its tenant's; or anyone, on a
   relay open for a tenant (`relay.open_for_tenant`, for a relay that is all an installation does) – the space is that
   tenant's. A space counts against its tenant: a tenant's spaces together may take at most its **relay quota**
   (`tenant.relay_quota_set`; REST `/v1/relay/quota`, GraphQL `relayQuota`, `kernoid relay quota`); an envelope that
@@ -65,7 +64,7 @@ space is its program's – under another scheme it is not there.
 - **Who may write and read:** members, by signed requests – the relay checks signatures against the ordered list, as
   aktujo's does; it never sees a key of a space.
 - **Limits:** a request at most 64 MiB (aktujo's limit); larger originals in parts – protocol 2 splits them into parts
-  of 16 MiB on the device (`kernoid_replica::streams::PART`).
+  of 16 MiB on the device (`kernoid_spaces::streams::PART`).
 - **Administration:** a tenant's spaces (identity, program, founder, size, last write) and removing one – REST
   (`/v1/relay/spaces`), GraphQL (`relaySpaces`, `removeRelaySpace`), CLI (`kernoid relay`).
 
@@ -108,7 +107,7 @@ move, as built so far:
 
 5. **In the browser** the same code runs as WebAssembly in a worker (`@kernoid/vault`): SQLite in memory
    (sqlite-wasm-rs), saved whole to IndexedDB after each change; the relay is reached by synchronous requests, which
-   only a worker may make (`kernoid_replica::transport::Transport`). The page founds with its session cookie, which the
+   only a worker may make (`kernoid_spaces::transport::Transport`). The page founds with its session cookie, which the
    relay takes with the CSRF header and an `Origin` of the instance.
 
 6. **Levels follow the grant.** Sharing brings the members in line with whom the vault's directory is shared with and
@@ -161,9 +160,9 @@ version). ML-DSA is ml-dsa 0.1, which signs in constant time – the server sign
 ## 7. 0.5.0
 
 1. The six MIT crates in `kit/`, with aktujo's tests; two devices found a space, write offline, sync through
-   `kernoid-relay`, add and remove a member, recover – against a real kernoid (`kit/replica/tests/server.rs`, run by
+   `kernoid-relay`, add and remove a member, recover – against a real kernoid (`kit/spaces/tests/server.rs`, run by
    `scripts/client-check.sh`).
-2. `kernoid-relay` with section 4, the role and service `relay`, its administration, and the replica's tests against a
+2. `kernoid-relay` with section 4, the role and service `relay`, its administration, and the tests of `kernoid-spaces` against a
    real kernoid in CI.
 3. Published on crates.io with the rest of the kit.
 

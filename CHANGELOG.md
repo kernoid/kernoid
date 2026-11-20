@@ -13,7 +13,7 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   and `setRelayQuota`, `kernoid relay quota`; an envelope beyond it is refused.
 - **Mail without the service mail:** `[mail.notification_relay]` sends kernoid's own messages (registration codes)
   through the operator's relay where kernoid keeps no mail – identity alone can register people by email. The SMTP
-  client is a crate of its own (`kernoid-smtp-client`).
+  client is `kernoid_smtp::client`; identity alone takes `kernoid-smtp` without its feature `server`.
 - **Services per tenant** (RFC 0008, 4; `tenant.service_switched`, migration 0056): the operator switches mail,
   calendars, files or the relay off for one tenant – REST `/v1/tenant/services`, GraphQL `tenantServices` and
   `setTenantService`, `kernoid tenant service`. Its accounts no longer see it; nothing is removed.
@@ -26,8 +26,8 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   to seal to, Ed25519 + ML-DSA-65 to sign, both from one seed; X-Wing checked against the draft's test vectors.
 - **Streams** (RFC 0012): spaces as many logs joined by a tree of hybrid post-quantum keys – `kernoid_crypt::stream`
   (roster, person keys, stream keys per generation, records, read and write tokens), the relay's protocol 2 below
-  `/relay/<scheme>/v2/` (migration 0057), `kernoid_space_store::streams` (schema version 2) and
-  `kernoid_replica::streams::Streams` (found, invite, join, follow, write, share, renew when due, originals in parts,
+  `/relay/<scheme>/v2/` (migration 0057), `kernoid_spaces::store::streams` (schema version 2) and
+  `kernoid_spaces::streams::Streams` (found, invite, join, follow, write, share, renew when due, originals in parts,
   remove devices and persons, recover, purge). Protocol 1 stays beside it.
 - **Vaults on spaces** (RFC 0010, 5): a new vault is a space of the relay's protocol 2, kept end to end through streams
   – `kernoid_client::e2e::Vaults` (make, enter with the account's recovery code of it, directories and files as streams,
@@ -39,7 +39,7 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   WebAssembly (`@kernoid/vault`, `kit/vault/scripts/build-wasm.sh`), for the web app – in a worker, SQLite in memory
   kept in IndexedDB. New vaults are made there, OpenPGP vaults can be moved onto a space, sharing makes members. The
   replica reaches relays through a `Transport` (ureq natively, feature `native`), the store can be kept as bytes
-  (`kernoid-space-store`, feature `serialize`), and the relay takes the web app's session cookie of a founder.
+  (`kernoid-spaces`, feature `serialize`), and the relay takes the web app's session cookie of a founder.
 - **Vaults on spaces everywhere:** the file sync keeps them in step (`Folder::sync_all`; state version 2), the terminal
   app opens them (folders, saving decrypted, uploads, new folders, renaming, deleting into the vault's trash), and
   every app renames them. Sharing follows the level of each share (`kernoid_vault::set_members`: read, edit, full) –
@@ -54,6 +54,10 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 ### Changed
 
+- **Crate names are `kernoid-` and one word:** `kernoid-replica` and `kernoid-space-store` are one crate,
+  `kernoid-spaces` (the store is `kernoid_spaces::store`); the SMTP client is `kernoid_smtp::client` – identity alone
+  takes `kernoid-smtp` without its feature `server`. `kernoid-replica` and `kernoid-space-store` 0.5.0 stay on
+  crates.io, yanked.
 - **The relay follows files:** `[services] relay` is on wherever files are unless set – vaults live there. An account
   that founds a space on an open relay is recorded as its founder.
 - **The replica talks TLS with rustls on AWS-LC**, post-quantum key exchange preferred and the system's trust store –
@@ -90,7 +94,7 @@ Flutter packages from this release.
   kernoid's tables into a schema of their own (migration 0053 grants its use).
 - **The foundation** ([RFC 0010](rfcs/0010-foundation.md)): aktujo's core – originals by their hash, the event log of a
   space, the keys of its members, a device's spaces in SQLite, the replica – as `kernoid-base`, `-blob`, `-log`,
-  `-crypt`, `-space-store` and `-replica` in the kit (MIT, on crates.io), for kernoid, aktujo, notenwart and spezado.
+  `-crypt` and `-spaces` in the kit (MIT, on crates.io), for kernoid, aktujo, notenwart and spezado.
 - **The relay** (`[services] relay = true`, migration 0054): kernoid keeps end-to-end encrypted spaces below
   `/relay/<program>/v1/` – it checks signatures and member lists, never content; envelopes larger than 64 KiB go to
   object storage. Spaces are founded by accounts (their token in `kernoid-session`) or, on a relay open for a tenant

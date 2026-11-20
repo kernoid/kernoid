@@ -46,7 +46,7 @@ kit/               the kit (MIT), one Cargo workspace
   client/          kernoid-client – the Rust SDK (was apps/client)
   e2e/             kernoid-e2e – OpenPGP for mail and vaults (was apps/e2e)
   sync/            kernoid-sync – keeping a folder in step with a file store (was apps/sync)
-  base/ blob/ log/ crypt/ space-store/ replica/   the foundation's device side (0010)
+  base/ blob/ log/ crypt/ spaces/   the foundation's device side (0010)
   flutter/         Flutter packages (0011)
 tui/               kernoid-tui (AGPL, was apps/tui), a workspace of its own
 operator/          kernoid-operator (AGPL)
@@ -115,7 +115,7 @@ kernoid still needs only PostgreSQL and, where content is kept, S3-compatible st
 | `crates/**`, `crates/kernoid`, `tui/`, `operator/` | AGPL-3.0-or-later (files taken over from Stalwart or derived from Zitadel: AGPL-3.0-only, as before) | the server and its programs |
 | `web/sdk`, `web/login`, `web/app` | **AGPL-3.0-or-later** (was MIT) | no MIT app uses them; served by the server |
 | `kit/client`, `kit/e2e`, `kit/sync` | MIT | kernoid's apps use them |
-| `kit/base`, `-blob`, `-log`, `-crypt`, `-space-store`, `-replica` | MIT | the apps of programs on kernoid use them ([0010](0010-foundation.md)) |
+| `kit/base`, `-blob`, `-log`, `-crypt`, `-spaces` | MIT | the apps of programs on kernoid use them ([0010](0010-foundation.md)) |
 | `kit/flutter/**` | MIT | kernoid's apps are made of them ([0011](0011-app-kit.md)) |
 | the relay's server side, `kernoid-auth`, identity for other servers | AGPL | only servers use them ([0009](0009-kernoid-in-other-servers.md), [0010](0010-foundation.md)) |
 | API descriptions (`docs/_data/openapi.json`, `docs/api/`) | MIT | others generate clients from them (starter pack) |

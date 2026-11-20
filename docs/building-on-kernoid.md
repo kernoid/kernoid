@@ -115,7 +115,7 @@ its id, which is the subject (`sub`) the program sees through `kernoid-auth` as 
 kernoid's foundation ([RFC 0010](https://github.com/kernoid/kernoid/blob/main/rfcs/0010-foundation.md)) keeps data that
 only its members read: a **space** is a log of events and originals, encrypted on the devices, merged by union, and
 synchronised through a **relay** that checks signatures and the member list but never sees content. The crates are in
-kernoid's kit, under MIT, for apps of any licence: `kernoid-base`, `-blob`, `-log`, `-crypt`, `-space-store` (a
+kernoid's kit, under MIT, for apps of any licence: `kernoid-base`, `-blob`, `-log`, `-crypt`, `-spaces` (a
 device's spaces in SQLite) and `-replica` (a device's replica, synchronising through a relay).
 
 With `services.relay = true` a kernoid is that relay, below `/relay/<program>/v1/` – `<program>` is the scheme of the
