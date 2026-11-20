@@ -283,3 +283,89 @@ async fn single_instances_of_a_series_change_through_overrides(pool: PgPool) {
         expected.iter().map(|(a, b, c)| ((*a).into(), (*b).into(), (*c).into())).collect();
     assert_eq!(instances, expected);
 }
+
+#[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
+async fn the_first_instance_of_an_endless_series_changes_and_goes_alone(pool: PgPool) {
+    let setup = setup(pool).await;
+    let alice = setup.caller("alice").await;
+    let account = alice.account.to_string();
+    let calendars = setup.one(&alice, "Calendar/get", json!({ "accountId": account })).await;
+    let calendar = calendars["list"][0]["id"].as_str().unwrap().to_owned();
+    let created = setup
+        .one(
+            &alice,
+            "CalendarEvent/set",
+            json!({ "accountId": account, "create": { "s": {
+                "@type": "Event", "title": "Serie X", "calendarIds": { &calendar: true },
+                "start": "2026-11-21T09:00:00", "timeZone": "Europe/Berlin", "duration": "PT1H",
+                "recurrenceRule": { "@type": "RecurrenceRule", "frequency": "weekly" }
+            } } }),
+        )
+        .await;
+    let id = created["created"]["s"]["id"].as_str().unwrap().to_owned();
+    let titles = |overrides: Value| {
+        let setup = &setup;
+        let alice = &alice;
+        let account = account.clone();
+        let id = id.clone();
+        async move {
+            let updated = setup
+                .one(
+                    alice,
+                    "CalendarEvent/set",
+                    json!({ "accountId": account, "update": { &id: { "recurrenceOverrides": overrides } } }),
+                )
+                .await;
+            assert_eq!(updated["notUpdated"], json!({}), "{updated}");
+            let found = setup
+                .one(
+                    alice,
+                    "CalendarEvent/query",
+                    json!({ "accountId": account, "expandRecurrences": true,
+                            "filter": { "after": "2026-11-21T00:00:00Z", "before": "2026-12-06T00:00:00Z" } }),
+                )
+                .await;
+            let got = setup
+                .one(
+                    alice,
+                    "CalendarEvent/get",
+                    json!({ "accountId": account, "ids": found["ids"], "properties": ["title", "start"] }),
+                )
+                .await;
+            got["list"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|event| (event["title"].as_str().unwrap().to_owned(), event["start"].as_str().unwrap().to_owned()))
+                .collect::<Vec<_>>()
+        }
+    };
+    // The first instance changed – as the apps send it, with the start it keeps.
+    let changed = titles(json!({ "2026-11-21T09:00:00": {
+        "title": "Serie X einmal", "start": "2026-11-21T09:00:00", "duration": "PT1H", "showWithoutTime": false,
+        "description": "", "locations": null } }))
+    .await;
+    let expected = |first: &str| {
+        vec![
+            (first.to_owned(), "2026-11-21T09:00:00".to_owned()),
+            ("Serie X".to_owned(), "2026-11-28T09:00:00".to_owned()),
+            ("Serie X".to_owned(), "2026-12-05T09:00:00".to_owned()),
+        ]
+    };
+    assert_eq!(changed, expected("Serie X einmal"));
+    // The first instance deleted alone.
+    let left = titles(json!({ "2026-11-21T09:00:00": { "excluded": true } })).await;
+    assert_eq!(left, expected("")[1..].to_vec());
+    // The whole series.
+    let gone = setup.one(&alice, "CalendarEvent/set", json!({ "accountId": account, "destroy": [id] })).await;
+    assert_eq!(gone["destroyed"], json!([id]));
+    let found = setup
+        .one(
+            &alice,
+            "CalendarEvent/query",
+            json!({ "accountId": account, "expandRecurrences": true,
+                    "filter": { "after": "2026-11-21T00:00:00Z", "before": "2026-12-06T00:00:00Z" } }),
+        )
+        .await;
+    assert_eq!(found["ids"], json!([]));
+}

@@ -358,3 +358,30 @@ async fn properties_reports_and_refused_bodies(pool: PgPool) {
     let response = setup.request(alice, "PROPFIND", &calendar, &[("depth", "0")], "<D:propfind").await;
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
+
+#[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
+async fn an_override_of_an_endless_series_is_expanded(pool: PgPool) {
+    let setup = setup(pool).await;
+    let alice = setup.account("alice").await;
+    let work = format!("/dav/calendars/{alice}/work/");
+    let made = setup
+        .request(alice, "MKCALENDAR", &work, &[], r#"<C:mkcalendar xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:set><D:prop><D:displayname>Work</D:displayname></D:prop></D:set></C:mkcalendar>"#)
+        .await;
+    assert_eq!(made.status(), StatusCode::CREATED, "{}", text(&made));
+    let series = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:test\r\nBEGIN:VEVENT\r\nUID:s@firma\r\nDTSTAMP:20261001T080000Z\r\n\
+        DTSTART;TZID=Europe/Berlin:20261121T090000\r\nDURATION:PT1H\r\nRRULE:FREQ=WEEKLY\r\nSUMMARY:Serie\r\nEND:VEVENT\r\n\
+        BEGIN:VEVENT\r\nUID:s@firma\r\nDTSTAMP:20261001T080000Z\r\nRECURRENCE-ID;TZID=Europe/Berlin:20261121T090000\r\n\
+        DTSTART;TZID=Europe/Berlin:20261121T090000\r\nDURATION:PT1H\r\nSUMMARY:Einmal\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+    let put = setup.request(alice, "PUT", &format!("{work}s.ics"), &[], series).await;
+    assert_eq!(put.status(), StatusCode::CREATED, "{}", text(&put));
+    // A time range open to the end: the series alone gives every instance there is.
+    let query = r#"<C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+      <D:prop><C:calendar-data><C:expand start="20261120T000000Z" end="20261206T000000Z"/></C:calendar-data></D:prop>
+      <C:filter><C:comp-filter name="VCALENDAR"><C:comp-filter name="VEVENT">
+        <C:time-range start="20261120T000000Z"/></C:comp-filter></C:comp-filter></C:filter>
+    </C:calendar-query>"#;
+    let body = text(&setup.request(alice, "REPORT", &work, &[("depth", "1")], query).await).replace("\r\n ", "");
+    assert_eq!(body.matches("SUMMARY:Einmal").count(), 1, "{body}");
+    assert_eq!(body.matches("SUMMARY:Serie").count(), 2, "{body}");
+    assert!(body.contains("RECURRENCE-ID:20261121T080000Z"), "{body}");
+}

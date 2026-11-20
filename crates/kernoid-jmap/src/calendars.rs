@@ -112,7 +112,14 @@ fn recurs(text: &str) -> bool {
 /// The instances of an iCalendar object as (start, end) in seconds since 1970, in a time window.
 fn instances(text: &str, default_tz: TimeZone, after: Option<i64>, before: Option<i64>) -> Vec<(i64, i64)> {
     let Ok(parsed) = kernoid_pim::ical::parse(text) else { return Vec::new() };
-    let expanded = kernoid_pim::expand::expand(&parsed, &default_tz, None, ical::MAX_INSTANCES);
+    // Expanded over the window only, so that a long series reaches it within the limit.
+    let window = (after.is_some() || before.is_some()).then(|| {
+        let at = |seconds: Option<i64>, open: jiff::Timestamp| {
+            seconds.and_then(|seconds| jiff::Timestamp::from_second(seconds).ok()).unwrap_or(open)
+        };
+        (at(after, jiff::Timestamp::MIN), at(before, jiff::Timestamp::MAX))
+    });
+    let expanded = kernoid_pim::expand::expand(&parsed, &default_tz, window, ical::MAX_INSTANCES);
     let mut out: Vec<(i64, i64)> = expanded
         .instances
         .into_iter()
@@ -380,7 +387,10 @@ impl Context<'_> {
             };
             let zone = ical::time_zone(zones.get(&event.calendar).cloned().flatten().as_deref());
             let time_zone = object.get("timeZone").and_then(Value::as_str).map(str::to_owned);
-            let found = instances(text, zone, None, None);
+            let found = match instance {
+                Some(start) => instances(text, zone, Some(start - 1), Some(start + 1)),
+                None => instances(text, zone, None, None),
+            };
             match instance {
                 Some(start) => {
                     let Some((_, end)) = found.iter().find(|(s, _)| *s == start).copied() else {

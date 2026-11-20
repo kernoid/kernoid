@@ -114,10 +114,6 @@ pub fn expand(
             let instant = to_timestamp(&zone, start.civil());
             let end = duration.end_of(&zone, start.civil()).max(instant);
             if overlaps(instant, end, range) {
-                if out.instances.len() >= limit {
-                    out.complete = false;
-                    break;
-                }
                 out.instances.push(Instance { component: *index, recurrence_id, start: instant, end, all_day });
             }
             continue;
@@ -137,6 +133,7 @@ pub fn expand(
                 }
             }
         }
+        let mut from_series = 0;
         for occurrence in occurrences(component, &start, &zones, default) {
             let civil = occurrence.civil;
             let instant = to_timestamp(&zone, civil);
@@ -155,10 +152,12 @@ pub fn expand(
             if !overlaps(instant, end, range) {
                 continue;
             }
-            if out.instances.len() >= limit {
+            // Each series gives at most `limit` instances – its earliest; the others are not cut short by it.
+            if from_series >= limit {
                 out.complete = false;
                 break;
             }
+            from_series += 1;
             out.instances.push(Instance {
                 component: *index,
                 recurrence_id: Some(start.with_civil(civil)),
@@ -169,6 +168,10 @@ pub fn expand(
         }
     }
     out.instances.sort_by_key(|instance| (instance.start, instance.component));
+    if out.instances.len() > limit {
+        out.instances.truncate(limit);
+        out.complete = false;
+    }
     out
 }
 
@@ -351,6 +354,30 @@ mod tests {
         let expansion = expand(&calendar, &TimeZone::UTC, None, 10);
         assert_eq!(expansion.instances[2].component, 1);
         assert_eq!(expansion.instances[2].recurrence_id.as_ref().unwrap().format(), "20261109T100000");
+    }
+
+    #[test]
+    fn an_override_of_an_endless_series_is_not_cut_off_by_the_limit() {
+        // The override of the first instance comes after its endless series in the file; with a limit, the series
+        // must not use it up before the override is read.
+        let text = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:t\r\nBEGIN:VEVENT\r\nUID:a\r\n\
+            DTSTART;TZID=Europe/Berlin:20261121T090000\r\nDTEND;TZID=Europe/Berlin:20261121T100000\r\n\
+            RRULE:FREQ=WEEKLY\r\nSUMMARY:Serie\r\nEND:VEVENT\r\nBEGIN:VEVENT\r\nUID:a\r\n\
+            RECURRENCE-ID;TZID=Europe/Berlin:20261121T090000\r\nDTSTART;TZID=Europe/Berlin:20261121T090000\r\n\
+            DTEND;TZID=Europe/Berlin:20261121T100000\r\nSUMMARY:Einmal\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+        let calendar = ical::parse(text).unwrap();
+        let expansion = expand(&calendar, &TimeZone::UTC, None, 3);
+        assert!(!expansion.complete);
+        let found: Vec<(usize, String)> =
+            expansion.instances.iter().map(|i| (i.component, format_utc(i.start))).collect();
+        assert_eq!(
+            found,
+            [
+                (1, "2026-11-21T08:00:00Z".to_owned()),
+                (0, "2026-11-28T08:00:00Z".to_owned()),
+                (0, "2026-12-05T08:00:00Z".to_owned()),
+            ]
+        );
     }
 
     #[test]
