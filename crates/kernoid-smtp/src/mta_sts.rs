@@ -8,7 +8,6 @@
 use jiff::Timestamp;
 use jiff_sqlx::ToSqlx;
 use kernoid_store::PgPool;
-use mail_auth::mta_sts::MtaStsRecord;
 
 use crate::Dns;
 
@@ -213,21 +212,38 @@ async fn fetch(allow_private: bool, domain: &str, id: String) -> Result<Policy, 
     Policy::parse(&text, id)
 }
 
+/// The `id` of a domain's MTA-STS record (RFC 8461, 3.1): `v=STSv1` first, then `id=` of 1 to 32 letters and digits;
+/// other fields are ignored. More than one record starting with `v=STSv1` is as good as none.
+pub fn record_id(records: &[String]) -> Option<String> {
+    let mut found = records.iter().filter(|record| record.trim_start().starts_with("v=STSv1"));
+    let (Some(record), None) = (found.next(), found.next()) else { return None };
+    let mut fields = record.split(';').map(str::trim).filter(|field| !field.is_empty());
+    if fields.next() != Some("v=STSv1") {
+        return None;
+    }
+    fields
+        .filter_map(|field| field.split_once('='))
+        .find(|(name, _)| name.trim() == "id")
+        .map(|(_, id)| id.trim())
+        .filter(|id| (1..=32).contains(&id.len()) && id.chars().all(|c| c.is_ascii_alphanumeric()))
+        .map(str::to_owned)
+}
+
 /// The domain's policy, if it has one: from the cache while its id is current, else fetched over HTTPS (public
 /// addresses only, no redirects). A domain whose policy cannot be had now is treated as having none, unless a policy
 /// is still cached (RFC 8461, 5.1).
 pub async fn lookup(dns: &Dns, pool: &PgPool, allow_private: bool, domain: &str) -> Option<Policy> {
     let domain = normalized_host(domain);
-    let record = dns.authenticator.txt_lookup::<MtaStsRecord>(format!("_mta-sts.{domain}."), Some(&dns.txt)).await;
+    let record = dns.txt(&format!("_mta-sts.{domain}")).await.ok().and_then(|records| record_id(&records));
     let kept = cached(pool, &domain).await;
-    let Ok(record) = record else {
+    let Some(record_id) = record else {
         // No record (or no answer now): a policy still kept goes on (RFC 8461, 5.1).
         return kept;
     };
-    if let Some(policy) = kept.as_ref().filter(|policy| policy.id == record.id) {
+    if let Some(policy) = kept.as_ref().filter(|policy| policy.id == record_id) {
         return Some(policy.clone());
     }
-    match fetch(allow_private, &domain, record.id.clone()).await {
+    match fetch(allow_private, &domain, record_id).await {
         Ok(policy) => {
             keep(pool, &domain, &policy).await;
             Some(policy)
@@ -245,6 +261,17 @@ mod tests {
 
     const POLICY: &str = "version: STSv1\r\nmode: enforce\r\nmx: mail.example.com\r\nmx: *.Example.NET\r\n\
                           max_age: 86400\r\nextension: ignored\r\n";
+
+    #[test]
+    fn txt_records_name_the_policy_id() {
+        let records = |list: &[&str]| list.iter().map(|record| (*record).to_owned()).collect::<Vec<_>>();
+        assert_eq!(record_id(&records(&["v=STSv1; id=20261024;"])).as_deref(), Some("20261024"));
+        assert_eq!(record_id(&records(&["other", "v=STSv1;id=abc ; ext=1"])).as_deref(), Some("abc"));
+        assert_eq!(record_id(&records(&["v=STSv1; id=a", "v=STSv1; id=b"])), None);
+        assert_eq!(record_id(&records(&["id=a; v=STSv1"])), None);
+        assert_eq!(record_id(&records(&["v=STSv1; id=not-alphanumeric"])), None);
+        assert_eq!(record_id(&records(&["v=STSv1"])), None);
+    }
 
     #[test]
     fn policies_are_parsed_as_the_rfc_writes_them() {

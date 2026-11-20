@@ -15,11 +15,10 @@ use kernoid_identity::{Address, CHALLENGE_LABEL, DomainName, Identity, TxtLookup
 use kernoid_mail::{EmailQuery, Limits, Mail, Outgoing, Role};
 use kernoid_smtp::{
     Dns, Server, Settings, dkim,
-    dns::FOREVER,
+    dns::{FOREVER, Mx},
     outbound::{Outbound, OutboundSettings},
 };
 use kernoid_store::{BlobStore, MainKeys, TenantKeys, crypto::Key};
-use mail_auth::{DnssecStatus, Mx, RecordSet, ResolverCache, TxtRecord, dkim::DomainKey, dns::TxtRecordParser};
 use sqlx::PgPool;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
@@ -86,9 +85,8 @@ impl Setup {
     async fn remote_server(&self) -> u16 {
         let dns = Dns::offline();
         for key in dkim::public_records(&self.pool, "firma.example").await.unwrap() {
-            let record: TxtRecord = DomainKey::parse(key.record.as_bytes()).unwrap().into();
             let name = format!("{}._domainkey.firma.example.", key.selector);
-            dns.txt.insert(name.into(), record, Instant::now() + FOREVER);
+            dns.txt.insert(name.into(), Ok(vec![key.record]), Instant::now() + FOREVER);
         }
         let settings = Settings {
             hostname: "mx.remote.example".into(),
@@ -108,17 +106,10 @@ impl Setup {
     /// The sending side: MX and address of remote.example in its caches.
     fn outbound(&self, port: u16) -> Outbound {
         let dns = Dns::offline();
-        let mx = RecordSet {
-            records: Arc::from([Mx { exchanges: Box::from(["mx.remote.example.".into()]), preference: 10 }]),
-            dnssec_status: DnssecStatus::Insecure,
-        };
+        let mx = vec![Mx { preference: 10, exchange: "mx.remote.example.".into() }];
         dns.mx.insert("remote.example.".into(), Ok(mx), Instant::now() + FOREVER);
-        let address = RecordSet { records: Arc::from([Ipv4Addr::LOCALHOST]), dnssec_status: DnssecStatus::Insecure };
-        dns.ipv4.insert("mx.remote.example.".into(), Ok(address), Instant::now() + FOREVER);
-        let null = RecordSet {
-            records: Arc::from([Mx { exchanges: Box::from([".".into()]), preference: 0 }]),
-            dnssec_status: DnssecStatus::Insecure,
-        };
+        dns.ipv4.insert("mx.remote.example.".into(), Ok(vec![Ipv4Addr::LOCALHOST]), Instant::now() + FOREVER);
+        let null = vec![Mx { preference: 0, exchange: ".".into() }];
         dns.mx.insert("nomail.example.".into(), Ok(null), Instant::now() + FOREVER);
         let settings = OutboundSettings {
             hostname: "mx.kernoid.example".into(),
@@ -159,8 +150,8 @@ impl Setup {
 }
 
 /// Puts a TXT record into the sending side's DNS cache.
-fn outbound_dns_txt(outbound: &Outbound, name: &str, record: TxtRecord) {
-    outbound.dns().txt.insert(name.into(), record, Instant::now() + FOREVER);
+fn outbound_dns_txt(outbound: &Outbound, name: &str, record: &str) {
+    outbound.dns().txt.insert(name.into(), Ok(vec![record.to_owned()]), Instant::now() + FOREVER);
 }
 
 fn message(subject: &str) -> String {
@@ -335,8 +326,7 @@ async fn an_mta_sts_policy_in_enforce_mode_requires_its_hosts_and_tls(pool: PgPo
     let port = setup.remote_server().await;
     let outbound = setup.outbound(port);
     // remote.example publishes a policy; it is cached, so nothing is fetched.
-    let record: TxtRecord = mail_auth::mta_sts::MtaStsRecord::parse(b"v=STSv1; id=20261024").unwrap().into();
-    outbound_dns_txt(&outbound, "_mta-sts.remote.example.", record);
+    outbound_dns_txt(&outbound, "_mta-sts.remote.example.", "v=STSv1; id=20261024");
     sqlx::query!(
         "INSERT INTO mta_sts_policies (domain, policy_id, mode, mx, expires_at)
          VALUES ('remote.example', '20261024', 'enforce', ARRAY['mx.remote.example'], now() + interval '1 day')"

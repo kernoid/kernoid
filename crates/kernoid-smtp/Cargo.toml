@@ -17,7 +17,7 @@ default = ["server"]
 server = [
     "dep:aws-lc-rs", "dep:bytes", "dep:jiff", "dep:jiff-sqlx", "dep:idna", "dep:kernoid-config", "dep:kernoid-groupware",
     "dep:kernoid-identity", "dep:kernoid-mail", "dep:kernoid-oidc", "dep:kernoid-store", "dep:mail-builder",
-    "dep:mail-auth", "dep:mail-parser", "dep:rustls-webpki", "dep:sha2", "dep:tokio-util", "dep:sqlx", "dep:tracing",
+    "dep:hickory-resolver", "dep:mail-parser", "dep:rustls-webpki", "dep:sha2", "dep:tokio-util", "dep:sqlx", "dep:tracing",
     "dep:uuid", "dep:x509-cert", "dep:zeroize", "tokio/sync", "tokio/rt", "tokio/macros",
 ]
 
@@ -28,6 +28,7 @@ bytes = { version = "1.12.1", optional = true }
 jiff = { version = "1.0.1", features = ["serde"], optional = true }
 jiff-sqlx = { version = "1.0.0", features = ["postgres", "serde"], optional = true }
 idna = { version = "1.1.0", optional = true }
+hickory-resolver = { version = "0.26.3", features = ["dnssec-aws-lc-rs"], optional = true }
 kernoid-config = { version = "0.5.1", path = "../kernoid-config", optional = true }
 kernoid-groupware = { version = "0.5.1", path = "../kernoid-groupware", optional = true }
 kernoid-identity = { version = "0.5.1", path = "../kernoid-identity", optional = true }
@@ -35,12 +36,10 @@ kernoid-mail = { version = "0.5.1", path = "../kernoid-mail", optional = true }
 kernoid-oidc = { version = "0.5.1", path = "../kernoid-oidc", optional = true }
 kernoid-store = { version = "0.5.1", path = "../kernoid-store", optional = true }
 mail-builder = { version = "2.0.0", optional = true }
-mail-auth = { version = "0.15.1", default-features = false, features = ["aws-lc-rs", "arc"], optional = true }
 mail-parser = { version = "1.0.0", features = ["full_encoding"], optional = true }
 rustls = { version = "0.23.46", default-features = false, features = ["aws-lc-rs", "prefer-post-quantum", "std", "tls12"] }
 rustls-webpki = { version = "0.103.16", default-features = false, features = ["aws-lc-rs", "std"], optional = true }
 sha2 = { version = "0.11.1", optional = true }
-smtp-proto = "0.2.5"
 thiserror = "2.0.21"
 tokio = { version = "1.54.1", features = ["net", "io-util", "time"] }
 tokio-rustls = { version = "0.26.6", default-features = false }
@@ -58,7 +57,6 @@ bytes = "1.12.1"
 futures-util = { version = "0.3.34", default-features = false }
 tokio-util = "0.7.20"
 kernoid-identity = { path = "../kernoid-identity" }
-mail-auth = { version = "0.15.1", default-features = false, features = ["aws-lc-rs", "arc"] }
 rustls = { version = "0.23.46", default-features = false, features = ["aws-lc-rs", "prefer-post-quantum", "std", "tls12"] }
 tokio-rustls = { version = "0.26.6", default-features = false }
 kernoid-events = { path = "../kernoid-events" }

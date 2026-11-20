@@ -2,7 +2,7 @@
 //! An SMTP session (RFC 5321) of the MX (RFC 0002, 9.1) or of submission (10.1, `submission.rs`).
 //!
 //! The session reads what the client sends in batches and hands each batch to the receiver of the state it is in:
-//! commands to smtp-proto's request receiver, the message to its `DATA` or `BDAT` receiver (RFC 3030), an `AUTH`
+//! commands to the request receiver of `proto`, the message to its `DATA` or `BDAT` receiver (RFC 3030), an `AUTH`
 //! exchange line by line. Replies are collected while a batch lasts and written when it is used up, so that a
 //! client that pipelines (RFC 2920) gets them in one write, in order. `STARTTLS` (RFC 3207) drops whatever the
 //! client sent after it and starts the session over – nothing said in plain text survives into TLS.
@@ -12,10 +12,12 @@
 
 use std::{net::IpAddr, sync::Arc};
 
-use mail_auth::{IprevOutput, SpfOutput, spf::verify::SpfParameters};
-use smtp_proto::{
-    Error as ProtoError, MailFrom as ProtoMailFrom, RcptTo, Request,
-    request::receiver::{BdatReceiver, DataReceiver, DummyDataReceiver, RequestReceiver},
+use crate::{
+    auth::{IprevOutput, SpfOutput, iprev, spf, spf::SpfParameters},
+    proto::{
+        BdatReceiver, DataReceiver, Discard, Error as ProtoError, MailFrom as ProtoMailFrom, RcptTo, Request,
+        RequestReceiver,
+    },
 };
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use uuid::Uuid;
@@ -44,7 +46,7 @@ pub(crate) enum State {
     /// A chunk of `BDAT`.
     Bdat(BdatReceiver),
     /// Data that is read but not kept – after `DATA`, its end; after `BDAT`, its size –, then answered with this.
-    Discard(DummyDataReceiver, String),
+    Discard(Discard, String),
     /// A line of an `AUTH` exchange, gathered until its end.
     Sasl(Sasl, Vec<u8>),
 }
@@ -224,16 +226,16 @@ impl Session {
 
     /// Hands a batch of input to the states it passes through.
     async fn ingest(&mut self, state: &mut State, input: &[u8]) -> Next {
-        let mut bytes = input.iter();
+        let mut bytes: &[u8] = input;
         loop {
             match state {
                 State::Request(receiver) => {
-                    if bytes.len() == 0 {
+                    if bytes.is_empty() {
                         return Next::Continue;
                     }
                     let request = match receiver.ingest(&mut bytes) {
-                        Ok(request) => request.into_owned(),
-                        Err(ProtoError::NeedsMoreData { .. }) => return Next::Continue,
+                        Ok(request) => request,
+                        Err(ProtoError::NeedsMoreData) => return Next::Continue,
                         Err(error) => {
                             self.errors += 1;
                             if self.errors >= MAX_ERRORS {
@@ -263,7 +265,7 @@ impl Session {
                         *state = State::Request(RequestReceiver::default());
                     } else if self.message.len() > self.inner.settings.max_message_size {
                         // Read to its end, keep nothing, refuse it then.
-                        let discard = DummyDataReceiver::new_data(receiver);
+                        let discard = Discard::Data(receiver.clone());
                         self.message = Vec::new();
                         *state = State::Discard(discard, "552 5.3.4 Message too big for system".into());
                     } else {
@@ -287,7 +289,7 @@ impl Session {
                     *state = State::Request(RequestReceiver::default());
                 }
                 State::Sasl(step, line) => {
-                    let rest = bytes.as_slice();
+                    let rest = bytes;
                     let Some(end) = rest.iter().position(|byte| *byte == b'\n') else {
                         line.extend_from_slice(rest);
                         if line.len() > MAX_SASL_LINE {
@@ -297,7 +299,7 @@ impl Session {
                         return Next::Continue;
                     };
                     line.extend_from_slice(&rest[..end]);
-                    bytes = rest[end + 1..].iter();
+                    bytes = &rest[end + 1..];
                     let (step, line) = (step.clone(), std::mem::take(line));
                     *state = if line.len() > MAX_SASL_LINE {
                         self.reply("500 5.5.6 Authentication exchange line is too long");
@@ -311,7 +313,7 @@ impl Session {
     }
 
     /// One command. `Ok` with the state to go on in, if not the next command; `Err` ends the batch.
-    async fn request(&mut self, request: Request<String>) -> Result<Option<State>, Next> {
+    async fn request(&mut self, request: Request) -> Result<Option<State>, Next> {
         match request {
             Request::Ehlo { host } => self.ehlo(host, true).await,
             Request::Helo { host } => self.ehlo(host, false).await,
@@ -343,14 +345,14 @@ impl Session {
                 self.reset();
                 self.reply("250 2.0.0 OK");
             }
-            Request::Noop { .. } => self.reply("250 2.0.0 OK"),
+            Request::Noop => self.reply("250 2.0.0 OK"),
             Request::Quit => {
                 self.reply("221 2.0.0 Bye");
                 return Err(Next::Close);
             }
             Request::Vrfy { .. } => self.reply("252 2.5.2 Cannot verify the user, but will take mail for it"),
             Request::Help { .. } => self.reply("214 2.0.0 See RFC 5321"),
-            Request::Expn { .. } | Request::Etrn { .. } | Request::Atrn { .. } | Request::Burl { .. } => {
+            Request::Expn { .. } | Request::Etrn | Request::Atrn | Request::Burl => {
                 self.reply("502 5.5.1 Command not implemented")
             }
         }
@@ -359,7 +361,7 @@ impl Session {
 
     fn protocol_error(&mut self, error: ProtoError) {
         match error {
-            ProtoError::NeedsMoreData { .. } => {}
+            ProtoError::NeedsMoreData => {}
             ProtoError::UnknownCommand => self.reply("500 5.5.1 Command not recognized"),
             ProtoError::InvalidSenderAddress => self.reply("501 5.1.7 Bad sender address syntax"),
             ProtoError::InvalidRecipientAddress => self.reply("501 5.1.3 Bad recipient address syntax"),
@@ -369,8 +371,7 @@ impl Session {
                 let param: String = param.chars().filter(|c| !c.is_control()).take(64).collect();
                 self.reply(format!("504 5.5.4 Unsupported parameter {param}"));
             }
-            ProtoError::ResponseTooLong => self.reply("500 5.5.6 Line too long"),
-            ProtoError::InvalidResponse { .. } => self.reply("500 5.5.2 Syntax error"),
+            ProtoError::LineTooLong => self.reply("500 5.5.6 Line too long"),
         }
     }
 
@@ -381,11 +382,11 @@ impl Session {
         if self.inner.submission.is_none() {
             let dns = &self.inner.dns;
             if self.iprev.is_none() {
-                self.iprev = Some(dns.authenticator.verify_iprev(dns.parameters(self.remote)).await);
+                self.iprev = Some(iprev::verify(dns, self.remote).await);
             }
             let hostname = self.inner.settings.hostname.clone();
             let params = SpfParameters::helo(self.remote, &host, &hostname);
-            self.spf_ehlo = Some(dns.authenticator.verify_spf(dns.parameters(params)).await);
+            self.spf_ehlo = Some(spf::verify(dns, &params).await);
         }
         let hostname = self.hostname().to_owned();
         if !extended {
@@ -411,7 +412,7 @@ impl Session {
         self.helo = Some(host);
     }
 
-    async fn mail_from(&mut self, from: ProtoMailFrom<String>) {
+    async fn mail_from(&mut self, from: ProtoMailFrom) {
         if self.inner.submission.is_some() {
             return self.submission_mail_from(from).await;
         }
@@ -436,12 +437,12 @@ impl Session {
         let dns = &self.inner.dns;
         let hostname = self.inner.settings.hostname.clone();
         let params = SpfParameters::mail_from(self.remote, &helo, &hostname, &address);
-        let spf = dns.authenticator.verify_spf(dns.parameters(params)).await;
+        let spf = spf::verify(dns, &params).await;
         self.mail_from = Some(MailFrom { address, domain, spf: Some(spf) });
         self.reply("250 2.1.0 OK");
     }
 
-    async fn rcpt_to(&mut self, to: RcptTo<String>) {
+    async fn rcpt_to(&mut self, to: RcptTo) {
         if self.inner.submission.is_some() {
             return self.submission_rcpt_to(to).await;
         }
@@ -527,7 +528,7 @@ impl Session {
                 self.reply(refusal);
                 return None;
             }
-            return Some(State::Discard(DummyDataReceiver::new_bdat(size), refusal.into()));
+            return Some(State::Discard(Discard::Bdat(size), refusal.into()));
         }
         self.chunking = true;
         if size > 0 {

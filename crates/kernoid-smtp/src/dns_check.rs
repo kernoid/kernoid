@@ -3,7 +3,7 @@
 //! DNS when asked and changes nothing.
 
 use kernoid_store::PgPool;
-use mail_auth::hickory_resolver::proto::rr::RData;
+use hickory_resolver::proto::rr::RData;
 
 use crate::{Dns, dkim};
 
@@ -45,7 +45,8 @@ pub struct RecordCheck {
 
 /// The TXT records at `name`, each joined from its strings.
 pub(crate) async fn txt(dns: &Dns, name: &str) -> Vec<String> {
-    match dns.authenticator.resolver().txt_lookup(format!("{name}.")).await {
+    let Some(resolver) = dns.resolver() else { return Vec::new() };
+    match resolver.txt_lookup(format!("{name}.")).await {
         Ok(lookup) => lookup
             .answers()
             .iter()
@@ -106,8 +107,12 @@ impl Checker {
 pub async fn check(dns: &Dns, pool: &PgPool, hostname: &str, spf: Option<&str>, domain: &str) -> Vec<RecordCheck> {
     let mut checks = Vec::new();
 
-    let exchanges: Vec<String> = match dns.authenticator.resolver().mx_lookup(format!("{domain}.")).await {
-        Ok(lookup) => lookup
+    let lookup = match dns.resolver() {
+        Some(resolver) => resolver.mx_lookup(format!("{domain}.")).await.ok(),
+        None => None,
+    };
+    let exchanges: Vec<String> = match lookup {
+        Some(lookup) => lookup
             .answers()
             .iter()
             .filter_map(|record| match &record.data {
@@ -115,7 +120,7 @@ pub async fn check(dns: &Dns, pool: &PgPool, hostname: &str, spf: Option<&str>, 
                 _ => None,
             })
             .collect(),
-        Err(_) => Vec::new(),
+        None => Vec::new(),
     };
     let status = if exchanges.is_empty() {
         Status::Missing
