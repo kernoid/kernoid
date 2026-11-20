@@ -13,81 +13,63 @@ use uuid::Uuid;
 use crate::{
     flags,
     proto::{
-        Command, StatusResponse,
-        protocol::search::{self, Filter, ResultOption},
+        request::{ResultOption, Search, SearchKey},
+        response::Status,
+        sequence,
     },
     selected::Selected,
     session::{Session, mail_error},
 };
 
-enum Node {
-    Leaf(Filter),
-    And(Vec<Node>),
-    Or(Vec<Node>),
-    Not(Vec<Node>),
-}
-
-/// The parser's filters are prefix operators closed by `End`; the top level is an `AND`.
-fn tree(filters: &mut impl Iterator<Item = Filter>) -> Vec<Node> {
-    let mut nodes = Vec::new();
-    while let Some(filter) = filters.next() {
-        nodes.push(match filter {
-            Filter::End => break,
-            Filter::And => Node::And(tree(filters)),
-            Filter::Or => Node::Or(tree(filters)),
-            Filter::Not => Node::Not(tree(filters)),
-            leaf => Node::Leaf(leaf),
-        });
+/// Calls `test` on every key that is not `AND`, `OR` or `NOT`.
+fn any_leaf(key: &SearchKey, test: &impl Fn(&SearchKey) -> bool) -> bool {
+    match key {
+        SearchKey::And(keys) => keys.iter().any(|key| any_leaf(key, test)),
+        SearchKey::Or(first, second) => any_leaf(first, test) || any_leaf(second, test),
+        SearchKey::Not(key) => any_leaf(key, test),
+        leaf => test(leaf),
     }
-    nodes
-}
-
-fn any_leaf(nodes: &[Node], test: &impl Fn(&Filter) -> bool) -> bool {
-    nodes.iter().any(|node| match node {
-        Node::And(children) | Node::Or(children) | Node::Not(children) => any_leaf(children, test),
-        Node::Leaf(filter) => test(filter),
-    })
 }
 
 /// Only `HEADER` reads the messages.
-fn needs_message(nodes: &[Node]) -> bool {
-    any_leaf(nodes, &|filter| matches!(filter, Filter::Header(..)))
+fn needs_message(key: &SearchKey) -> bool {
+    any_leaf(key, &|key| matches!(key, SearchKey::Header(..)))
 }
 
 /// What the summary in PostgreSQL answers.
-fn needs_summary(nodes: &[Node]) -> bool {
-    any_leaf(nodes, &|filter| {
+fn needs_summary(key: &SearchKey) -> bool {
+    any_leaf(key, &|key| {
         matches!(
-            filter,
-            Filter::Bcc(_)
-                | Filter::Cc(_)
-                | Filter::From(_)
-                | Filter::SentBefore(_)
-                | Filter::SentOn(_)
-                | Filter::SentSince(_)
-                | Filter::Subject(_)
-                | Filter::Text(_)
-                | Filter::To(_)
+            key,
+            SearchKey::Bcc(_)
+                | SearchKey::Cc(_)
+                | SearchKey::From(_)
+                | SearchKey::SentBefore(_)
+                | SearchKey::SentOn(_)
+                | SearchKey::SentSince(_)
+                | SearchKey::Subject(_)
+                | SearchKey::Text(_)
+                | SearchKey::To(_)
         )
     })
 }
 
 /// The values of `BODY` and `TEXT`, for the index.
-fn texts(nodes: &[Node], out: &mut Vec<String>) {
-    for node in nodes {
-        match node {
-            Node::And(children) | Node::Or(children) | Node::Not(children) => texts(children, out),
-            Node::Leaf(Filter::Body(text) | Filter::Text(text)) => out.push(text.clone()),
-            Node::Leaf(_) => {}
+fn texts(key: &SearchKey, out: &mut Vec<String>) {
+    match key {
+        SearchKey::And(keys) => keys.iter().for_each(|key| texts(key, out)),
+        SearchKey::Or(first, second) => {
+            texts(first, out);
+            texts(second, out);
         }
+        SearchKey::Not(key) => texts(key, out),
+        SearchKey::Body(text) | SearchKey::Text(text) => out.push(text.clone()),
+        _ => {}
     }
 }
 
-fn uses_modseq(nodes: &[Node]) -> bool {
-    nodes.iter().any(|node| match node {
-        Node::And(children) | Node::Or(children) | Node::Not(children) => uses_modseq(children),
-        Node::Leaf(filter) => matches!(filter, Filter::ModSeq(_)),
-    })
+fn uses_modseq(key: &SearchKey) -> bool {
+    any_leaf(key, &|key| matches!(key, SearchKey::ModSeq(_)))
 }
 
 /// A header's decoded text: addresses as `name <address>`.
@@ -141,11 +123,7 @@ struct Candidate<'x> {
     found: &'x HashMap<String, HashSet<Uuid>>,
 }
 
-fn matches(nodes: &[Node], candidate: &Candidate<'_>, selected: &Selected) -> bool {
-    nodes.iter().all(|node| node_matches(node, candidate, selected))
-}
-
-fn node_matches(node: &Node, candidate: &Candidate<'_>, selected: &Selected) -> bool {
+fn matches(key: &SearchKey, candidate: &Candidate<'_>, selected: &Selected) -> bool {
     let entry = candidate.entry;
     let has = |keyword: &str| entry.keywords.iter().any(|k| k == keyword);
     let received = entry.received_at.as_second();
@@ -158,91 +136,80 @@ fn node_matches(node: &Node, candidate: &Candidate<'_>, selected: &Selected) -> 
     let header = |name: &str, needle: &str| {
         candidate.message.is_some_and(|message| contains(header_text(message, name), needle))
     };
-    match node {
-        Node::And(children) => matches(children, candidate, selected),
-        Node::Or(children) => children.iter().any(|child| node_matches(child, candidate, selected)),
-        Node::Not(children) => !matches(children, candidate, selected),
-        Node::Leaf(filter) => match filter {
-            Filter::All => true,
-            Filter::Sequence(sequence, is_uid) => {
-                let (value, max) = if *is_uid {
-                    (entry.uid, selected.entries.last().map_or(0, |entry| entry.uid))
-                } else {
-                    (candidate.position as u32 + 1, selected.entries.len() as u32)
-                };
-                crate::selected::in_set(sequence, value, max, candidate.saved)
-            }
-            Filter::Answered => has("$answered"),
-            Filter::Unanswered => !has("$answered"),
-            Filter::Deleted => has("$deleted"),
-            Filter::Undeleted => !has("$deleted"),
-            Filter::Draft => has("$draft"),
-            Filter::Undraft => !has("$draft"),
-            Filter::Flagged => has("$flagged"),
-            Filter::Unflagged => !has("$flagged"),
-            Filter::Seen => has("$seen"),
-            Filter::Unseen => !has("$seen"),
-            Filter::Keyword(flag) => flags::keyword(flag).is_some_and(|keyword| has(keyword.as_str())),
-            Filter::Unkeyword(flag) => flags::keyword(flag).is_none_or(|keyword| !has(keyword.as_str())),
-            // kernoid keeps no `\Recent`.
-            Filter::Recent | Filter::New => false,
-            Filter::Old => true,
-            Filter::Before(date) => day(received) < day(*date),
-            Filter::On(date) => day(received) == day(*date),
-            Filter::Since(date) => day(received) >= day(*date),
-            Filter::SentBefore(date) => sent().is_some_and(|sent| day(sent) < day(*date)),
-            Filter::SentOn(date) => sent().is_some_and(|sent| day(sent) == day(*date)),
-            Filter::SentSince(date) => sent().is_some_and(|sent| day(sent) >= day(*date)),
-            Filter::Older(seconds) => received <= Timestamp::now().as_second() - i64::from(*seconds),
-            Filter::Younger(seconds) => received >= Timestamp::now().as_second() - i64::from(*seconds),
-            Filter::Larger(size) => entry.size > u64::from(*size),
-            Filter::Smaller(size) => entry.size < u64::from(*size),
-            Filter::ModSeq((modseq, _)) => entry.modseq >= *modseq,
-            Filter::UidAfter(uid) => entry.uid > *uid,
-            Filter::UidBefore(uid) => entry.uid < *uid,
-            Filter::EmailId(id) => entry.email.to_string() == *id,
-            Filter::ThreadId(id) => entry.thread.to_string() == *id,
-            Filter::From(needle) => {
-                summary(&|info| in_addresses(&info.from, needle) || in_addresses(&info.sender, needle))
-            }
-            Filter::To(needle) => summary(&|info| in_addresses(&info.to, needle)),
-            Filter::Cc(needle) => summary(&|info| in_addresses(&info.cc, needle)),
-            Filter::Bcc(needle) => summary(&|info| in_addresses(&info.bcc, needle)),
-            Filter::Subject(needle) => summary(&|info| subject(info, needle)),
-            Filter::Header(name, needle) if needle.is_empty() => candidate
-                .message
-                .is_some_and(|message| message.headers().iter().any(|h| h.raw_name().eq_ignore_ascii_case(name))),
-            Filter::Header(name, needle) => header(name, needle),
-            Filter::Body(needle) => in_body(needle),
-            Filter::Text(needle) => {
-                in_body(needle)
-                    || summary(&|info| {
-                        subject(info, needle)
-                            || [&info.from, &info.sender, &info.to, &info.cc, &info.bcc]
-                                .iter()
-                                .any(|list| in_addresses(list, needle))
-                    })
-            }
-            Filter::And | Filter::Or | Filter::Not | Filter::End => true,
-        },
+    let older_than =
+        |seconds: u64| Timestamp::now().as_second().saturating_sub(i64::try_from(seconds).unwrap_or(i64::MAX));
+    match key {
+        SearchKey::And(keys) => keys.iter().all(|key| matches(key, candidate, selected)),
+        SearchKey::Or(first, second) => matches(first, candidate, selected) || matches(second, candidate, selected),
+        SearchKey::Not(key) => !matches(key, candidate, selected),
+        SearchKey::All => true,
+        SearchKey::Sequence(set) => {
+            set.contains(candidate.position as u32 + 1, selected.entries.len() as u32, candidate.saved)
+        }
+        SearchKey::Uid(set) => {
+            set.contains(entry.uid, selected.entries.last().map_or(0, |entry| entry.uid), candidate.saved)
+        }
+        SearchKey::Answered => has("$answered"),
+        SearchKey::Unanswered => !has("$answered"),
+        SearchKey::Deleted => has("$deleted"),
+        SearchKey::Undeleted => !has("$deleted"),
+        SearchKey::Draft => has("$draft"),
+        SearchKey::Undraft => !has("$draft"),
+        SearchKey::Flagged => has("$flagged"),
+        SearchKey::Unflagged => !has("$flagged"),
+        SearchKey::Seen => has("$seen"),
+        SearchKey::Unseen => !has("$seen"),
+        SearchKey::Keyword(flag) => flags::keyword(flag).is_some_and(|keyword| has(keyword.as_str())),
+        SearchKey::Unkeyword(flag) => flags::keyword(flag).is_none_or(|keyword| !has(keyword.as_str())),
+        // kernoid keeps no `\Recent`.
+        SearchKey::Recent | SearchKey::New => false,
+        SearchKey::Old => true,
+        SearchKey::Before(date) => day(received) < day(*date),
+        SearchKey::On(date) => day(received) == day(*date),
+        SearchKey::Since(date) => day(received) >= day(*date),
+        SearchKey::SentBefore(date) => sent().is_some_and(|sent| day(sent) < day(*date)),
+        SearchKey::SentOn(date) => sent().is_some_and(|sent| day(sent) == day(*date)),
+        SearchKey::SentSince(date) => sent().is_some_and(|sent| day(sent) >= day(*date)),
+        SearchKey::Older(seconds) => received <= older_than(*seconds),
+        SearchKey::Younger(seconds) => received >= older_than(*seconds),
+        SearchKey::Larger(size) => entry.size > *size,
+        SearchKey::Smaller(size) => entry.size < *size,
+        SearchKey::ModSeq(modseq) => entry.modseq >= *modseq,
+        SearchKey::From(needle) => {
+            summary(&|info| in_addresses(&info.from, needle) || in_addresses(&info.sender, needle))
+        }
+        SearchKey::To(needle) => summary(&|info| in_addresses(&info.to, needle)),
+        SearchKey::Cc(needle) => summary(&|info| in_addresses(&info.cc, needle)),
+        SearchKey::Bcc(needle) => summary(&|info| in_addresses(&info.bcc, needle)),
+        SearchKey::Subject(needle) => summary(&|info| subject(info, needle)),
+        SearchKey::Header(name, needle) if needle.is_empty() => candidate
+            .message
+            .is_some_and(|message| message.headers().iter().any(|h| h.raw_name().eq_ignore_ascii_case(name))),
+        SearchKey::Header(name, needle) => header(name, needle),
+        SearchKey::Body(needle) => in_body(needle),
+        SearchKey::Text(needle) => {
+            in_body(needle)
+                || summary(&|info| {
+                    subject(info, needle)
+                        || [&info.from, &info.sender, &info.to, &info.cc, &info.bcc]
+                            .iter()
+                            .any(|list| in_addresses(list, needle))
+                })
+        }
     }
 }
 
 impl Session {
     /// The positions of the selected mailbox's messages that match `filter`, and whether it asked for `MODSEQ`.
-    pub(crate) async fn matching(
-        &mut self,
-        filter: Vec<Filter>,
-    ) -> Result<(Selected, Vec<usize>, bool), Box<StatusResponse>> {
+    pub(crate) async fn matching(&mut self, key: &SearchKey) -> Result<(Selected, Vec<usize>, bool), Box<Status>> {
         let Some(selected) = self.selected.clone() else {
-            return Err(Box::new(StatusResponse::bad("No mailbox selected")));
+            return Err(Box::new(Status::bad("No mailbox selected")));
         };
         let account = selected.owner;
-        let nodes = tree(&mut filter.into_iter());
-        let with_messages = needs_message(&nodes);
+        let with_messages = needs_message(key);
         let mail = &self.inner.mail;
         let mut words = Vec::new();
-        texts(&nodes, &mut words);
+        texts(key, &mut words);
         let mut in_text = HashMap::new();
         for text in words {
             if let std::collections::hash_map::Entry::Vacant(slot) = in_text.entry(text) {
@@ -254,7 +221,7 @@ impl Session {
                 }
             }
         }
-        let infos: HashMap<Uuid, EmailInfo> = if needs_summary(&nodes) {
+        let infos: HashMap<Uuid, EmailInfo> = if needs_summary(key) {
             let ids: Vec<Uuid> = selected.entries.iter().map(|entry| entry.email).collect();
             match mail.emails(account, &ids).await {
                 Ok(infos) => infos.into_iter().map(|info| (info.id, info)).collect(),
@@ -283,17 +250,16 @@ impl Session {
                 saved: selected.saved.contains(&entry.uid),
                 found: &in_text,
             };
-            if matches(&nodes, &candidate, &selected) {
+            if matches(key, &candidate, &selected) {
                 found.push(position);
             }
         }
-        let modseq = uses_modseq(&nodes);
+        let modseq = uses_modseq(key);
         Ok((selected, found, modseq))
     }
 
-    pub(crate) async fn search(&mut self, arguments: search::Arguments, is_uid: bool) -> StatusResponse {
-        let command = Command::Search(is_uid);
-        let (selected, found, modseq) = match self.matching(arguments.filter).await {
+    pub(crate) async fn search(&mut self, search: Search, is_uid: bool) -> Status {
+        let (selected, found, modseq) = match self.matching(&search.key).await {
             Ok(matched) => matched,
             Err(response) => return *response,
         };
@@ -303,7 +269,7 @@ impl Session {
             .collect();
         let highest_modseq =
             if modseq { found.iter().map(|&position| selected.entries[position].modseq).max() } else { None };
-        let options = arguments.result_options;
+        let options = search.options.clone().unwrap_or_default();
         if options.contains(&ResultOption::Save) {
             let uids = found.iter().map(|&position| selected.entries[position].uid).collect();
             if let Some(selected) = &mut self.selected {
@@ -311,21 +277,62 @@ impl Session {
             }
             // RFC 5182, 2.1: `SAVE` alone returns nothing.
             if options.len() == 1 {
-                return StatusResponse::completed(command);
+                return Status::done();
             }
         }
-        let wants = |option: ResultOption| options.is_empty() || options.contains(&option);
-        let response = search::Response {
-            is_uid,
-            is_esearch: arguments.is_esearch,
-            is_sort: false,
-            min: (arguments.is_esearch && options.contains(&ResultOption::Min)).then(|| ids.first().copied()).flatten(),
-            max: (arguments.is_esearch && options.contains(&ResultOption::Max)).then(|| ids.last().copied()).flatten(),
-            count: (arguments.is_esearch && options.contains(&ResultOption::Count)).then_some(ids.len() as u32),
-            ids: if !arguments.is_esearch || wants(ResultOption::All) { ids } else { Vec::new() },
-            highest_modseq,
-        };
-        self.write(response.serialize(&arguments.tag));
-        StatusResponse::completed(command)
+        // ESEARCH when asked for it, and always in IMAP4rev2 (RFC 9051, 7.3.4).
+        if search.options.is_none() && !self.rev2 {
+            let mut line = String::from("* SEARCH");
+            for id in &ids {
+                line.push_str(&format!(" {id}"));
+            }
+            if let Some(modseq) = highest_modseq.filter(|_| !ids.is_empty()) {
+                line.push_str(&format!(" (MODSEQ {modseq})"));
+            }
+            line.push_str("\r\n");
+            self.write(line);
+            return Status::done();
+        }
+        let wants = |option: ResultOption| options.contains(&option);
+        let all = options.iter().all(|option| *option == ResultOption::Save) || wants(ResultOption::All);
+        let tag = self.tag.clone();
+        let line = esearch(&tag, is_uid, |line| {
+            if wants(ResultOption::Min)
+                && let Some(min) = ids.iter().min()
+            {
+                line.push_str(&format!(" MIN {min}"));
+            }
+            if wants(ResultOption::Max)
+                && let Some(max) = ids.iter().max()
+            {
+                line.push_str(&format!(" MAX {max}"));
+            }
+            if wants(ResultOption::Count) {
+                line.push_str(&format!(" COUNT {}", ids.len()));
+            }
+            if all && !ids.is_empty() {
+                line.push_str(&format!(" ALL {}", sequence::compact(&ids)));
+            }
+            if let Some(modseq) = highest_modseq.filter(|_| !ids.is_empty()) {
+                line.push_str(&format!(" MODSEQ {modseq}"));
+            }
+        });
+        self.write(line);
+        Status::done()
     }
+}
+
+/// `* ESEARCH (TAG "a") [UID] …` (RFC 4731).
+pub(crate) fn esearch(tag: &str, is_uid: bool, items: impl FnOnce(&mut String)) -> String {
+    let mut line = String::from("* ESEARCH (TAG ");
+    let mut quoted = Vec::new();
+    crate::proto::response::string(&mut quoted, tag.as_bytes(), false);
+    line.push_str(&String::from_utf8_lossy(&quoted));
+    line.push(')');
+    if is_uid {
+        line.push_str(" UID");
+    }
+    items(&mut line);
+    line.push_str("\r\n");
+    line
 }

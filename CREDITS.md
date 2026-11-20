@@ -18,7 +18,6 @@ the Stalwart Enterprise License, which `scripts/check-sel.sh` enforces.
 
 | In kernoid | From Stalwart |
 |---|---|
-| `crates/kernoid-imap/src/proto/` | `crates/imap-proto` – IMAP requests and responses |
 | `crates/kernoid-groupware/src/scheduling/` | `crates/groupware/src/scheduling` – iTIP (RFC 5546) |
 | `crates/calcard/` | `crates/calcard` – iCalendar, vCard, JSCalendar, JSContact (its files from rust-rrule and bttf keep their licences) |
 | `crates/jmap-tools/` | `crates/jmap-tools` – JMAP objects with JSON Pointer (its JSON files from serde_json_borrow keep their licence) |
@@ -27,7 +26,6 @@ the Stalwart Enterprise License, which `scripts/check-sel.sh` enforces.
 
 | In kernoid | From Stalwart |
 |---|---|
-| `crates/kernoid-imap/src/message.rs` | `FETCH` in `crates/imap/src/op/fetch.rs` |
 | `crates/kernoid-groupware/src/itip.rs` | receiving iTIP in `crates/groupware/src/calendar/itip.rs` |
 | `crates/kernoid-dav/src/query.rs` | calendar and contact queries in `crates/dav/src/calendar/query.rs`, `card/query.rs` |
 

@@ -393,14 +393,15 @@ IMAP4rev1 ([RFC 3501](https://www.rfc-editor.org/rfc/rfc3501)), on port 143 with
 the process role `imap` (part of `all`) when `[imap]` is configured, in `kernoid-imap`. Login only over TLS
 (`LOGIN`, `AUTHENTICATE PLAIN`); without certificates there is no IMAP.
 
-- The parser of requests and the writer of responses are taken over from Stalwart (`crates/imap-proto`), and so is
-  what `FETCH` reads from a message (`ENVELOPE`, `BODYSTRUCTURE`, sections; from `crates/imap/src/op/fetch.rs`); the
-  server is kernoid's own, on the mail store.
+- The protocol is kernoid's own, written from the RFCs: commands are cut from the bytes with their literals –
+  synchronizing, `LITERAL+` and binary – under limits (a line or another literal 64 KiB, a message as large as
+  `mail.max_message_size`), parsed without ever panicking, and answered by a session on the mail store; so is what
+  `FETCH` reads from a message (`ENVELOPE`, `BODYSTRUCTURE`, sections, `BINARY`), through mail-parser.
 - **Extensions:** `IDLE`, `MOVE`, `UIDPLUS`, `CONDSTORE`, `QRESYNC`, `ENABLE`, `NAMESPACE`, `SPECIAL-USE`,
   `LIST-EXTENDED`, `LIST-STATUS`, `ESEARCH`, `SEARCHRES`, `WITHIN`, `BINARY`, `MULTIAPPEND`, `LITERAL+`, `SASL-IR`,
   `UTF8=ACCEPT`, `ID`, `UNSELECT`, `STATUS=SIZE`, `CHILDREN`, `ACL` and `RIGHTS=` (12.2), `SORT`, `SORT=DISPLAY`,
-  `THREAD`, `QUOTA` and `QUOTA=RES-STORAGE`. Before login: `AUTH=PLAIN`, `AUTH=OAUTHBEARER` and `AUTH=XOAUTH2` over
-  TLS, `STARTTLS` and `LOGINDISABLED` without.
+  `THREAD=REFERENCES`, `THREAD=ORDEREDSUBJECT`, `QUOTA` and `QUOTA=RES-STORAGE`. Before login: `AUTH=PLAIN`,
+  `AUTH=OAUTHBEARER` and `AUTH=XOAUTH2` over TLS, `STARTTLS` and `LOGINDISABLED` without.
 - **Mailboxes:** the hierarchy separator is `/`; a mailbox's name is its path in the tree, and the inbox is `INBOX`
   wherever JMAP put it. `CREATE` makes missing parents; `DELETE` removes the emails of the mailbox (an email in no
   other mailbox is destroyed) and refuses a mailbox with children.

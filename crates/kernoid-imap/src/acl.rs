@@ -7,169 +7,168 @@ use kernoid_identity::{IdentityError, role::Principal};
 use kernoid_mail::Rights;
 
 use crate::{
+    folders::Folder,
     mailboxes::no_permission,
     proto::{
-        Command, ResponseCode, StatusResponse,
-        protocol::acl::{self, GetAclResponse, ListRightsResponse, ModRightsOp, MyRightsResponse},
+        request::{RightsChange, StoreMode},
+        response::{self, Code, Status},
     },
     session::Session,
 };
 
-/// The proto's rights from letters.
-fn proto_rights(rights: Rights) -> Vec<acl::Rights> {
-    rights
-        .letters()
-        .chars()
-        .filter_map(|letter| {
-            Some(match letter {
-                'l' => acl::Rights::Lookup,
-                'r' => acl::Rights::Read,
-                's' => acl::Rights::Seen,
-                'w' => acl::Rights::Write,
-                'i' => acl::Rights::Insert,
-                'p' => acl::Rights::Post,
-                'k' => acl::Rights::CreateMailbox,
-                'x' => acl::Rights::DeleteMailbox,
-                't' => acl::Rights::DeleteMessages,
-                'e' => acl::Rights::Expunge,
-                'a' => acl::Rights::Administer,
-                _ => return None,
-            })
-        })
-        .collect()
-}
-
-fn letters(rights: &[acl::Rights]) -> Rights {
-    let letters: String = rights.iter().map(|right| right.to_char() as char).collect();
-    Rights::parse(&letters)
-}
-
-fn identity_error(error: IdentityError) -> StatusResponse {
+fn identity_error(error: IdentityError) -> Status {
     match error {
-        IdentityError::NotFound(what) => {
-            StatusResponse::no(format!("{what} does not exist")).with_code(ResponseCode::NonExistent)
-        }
-        IdentityError::Refused(reason) => StatusResponse::no(reason).with_code(ResponseCode::Cannot),
+        IdentityError::NotFound(what) => Status::no(format!("{what} does not exist")).with_code(Code::NonExistent),
+        IdentityError::Refused(reason) => Status::no(reason).with_code(Code::Cannot),
         error => {
             tracing::warn!(%error, "an IMAP ACL command failed");
-            StatusResponse::database_failure()
+            Status::unavailable()
         }
     }
 }
 
+/// `"name" "identifier"` and what follows, as one untagged response.
+fn line(verb: &str, mailbox: &str, utf8: bool, rest: &[(Option<&str>, String)]) -> Vec<u8> {
+    let mut out = format!("* {verb} ").into_bytes();
+    response::mailbox(&mut out, mailbox, utf8);
+    for (identifier, rights) in rest {
+        if let Some(identifier) = identifier {
+            out.push(b' ');
+            response::string(&mut out, identifier.as_bytes(), utf8);
+        }
+        out.push(b' ');
+        if rights.is_empty() {
+            out.extend_from_slice(b"\"\"");
+        } else {
+            out.extend_from_slice(rights.as_bytes());
+        }
+    }
+    out.extend_from_slice(b"\r\n");
+    out
+}
+
 impl Session {
-    pub(crate) async fn acl(&mut self, command: Command, arguments: acl::Arguments) -> StatusResponse {
-        let folders = match self.folders().await {
-            Ok(folders) => folders,
+    /// The mailbox an ACL command names.
+    #[allow(clippy::result_large_err, reason = "the error is the response, sent once")]
+    async fn acl_folder(&mut self, mailbox: &str) -> Result<Folder, Status> {
+        let folders = self.folders().await?;
+        folders.find(mailbox).cloned().ok_or_else(|| Status::no("No such mailbox").with_code(Code::NonExistent))
+    }
+
+    pub(crate) async fn my_rights(&mut self, mailbox: &str) -> Status {
+        match self.acl_folder(mailbox).await {
+            Ok(folder) => {
+                let out = line("MYRIGHTS", &folder.name, self.utf8, &[(None, folder.rights.letters())]);
+                self.write(out);
+                Status::done()
+            }
+            Err(response) => response,
+        }
+    }
+
+    pub(crate) async fn list_rights(&mut self, mailbox: &str, identifier: &str) -> Status {
+        match self.acl_folder(mailbox).await {
+            Ok(folder) => {
+                // Nothing is granted without asking; each right on its own.
+                let mut rights = vec![(Some(identifier), String::new())];
+                rights.extend(Rights::ALL.letters().chars().map(|right| (None, right.to_string())));
+                let out = line("LISTRIGHTS", &folder.name, self.utf8, &rights);
+                self.write(out);
+                Status::done()
+            }
+            Err(response) => response,
+        }
+    }
+
+    pub(crate) async fn get_acl(&mut self, mailbox: &str) -> Status {
+        let folder = match self.acl_folder(mailbox).await {
+            Ok(folder) => folder,
             Err(response) => return response,
         };
-        let Some(folder) = folders.find(&arguments.mailbox_name) else {
-            return StatusResponse::no("No such mailbox").with_code(ResponseCode::NonExistent);
-        };
-        let (owner, mailbox, rights, name) = (folder.owner, folder.info.id, folder.rights, folder.name.clone());
-        let account = self.account();
-        let is_utf8 = self.is_utf8;
-        match command {
-            Command::MyRights => {
-                self.write(MyRightsResponse { mailbox_name: name, rights: proto_rights(rights) }.into_bytes(is_utf8));
-                return StatusResponse::completed(command);
-            }
-            Command::ListRights => {
-                let identifier = arguments.identifier.unwrap_or_default();
-                let response = ListRightsResponse {
-                    mailbox_name: name,
-                    identifier,
-                    // Nothing is granted without asking; each right on its own.
-                    permissions: std::iter::once(Vec::new())
-                        .chain(Rights::ALL.letters().chars().map(|c| proto_rights(Rights::parse(&c.to_string()))))
-                        .collect(),
-                };
-                self.write(response.into_bytes(is_utf8));
-                return StatusResponse::completed(command);
-            }
-            _ => {}
-        }
         // Seeing and changing the access needs `a` (the owner has it).
-        if !rights.contains(Rights::ADMIN) {
+        if !folder.rights.contains(Rights::ADMIN) {
             return no_permission("see or change the access to this mailbox");
         }
+        let identity = &self.inner.identity;
+        let grants = match identity.mail_access(folder.owner).await {
+            Ok(grants) => grants,
+            Err(error) => return identity_error(error),
+        };
+        let owner_address = match identity.account(folder.owner).await {
+            Ok(info) => info.address,
+            Err(error) => return identity_error(error),
+        };
+        let mailbox = folder.info.id;
+        let mut permissions = vec![(owner_address, Rights::ALL)];
+        // Per grantee: the grant on the whole store together with the one on this mailbox.
+        for grant in grants.iter().filter(|grant| grant.mailbox.is_none() || grant.mailbox == Some(mailbox)) {
+            let rights = Rights::parse(&grant.rights);
+            match permissions.iter_mut().find(|(name, _)| *name == grant.grantee_name) {
+                Some((_, held)) => *held |= rights,
+                None => permissions.push((grant.grantee_name.clone(), rights)),
+            }
+        }
+        let rest: Vec<(Option<&str>, String)> =
+            permissions.iter().map(|(name, rights)| (Some(name.as_str()), rights.letters())).collect();
+        let out = line("ACL", &folder.name, self.utf8, &rest);
+        self.write(out);
+        Status::done()
+    }
+
+    /// `SETACL` with a change, `DELETEACL` without: the grant on this one mailbox.
+    pub(crate) async fn set_acl(&mut self, mailbox: &str, identifier: &str, change: Option<RightsChange>) -> Status {
+        let folder = match self.acl_folder(mailbox).await {
+            Ok(folder) => folder,
+            Err(response) => return response,
+        };
+        if !folder.rights.contains(Rights::ADMIN) {
+            return no_permission("see or change the access to this mailbox");
+        }
+        let (owner, mailbox) = (folder.owner, folder.info.id);
+        let account = self.account();
+        let tenant = self.tenant.expect("only after logging in");
         let identity = &self.inner.identity;
         let grants = match identity.mail_access(owner).await {
             Ok(grants) => grants,
             Err(error) => return identity_error(error),
         };
-        match command {
-            Command::GetAcl => {
-                let owner_address = match identity.account(owner).await {
-                    Ok(info) => info.address,
-                    Err(error) => return identity_error(error),
-                };
-                let mut permissions = vec![(owner_address, proto_rights(Rights::ALL))];
-                // Per grantee: the grant on the whole store together with the one on this mailbox.
-                let mut names: Vec<&str> = Vec::new();
-                for grant in grants.iter().filter(|grant| grant.mailbox.is_none() || grant.mailbox == Some(mailbox)) {
-                    if !names.contains(&grant.grantee_name.as_str()) {
-                        names.push(&grant.grantee_name);
-                    }
-                }
-                for name in names {
-                    let rights = grants
-                        .iter()
-                        .filter(|grant| grant.grantee_name == name)
-                        .filter(|grant| grant.mailbox.is_none() || grant.mailbox == Some(mailbox))
-                        .fold(Rights::NONE, |rights, grant| rights | Rights::parse(&grant.rights));
-                    permissions.push((name.to_owned(), proto_rights(rights)));
-                }
-                self.write(GetAclResponse { mailbox_name: name, permissions }.into_bytes(is_utf8));
-                StatusResponse::completed(command)
-            }
-            Command::SetAcl | Command::DeleteAcl => {
-                let tenant = self.tenant.expect("only after logging in");
-                let identifier = arguments.identifier.unwrap_or_default();
-                let grantee = match identity.mail_grantee(tenant, &identifier).await {
-                    Ok(grantee) => grantee,
-                    Err(error) => return identity_error(error),
-                };
-                if grantee == Principal::Account(owner) {
-                    return StatusResponse::no("The owner has every right").with_code(ResponseCode::Cannot);
-                }
-                let current = grants
-                    .iter()
-                    .find(|grant| grant.grantee == grantee && grant.mailbox == Some(mailbox))
-                    .map_or(Rights::NONE, |grant| Rights::parse(&grant.rights));
-                let wanted = match (command, arguments.mod_rights) {
-                    (Command::SetAcl, Some(change)) => {
-                        let changed = letters(&change.rights);
-                        match change.op {
-                            ModRightsOp::Replace => changed,
-                            ModRightsOp::Add => current | changed,
-                            ModRightsOp::Remove => Rights::parse(
-                                &current
-                                    .letters()
-                                    .chars()
-                                    .filter(|c| !changed.letters().contains(*c))
-                                    .collect::<String>(),
-                            ),
-                        }
-                    }
-                    _ => Rights::NONE,
-                };
-                let creator = format!("account:{account}");
-                let result = if wanted.is_empty() {
-                    if current.is_empty() {
-                        Ok(())
-                    } else {
-                        identity.remove_mail_access(owner, grantee, Some(mailbox), &creator).await
-                    }
-                } else {
-                    identity.set_mail_access(owner, grantee, Some(mailbox), &wanted.letters(), false, &creator).await
-                };
-                match result {
-                    Ok(()) => StatusResponse::completed(command),
-                    Err(error) => identity_error(error),
+        let grantee = match identity.mail_grantee(tenant, identifier).await {
+            Ok(grantee) => grantee,
+            Err(error) => return identity_error(error),
+        };
+        if grantee == Principal::Account(owner) {
+            return Status::no("The owner has every right").with_code(Code::Cannot);
+        }
+        let current = grants
+            .iter()
+            .find(|grant| grant.grantee == grantee && grant.mailbox == Some(mailbox))
+            .map_or(Rights::NONE, |grant| Rights::parse(&grant.rights));
+        let wanted = match change {
+            Some(change) => {
+                let changed = Rights::parse(&change.letters);
+                match change.mode {
+                    StoreMode::Replace => changed,
+                    StoreMode::Add => current | changed,
+                    StoreMode::Remove => Rights::parse(
+                        &current.letters().chars().filter(|c| !changed.letters().contains(*c)).collect::<String>(),
+                    ),
                 }
             }
-            _ => StatusResponse::bad("Not an ACL command"),
+            None => Rights::NONE,
+        };
+        let creator = format!("account:{account}");
+        let result = if wanted.is_empty() {
+            if current.is_empty() {
+                Ok(())
+            } else {
+                identity.remove_mail_access(owner, grantee, Some(mailbox), &creator).await
+            }
+        } else {
+            identity.set_mail_access(owner, grantee, Some(mailbox), &wanted.letters(), false, &creator).await
+        };
+        match result {
+            Ok(()) => Status::done(),
+            Err(error) => identity_error(error),
         }
     }
 }

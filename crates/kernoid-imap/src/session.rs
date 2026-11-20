@@ -1,129 +1,108 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! An IMAP session (RFC 9051): requests read by the receiver taken over from Stalwart, answered in order; the
-//! untagged updates of the selected mailbox go out before a command completes – except during `FETCH`, `STORE` and
-//! `SEARCH` by sequence number, which must not see sequence numbers move (RFC 9051, 7.5.1).
+//! An IMAP session (RFC 9051): commands read by the framer and the parser of `proto`, answered in order, with the
+//! states not authenticated, authenticated and selected. Before a command completes, the client hears what changed in
+//! the selected mailbox – except during `FETCH`, `STORE`, `SEARCH`, `SORT` and `THREAD` by sequence number, which
+//! must not see sequence numbers move (RFC 9051, 7.5.1).
 
 use std::{net::IpAddr, sync::Arc};
 
 use base64::Engine;
-use kernoid_identity::IdentityError;
+use kernoid_identity::{IdentityError, account::AccountInfo};
 use kernoid_mail::MailError;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    sync::broadcast,
+    sync::broadcast::error::RecvError,
 };
 use uuid::Uuid;
 
 use crate::{
     Inner, Io,
     proto::{
-        Command, ResponseCode, StatusResponse,
-        protocol::{
-            ImapResponse, ProtocolVersion, SerializeResponse,
-            authenticate::Mechanism,
-            capability::{self, Capability, QuotaResourceName},
-            enable, namespace,
-        },
-        receiver::{self, Receiver, Request},
+        frame::{Framer, Next},
+        parse::{Bad, parse},
+        request::{Command, Request},
+        response::{Code, Status},
     },
     selected::Selected,
 };
 
-/// What the session reads next.
-enum State {
-    Command(Receiver<Command>),
-    /// The client's response to `AUTHENTICATE`'s `+`.
-    Sasl {
-        tag: String,
-        line: Vec<u8>,
-    },
-    /// Waiting for `DONE`, sending updates as they happen.
-    Idle {
-        tag: String,
-        line: Vec<u8>,
-    },
-}
+/// What all states offer.
+const BASE: &str = "IMAP4rev2 IMAP4rev1 ENABLE SASL-IR LITERAL+ ID UTF8=ACCEPT";
+/// What logging in brings (RFC 0002, 11.2).
+const AUTHENTICATED: &str = "IDLE NAMESPACE CHILDREN MULTIAPPEND BINARY UNSELECT UIDPLUS ESEARCH WITHIN SEARCHRES \
+     LIST-EXTENDED LIST-STATUS SPECIAL-USE MOVE CONDSTORE QRESYNC STATUS=SIZE ACL RIGHTS=texk SORT SORT=DISPLAY \
+     THREAD=ORDEREDSUBJECT THREAD=REFERENCES QUOTA QUOTA=RES-STORAGE";
+
+/// Output is sent once it grows past this, even in the middle of a command.
+const FLUSH_AT: usize = 1024 * 1024;
 
 /// What the session does after a command.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Flow {
     Continue,
-    StartTls,
-    Logout,
-    Sasl(String),
-    Idle(String),
+    Close,
 }
 
 pub(crate) struct Session {
     pub inner: Arc<Inner>,
-    remote: IpAddr,
     stream: Box<dyn Io>,
+    remote: IpAddr,
     tls: bool,
+    framer: Framer,
     pub account: Option<Uuid>,
     pub tenant: Option<Uuid>,
-    pub version: ProtocolVersion,
-    pub is_utf8: bool,
+    /// `ENABLE IMAP4rev2`.
+    pub rev2: bool,
+    /// Mailbox names and strings in UTF-8: `ENABLE UTF8=ACCEPT` or IMAP4rev2.
+    pub utf8: bool,
     pub condstore: bool,
     pub qresync: bool,
     pub selected: Option<Selected>,
-    events: broadcast::Receiver<Uuid>,
-    pub out: Vec<u8>,
-    /// The mechanism of an `AUTHENTICATE` waiting for the client's response.
-    sasl_mechanism: Mechanism,
+    /// The tag of the command being answered (for `ESEARCH`).
+    pub tag: String,
+    out: Vec<u8>,
 }
 
 /// A failure of the store as the client sees it.
-pub(crate) fn mail_error(error: MailError) -> StatusResponse {
+pub(crate) fn mail_error(error: MailError) -> Status {
     match error {
-        MailError::NotFound(what) => {
-            StatusResponse::no(format!("{what} does not exist")).with_code(ResponseCode::NonExistent)
-        }
-        MailError::Exists(what) => {
-            StatusResponse::no(format!("{what} exists already")).with_code(ResponseCode::AlreadyExists)
-        }
-        MailError::Invalid(message) => StatusResponse::no(message).with_code(ResponseCode::Cannot),
+        MailError::NotFound(what) => Status::no(format!("{what} does not exist")).with_code(Code::NonExistent),
+        MailError::Exists(what) => Status::no(format!("{what} exists already")).with_code(Code::AlreadyExists),
+        MailError::Invalid(reason) => Status::no(reason).with_code(Code::Cannot),
         MailError::TooLarge { limit } => {
-            StatusResponse::no(format!("the message is larger than {limit} bytes")).with_code(ResponseCode::Limit)
+            Status::no(format!("The message is larger than {limit} bytes")).with_code(Code::TooBig)
         }
-        MailError::OverQuota => StatusResponse::no("over quota").with_code(ResponseCode::OverQuota),
-        MailError::MailboxHasChild => {
-            StatusResponse::no("the mailbox has child mailboxes").with_code(ResponseCode::HasChildren)
-        }
-        MailError::Unparsable => StatusResponse::no("the message could not be parsed").with_code(ResponseCode::Parse),
-        MailError::Refused(refused @ kernoid_store::scan::Refused::Infected(_)) => {
-            StatusResponse::no(refused.to_string()).with_code(ResponseCode::Cannot)
-        }
-        MailError::Refused(refused) => StatusResponse::no(refused.to_string()).with_code(ResponseCode::Unavailable),
+        MailError::OverQuota => Status::no("The quota does not leave room for it").with_code(Code::OverQuota),
+        MailError::MailboxHasChild => Status::no("The mailbox has child mailboxes").with_code(Code::HasChildren),
+        MailError::MailboxHasEmail => Status::no("The mailbox has messages").with_code(Code::Cannot),
+        MailError::Unparsable => Status::no("The message could not be parsed").with_code(Code::Cannot),
+        MailError::Refused(refused) => Status::no(refused.to_string()).with_code(Code::Cannot),
         error => {
-            tracing::warn!(%error, "an IMAP command failed");
-            StatusResponse::database_failure()
+            tracing::warn!(%error, "an IMAP command failed in the store");
+            Status::unavailable()
         }
     }
 }
 
 impl Session {
     pub(crate) fn new(inner: Arc<Inner>, stream: Box<dyn Io>, remote: IpAddr) -> Self {
-        let events = inner.events.subscribe();
+        let framer = Framer::new(inner.settings.max_message_size);
         Self {
             inner,
-            remote,
             stream,
+            remote,
             tls: false,
+            framer,
             account: None,
             tenant: None,
-            version: ProtocolVersion::Rev1,
-            is_utf8: false,
+            rev2: false,
+            utf8: false,
             condstore: false,
             qresync: false,
             selected: None,
-            events,
-            sasl_mechanism: Mechanism::Plain,
+            tag: String::new(),
             out: Vec::new(),
         }
-    }
-
-    fn receiver(&self) -> Receiver<Command> {
-        // Room for the largest message plus the command around it.
-        Receiver::with_max_request_size(self.inner.settings.max_message_size.saturating_add(64 * 1024))
     }
 
     pub(crate) fn write(&mut self, bytes: impl AsRef<[u8]>) {
@@ -131,500 +110,378 @@ impl Session {
     }
 
     async fn flush(&mut self) -> std::io::Result<()> {
-        if !self.out.is_empty() {
-            let out = std::mem::take(&mut self.out);
-            tokio::time::timeout(self.inner.settings.timeout, self.stream.write_all(&out))
-                .await
-                .map_err(|_| std::io::ErrorKind::TimedOut)??;
-            self.stream.flush().await?;
+        if self.out.is_empty() {
+            return Ok(());
         }
-        Ok(())
+        let out = std::mem::take(&mut self.out);
+        tokio::time::timeout(self.inner.settings.timeout, self.stream.write_all(&out))
+            .await
+            .map_err(|_| std::io::ErrorKind::TimedOut)??;
+        self.stream.flush().await
     }
 
-    fn capabilities(&self) -> Vec<Capability> {
-        let mut capabilities = vec![
-            Capability::IMAP4rev2,
-            Capability::IMAP4rev1,
-            Capability::Enable,
-            Capability::SASLIR,
-            Capability::LiteralPlus,
-            Capability::Id,
-            Capability::Utf8Accept,
-        ];
+    /// Sends what is waiting if it is a lot – for long `FETCH` responses.
+    pub(crate) async fn flush_if_large(&mut self) -> std::io::Result<()> {
+        if self.out.len() >= FLUSH_AT { self.flush().await } else { Ok(()) }
+    }
+
+    fn capabilities(&self) -> String {
+        let mut capabilities = BASE.to_owned();
         if self.account.is_some() {
-            capabilities.extend([
-                Capability::Idle,
-                Capability::Namespace,
-                Capability::Children,
-                Capability::MultiAppend,
-                Capability::Binary,
-                Capability::Unselect,
-                Capability::UIDPlus,
-                Capability::ESearch,
-                Capability::Within,
-                Capability::SearchRes,
-                Capability::ListExtended,
-                Capability::ListStatus,
-                Capability::SpecialUse,
-                Capability::Move,
-                Capability::CondStore,
-                Capability::QResync,
-                Capability::StatusSize,
-                Capability::ACL,
-                Capability::Rights,
-                Capability::Sort,
-                Capability::SortDisplay,
-                Capability::Thread,
-                Capability::Quota,
-                Capability::QuotaResource(QuotaResourceName::Storage),
-            ]);
+            capabilities.push(' ');
+            capabilities.push_str(AUTHENTICATED);
         } else if self.tls {
-            capabilities.extend([
-                Capability::Auth(Mechanism::Plain),
-                Capability::Auth(Mechanism::OAuthBearer),
-                Capability::Auth(Mechanism::XOauth2),
-            ]);
+            capabilities.push_str(" AUTH=PLAIN AUTH=OAUTHBEARER AUTH=XOAUTH2");
         } else {
-            capabilities.extend([Capability::StartTLS, Capability::LoginDisabled]);
+            capabilities.push_str(" STARTTLS LOGINDISABLED");
         }
         capabilities
     }
 
-    pub(crate) async fn run(mut self) {
-        if self.inner.implicit_tls {
-            let plain = std::mem::replace(&mut self.stream, Box::new(tokio::io::duplex(1).0));
-            match crate::start_tls(&self.inner, plain).await {
-                Some(tls) => {
-                    self.stream = tls;
-                    self.tls = true;
-                }
-                None => return,
+    /// Reads more of what the client sends; `false` if the connection ended or was idle too long.
+    async fn read_more(&mut self) -> bool {
+        let mut buffer = [0u8; 16 * 1024];
+        match tokio::time::timeout(self.inner.settings.timeout, self.stream.read(&mut buffer)).await {
+            Ok(Ok(0) | Err(_)) => false,
+            Ok(Ok(read)) => {
+                self.framer.push(&buffer[..read]);
+                true
+            }
+            Err(_) => {
+                self.write(Status::bye("Autologout; idle for too long").line(None));
+                let _ = self.flush().await;
+                false
             }
         }
-        let mut greeting = Vec::from(&b"* OK ["[..]);
-        ResponseCode::Capability { capabilities: self.capabilities() }.serialize(&mut greeting);
-        greeting.extend_from_slice(b"] kernoid ready\r\n");
-        self.write(greeting);
-        let mut state = State::Command(self.receiver());
-        let mut buf = vec![0u8; 16 * 1024];
+    }
+
+    /// A line outside a command (a response to `AUTHENTICATE`'s `+`); `None` if the session must end.
+    async fn read_line(&mut self) -> Option<Vec<u8>> {
         loop {
-            if self.flush().await.is_err() {
-                return;
-            }
-            let idle = matches!(state, State::Idle { .. });
-            let read = tokio::select! {
-                read = tokio::time::timeout(self.inner.settings.timeout, self.stream.read(&mut buf)) => read,
-                changed = self.events.recv(), if idle => {
-                    let ours = match changed {
-                        Ok(account) => {
-                            Some(account) == self.account
-                                || self.selected.as_ref().is_some_and(|selected| selected.owner == account)
-                        }
-                        Err(broadcast::error::RecvError::Lagged(_)) => true,
-                        Err(broadcast::error::RecvError::Closed) => false,
-                    };
-                    if ours {
-                        self.sync().await;
+            match self.framer.line() {
+                Some(Ok(line)) => return Some(line),
+                Some(Err(())) => {
+                    self.write(Status::bye("Line too long").line(None));
+                    return None;
+                }
+                None => {
+                    if self.flush().await.is_err() || !self.read_more().await {
+                        return None;
                     }
-                    continue;
                 }
-            };
-            let n = match read {
-                Ok(Ok(0)) | Ok(Err(_)) => return,
-                Ok(Ok(n)) => n,
-                Err(_) => {
-                    self.write(StatusResponse::bye("Autologout; idle for too long").into_bytes());
-                    let _ = self.flush().await;
-                    return;
-                }
-            };
-            let mut rest = &buf[..n];
-            while !rest.is_empty() {
-                let (next, flow, left) = self.ingest(state, rest).await;
-                state = next;
-                rest = left;
-                match flow {
-                    Flow::Continue | Flow::Sasl(_) | Flow::Idle(_) => {}
-                    Flow::Logout => {
+            }
+        }
+    }
+
+    async fn upgrade(&mut self) -> bool {
+        let plain = std::mem::replace(&mut self.stream, Box::new(tokio::io::duplex(1).0));
+        match crate::start_tls(&self.inner, plain).await {
+            Some(tls) => {
+                self.stream = tls;
+                self.tls = true;
+                true
+            }
+            None => false,
+        }
+    }
+
+    pub(crate) async fn run(mut self) {
+        if self.inner.implicit_tls && !self.upgrade().await {
+            return;
+        }
+        let greeting = Status::ok("kernoid ready").with_code(Code::Capability(self.capabilities()));
+        self.write(greeting.line(None));
+        loop {
+            loop {
+                match self.framer.next() {
+                    Next::More => break,
+                    Next::Continue => self.write(b"+ Ready for literal data\r\n"),
+                    Next::Refused { tag, text } => {
+                        self.write(Status::no(text).with_code(Code::TooBig).line(tag.as_deref()));
+                    }
+                    Next::Fatal(text) => {
+                        self.write(Status::bye(text).line(None));
                         let _ = self.flush().await;
-                        let _ = self.stream.shutdown().await;
                         return;
                     }
-                    Flow::StartTls => {
-                        if self.flush().await.is_err() {
+                    Next::Command(frame) => {
+                        let flow = match parse(&frame, self.utf8) {
+                            Ok(request) => self.request(request).await,
+                            Err(bad) => {
+                                self.bad_request(bad);
+                                Flow::Continue
+                            }
+                        };
+                        if flow == Flow::Close {
+                            let _ = self.flush().await;
+                            let _ = self.stream.shutdown().await;
                             return;
                         }
-                        let plain = std::mem::replace(&mut self.stream, Box::new(tokio::io::duplex(1).0));
-                        match crate::start_tls(&self.inner, plain).await {
-                            Some(tls) => {
-                                self.stream = tls;
-                                self.tls = true;
-                            }
-                            None => return,
-                        }
-                        // RFC 9051, 6.2.1: what the client sent after STARTTLS before the handshake is dropped.
-                        state = State::Command(self.receiver());
-                        break;
                     }
                 }
+            }
+            if self.flush().await.is_err() || !self.read_more().await {
+                return;
             }
         }
     }
 
-    /// Reads `bytes` in `state`; returns the next state, what happened, and the bytes not read yet.
-    async fn ingest<'b>(&mut self, state: State, bytes: &'b [u8]) -> (State, Flow, &'b [u8]) {
-        match state {
-            State::Command(mut receiver) => {
-                let mut iter = bytes.iter();
-                loop {
-                    match receiver.parse(&mut iter) {
-                        Ok(request) => {
-                            let flow = self.request(request).await;
-                            let rest = iter.as_slice();
-                            return match flow {
-                                Flow::Sasl(tag) => {
-                                    (State::Sasl { tag: tag.clone(), line: Vec::new() }, Flow::Sasl(tag), rest)
-                                }
-                                Flow::Idle(tag) => {
-                                    (State::Idle { tag: tag.clone(), line: Vec::new() }, Flow::Idle(tag), rest)
-                                }
-                                flow => (State::Command(receiver), flow, rest),
-                            };
-                        }
-                        Err(receiver::Error::NeedsMoreData) => return (State::Command(receiver), Flow::Continue, &[]),
-                        Err(receiver::Error::NeedsLiteral { .. }) => {
-                            self.write(b"+ Ready for literal data\r\n");
-                            if iter.as_slice().is_empty() {
-                                return (State::Command(receiver), Flow::Continue, &[]);
-                            }
-                        }
-                        Err(receiver::Error::Error { response }) => self.write(response.serialize()),
-                    }
-                }
-            }
-            State::Sasl { tag, mut line } => match take_line(&mut line, bytes) {
-                Some(rest) => {
-                    self.sasl(&tag, &line).await;
-                    (State::Command(self.receiver()), Flow::Continue, rest)
-                }
-                None if line.len() > 8192 => {
-                    self.write(StatusResponse::bad("Line too long").with_tag(tag).into_bytes());
-                    (State::Command(self.receiver()), Flow::Continue, &[])
-                }
-                None => (State::Sasl { tag, line }, Flow::Continue, &[]),
-            },
-            State::Idle { tag, mut line } => match take_line(&mut line, bytes) {
-                Some(rest) => {
-                    let done = line.trim_ascii().eq_ignore_ascii_case(b"DONE");
-                    let response = if done {
-                        StatusResponse::completed(Command::Idle)
-                    } else {
-                        StatusResponse::bad("Expected DONE")
-                    };
-                    self.write(response.with_tag(tag).into_bytes());
-                    (State::Command(self.receiver()), Flow::Continue, rest)
-                }
-                None if line.len() > 1024 => {
-                    self.write(StatusResponse::bad("Expected DONE").with_tag(tag).into_bytes());
-                    (State::Command(self.receiver()), Flow::Continue, &[])
-                }
-                None => (State::Idle { tag, line }, Flow::Continue, &[]),
-            },
-        }
+    fn bad_request(&mut self, bad: Bad) {
+        let status = match bad.text.strip_prefix("BADCHARSET ") {
+            Some(charset) => Status::no(format!("Unsupported charset {charset}")).with_code(Code::BadCharset),
+            None => Status::bad(bad.text),
+        };
+        self.write(status.line(bad.tag.as_deref()));
     }
 
-    async fn request(&mut self, request: Request<Command>) -> Flow {
-        let tag = request.tag.clone();
-        let command = request.command;
-        let mut flow = Flow::Continue;
-        let response = match command {
+    async fn request(&mut self, Request { tag, command }: Request) -> Flow {
+        let name = command.name();
+        self.tag.clone_from(&tag);
+        // Commands that must not see sequence numbers move, and those after which nothing is selected.
+        let quiet = matches!(
+            command,
+            Command::Fetch { uid: false, .. }
+                | Command::Store { uid: false, .. }
+                | Command::Search { uid: false, .. }
+                | Command::Sort { uid: false, .. }
+                | Command::Thread { uid: false, .. }
+                | Command::Select { .. }
+                | Command::Close
+                | Command::Unselect
+        );
+        let status = match command {
             Command::Capability => {
-                let capabilities = self.capabilities();
-                self.write(capability::Response { capabilities }.serialize());
-                StatusResponse::completed(command)
+                let line = format!("* CAPABILITY {}\r\n", self.capabilities());
+                self.write(line);
+                Status::done()
             }
-            Command::Noop | Command::Check => StatusResponse::completed(command),
-            Command::Logout => {
-                self.write(StatusResponse::bye("kernoid logging out").into_bytes());
-                flow = Flow::Logout;
-                StatusResponse::completed(command)
-            }
+            Command::Noop => Status::done(),
             Command::Id => {
                 self.write(b"* ID (\"name\" \"kernoid\")\r\n");
-                StatusResponse::completed(command)
+                Status::done()
             }
-            Command::StartTls if self.tls => StatusResponse::bad("TLS is already active"),
+            Command::Logout => {
+                self.write(Status::bye("kernoid logging out").line(None));
+                self.write(Status::ok(format!("{name} completed")).line(Some(&tag)));
+                return Flow::Close;
+            }
+            Command::StartTls if self.tls => Status::bad("TLS is already active"),
+            Command::StartTls if self.account.is_some() => Status::bad("Already logged in"),
             Command::StartTls => {
-                flow = Flow::StartTls;
-                StatusResponse::ok("Begin TLS negotiation now")
-            }
-            Command::Login | Command::Authenticate if self.account.is_some() => {
-                StatusResponse::bad("Already logged in")
-            }
-            Command::Login | Command::Authenticate if !self.tls => {
-                StatusResponse::no("Log in over TLS only").with_code(ResponseCode::PrivacyRequired)
-            }
-            Command::Login => match request.parse_login() {
-                Ok(arguments) => self.login(&arguments.username, &arguments.password).await,
-                Err(error) => return self.parse_error(error),
-            },
-            Command::Authenticate => match request.parse_authenticate() {
-                Ok(arguments)
-                    if !matches!(
-                        arguments.mechanism,
-                        Mechanism::Plain | Mechanism::OAuthBearer | Mechanism::XOauth2
-                    ) =>
-                {
-                    StatusResponse::no("Use AUTHENTICATE PLAIN, OAUTHBEARER or XOAUTH2").with_code(ResponseCode::Cannot)
+                self.write(Status::ok("Begin TLS negotiation now").line(Some(&tag)));
+                if self.flush().await.is_err() {
+                    return Flow::Close;
                 }
-                Ok(arguments) => {
-                    self.sasl_mechanism = arguments.mechanism;
-                    match arguments.params.first() {
-                        // SASL-IR: the response came with the command; `=` is an empty one.
-                        Some(initial) => {
-                            let initial = if initial == "=" { "" } else { initial.as_str() };
-                            self.sasl_response(initial.as_bytes()).await
-                        }
-                        None => {
-                            self.write(b"+ \r\n");
-                            return Flow::Sasl(tag);
-                        }
-                    }
-                }
-                Err(error) => return self.parse_error(error),
+                // Nothing the client sent before the handshake counts (RFC 9051, 11.1).
+                self.framer.clear();
+                return if self.upgrade().await { Flow::Continue } else { Flow::Close };
+            }
+            Command::Login { .. } | Command::Authenticate { .. } if self.account.is_some() => {
+                Status::bad("Already logged in")
+            }
+            Command::Login { .. } | Command::Authenticate { .. } if !self.tls => {
+                Status::no("Log in over TLS only").with_code(Code::PrivacyRequired)
+            }
+            Command::Login { user, password } => {
+                let result = self.inner.identity.mail_login(&user, &password, Some(self.remote)).await;
+                self.logged_in(result).await
+            }
+            Command::Authenticate { mechanism, initial } => match self.authenticate(&mechanism, initial).await {
+                Some(status) => status,
+                None => return Flow::Close,
             },
-            _ if self.account.is_none() => StatusResponse::bad("Log in first"),
-            Command::Enable => match request.parse_enable() {
-                Ok(arguments) => self.enable(arguments),
-                Err(error) => return self.parse_error(error),
-            },
+            _ if self.account.is_none() => Status::bad("Log in first"),
+            Command::Enable(capabilities) => self.enable(&capabilities),
             Command::Namespace => {
-                let shared_prefix = Some(format!("{}{}", crate::folders::SHARED, crate::folders::SEPARATOR));
-                self.write(namespace::Response { shared_prefix }.serialize());
-                StatusResponse::completed(command)
+                self.write(b"* NAMESPACE ((\"\" \"/\")) ((\"Shared/\" \"/\")) NIL\r\n");
+                Status::done()
             }
-            Command::Idle => {
-                self.sync().await;
-                self.write(b"+ idling\r\n");
-                return Flow::Idle(tag);
+            Command::Select { mailbox, read_only, condstore, qresync } => {
+                self.select(&mailbox, read_only, condstore, qresync).await
             }
-            Command::Select | Command::Examine => {
-                let is_utf8 = self.is_utf8;
-                match request.parse_select(is_utf8) {
-                    Ok(arguments) => self.select(arguments, command == Command::Examine).await,
-                    Err(error) => return self.parse_error(error),
-                }
-            }
-            Command::List | Command::Lsub => {
-                let is_utf8 = self.is_utf8;
-                let arguments =
-                    if command == Command::List { request.parse_list(is_utf8) } else { request.parse_lsub(is_utf8) };
-                match arguments {
-                    Ok(arguments) => self.list(arguments, command == Command::Lsub).await,
-                    Err(error) => return self.parse_error(error),
-                }
-            }
-            Command::Status => match request.parse_status(self.is_utf8) {
-                Ok(arguments) => self.status(arguments).await,
-                Err(error) => return self.parse_error(error),
+            Command::Create(mailbox) => self.create(&mailbox).await,
+            Command::Delete(mailbox) => self.delete(&mailbox).await,
+            Command::Rename { from, to } => self.rename(&from, &to).await,
+            Command::Subscribe { mailbox, subscribe } => self.subscribe(&mailbox, subscribe).await,
+            Command::List(list) => self.list(list).await,
+            Command::Lsub { reference, pattern } => self.lsub(&reference, &pattern).await,
+            Command::Status { mailbox, items } => self.status(&mailbox, &items).await,
+            Command::Append { mailbox, messages } => self.append(&mailbox, messages).await,
+            Command::Idle => match self.idle().await {
+                Some(status) => status,
+                None => return Flow::Close,
             },
-            Command::Create => match request.parse_create(self.is_utf8) {
-                Ok(arguments) => self.create(&arguments.mailbox_name).await,
-                Err(error) => return self.parse_error(error),
-            },
-            Command::Delete => match request.parse_delete(self.is_utf8) {
-                Ok(arguments) => self.delete(&arguments.mailbox_name).await,
-                Err(error) => return self.parse_error(error),
-            },
-            Command::Rename => match request.parse_rename(self.is_utf8) {
-                Ok(arguments) => self.rename(&arguments.mailbox_name, &arguments.new_mailbox_name).await,
-                Err(error) => return self.parse_error(error),
-            },
-            Command::Subscribe | Command::Unsubscribe => match request.parse_subscribe(self.is_utf8) {
-                Ok(arguments) => self.subscribe(&arguments.mailbox_name, command == Command::Subscribe).await,
-                Err(error) => return self.parse_error(error),
-            },
-            Command::Append => match request.parse_append(self.is_utf8) {
-                Ok(arguments) => self.append(arguments).await,
-                Err(error) => return self.parse_error(error),
-            },
-            Command::GetAcl | Command::SetAcl | Command::DeleteAcl | Command::ListRights | Command::MyRights => {
-                match request.parse_acl(self.is_utf8) {
-                    Ok(arguments) => self.acl(command, arguments).await,
-                    Err(error) => return self.parse_error(error),
-                }
-            }
-            _ if self.selected.is_none() => StatusResponse::bad("No mailbox selected"),
-            Command::Close | Command::Unselect => {
-                if command == Command::Close {
-                    self.expunge(None, false).await;
-                }
+            Command::GetAcl(mailbox) => self.get_acl(&mailbox).await,
+            Command::MyRights(mailbox) => self.my_rights(&mailbox).await,
+            Command::ListRights { mailbox, identifier } => self.list_rights(&mailbox, &identifier).await,
+            Command::SetAcl { mailbox, identifier, change } => self.set_acl(&mailbox, &identifier, Some(change)).await,
+            Command::DeleteAcl { mailbox, identifier } => self.set_acl(&mailbox, &identifier, None).await,
+            Command::GetQuota(root) => self.get_quota(&root).await,
+            Command::GetQuotaRoot(mailbox) => self.get_quota_root(&mailbox).await,
+            Command::SetQuota => Status::no("Quotas are set by the administrators").with_code(Code::NoPerm),
+            _ if self.selected.is_none() => Status::bad("No mailbox selected"),
+            Command::Check => Status::done(),
+            Command::Close => {
+                // The silent expunge of `CLOSE` (RFC 9051, 6.4.1).
+                let status = self.expunge(None, false).await;
                 self.selected = None;
-                StatusResponse::completed(command)
+                if status.is_ok() { Status::done() } else { status }
             }
-            Command::Expunge(is_uid) => {
-                let sequence = if is_uid {
-                    let set = request.tokens.into_iter().next().map(receiver::Token::unwrap_bytes);
-                    match set.as_deref().map(crate::proto::parser::parse_sequence_set) {
-                        Some(Ok(sequence)) => Some(sequence),
-                        _ => {
-                            self.write(
-                                StatusResponse::bad("UID EXPUNGE needs a set of UIDs").with_tag(tag).into_bytes(),
-                            );
-                            return Flow::Continue;
-                        }
-                    }
-                } else {
-                    None
-                };
-                self.expunge(sequence, true).await
+            Command::Unselect => {
+                self.selected = None;
+                Status::done()
             }
-            Command::Fetch(is_uid) => match request.parse_fetch() {
-                Ok(arguments) => self.fetch(arguments, is_uid).await,
-                Err(error) => return self.parse_error(error),
-            },
-            Command::Store(is_uid) => match request.parse_store() {
-                Ok(arguments) => self.store(arguments, is_uid).await,
-                Err(error) => return self.parse_error(error),
-            },
-            Command::Search(is_uid) => match request.parse_search(self.version) {
-                Ok(arguments) => self.search(arguments, is_uid).await,
-                Err(error) => return self.parse_error(error),
-            },
-            Command::Sort(is_uid) => match request.parse_sort() {
-                Ok(arguments) => self.sort(arguments, is_uid).await,
-                Err(error) => return self.parse_error(error),
-            },
-            Command::Thread(is_uid) => match request.parse_thread() {
-                Ok(arguments) => self.thread(arguments, is_uid).await,
-                Err(error) => return self.parse_error(error),
-            },
-            Command::GetQuotaRoot => match request.parse_get_quota_root(self.is_utf8) {
-                Ok(arguments) => self.get_quota_root(arguments).await,
-                Err(error) => return self.parse_error(error),
-            },
-            Command::GetQuota => match request.parse_get_quota() {
-                Ok(arguments) => self.get_quota(arguments).await,
-                Err(error) => return self.parse_error(error),
-            },
-            Command::Copy(is_uid) | Command::Move(is_uid) => match request.parse_copy_move(self.is_utf8) {
-                Ok(arguments) => self.copy_move(arguments, is_uid, matches!(command, Command::Move(_))).await,
-                Err(error) => return self.parse_error(error),
-            },
-            _ => StatusResponse::bad("Command not supported"),
+            Command::Expunge(uids) => self.expunge(uids, true).await,
+            Command::Search { uid, search } => self.search(search, uid).await,
+            Command::Sort { uid, criteria, search } => self.sort(&criteria, search, uid).await,
+            Command::Thread { uid, algorithm, search } => self.thread(algorithm, search, uid).await,
+            Command::Fetch { uid, fetch } => self.fetch(fetch, uid).await,
+            Command::Store { uid, store } => self.store(store, uid).await,
+            Command::Copy { uid, is_move, set, mailbox } => self.copy_move(&set, &mailbox, uid, is_move).await,
         };
-        // RFC 9051, 7.5.1: no EXPUNGE while a command refers to messages by sequence number.
-        let keeps_numbers = matches!(
-            command,
-            Command::Fetch(false)
-                | Command::Store(false)
-                | Command::Search(false)
-                | Command::Sort(false)
-                | Command::Thread(false)
-        );
-        if self.selected.is_some()
-            && !keeps_numbers
-            && !matches!(command, Command::Select | Command::Examine | Command::Logout)
-        {
+        if !quiet && self.selected.is_some() {
             self.sync().await;
         }
-        self.write(response.with_tag(tag).into_bytes());
-        flow
-    }
-
-    fn parse_error(&mut self, error: crate::proto::Error) -> Flow {
-        self.write(error.serialize());
+        let status = if status.is_ok() && status.text.is_empty() {
+            Status { text: format!("{name} completed"), ..status }
+        } else {
+            status
+        };
+        self.write(status.line(Some(&tag)));
         Flow::Continue
     }
 
-    fn enable(&mut self, arguments: enable::Arguments) -> StatusResponse {
+    fn enable(&mut self, capabilities: &[String]) -> Status {
         let mut enabled = Vec::new();
-        for capability in arguments.capabilities {
-            match capability {
-                Capability::IMAP4rev2 => self.version = ProtocolVersion::Rev2,
-                Capability::CondStore => self.condstore = true,
-                Capability::QResync => {
-                    self.qresync = true;
+        for capability in capabilities {
+            let flag = match capability.as_str() {
+                "CONDSTORE" => &mut self.condstore,
+                "QRESYNC" => {
                     self.condstore = true;
+                    &mut self.qresync
                 }
-                Capability::Utf8Accept => self.is_utf8 = true,
+                "UTF8=ACCEPT" => &mut self.utf8,
+                "IMAP4REV2" => {
+                    self.utf8 = true;
+                    &mut self.rev2
+                }
+                // Unknown capabilities are ignored (RFC 5161, 3.1).
                 _ => continue,
+            };
+            if !*flag {
+                *flag = true;
+                enabled.push(if capability == "IMAP4REV2" { "IMAP4rev2" } else { capability.as_str() });
             }
-            enabled.push(capability);
         }
-        self.write(enable::Response { enabled }.serialize());
-        StatusResponse::completed(Command::Enable)
+        let mut line = String::from("* ENABLED");
+        for capability in enabled {
+            line.push(' ');
+            line.push_str(capability);
+        }
+        line.push_str("\r\n");
+        self.write(line);
+        Status::done()
     }
 
-    async fn login(&mut self, user: &str, password: &str) -> StatusResponse {
-        let result = self.inner.identity.mail_login(user, password, Some(self.remote)).await;
-        self.logged_in(result).await
-    }
-
-    async fn logged_in(
-        &mut self,
-        result: Result<kernoid_identity::account::AccountInfo, IdentityError>,
-    ) -> StatusResponse {
-        match result {
-            Ok(account) => {
-                if let Err(error) = self.inner.mail.ensure_account(account.id).await {
-                    return mail_error(error);
+    /// `AUTHENTICATE` (RFC 9051, 6.2.2) with PLAIN (RFC 4616), OAUTHBEARER (RFC 7628) and XOAUTH2; `None` if the
+    /// session must end.
+    async fn authenticate(&mut self, mechanism: &str, initial: Option<Vec<u8>>) -> Option<Status> {
+        if !matches!(mechanism, "PLAIN" | "OAUTHBEARER" | "XOAUTH2") {
+            return Some(Status::bad(format!(
+                "Unsupported mechanism {}",
+                mechanism.chars().take(32).collect::<String>()
+            )));
+        }
+        let response = match initial {
+            Some(initial) if initial == b"=" => Vec::new(),
+            Some(initial) => initial,
+            None => {
+                self.write(b"+ \r\n");
+                let line = self.read_line().await?;
+                if line == b"*" {
+                    return Some(Status::bad("Authentication cancelled"));
                 }
-                self.account = Some(account.id);
-                self.tenant = Some(account.tenant);
-                StatusResponse::ok("Logged in")
-                    .with_code(ResponseCode::Capability { capabilities: self.capabilities() })
+                line
             }
+        };
+        let Ok(decoded) = base64::engine::general_purpose::STANDARD.decode(response.trim_ascii()) else {
+            return Some(Status::bad("Invalid AUTHENTICATE response"));
+        };
+        let result = if mechanism == "PLAIN" {
+            match crate::sasl_plain(&decoded) {
+                Some((user, password)) => self.inner.identity.mail_login(&user, &password, Some(self.remote)).await,
+                None => return Some(Status::bad("Invalid AUTHENTICATE response")),
+            }
+        } else {
+            match kernoid_identity::app_password::sasl_bearer(&decoded) {
+                Some((user, token)) => self.inner.identity.token_login(&token, user.as_deref()).await,
+                None => return Some(Status::bad("Invalid AUTHENTICATE response")),
+            }
+        };
+        Some(self.logged_in(result).await)
+    }
+
+    async fn logged_in(&mut self, result: Result<AccountInfo, IdentityError>) -> Status {
+        let account = match result {
+            Ok(account) => account,
             Err(IdentityError::TooManyAttempts { .. }) => {
-                StatusResponse::no("Too many attempts, try again later").with_code(ResponseCode::Unavailable)
+                return Status::no("Too many attempts; try again later").with_code(Code::Unavailable);
             }
-            Err(IdentityError::AccountDeactivated | IdentityError::InvalidCredentials) => {
-                StatusResponse::no("Authentication failed").with_code(ResponseCode::AuthenticationFailed)
+            Err(IdentityError::InvalidCredentials | IdentityError::AccountDeactivated) => {
+                return Status::no("Authentication failed").with_code(Code::AuthenticationFailed);
             }
             Err(error) => {
-                tracing::warn!(%error, "checking a mail login");
-                StatusResponse::no("Temporary authentication failure").with_code(ResponseCode::Unavailable)
+                tracing::warn!(%error, "checking an IMAP login");
+                return Status::unavailable();
             }
+        };
+        if let Err(error) = self.inner.mail.ensure_account(account.id).await {
+            return mail_error(error);
         }
+        self.account = Some(account.id);
+        self.tenant = Some(account.tenant);
+        Status::ok("Logged in").with_code(Code::Capability(self.capabilities()))
     }
 
-    async fn sasl_response(&mut self, encoded: &[u8]) -> StatusResponse {
-        let decoded = base64::engine::general_purpose::STANDARD.decode(encoded.trim_ascii()).ok();
-        match self.sasl_mechanism {
-            Mechanism::OAuthBearer | Mechanism::XOauth2 => {
-                match decoded.as_deref().and_then(kernoid_identity::app_password::sasl_bearer) {
-                    Some((user, token)) => {
-                        let result = self.inner.identity.token_login(&token, user.as_deref()).await;
-                        self.logged_in(result).await
+    /// `IDLE` (RFC 2177): updates as they happen until `DONE`; `None` if the session must end.
+    async fn idle(&mut self) -> Option<Status> {
+        let mut events = self.inner.events.subscribe();
+        self.write(b"+ idling\r\n");
+        loop {
+            match self.framer.line() {
+                Some(Ok(line)) if line.eq_ignore_ascii_case(b"DONE") => return Some(Status::done()),
+                Some(Ok(_)) => return Some(Status::bad("Expected DONE")),
+                Some(Err(())) => {
+                    self.write(Status::bye("Line too long").line(None));
+                    return None;
+                }
+                None => {}
+            }
+            if self.flush().await.is_err() {
+                return None;
+            }
+            let mut buffer = [0u8; 4096];
+            let timeout = self.inner.settings.timeout;
+            tokio::select! {
+                read = tokio::time::timeout(timeout, self.stream.read(&mut buffer)) => match read {
+                    Ok(Ok(0) | Err(_)) => return None,
+                    Ok(Ok(read)) => self.framer.push(&buffer[..read]),
+                    Err(_) => {
+                        self.write(Status::bye("Autologout; idle for too long").line(None));
+                        return None;
                     }
-                    None => StatusResponse::bad("Invalid AUTHENTICATE response"),
+                },
+                event = events.recv() => {
+                    let watched = self.selected.as_ref().map(|selected| selected.owner);
+                    match event {
+                        Ok(account) if Some(account) == watched => self.sync().await,
+                        Err(RecvError::Lagged(_)) => self.sync().await,
+                        Ok(_) => {}
+                        // No more events: only the client ends the wait.
+                        Err(RecvError::Closed) => events = self.inner.events.subscribe(),
+                    }
                 }
             }
-            _ => match decoded.as_deref().and_then(crate::sasl_plain) {
-                Some((user, password)) => self.login(&user, &password).await,
-                None => StatusResponse::bad("Invalid AUTHENTICATE PLAIN response"),
-            },
-        }
-    }
-
-    async fn sasl(&mut self, tag: &str, line: &[u8]) {
-        let line = line.strip_suffix(b"\r").unwrap_or(line);
-        let response =
-            if line == b"*" { StatusResponse::bad("Authentication cancelled") } else { self.sasl_response(line).await };
-        self.write(response.with_tag(tag).into_bytes());
-    }
-}
-
-/// Adds `bytes` to `line` up to its end; the bytes after the line, once it is complete.
-fn take_line<'b>(line: &mut Vec<u8>, bytes: &'b [u8]) -> Option<&'b [u8]> {
-    match bytes.iter().position(|&b| b == b'\n') {
-        Some(end) => {
-            line.extend_from_slice(&bytes[..end]);
-            Some(&bytes[end + 1..])
-        }
-        None => {
-            line.extend_from_slice(bytes);
-            None
         }
     }
 }

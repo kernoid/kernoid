@@ -10,15 +10,11 @@ use uuid::Uuid;
 
 use crate::{
     proto::{
-        Command, StatusResponse,
-        protocol::{
-            ImapResponse,
-            capability::QuotaResourceName,
-            quota::{self, QuotaItem, QuotaResource},
-            search::{self, Comparator, Sort},
-            thread::{self, Algorithm},
-        },
+        request::{Search, SortCriterion, SortKey, ThreadAlgorithm},
+        response::{self, Status},
+        sequence,
     },
+    search::esearch,
     selected::Selected,
     session::{Session, mail_error},
 };
@@ -71,23 +67,28 @@ fn first_display(list: &[AddressInfo]) -> String {
         .to_lowercase()
 }
 
-fn compare(sort: &Sort, a: &EmailInfo, b: &EmailInfo) -> Ordering {
+fn compare(sort: SortKey, a: &EmailInfo, b: &EmailInfo) -> Ordering {
     match sort {
-        Sort::Arrival => a.received_at.cmp(&b.received_at),
-        Sort::Date => a.sent_at.unwrap_or(a.received_at).cmp(&b.sent_at.unwrap_or(b.received_at)),
-        Sort::Size => a.size.cmp(&b.size),
-        Sort::Subject => base_subject(a.subject.as_deref().unwrap_or_default())
+        SortKey::Arrival => a.received_at.cmp(&b.received_at),
+        SortKey::Date => a.sent_at.unwrap_or(a.received_at).cmp(&b.sent_at.unwrap_or(b.received_at)),
+        SortKey::Size => a.size.cmp(&b.size),
+        SortKey::Subject => base_subject(a.subject.as_deref().unwrap_or_default())
             .cmp(&base_subject(b.subject.as_deref().unwrap_or_default())),
-        Sort::From => first_address(&a.from).cmp(&first_address(&b.from)),
-        Sort::To => first_address(&a.to).cmp(&first_address(&b.to)),
-        Sort::Cc => first_address(&a.cc).cmp(&first_address(&b.cc)),
-        Sort::DisplayFrom => first_display(&a.from).cmp(&first_display(&b.from)),
-        Sort::DisplayTo => first_display(&a.to).cmp(&first_display(&b.to)),
+        SortKey::From => first_address(&a.from).cmp(&first_address(&b.from)),
+        SortKey::To => first_address(&a.to).cmp(&first_address(&b.to)),
+        SortKey::Cc => first_address(&a.cc).cmp(&first_address(&b.cc)),
+        SortKey::DisplayFrom => first_display(&a.from).cmp(&first_display(&b.from)),
+        SortKey::DisplayTo => first_display(&a.to).cmp(&first_display(&b.to)),
     }
 }
 
 /// Positions in the order of `comparators`; ties keep the mailbox's order (RFC 5256, 3).
-fn sorted(positions: &mut [usize], comparators: &[Comparator], infos: &HashMap<Uuid, EmailInfo>, selected: &Selected) {
+fn sorted(
+    positions: &mut [usize],
+    comparators: &[SortCriterion],
+    infos: &HashMap<Uuid, EmailInfo>,
+    selected: &Selected,
+) {
     positions.sort_by(|&a, &b| {
         let (Some(first), Some(second)) =
             (infos.get(&selected.entries[a].email), infos.get(&selected.entries[b].email))
@@ -95,8 +96,8 @@ fn sorted(positions: &mut [usize], comparators: &[Comparator], infos: &HashMap<U
             return a.cmp(&b);
         };
         for comparator in comparators {
-            let order = compare(&comparator.sort, first, second);
-            let order = if comparator.ascending { order } else { order.reverse() };
+            let order = compare(comparator.key, first, second);
+            let order = if comparator.reverse { order.reverse() } else { order };
             if order != Ordering::Equal {
                 return order;
             }
@@ -110,7 +111,7 @@ impl Session {
         &mut self,
         selected: &Selected,
         positions: &[usize],
-    ) -> Result<HashMap<Uuid, EmailInfo>, Box<StatusResponse>> {
+    ) -> Result<HashMap<Uuid, EmailInfo>, Box<Status>> {
         let ids: Vec<Uuid> = positions.iter().map(|&position| selected.entries[position].email).collect();
         match self.inner.mail.emails(selected.owner, &ids).await {
             Ok(infos) => Ok(infos.into_iter().map(|info| (info.id, info)).collect()),
@@ -122,10 +123,8 @@ impl Session {
         if is_uid { selected.entries[position].uid } else { position as u32 + 1 }
     }
 
-    pub(crate) async fn sort(&mut self, arguments: search::Arguments, is_uid: bool) -> StatusResponse {
-        let command = Command::Sort(is_uid);
-        let comparators = arguments.sort.clone().unwrap_or_default();
-        let (selected, mut found, _) = match self.matching(arguments.filter).await {
+    pub(crate) async fn sort(&mut self, criteria: &[SortCriterion], search: Search, is_uid: bool) -> Status {
+        let (selected, mut found, _) = match self.matching(&search.key).await {
             Ok(matched) => matched,
             Err(response) => return *response,
         };
@@ -133,24 +132,29 @@ impl Session {
             Ok(infos) => infos,
             Err(response) => return *response,
         };
-        sorted(&mut found, &comparators, &infos, &selected);
-        let response = search::Response {
-            is_uid,
-            is_esearch: arguments.is_esearch,
-            is_sort: true,
-            ids: found.iter().map(|&position| Self::number(&selected, position, is_uid)).collect(),
-            min: None,
-            max: None,
-            count: None,
-            highest_modseq: None,
+        sorted(&mut found, criteria, &infos, &selected);
+        let ids: Vec<u32> = found.iter().map(|&position| Self::number(&selected, position, is_uid)).collect();
+        let line = if search.options.is_some() {
+            // ESORT's result (RFC 5267): the numbers in their order.
+            let tag = self.tag.clone();
+            esearch(&tag, is_uid, |line| {
+                if !ids.is_empty() {
+                    line.push_str(&format!(" ALL {}", sequence::ordered(&ids)));
+                }
+            })
+        } else {
+            let mut line = String::from("* SORT");
+            for id in &ids {
+                line.push_str(&format!(" {id}"));
+            }
+            line + "\r\n"
         };
-        self.write(response.serialize(&arguments.tag));
-        StatusResponse::completed(command)
+        self.write(line);
+        Status::done()
     }
 
-    pub(crate) async fn thread(&mut self, arguments: thread::Arguments, is_uid: bool) -> StatusResponse {
-        let command = Command::Thread(is_uid);
-        let (selected, found, _) = match self.matching(arguments.filter).await {
+    pub(crate) async fn thread(&mut self, algorithm: ThreadAlgorithm, search: Search, is_uid: bool) -> Status {
+        let (selected, found, _) = match self.matching(&search.key).await {
             Ok(matched) => matched,
             Err(response) => return *response,
         };
@@ -164,9 +168,9 @@ impl Session {
         let mut index: HashMap<String, usize> = HashMap::new();
         for &position in &found {
             let entry = &selected.entries[position];
-            let key = match arguments.algorithm {
-                Algorithm::References => entry.thread.to_string(),
-                Algorithm::OrderedSubject => {
+            let key = match algorithm {
+                ThreadAlgorithm::References => entry.thread.to_string(),
+                ThreadAlgorithm::OrderedSubject => {
                     base_subject(infos.get(&entry.email).and_then(|info| info.subject.as_deref()).unwrap_or_default())
                 }
             };
@@ -178,7 +182,7 @@ impl Session {
                 }
             }
         }
-        let by_date = [Comparator { sort: Sort::Date, ascending: true }];
+        let by_date = [SortCriterion { key: SortKey::Date, reverse: false }];
         for (_, members) in &mut groups {
             sorted(members, &by_date, &infos, &selected);
         }
@@ -188,58 +192,48 @@ impl Session {
             };
             first(a).cmp(&first(b)).then(a[0].cmp(&b[0]))
         });
-        let response = thread::Response {
-            is_uid,
-            threads: groups
-                .into_iter()
-                .map(|(_, members)| {
-                    members.into_iter().map(|position| Self::number(&selected, position, is_uid)).collect()
-                })
-                .collect(),
-        };
-        self.write(response.serialize());
-        StatusResponse::completed(command)
+        let mut line = String::from("* THREAD ");
+        for (_, members) in groups {
+            let numbers: Vec<String> =
+                members.into_iter().map(|position| Self::number(&selected, position, is_uid).to_string()).collect();
+            line.push_str(&format!("({})", numbers.join(" ")));
+        }
+        line.truncate(line.trim_end().len());
+        line.push_str("\r\n");
+        self.write(line);
+        Status::done()
     }
 
-    /// The account's quota: one root, `""`, for all its mailboxes – STORAGE in KiB (RFC 9208). Without a quota the
-    /// mailboxes have no root.
-    async fn quota_item(&mut self) -> Result<Option<QuotaItem>, Box<StatusResponse>> {
-        let Some(account) = self.account else {
-            return Err(Box::new(StatusResponse::no("Log in first")));
-        };
+    /// The account's quota: one root, `""`, for all its mailboxes – `(STORAGE used total)` in KiB (RFC 9208); `None`
+    /// without a quota, when the mailboxes have no root.
+    async fn quota_resources(&mut self) -> Result<Option<String>, Box<Status>> {
+        let account = self.account();
         let (used, quota) = self.inner.mail.quota(account).await.map_err(|error| Box::new(mail_error(error)))?;
-        Ok(quota.map(|total| QuotaItem {
-            name: String::new(),
-            resources: vec![QuotaResource {
-                resource: QuotaResourceName::Storage,
-                total: total / 1024,
-                used: used / 1024,
-            }],
-        }))
+        Ok(quota.map(|total| format!("(STORAGE {} {})", used / 1024, total / 1024)))
     }
 
-    pub(crate) async fn get_quota_root(&mut self, arguments: quota::Arguments) -> StatusResponse {
-        let item = match self.quota_item().await {
-            Ok(item) => item,
+    pub(crate) async fn get_quota_root(&mut self, mailbox: &str) -> Status {
+        let resources = match self.quota_resources().await {
+            Ok(resources) => resources,
             Err(response) => return *response,
         };
-        let mut root = vec![arguments.name];
-        if item.is_some() {
-            root.push(String::new());
+        let mut out = b"* QUOTAROOT ".to_vec();
+        response::mailbox(&mut out, mailbox, self.utf8);
+        if let Some(resources) = &resources {
+            out.extend_from_slice(format!(" \"\"\r\n* QUOTA \"\" {resources}").as_bytes());
         }
-        let response = quota::Response { quota_root_items: root, quota_items: item.into_iter().collect() };
-        self.write(response.serialize());
-        StatusResponse::completed(Command::GetQuotaRoot)
+        out.extend_from_slice(b"\r\n");
+        self.write(out);
+        Status::done()
     }
 
-    pub(crate) async fn get_quota(&mut self, arguments: quota::Arguments) -> StatusResponse {
-        match self.quota_item().await {
-            Ok(Some(item)) if arguments.name.is_empty() => {
-                let response = quota::Response { quota_root_items: Vec::new(), quota_items: vec![item] };
-                self.write(response.serialize());
-                StatusResponse::completed(Command::GetQuota)
+    pub(crate) async fn get_quota(&mut self, root: &str) -> Status {
+        match self.quota_resources().await {
+            Ok(Some(resources)) if root.is_empty() => {
+                self.write(format!("* QUOTA \"\" {resources}\r\n"));
+                Status::done()
             }
-            Ok(_) => StatusResponse::no("No such quota root"),
+            Ok(_) => Status::no("No such quota root"),
             Err(response) => *response,
         }
     }
