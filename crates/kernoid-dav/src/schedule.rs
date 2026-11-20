@@ -2,8 +2,6 @@
 //! The scheduling outbox (RFC 6638, 5): free/busy requests for accounts of the same tenant whose calendars the asking
 //! account may see free/busy of (RFC 0004, 7 and 9). Invitations are sent when events are stored, not posted here.
 
-use std::borrow::Cow;
-
 use calcard::{
     Entry, Parser,
     icalendar::{ICalendarComponentType, ICalendarEntry, ICalendarProperty, ICalendarValue},
@@ -14,7 +12,7 @@ use kernoid_groupware::{Level, PrincipalInfo};
 use crate::{
     Dav, Error,
     proto::{
-        schema::response::{CalCondition, Href, ScheduleResponse, ScheduleResponseItem},
+        schema::response::{Condition, ScheduleResponse, ScheduleResponseItem},
         types::TimeRange,
     },
     server::DavResponse,
@@ -22,7 +20,7 @@ use crate::{
 
 /// Answers a `VFREEBUSY` request posted to the outbox.
 pub(crate) async fn outbox_post(dav: &Dav, user: &PrincipalInfo, body: &[u8]) -> Result<DavResponse, Error> {
-    let invalid = || Error::Condition(StatusCode::BAD_REQUEST, CalCondition::ValidSchedulingMessage.into());
+    let invalid = || Error::Condition(StatusCode::BAD_REQUEST, Condition::ValidSchedulingMessage);
     let text = std::str::from_utf8(body).map_err(|_| invalid())?;
     let Entry::ICalendar(ical) = Parser::new(text).entry() else { return Err(invalid()) };
     let method = ical
@@ -43,7 +41,7 @@ pub(crate) async fn outbox_post(dav: &Dav, user: &PrincipalInfo, body: &[u8]) ->
         .and_then(|entry| entry.calendar_address())
         .map(|address| address.to_lowercase());
     if organizer.is_none_or(|organizer| !user.addresses.contains(&organizer)) {
-        return Err(Error::Condition(StatusCode::FORBIDDEN, CalCondition::ValidOrganizer.into()));
+        return Err(Error::Condition(StatusCode::FORBIDDEN, Condition::ValidOrganizer));
     }
     let time = |property| {
         request.property(&property).and_then(|entry| match entry.values.first() {
@@ -64,8 +62,8 @@ pub(crate) async fn outbox_post(dav: &Dav, user: &PrincipalInfo, body: &[u8]) ->
         let Some(address) = attendee.calendar_address() else { continue };
         let address = address.to_lowercase();
         let mut item = ScheduleResponseItem {
-            recipient: Href(format!("mailto:{address}")),
-            request_status: Cow::Borrowed("3.7;Invalid calendar user"),
+            recipient: format!("mailto:{address}"),
+            request_status: "3.7;Invalid calendar user".into(),
             calendar_data: None,
         };
         if let Some(account) = dav.groupware.account_by_address(user.tenant, &address).await? {
@@ -84,7 +82,7 @@ pub(crate) async fn outbox_post(dav: &Dav, user: &PrincipalInfo, body: &[u8]) ->
             };
             match calendars {
                 Some(calendars) if calendars.is_empty() => {
-                    item.request_status = Cow::Borrowed("3.8;No authority");
+                    item.request_status = "3.8;No authority".into();
                 }
                 calendars => {
                     let calendars = match calendars {
@@ -112,12 +110,12 @@ pub(crate) async fn outbox_post(dav: &Dav, user: &PrincipalInfo, body: &[u8]) ->
                             values: smallvec::smallvec![ICalendarValue::Text("REPLY".into())],
                         });
                     }
-                    item.request_status = Cow::Borrowed("2.0;Success");
+                    item.request_status = "2.0;Success".into();
                     item.calendar_data = Some(object.to_string());
                 }
             }
         }
-        response.items.0.push(item);
+        response.0.push(item);
     }
     let mut http = http::Response::new(response.to_string().into_bytes());
     http.headers_mut().insert(header::CONTENT_TYPE, HeaderValue::from_static("application/xml; charset=utf-8"));

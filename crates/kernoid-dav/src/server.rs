@@ -17,17 +17,17 @@ use crate::{
     props::{Content, parse_sync_token, sync_token},
     proto::{
         Depth, RequestHeaders,
-        parser::{DavParser, tokenizer::Tokenizer},
         schema::{
-            Namespace,
-            property::{CalDavProperty, DavProperty, DavValue, WebDavProperty},
-            request::{DavPropertyValue, MkCol, MultiGet, PropFind, PropertyUpdate, Report},
+            property::{
+                CalDavName, CalDavProperty, CardDavName, CardDavProperty, DavProperty, DavPropertyValue, DavValue,
+                ResourceType, WebDavProperty,
+            },
+            request::{MkCol, MultiGet, PropFind, PropertyUpdate, Report},
             response::{
-                BaseCondition, CalCondition, CardCondition, Condition, ErrorResponse, Href, List, MkColResponse,
-                MultiStatus, PropStat, Response,
+                Condition, ErrorResponse, MkColResponse, MultiStatus, PrincipalSearchPropertySet, PropStat, Response,
             },
         },
-        types::dead_property::{DeadProperty, DeadPropertyTag},
+        types::{DeadProperties, TimeRange},
     },
     query,
 };
@@ -61,9 +61,14 @@ impl Error {
     }
 }
 
-impl From<crate::proto::parser::Error> for Error {
-    fn from(_: crate::proto::parser::Error) -> Self {
-        Self::Status(StatusCode::BAD_REQUEST)
+impl From<crate::proto::Error> for Error {
+    fn from(error: crate::proto::Error) -> Self {
+        match error {
+            crate::proto::Error::UnsupportedReport => {
+                Self::Condition(StatusCode::FORBIDDEN, Condition::SupportedReport)
+            }
+            _ => Self::Status(StatusCode::BAD_REQUEST),
+        }
     }
 }
 
@@ -89,14 +94,8 @@ fn status(status: StatusCode) -> DavResponse {
     response
 }
 
-fn condition(code: StatusCode, condition: impl Into<Condition>) -> DavResponse {
-    let condition = condition.into();
-    let namespace = match condition {
-        Condition::Cal(_) => Namespace::CalDav,
-        Condition::Card(_) => Namespace::CardDav,
-        Condition::Base(_) => Namespace::Dav,
-    };
-    xml(code, ErrorResponse::new(condition).with_namespace(namespace))
+fn condition(code: StatusCode, condition: Condition) -> DavResponse {
+    xml(code, ErrorResponse(condition))
 }
 
 /// The ETag header value of an object or collection.
@@ -132,35 +131,29 @@ impl Dav {
         match self.dispatch(&request).await {
             Ok(response) => response,
             Err(Error::NotFound) => status(StatusCode::NOT_FOUND),
-            Err(Error::Forbidden) => condition(StatusCode::FORBIDDEN, BaseCondition::NeedPrivileges(List(vec![]))),
+            Err(Error::Forbidden) => condition(StatusCode::FORBIDDEN, Condition::NeedPrivileges),
             Err(Error::Status(code)) => status(code),
             Err(Error::Condition(code, condition_)) => condition(code, condition_),
             Err(Error::Groupware(error)) => match error {
                 GroupwareError::NotFound(_) => status(StatusCode::NOT_FOUND),
                 GroupwareError::PreconditionFailed => status(StatusCode::PRECONDITION_FAILED),
                 GroupwareError::Invalid(_) if is_calendar_path => {
-                    condition(StatusCode::FORBIDDEN, CalCondition::ValidCalendarObjectResource)
+                    condition(StatusCode::FORBIDDEN, Condition::ValidCalendarObjectResource)
                 }
-                GroupwareError::Invalid(_) => condition(StatusCode::FORBIDDEN, CardCondition::ValidAddressData),
-                GroupwareError::TooLarge { limit } if is_calendar_path => {
-                    condition(StatusCode::FORBIDDEN, CalCondition::MaxResourceSize(limit as u32))
+                GroupwareError::Invalid(_) => condition(StatusCode::FORBIDDEN, Condition::ValidAddressData),
+                GroupwareError::TooLarge { .. } if is_calendar_path => {
+                    condition(StatusCode::FORBIDDEN, Condition::MaxResourceSize(true))
                 }
-                GroupwareError::TooLarge { limit } => {
-                    condition(StatusCode::FORBIDDEN, CardCondition::MaxResourceSize(limit as u32))
-                }
-                GroupwareError::OverQuota => {
-                    condition(StatusCode::INSUFFICIENT_STORAGE, BaseCondition::QuotaNotExceeded)
-                }
+                GroupwareError::TooLarge { .. } => condition(StatusCode::FORBIDDEN, Condition::MaxResourceSize(false)),
+                GroupwareError::OverQuota => condition(StatusCode::INSUFFICIENT_STORAGE, Condition::QuotaNotExceeded),
                 GroupwareError::UidConflict(_) if is_calendar_path => {
-                    condition(StatusCode::FORBIDDEN, CalCondition::NoUidConflict(Href(String::new())))
+                    condition(StatusCode::FORBIDDEN, Condition::NoUidConflict(true, None))
                 }
                 GroupwareError::UidConflict(_) => {
-                    condition(StatusCode::FORBIDDEN, CardCondition::NoUidConflict(Href(String::new())))
+                    condition(StatusCode::FORBIDDEN, Condition::NoUidConflict(false, None))
                 }
                 GroupwareError::IsDefault | GroupwareError::NotEmpty => status(StatusCode::FORBIDDEN),
-                GroupwareError::CannotCalculateChanges => {
-                    condition(StatusCode::FORBIDDEN, BaseCondition::ValidSyncToken)
-                }
+                GroupwareError::CannotCalculateChanges => condition(StatusCode::FORBIDDEN, Condition::ValidSyncToken),
                 other => {
                     tracing::warn!(error = %other, "dav request failed");
                     status(StatusCode::INTERNAL_SERVER_ERROR)
@@ -176,23 +169,24 @@ impl Dav {
     async fn dispatch(&self, request: &DavRequest) -> Result<DavResponse, Error> {
         let user = self.groupware.principal(request.account).await.map_err(|_| Error::Forbidden)?;
         let target = path::parse(&request.path).ok_or(Error::NotFound)?;
-        let mut headers = RequestHeaders::new(&request.path);
-        for (name, value) in &request.headers {
-            if let Ok(value) = value.to_str() {
-                headers.parse(name.as_str(), value);
-            }
-        }
+        let headers = RequestHeaders::from_map(&request.headers);
         let body = &request.body;
         match request.method.as_str() {
             "OPTIONS" => Ok(self.options()),
             "PROPFIND" => {
                 let node = self.resolve(&user, &target).await?;
-                let propfind = PropFind::parse(&mut Tokenizer::new(body))?;
+                let propfind = PropFind::parse(body)?;
                 self.propfind(&user, node, headers.depth, propfind).await
             }
             "REPORT" => {
                 let node = self.resolve(&user, &target).await?;
-                let report = Report::parse(&mut Tokenizer::new(body))?;
+                let report = Report::parse(body).map_err(|error| match error {
+                    crate::proto::Error::UnsupportedCollation => Error::Condition(
+                        StatusCode::FORBIDDEN,
+                        Condition::SupportedCollation(request.path.contains("/calendars/")),
+                    ),
+                    other => other.into(),
+                })?;
                 self.report(&user, node, &headers, report).await
             }
             "GET" | "HEAD" => {
@@ -205,12 +199,12 @@ impl Dav {
                 self.delete(node, &request.headers).await
             }
             "MKCALENDAR" | "MKCOL" => {
-                let mkcol = if body.is_empty() { None } else { Some(MkCol::parse(&mut Tokenizer::new(body))?) };
+                let mkcol = if body.is_empty() { None } else { Some(MkCol::parse(body)?) };
                 self.mkcol(&user, &target, request.method.as_str() == "MKCALENDAR", mkcol).await
             }
             "PROPPATCH" => {
                 let node = self.resolve(&user, &target).await?;
-                let update = PropertyUpdate::parse(&mut Tokenizer::new(body))?;
+                let update = PropertyUpdate::parse(body)?;
                 self.proppatch(&user, node, update).await
             }
             "COPY" | "MOVE" => {
@@ -277,16 +271,13 @@ impl Dav {
 
     /// The content of objects that a set of properties needs: calendar or address data.
     async fn contents(&self, nodes: &[Node], propfind: &PropFind) -> Result<HashMap<Uuid, Content>, Error> {
-        let wants_data = match propfind {
-            PropFind::Prop(props) | PropFind::AllProp(props) => props.iter().any(|prop| {
-                matches!(
-                    prop,
-                    DavProperty::CalDav(CalDavProperty::CalendarData(_))
-                        | DavProperty::CardDav(crate::proto::schema::property::CardDavProperty::AddressData { .. })
-                )
-            }),
-            PropFind::PropName => false,
-        };
+        let wants_data = propfind.properties().iter().any(|prop| {
+            matches!(
+                prop,
+                DavProperty::CalDav(CalDavProperty::CalendarData(_))
+                    | DavProperty::CardDav(CardDavProperty::AddressData(_))
+            )
+        });
         let mut contents = HashMap::new();
         if !wants_data {
             return Ok(contents);
@@ -321,7 +312,6 @@ impl Dav {
         mut contents: HashMap<Uuid, Content>,
     ) -> Result<MultiStatus, Error> {
         let mut multistatus = MultiStatus::new(Vec::with_capacity(nodes.len()));
-        set_namespaces(&mut multistatus, propfind);
         let mut instances_limit = ical::MAX_INSTANCES;
         for node in &nodes {
             let id = match node {
@@ -392,10 +382,8 @@ impl Dav {
         body: &[u8],
     ) -> Result<DavResponse, Error> {
         let text = std::str::from_utf8(body).map_err(|_| match target {
-            Target::CalendarObject(..) => {
-                Error::Condition(StatusCode::FORBIDDEN, CalCondition::SupportedCalendarData.into())
-            }
-            _ => Error::Condition(StatusCode::FORBIDDEN, CardCondition::SupportedAddressData.into()),
+            Target::CalendarObject(..) => Error::Condition(StatusCode::FORBIDDEN, Condition::SupportedCalendarData),
+            _ => Error::Condition(StatusCode::FORBIDDEN, Condition::SupportedAddressData),
         })?;
         let expect = expect(headers);
         let (status_code, modseq, schedule_tag, changed) = match target {
@@ -420,16 +408,10 @@ impl Dav {
                 let scheduled = match self.groupware.put_event_scheduled(*owner, info.id, name, text, expect).await? {
                     Ok(scheduled) => scheduled,
                     Err(ScheduleRefusal::OrganizerChange) => {
-                        return Err(Error::Condition(
-                            StatusCode::FORBIDDEN,
-                            CalCondition::SameOrganizerInAllComponents.into(),
-                        ));
+                        return Err(Error::Condition(StatusCode::FORBIDDEN, Condition::SameOrganizerInAllComponents));
                     }
                     Err(ScheduleRefusal::AttendeeChange) => {
-                        return Err(Error::Condition(
-                            StatusCode::FORBIDDEN,
-                            CalCondition::AllowedAttendeeObjectChange.into(),
-                        ));
+                        return Err(Error::Condition(StatusCode::FORBIDDEN, Condition::AllowedAttendeeObjectChange));
                     }
                 };
                 let written = scheduled.written;
@@ -517,34 +499,33 @@ impl Dav {
         let wants_calendar = is_mkcalendar
             || props.iter().any(|prop| {
                 matches!(&prop.property, DavProperty::WebDav(WebDavProperty::ResourceType))
-                    && matches!(&prop.value, DavValue::ResourceTypes(types) if types.0.contains(&crate::proto::schema::property::ResourceType::Calendar))
+                    && matches!(&prop.value, DavValue::ResourceTypes(types) if types.contains(&ResourceType::Calendar))
             });
         match target {
             Target::Calendar(home, segment) if *home == user.id => {
                 if !wants_calendar {
-                    return Err(Error::Condition(StatusCode::FORBIDDEN, BaseCondition::ValidResourceType.into()));
+                    return Err(Error::Condition(StatusCode::FORBIDDEN, Condition::ValidResourceType));
                 }
                 if self.groupware.calendar_by_name(user.id, segment).await?.is_some() {
                     return Err(Error::Status(StatusCode::METHOD_NOT_ALLOWED));
                 }
                 let mut new =
                     NewCalendar { resource_name: Some(segment.clone()), name: segment.clone(), ..Default::default() };
-                let mut dead = DeadProperty::default();
+                let mut dead = DeadProperties::default();
                 for prop in &props {
                     apply_calendar_prop(prop, &mut new, &mut dead);
                 }
                 let id = self.groupware.create_calendar(user.id, new).await?;
-                if !dead.0.is_empty() {
-                    let value = serde_json::to_value(&dead).map_err(Error::other)?;
-                    self.groupware.set_calendar_dead_properties(user.id, id, value).await?;
+                if !dead.is_empty() {
+                    self.groupware.set_calendar_dead_properties(user.id, id, dead.to_stored()).await?;
                 }
             }
             Target::Addressbook(home, segment) if *home == user.id => {
                 let wants_addressbook = props.iter().any(|prop| {
-                    matches!(&prop.value, DavValue::ResourceTypes(types) if types.0.contains(&crate::proto::schema::property::ResourceType::AddressBook))
+                    matches!(&prop.value, DavValue::ResourceTypes(types) if types.contains(&ResourceType::AddressBook))
                 });
                 if is_mkcalendar || !wants_addressbook {
-                    return Err(Error::Condition(StatusCode::FORBIDDEN, BaseCondition::ValidResourceType.into()));
+                    return Err(Error::Condition(StatusCode::FORBIDDEN, Condition::ValidResourceType));
                 }
                 if self.groupware.addressbook_by_name(user.id, segment).await?.is_some() {
                     return Err(Error::Status(StatusCode::METHOD_NOT_ALLOWED));
@@ -560,11 +541,11 @@ impl Dav {
                             new.name = name.clone();
                         }
                         (
-                            DavProperty::CardDav(
-                                crate::proto::schema::property::CardDavProperty::AddressbookDescription,
-                            ),
+                            DavProperty::CardDav(CardDavProperty::Named(CardDavName::AddressbookDescription)),
                             DavValue::String(description),
-                        ) => new.description = Some(description.clone()),
+                        ) => {
+                            new.description = Some(description.clone());
+                        }
                         _ => {}
                     }
                 }
@@ -578,7 +559,7 @@ impl Dav {
         }
         let accepted: Vec<DavPropertyValue> =
             props.into_iter().map(|prop| DavPropertyValue::empty(prop.property)).collect();
-        Ok(xml(StatusCode::CREATED, MkColResponse::new(vec![PropStat::new_list(accepted)])))
+        Ok(xml(StatusCode::CREATED, MkColResponse(vec![PropStat::new_list(accepted)])))
     }
 
     async fn proppatch(&self, user: &PrincipalInfo, node: Node, update: PropertyUpdate) -> Result<DavResponse, Error> {
@@ -602,16 +583,18 @@ impl Dav {
                     timezone: info.timezone.clone(),
                     ..Default::default()
                 };
-                let mut dead: DeadProperty = serde_json::from_value(info.dead_properties.clone()).unwrap_or_default();
+                let mut dead = DeadProperties::from_stored(&info.dead_properties);
                 for prop in &update.set {
                     apply_calendar_prop(prop, &mut new, &mut dead);
                 }
                 for prop in &update.remove {
                     match prop {
-                        DavProperty::CalDav(CalDavProperty::CalendarDescription) => new.description = None,
-                        DavProperty::DeadProperty(tag) => {
-                            dead.remove_element(tag);
-                            if tag.name == "calendar-color" {
+                        DavProperty::CalDav(CalDavProperty::Named(CalDavName::CalendarDescription)) => {
+                            new.description = None;
+                        }
+                        DavProperty::Dead(name) => {
+                            dead.remove(&name.ns, &name.name);
+                            if name.name == "calendar-color" {
                                 new.color = None;
                             }
                         }
@@ -627,47 +610,40 @@ impl Dav {
                     ..Default::default()
                 };
                 self.groupware.update_calendar(owner, info.id, update).await?;
-                let value = serde_json::to_value(&dead).map_err(Error::other)?;
-                self.groupware.set_calendar_dead_properties(owner, info.id, value).await?;
+                self.groupware.set_calendar_dead_properties(owner, info.id, dead.to_stored()).await?;
             }
             Node::Collection(Collection::Addressbook { owner, info, level, .. }) => {
                 if level < Level::Admin {
                     return Err(Error::Forbidden);
                 }
                 let mut update_ = AddressBookUpdate::default();
-                let mut dead: DeadProperty = serde_json::from_value(info.dead_properties.clone()).unwrap_or_default();
+                let mut dead = DeadProperties::from_stored(&info.dead_properties);
                 for prop in &update.set {
                     match (&prop.property, &prop.value) {
                         (DavProperty::WebDav(WebDavProperty::DisplayName), DavValue::String(name)) => {
                             update_.name = Some(name.clone());
                         }
                         (
-                            DavProperty::CardDav(
-                                crate::proto::schema::property::CardDavProperty::AddressbookDescription,
-                            ),
+                            DavProperty::CardDav(CardDavProperty::Named(CardDavName::AddressbookDescription)),
                             DavValue::String(description),
-                        ) => update_.description = Some(Some(description.clone())),
-                        (DavProperty::DeadProperty(tag), DavValue::DeadProperty(value)) => {
-                            dead.remove_element(tag);
-                            dead.add_element(tag.clone(), value.0.clone());
+                        ) => {
+                            update_.description = Some(Some(description.clone()));
                         }
+                        (DavProperty::Dead(name), DavValue::Xml(xml)) => dead.set(&name.ns, &name.name, xml.clone()),
                         _ => {}
                     }
                 }
                 for prop in &update.remove {
                     match prop {
-                        DavProperty::CardDav(
-                            crate::proto::schema::property::CardDavProperty::AddressbookDescription,
-                        ) => {
+                        DavProperty::CardDav(CardDavProperty::Named(CardDavName::AddressbookDescription)) => {
                             update_.description = Some(None);
                         }
-                        DavProperty::DeadProperty(tag) => dead.remove_element(tag),
+                        DavProperty::Dead(name) => dead.remove(&name.ns, &name.name),
                         _ => {}
                     }
                 }
                 self.groupware.update_addressbook(owner, info.id, update_).await?;
-                let value = serde_json::to_value(&dead).map_err(Error::other)?;
-                self.groupware.set_addressbook_dead_properties(owner, info.id, value).await?;
+                self.groupware.set_addressbook_dead_properties(owner, info.id, dead.to_stored()).await?;
             }
             _ => {
                 let response =
@@ -753,7 +729,7 @@ impl Dav {
         &self,
         user: &PrincipalInfo,
         node: Node,
-        headers: &RequestHeaders<'_>,
+        headers: &RequestHeaders,
         report: Report,
     ) -> Result<DavResponse, Error> {
         match report {
@@ -833,9 +809,9 @@ impl Dav {
             Report::SyncCollection(sync) => {
                 let Node::Collection(collection) = &node else { return Err(Error::Status(StatusCode::FORBIDDEN)) };
                 let Some(id) = collection.id() else { return Err(Error::Status(StatusCode::FORBIDDEN)) };
-                let since = match sync.sync_token.as_deref().filter(|token| !token.is_empty()) {
+                let since = match sync.sync_token.as_deref() {
                     Some(token) => parse_sync_token(token)
-                        .ok_or(Error::Condition(StatusCode::FORBIDDEN, BaseCondition::ValidSyncToken.into()))?,
+                        .ok_or(Error::Condition(StatusCode::FORBIDDEN, Condition::ValidSyncToken))?,
                     None => 0,
                 };
                 let changes = self.groupware.sync(collection.owner(), id, since).await?;
@@ -872,14 +848,14 @@ impl Dav {
                 multistatus.set_sync_token(sync_token(changes.token));
                 Ok(xml(StatusCode::MULTI_STATUS, multistatus))
             }
-            Report::FreeBusyQuery(freebusy) => {
+            Report::FreeBusyQuery { range } => {
                 let Node::Collection(Collection::Calendar { owner, info, level, .. }) = &node else {
                     return Err(Error::Status(StatusCode::FORBIDDEN));
                 };
                 if *level < Level::Freebusy {
                     return Err(Error::Forbidden);
                 }
-                let range = freebusy.range.ok_or(Error::Status(StatusCode::BAD_REQUEST))?;
+                let range = range.ok_or(Error::Status(StatusCode::BAD_REQUEST))?;
                 let object = self.freebusy(*owner, Some(vec![info.id]), range, Vec::new()).await?;
                 let mut response = http::Response::new(object.to_string().into_bytes());
                 response
@@ -887,46 +863,33 @@ impl Dav {
                     .insert(header::CONTENT_TYPE, HeaderValue::from_static("text/calendar; charset=utf-8"));
                 Ok(response)
             }
-            Report::ExpandProperty(expand) => {
+            Report::ExpandProperty { properties } => {
                 // The properties asked for on the node itself; hrefs are not expanded further (OPEN).
-                let props: Vec<DavProperty> = expand.properties.into_iter().map(|item| item.property).collect();
-                let propfind = PropFind::Prop(props);
+                let propfind = PropFind::Prop(properties);
                 let response = self.response(user, &node, &propfind, &Content::default(), &mut 0).await?;
                 Ok(xml(StatusCode::MULTI_STATUS, MultiStatus::new(vec![response])))
             }
             Report::PrincipalPropertySearch(search) => {
-                let text = search
-                    .property_search
-                    .iter()
-                    .map(|search| search.match_.trim())
-                    .find(|text| !text.is_empty())
-                    .unwrap_or("");
+                let text =
+                    search.searches.iter().map(|(_, text)| text.trim()).find(|text| !text.is_empty()).unwrap_or("");
                 let principals = self.groupware.search_principals(user.tenant, text, 50).await?;
                 let propfind = PropFind::Prop(search.properties);
                 let nodes = principals.into_iter().map(Node::Principal).collect();
                 let multistatus = self.multistatus(user, nodes, &propfind, HashMap::new()).await?;
                 Ok(xml(StatusCode::MULTI_STATUS, multistatus))
             }
-            Report::PrincipalMatch(principal_match) => {
-                let propfind = PropFind::Prop(principal_match.properties);
+            Report::PrincipalMatch { properties } => {
+                let propfind = PropFind::Prop(properties);
                 let multistatus =
                     self.multistatus(user, vec![Node::Principal(user.clone())], &propfind, HashMap::new()).await?;
                 Ok(xml(StatusCode::MULTI_STATUS, multistatus))
             }
-            Report::AclPrincipalPropSet(_) => Ok(xml(StatusCode::MULTI_STATUS, MultiStatus::new(Vec::new()))),
+            Report::AclPrincipalPropSet { .. } => Ok(xml(StatusCode::MULTI_STATUS, MultiStatus::new(Vec::new()))),
             Report::PrincipalSearchPropertySet => {
-                use crate::proto::schema::{
-                    property::PrincipalProperty,
-                    response::{PrincipalSearchProperty, PrincipalSearchPropertySet},
-                };
-                let set = PrincipalSearchPropertySet::new(vec![
-                    PrincipalSearchProperty::new(DavProperty::WebDav(WebDavProperty::DisplayName), "Name"),
-                    PrincipalSearchProperty::new(
-                        DavProperty::Principal(PrincipalProperty::CalendarUserAddressSet),
-                        "Address",
-                    ),
-                ])
-                .with_namespace(Namespace::CalDav);
+                let set = PrincipalSearchPropertySet(vec![
+                    (WebDavProperty::DisplayName.into(), "Name"),
+                    (CalDavName::CalendarUserAddressSet.into(), "Address"),
+                ]);
                 let _ = headers;
                 Ok(xml(StatusCode::OK, set))
             }
@@ -965,7 +928,7 @@ impl Dav {
         &self,
         owner: Uuid,
         calendars: Option<Vec<Uuid>>,
-        range: crate::proto::types::TimeRange,
+        range: TimeRange,
         extra: Vec<calcard::icalendar::ICalendarEntry>,
     ) -> Result<calcard::icalendar::ICalendar, Error> {
         let zones: HashMap<Uuid, Option<String>> =
@@ -1003,54 +966,43 @@ fn timestamp(value: i64) -> Option<jiff::Timestamp> {
     if value == i64::MIN || value == i64::MAX { None } else { jiff::Timestamp::from_second(value).ok() }
 }
 
-fn set_namespaces(multistatus: &mut MultiStatus, propfind: &PropFind) {
-    if let PropFind::Prop(props) | PropFind::AllProp(props) = propfind {
-        for prop in props {
-            multistatus.set_namespace(prop.namespace());
-        }
-    }
-    multistatus.set_namespace(Namespace::CalDav);
-    multistatus.set_namespace(Namespace::CardDav);
-    multistatus.set_namespace(Namespace::CalendarServer);
-}
-
 /// A property of `MKCALENDAR` or `PROPPATCH` on a calendar: the known ones change the calendar, the rest are kept
 /// as dead properties. Apple's colour and order also set the calendar's own.
-fn apply_calendar_prop(prop: &DavPropertyValue, new: &mut NewCalendar, dead: &mut DeadProperty) {
+fn apply_calendar_prop(prop: &DavPropertyValue, new: &mut NewCalendar, dead: &mut DeadProperties) {
     match (&prop.property, &prop.value) {
         (DavProperty::WebDav(WebDavProperty::DisplayName), DavValue::String(name)) => new.name = name.clone(),
-        (DavProperty::CalDav(CalDavProperty::CalendarDescription), DavValue::String(description)) => {
-            new.description = Some(description.clone());
-        }
-        (DavProperty::CalDav(CalDavProperty::TimezoneId), DavValue::String(tz)) => new.timezone = Some(tz.clone()),
-        (DavProperty::CalDav(CalDavProperty::CalendarTimezone), DavValue::ICalendar(ical)) => {
-            if let Some(tz) = ical
-                .components
-                .iter()
-                .find(|comp| comp.component_type == calcard::icalendar::ICalendarComponentType::VTimezone)
-                .and_then(|comp| comp.property(&calcard::icalendar::ICalendarProperty::Tzid))
-                .and_then(|entry| entry.values.first())
-                .and_then(|value| value.as_text())
-                .filter(|name| calcard::common::timezone::Tz::iana(name).is_some())
-            {
-                new.timezone = Some(tz.to_owned());
+        (DavProperty::CalDav(CalDavProperty::Named(name)), value) => match (name, value) {
+            (CalDavName::CalendarDescription, DavValue::String(description)) => {
+                new.description = Some(description.clone());
             }
-        }
-        (DavProperty::CalDav(CalDavProperty::SupportedCalendarComponentSet), DavValue::Components(components)) => {
-            new.components = components.0.iter().map(|comp| comp.0.as_str().to_owned()).collect();
-        }
-        (DavProperty::DeadProperty(tag), DavValue::DeadProperty(value)) => {
-            let text = value.0.iter().find_map(|item| match item {
-                DeadPropertyTag::Text(text) => Some(text.trim().to_owned()),
-                _ => None,
-            });
-            match (tag.name.as_str(), text) {
+            (CalDavName::TimezoneId, DavValue::String(tz)) => new.timezone = Some(tz.trim().to_owned()),
+            (CalDavName::CalendarTimezone, DavValue::Data(text)) => {
+                let calcard::Entry::ICalendar(ical) = calcard::Parser::new(text).entry() else { return };
+                if let Some(tz) = ical
+                    .components
+                    .iter()
+                    .find(|comp| comp.component_type == calcard::icalendar::ICalendarComponentType::VTimezone)
+                    .and_then(|comp| comp.property(&calcard::icalendar::ICalendarProperty::Tzid))
+                    .and_then(|entry| entry.values.first())
+                    .and_then(|value| value.as_text())
+                    .filter(|name| calcard::common::timezone::Tz::iana(name).is_some())
+                {
+                    new.timezone = Some(tz.to_owned());
+                }
+            }
+            (CalDavName::SupportedCalendarComponentSet, DavValue::Components(components)) => {
+                new.components = components.clone();
+            }
+            _ => {}
+        },
+        (DavProperty::Dead(name), DavValue::Xml(xml)) => {
+            dead.set(&name.ns, &name.name, xml.clone());
+            let text = dead.get(&name.ns, &name.name).and_then(|property| property.text());
+            match (name.name.as_str(), text) {
                 ("calendar-color", Some(color)) => new.color = Some(color),
                 ("calendar-order", Some(order)) => new.sort_order = order.parse().unwrap_or(new.sort_order),
                 _ => {}
             }
-            dead.remove_element(tag);
-            dead.add_element(tag.clone(), value.0.clone());
         }
         _ => {}
     }

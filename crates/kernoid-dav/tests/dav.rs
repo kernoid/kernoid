@@ -284,3 +284,78 @@ async fn contacts_and_shared_calendars(pool: PgPool) {
     assert!(body.contains("2.0;Success") && body.contains("20261110T100000Z/20261110T110000Z"), "{body}");
     assert!(body.contains("3.7;Invalid calendar user"), "{body}");
 }
+
+#[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
+async fn properties_reports_and_refused_bodies(pool: PgPool) {
+    let setup = setup(pool).await;
+    let alice = setup.account("alice").await;
+    let home = format!("/dav/calendars/{alice}/");
+    let books = format!("/dav/addressbooks/{alice}/");
+
+    // An address book by extended MKCOL, answered with an mkcol-response.
+    let response = setup
+        .request(
+            alice,
+            "MKCOL",
+            &format!("{books}team/"),
+            &[],
+            r#"<D:mkcol xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:carddav"><D:set><D:prop>
+                 <D:resourcetype><D:collection/><C:addressbook/></D:resourcetype><D:displayname>Team</D:displayname>
+                 <C:addressbook-description>Colleagues</C:addressbook-description></D:prop></D:set></D:mkcol>"#,
+        )
+        .await;
+    assert_eq!(response.status(), StatusCode::CREATED, "{}", text(&response));
+    assert!(text(&response).contains("mkcol-response"), "{}", text(&response));
+
+    // A property of the client's own, set, read, listed by allprop and propname, removed.
+    let calendar = format!("{home}work/");
+    setup.request(alice, "MKCALENDAR", &calendar, &[], "").await;
+    let set = r#"<D:propertyupdate xmlns:D="DAV:" xmlns:X="urn:example:x" xmlns:A="http://apple.com/ns/ical/">
+        <D:set><D:prop><X:note><X:b>bold &amp; more</X:b></X:note><A:calendar-order>3</A:calendar-order></D:prop></D:set></D:propertyupdate>"#;
+    let response = setup.request(alice, "PROPPATCH", &calendar, &[], set).await;
+    assert_eq!(response.status(), StatusCode::MULTI_STATUS);
+    assert!(text(&response).contains("200 OK"), "{}", text(&response));
+    let get = r#"<D:propfind xmlns:D="DAV:" xmlns:X="urn:example:x" xmlns:A="http://apple.com/ns/ical/"><D:prop><X:note/><A:calendar-order/><X:missing/></D:prop></D:propfind>"#;
+    let body = text(&setup.request(alice, "PROPFIND", &calendar, &[("depth", "0")], get).await);
+    assert!(
+        body.contains("<x:note xmlns:x=\"urn:example:x\"><b xmlns=\"urn:example:x\">bold &amp; more</b></x:note>"),
+        "{body}"
+    );
+    assert!(body.contains("<A:calendar-order>3</A:calendar-order>") && body.contains("404 Not Found"), "{body}");
+    let all = r#"<D:propfind xmlns:D="DAV:"><D:allprop/></D:propfind>"#;
+    let body = text(&setup.request(alice, "PROPFIND", &calendar, &[("depth", "0")], all).await);
+    assert!(body.contains("bold &amp; more") && body.contains("<D:displayname>work</D:displayname>"), "{body}");
+    let names = r#"<D:propfind xmlns:D="DAV:"><D:propname/></D:propfind>"#;
+    let body = text(&setup.request(alice, "PROPFIND", &calendar, &[("depth", "0")], names).await);
+    assert!(body.contains("<D:sync-token/>") && body.contains("<CS:getctag/>"), "{body}");
+    let remove = r#"<D:propertyupdate xmlns:D="DAV:" xmlns:X="urn:example:x"><D:remove><D:prop><X:note/></D:prop></D:remove></D:propertyupdate>"#;
+    setup.request(alice, "PROPPATCH", &calendar, &[], remove).await;
+    let body = text(&setup.request(alice, "PROPFIND", &calendar, &[("depth", "0")], get).await);
+    assert!(!body.contains("bold"), "{body}");
+
+    // ACL properties and the reports a calendar supports.
+    let acl = r#"<D:propfind xmlns:D="DAV:"><D:prop><D:current-user-privilege-set/><D:supported-report-set/><D:acl/><D:supported-privilege-set/></D:prop></D:propfind>"#;
+    let body = text(&setup.request(alice, "PROPFIND", &calendar, &[("depth", "0")], acl).await);
+    assert!(body.contains("<D:privilege><D:write-content/></D:privilege>"), "{body}");
+    assert!(body.contains("<D:report><C:calendar-query/></D:report>") && body.contains("<D:protected/>"), "{body}");
+
+    // expand-property and principal-property-search.
+    let expand = r#"<D:expand-property xmlns:D="DAV:"><D:property name="current-user-principal"/></D:expand-property>"#;
+    let body = text(&setup.request(alice, "REPORT", &format!("/dav/principals/{alice}/"), &[], expand).await);
+    assert!(body.contains(&format!("<D:current-user-principal><D:href>/dav/principals/{alice}/</D:href>")), "{body}");
+    let search = r#"<D:principal-property-search xmlns:D="DAV:"><D:property-search><D:prop><D:displayname/></D:prop>
+        <D:match>ali</D:match></D:property-search><D:prop><D:displayname/></D:prop></D:principal-property-search>"#;
+    let body = text(&setup.request(alice, "REPORT", "/dav/principals/", &[], search).await);
+    assert!(body.contains(&format!("/dav/principals/{alice}/")), "{body}");
+
+    // A report kernoid does not know, a document type, a body that is not XML.
+    let response = setup.request(alice, "REPORT", &calendar, &[], r#"<D:version-tree xmlns:D="DAV:"/>"#).await;
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    assert!(text(&response).contains("supported-report"));
+    let doctype =
+        r#"<?xml version="1.0"?><!DOCTYPE d [<!ENTITY e "x">]><D:propfind xmlns:D="DAV:"><D:allprop/></D:propfind>"#;
+    let response = setup.request(alice, "PROPFIND", &calendar, &[("depth", "0")], doctype).await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let response = setup.request(alice, "PROPFIND", &calendar, &[("depth", "0")], "<D:propfind").await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}

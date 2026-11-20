@@ -192,7 +192,7 @@ the draft means to replace, but what many programs speak today. Logging in is as
 - **Locks** (`file_locks`): write locks, exclusive or shared, on a node or a directory with all below it, for at most
   an hour unless refreshed. A change to what a lock holds needs its token in the `If` header (423 otherwise). A lock
   on a free name makes an empty file there. Only WebDAV honours locks.
-- The XML is Stalwart's dav-proto, as for CalDAV (RFC 0004, 8.1); media types of files sent without one are
+- The XML and the headers are `kernoid_dav::proto`'s, as for CalDAV (RFC 0004, 8.1); media types of files sent without one are
   guessed from the name.
 
 ## 10. The web app
