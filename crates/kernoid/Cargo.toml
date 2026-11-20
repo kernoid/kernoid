@@ -46,4 +46,4 @@ uuid = "1.28.0"
 
 [target.'cfg(unix)'.dependencies]
 # The terminal's echo off while a secret is typed (`no_echo`).
-rustix = { version = "1.1.5", default-features = false, features = ["std", "termios"] }
+rustix = { version = "1.1.6", default-features = false, features = ["std", "termios"] }
