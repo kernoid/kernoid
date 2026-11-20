@@ -96,7 +96,7 @@ two different checks, or with a passkey (possession plus PIN or biometrics).
 | Factor | Set up | Check |
 |---|---|---|
 | TOTP (RFC 6238, six digits, 30 s) | `POST /v1/account/totp`, then `/v1/account/totp/confirm` | `POST /v1/sessions/current/totp` |
-| Passkey (WebAuthn, through webauthn-rs) | `POST /v1/account/passkeys/start`, `/finish` | `POST /v1/sessions/current/passkey/start`, `/finish` |
+| Passkey (WebAuthn, verified by kernoid) | `POST /v1/account/passkeys/start`, `/finish` | `POST /v1/sessions/current/passkey/start`, `/finish` |
 | Recovery codes (ten, each once) | `POST /v1/account/recovery-codes` | `POST /v1/sessions/current/recovery` |
 
 Setting up or removing a factor needs a session from the last 15 minutes – otherwise `401` with the problem type

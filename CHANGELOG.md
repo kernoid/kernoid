@@ -16,6 +16,11 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   self-hosted storage by path as before. An endpoint over plain HTTP without `allow_http` is refused at start.
   `kernoid-blob`: `ObjectBlobs::new` takes an `Arc<dyn Objects>` (`MemoryObjects`, `S3Objects`) – no more
   `object_store` re-export.
+- **Passkeys verified by kernoid itself** (W3C WebAuthn Level 3: client and authenticator data, COSE keys ES256,
+  EdDSA/Ed25519 and RS256, signatures through aws-lc-rs, a CBOR decoder of its own) in place of webauthn-rs – so no
+  OpenSSL any more: building needs neither `pkg-config` nor `libssl-dev`. Passkeys registered before keep working and
+  are written in kernoid's form at their next use; a ceremony started before the upgrade (five minutes at most) has to
+  be started again. Registration now prefers a discoverable passkey (`residentKey: preferred`) and offers EdDSA.
 
 ## [0.5.1] – 2026-11-20
 

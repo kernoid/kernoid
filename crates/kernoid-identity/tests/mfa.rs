@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! TOTP and passkeys against PostgreSQL; set `DATABASE_URL` as for the other crates' tests. Passkeys are made by
-//! webauthn-authenticator-rs' software token.
+//! kernoid's software passkey (`passkey::soft`).
 
 mod common;
 
@@ -9,16 +9,17 @@ use common::{WHO, tenant_with};
 use kernoid_events::EventStore;
 use kernoid_identity::{
     Address, Identity, IdentityError,
-    passkey::RelyingParty,
+    passkey::{
+        RelyingParty,
+        soft::SoftPasskey,
+        webauthn::{EDDSA, ES256, RS256},
+    },
     session::{ClientMeta, FAILURES_PER_NAME},
 };
 use kernoid_store::{MainKeys, crypto::Key};
 use serde_json::Value;
 use sqlx::PgPool;
 use uuid::Uuid;
-use webauthn_authenticator_rs::{WebauthnAuthenticator, softpasskey::SoftPasskey};
-use webauthn_rs::prelude::{CreationChallengeResponse, RequestChallengeResponse};
-use webauthn_rs_proto::AllowCredentials;
 
 const PASSWORD: &str = "correct horse battery staple";
 
@@ -159,32 +160,28 @@ fn rp() -> RelyingParty {
     }
 }
 
-/// Registers a passkey with the software token; returns the token and the credential id.
-async fn register(s: &Setup, authenticator: &mut WebauthnAuthenticator<SoftPasskey>) -> Vec<u8> {
+const ORIGIN: &str = "https://login.firma.de";
+
+/// Registers a passkey with the software passkey.
+async fn register(s: &Setup, authenticator: &mut SoftPasskey) {
     let challenge = s.identity.start_passkey_registration(&rp(), s.instance, &s.token).await.unwrap();
-    let options: CreationChallengeResponse = serde_json::from_value(challenge.options).unwrap();
-    let credential = authenticator.do_registration(rp().origins[0].clone(), options).unwrap();
-    let raw_id = credential.raw_id.to_vec();
-    let answer = serde_json::to_value(&credential).unwrap();
+    let answer = authenticator.register(ORIGIN, &challenge.options);
     s.identity
         .finish_passkey_registration(&rp(), s.instance, &s.token, &challenge.id, "Laptop", &answer)
         .await
         .unwrap();
-    raw_id
 }
 
 #[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
 async fn passkeys_register_and_check(pool: PgPool) {
     let s = setup(&pool).await;
-    let mut authenticator = WebauthnAuthenticator::new(SoftPasskey::new(true));
+    let mut authenticator = SoftPasskey::new(ES256);
     register(&s, &mut authenticator).await;
     let listed = s.identity.passkeys(s.instance, &s.token).await.unwrap();
     assert_eq!((listed.len(), listed[0].name.as_str()), (1, "Laptop"));
 
     let challenge = s.identity.start_passkey_check(&rp(), s.instance, &s.token).await.unwrap();
-    let options: RequestChallengeResponse = serde_json::from_value(challenge.options).unwrap();
-    let answer =
-        serde_json::to_value(authenticator.do_authentication(rp().origins[0].clone(), options).unwrap()).unwrap();
+    let answer = authenticator.authenticate(ORIGIN, &challenge.options);
     let session = s.identity.finish_passkey_check(&rp(), s.instance, &s.token, &challenge.id, &answer).await.unwrap();
     assert_eq!(session.checks, ["password", "passkey"]);
     // A challenge is used once.
@@ -194,15 +191,20 @@ async fn passkeys_register_and_check(pool: PgPool) {
     ));
     // Another origin – a phishing page – does not pass.
     let challenge = s.identity.start_passkey_check(&rp(), s.instance, &s.token).await.unwrap();
-    let options: RequestChallengeResponse = serde_json::from_value(challenge.options).unwrap();
-    let phished = authenticator.do_authentication("https://login.firma.de.evil.example".parse().unwrap(), options);
-    if let Ok(phished) = phished {
-        let answer = serde_json::to_value(phished).unwrap();
-        assert!(matches!(
-            s.identity.finish_passkey_check(&rp(), s.instance, &s.token, &challenge.id, &answer).await,
-            Err(IdentityError::PasskeyRejected)
-        ));
-    }
+    let answer = authenticator.authenticate("https://login.firma.de.evil.example", &challenge.options);
+    assert!(matches!(
+        s.identity.finish_passkey_check(&rp(), s.instance, &s.token, &challenge.id, &answer).await,
+        Err(IdentityError::PasskeyRejected)
+    ));
+    // Another account's passkey – a user handle that is not this account – does not pass either.
+    let challenge = s.identity.start_passkey_check(&rp(), s.instance, &s.token).await.unwrap();
+    authenticator.set_user_handle(Some(Uuid::now_v7().as_bytes().to_vec()));
+    let answer = authenticator.authenticate(ORIGIN, &challenge.options);
+    assert!(matches!(
+        s.identity.finish_passkey_check(&rp(), s.instance, &s.token, &challenge.id, &answer).await,
+        Err(IdentityError::PasskeyRejected)
+    ));
+    authenticator.set_user_handle(Some(s.account.as_bytes().to_vec()));
 
     let id = listed[0].id;
     s.identity.remove_passkey(s.instance, &s.token, id).await.unwrap();
@@ -216,19 +218,18 @@ async fn passkeys_register_and_check(pool: PgPool) {
 #[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
 async fn passkey_login_without_password_or_address(pool: PgPool) {
     let s = setup(&pool).await;
-    let mut authenticator = WebauthnAuthenticator::new(SoftPasskey::new(true));
-    let credential_id = register(&s, &mut authenticator).await;
+    let mut authenticator = SoftPasskey::new(EDDSA);
+    register(&s, &mut authenticator).await;
 
-    let login = |authenticator: &mut WebauthnAuthenticator<SoftPasskey>, options: Value, user: Uuid| {
-        // A discoverable passkey: the device knows its credential and the user handle. The software token does not
-        // keep resident keys, so the test hands it the credential and sets the handle the device would send.
-        let mut options: RequestChallengeResponse = serde_json::from_value(options).unwrap();
-        assert!(options.public_key.allow_credentials.is_empty(), "nothing tells which accounts exist");
-        options.public_key.allow_credentials =
-            vec![AllowCredentials { type_: "public-key".into(), id: credential_id.clone().into(), transports: None }];
-        let mut answer = authenticator.do_authentication(rp().origins[0].clone(), options).unwrap();
-        answer.response.user_handle = Some(user.as_bytes().to_vec().into());
-        serde_json::to_value(answer).unwrap()
+    let login = |authenticator: &mut SoftPasskey, options: Value, user: Uuid| {
+        // A discoverable passkey: the device knows its credential and sends the user handle it was registered with.
+        assert_eq!(
+            options["publicKey"]["allowCredentials"],
+            serde_json::json!([]),
+            "nothing tells which accounts exist"
+        );
+        authenticator.set_user_handle(Some(user.as_bytes().to_vec()));
+        authenticator.authenticate(ORIGIN, &options)
     };
 
     let challenge = s.identity.start_passkey_login(&rp(), s.instance, &ClientMeta::default()).await.unwrap();
@@ -253,6 +254,54 @@ async fn passkey_login_without_password_or_address(pool: PgPool) {
     // An operator resets the second factors of someone who lost their device.
     s.identity.reset_second_factors(s.account, "operator").await.unwrap();
     assert!(s.identity.passkeys(s.instance, &s.token).await.unwrap().is_empty());
+}
+
+/// Passkeys stored by webauthn-rs, which kernoid used up to 0.5.1, keep working – and are written in kernoid's form at
+/// their next use.
+#[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
+async fn passkeys_stored_by_webauthn_rs_keep_working(pool: PgPool) {
+    use kernoid_identity::passkey::webauthn::{PublicKey, encode};
+    let s = setup(&pool).await;
+    let mut authenticator = SoftPasskey::new(RS256);
+    let PublicKey::Rs256 { n, e } = authenticator.public_key() else { unreachable!() };
+    // webauthn-rs 0.5's `Passkey` as it serialised it (binary values in base64url, RSA's exponent as three bytes).
+    let stored = serde_json::json!({ "cred": {
+        "cred_id": encode(authenticator.credential_id()),
+        "cred": { "type_": "RS256", "key": { "RSA": { "n": encode(&n), "e": e } } },
+        "counter": 0, "transports": null, "user_verified": true, "backup_eligible": false, "backup_state": false,
+        "registration_policy": "required",
+        "extensions": { "cred_protect": "Ignored", "hmac_create_secret": "NotRequested", "appid": "NotRequested", "cred_props": "Ignored" },
+        "attestation": { "data": "None", "metadata": "None" }, "attestation_format": "none",
+    }});
+    sqlx::query!(
+        "INSERT INTO account_passkeys (id, account_id, name, credential_id, credential) VALUES ($1, $2, 'Old', $3, $4)",
+        Uuid::now_v7(),
+        s.account,
+        authenticator.credential_id(),
+        stored,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    authenticator.set_user_handle(None);
+
+    let challenge = s.identity.start_passkey_check(&rp(), s.instance, &s.token).await.unwrap();
+    let answer = authenticator.authenticate(ORIGIN, &challenge.options);
+    let session = s.identity.finish_passkey_check(&rp(), s.instance, &s.token, &challenge.id, &answer).await.unwrap();
+    assert_eq!(session.checks, ["password", "passkey"]);
+    let rewritten = sqlx::query_scalar!("SELECT credential FROM account_passkeys").fetch_one(&pool).await.unwrap();
+    assert_eq!((rewritten["kernoid"].as_u64(), rewritten["counter"].as_u64()), (Some(1), Some(1)));
+
+    // And the login with it, now in kernoid's form.
+    let challenge = s.identity.start_passkey_login(&rp(), s.instance, &ClientMeta::default()).await.unwrap();
+    authenticator.set_user_handle(Some(s.account.as_bytes().to_vec()));
+    let answer = authenticator.authenticate(ORIGIN, &challenge.options);
+    let created = s
+        .identity
+        .finish_passkey_login(&rp(), s.instance, &challenge.id, &answer, None, &ClientMeta::default())
+        .await
+        .unwrap();
+    assert_eq!(created.account.id, s.account);
 }
 
 #[sqlx::test(migrator = "kernoid_store::MIGRATOR")]

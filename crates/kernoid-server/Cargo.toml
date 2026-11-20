@@ -81,7 +81,8 @@ aws-lc-rs = "1.18.2"
 http-body-util = "0.1.5"
 kernoid-config = { path = "../kernoid-config" }
 kernoid-events = { path = "../kernoid-events" }
-kernoid-identity = { path = "../kernoid-identity" }
+# The software passkey of the tests (`passkey::soft`).
+kernoid-identity = { path = "../kernoid-identity", features = ["soft-passkey"] }
 kernoid-oidc = { path = "../kernoid-oidc" }
 kernoid-store = { path = "../kernoid-store" }
 rcgen = "0.14.10"
@@ -96,6 +97,3 @@ tokio-util = "0.7.20"
 tower = { version = "0.5.3", features = ["util"] }
 url = "2.5.8"
 uuid = { version = "1.28.0", features = ["v4"] }
-webauthn-authenticator-rs = { version = "0.5.5", features = ["softpasskey"] }
-webauthn-rs = { version = "0.5.5", features = ["conditional-ui", "danger-allow-state-serialisation"] }
-webauthn-rs-proto = "0.5.5"

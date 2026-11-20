@@ -12,6 +12,7 @@ use axum::{
 use http_body_util::BodyExt;
 use kernoid_config::{Blob, Http};
 use kernoid_events::EventStore;
+use kernoid_identity::passkey::{soft::SoftPasskey, webauthn::ES256};
 use kernoid_identity::{Address, DomainName, Identity};
 use kernoid_oidc::Oidc;
 use kernoid_server::{AppState, router};
@@ -19,9 +20,6 @@ use kernoid_store::{BlobStore, MainKeys, TenantKeys, crypto::Key};
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower::ServiceExt;
-use webauthn_authenticator_rs::{WebauthnAuthenticator, softpasskey::SoftPasskey};
-use webauthn_rs::prelude::{CreationChallengeResponse, RequestChallengeResponse};
-use webauthn_rs_proto::AllowCredentials;
 
 const HOST: &str = "login.firma.de";
 const PASSWORD: &str = "correct horse battery staple";
@@ -123,15 +121,13 @@ async fn totp_over_http(pool: PgPool) {
 async fn passkeys_over_http(pool: PgPool) {
     let (app, alice) = app(&pool).await;
     let token = login(&app).await;
-    let origin: url::Url = "https://login.firma.de".parse().unwrap();
-    let mut authenticator = WebauthnAuthenticator::new(SoftPasskey::new(true));
+    let origin = "https://login.firma.de";
+    let mut authenticator = SoftPasskey::new(ES256);
 
     let (status, start) = call(&app, "POST", "/v1/account/passkeys/start", Some(&token), None).await;
     assert_eq!(status, StatusCode::OK);
-    let options: CreationChallengeResponse = serde_json::from_value(start["options"].clone()).unwrap();
-    assert_eq!(options.public_key.rp.id, HOST, "the instance is the relying party");
-    let credential = authenticator.do_registration(origin.clone(), options).unwrap();
-    let credential_id = credential.raw_id.to_vec();
+    assert_eq!(start["options"]["publicKey"]["rp"]["id"], HOST, "the instance is the relying party");
+    let credential = authenticator.register(origin, &start["options"]);
     let answer = json!({ "challenge_id": start["challenge_id"], "name": "Laptop", "credential": credential });
     let (status, created) = call(&app, "POST", "/v1/account/passkeys/finish", Some(&token), Some(answer)).await;
     assert_eq!(status, StatusCode::CREATED);
@@ -141,12 +137,11 @@ async fn passkeys_over_http(pool: PgPool) {
 
     // Logging in with the passkey alone.
     let (_, start) = call(&app, "POST", "/v1/sessions/passkey/start", None, None).await;
-    let mut options: RequestChallengeResponse = serde_json::from_value(start["options"].clone()).unwrap();
-    assert!(options.public_key.allow_credentials.is_empty());
-    options.public_key.allow_credentials =
-        vec![AllowCredentials { type_: "public-key".into(), id: credential_id.into(), transports: None }];
-    let mut assertion = authenticator.do_authentication(origin, options).unwrap();
-    assertion.response.user_handle = Some(alice.as_bytes().to_vec().into());
+    assert_eq!(start["options"]["publicKey"]["allowCredentials"], json!([]));
+    assert_eq!(start["options"]["mediation"], "conditional");
+    // A discoverable passkey sends the handle it was registered with: the account's id.
+    let assertion = authenticator.authenticate(origin, &start["options"]);
+    assert_eq!(assertion["response"]["userHandle"], kernoid_identity::passkey::webauthn::encode(alice.as_bytes()));
     let answer = json!({ "challenge_id": start["challenge_id"], "credential": assertion });
     let (status, session) = call(&app, "POST", "/v1/sessions/passkey/finish", None, Some(answer.clone())).await;
     assert_eq!(status, StatusCode::CREATED);

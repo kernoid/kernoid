@@ -320,16 +320,19 @@ running (`pg_snapshot_xmin`), which needs no locks between writers and readers.
 - **TOTP** (RFC 6238): HMAC-SHA1, six digits, 30-second steps, one step of tolerance; every code works once (the last
   accepted step is kept); failed codes limited like passwords. The secret (160 bits) is sealed with the main key;
   `account.totp_enabled` carries none of it.
-- **Passkeys** are verified by webauthn-rs (Kanidm project, MPL-2.0) – kernoid parses no WebAuthn structures itself.
+- **Passkeys** are verified by kernoid itself (`kernoid_identity::passkey::webauthn`, from W3C WebAuthn Level 3): client
+  data, authenticator data, COSE keys (ES256, EdDSA with Ed25519, RS256 – RFC 9052/9053) with a CBOR decoder of its own
+  (RFC 8949, definite lengths only), signatures through aws-lc-rs; part of the external audit before 1.0. Up to 0.5.1
+  webauthn-rs did it; the passkeys it stored still read and are written in kernoid's form at their next use.
   User verification is required; the relying party is the instance: its **RP ID** is `passkey_rp_id`
   (`instance.passkey_rp_id_set`), which starts as the instance's first domain and does not follow the primary domain,
   and its origins are every domain of the instance and its own login UI. The RP ID may be set to a domain of the
   instance or a parent domain of one; a domain the RP ID needs cannot be removed. kernoid answers
   `/.well-known/webauthn` with these origins (WebAuthn Level 3, related origins), for browsers that support it.
-  Registration asks for no attestation (`none`): kernoid accepts any authenticator with user verification and does
-  not check models;
+  Registration asks for no attestation (`none`): kernoid accepts any authenticator with user verification, does not
+  check models and verifies no attestation statement (WebAuthn's attestation type None);
   challenges and their state stay on the server for five minutes and are used once; counters are kept, so a cloned
-  key is refused. webauthn-rs brings OpenSSL as a second cryptographic library next to aws-lc-rs.
+  key is refused. No OpenSSL: aws-lc-rs is the one cryptographic library.
 - **Requiring a second factor** per tenant (`tenant.mfa_requirement_set`) or per application
   (`application.mfa_requirement_set`). A session passes with two different checks, or a passkey (possession plus PIN
   or biometrics). It is enforced where it matters: finishing an auth request is refused with the problem type

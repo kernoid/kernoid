@@ -63,8 +63,7 @@ async fn setup(pool: &PgPool, open: bool) -> Setup {
     .await
     .unwrap();
     let founder = Founder { tenant, account };
-    let blobs =
-        BlobStore::in_memory(Arc::new(TenantKeys::new(pool.clone(), Key::random().unwrap())));
+    let blobs = BlobStore::in_memory(Arc::new(TenantKeys::new(pool.clone(), Key::random().unwrap())));
     let relay = Relay::new(
         pool.clone(),
         blobs,

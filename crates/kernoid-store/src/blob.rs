@@ -228,9 +228,6 @@ mod tests {
         for key in ["", "/x", "x/", "a//b", "..", "a/../b", "./a"] {
             assert!(matches!(path(tenant, key), Err(BlobError::InvalidKey(_))), "{key:?}");
         }
-        assert_eq!(
-            path(tenant, "files/a.txt").unwrap(),
-            "tenants/00000000-0000-0000-0000-000000000000/files/a.txt"
-        );
+        assert_eq!(path(tenant, "files/a.txt").unwrap(), "tenants/00000000-0000-0000-0000-000000000000/files/a.txt");
     }
 }

@@ -6,7 +6,9 @@ use std::sync::Arc;
 
 use bytes::Bytes;
 use kernoid_config::Blob;
-use kernoid_store::{BlobError, BlobStore, KeyError, MainKeys, MemoryObjects, Objects, TenantKeys, WrapStatus, crypto::Key};
+use kernoid_store::{
+    BlobError, BlobStore, KeyError, MainKeys, MemoryObjects, Objects, TenantKeys, WrapStatus, crypto::Key,
+};
 use sqlx::PgPool;
 use uuid::Uuid;
 
