@@ -22,7 +22,6 @@ use kernoid_crypt::{
 use kernoid_log::{Clock, Event};
 use kernoid_relay::{BoxFuture, Founder, Founders, READ_HEADER, Relay, WRITE_HEADER, router};
 use kernoid_store::{BlobStore, TenantKeys, crypto::Key};
-use object_store::memory::InMemory;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower::ServiceExt;
@@ -57,7 +56,7 @@ async fn setup(pool: &PgPool) -> Router {
     .await
     .unwrap();
     let blobs =
-        BlobStore::new(Arc::new(InMemory::new()), Arc::new(TenantKeys::new(pool.clone(), Key::random().unwrap())));
+        BlobStore::in_memory(Arc::new(TenantKeys::new(pool.clone(), Key::random().unwrap())));
     let relay =
         Relay::new(pool.clone(), blobs, &["kernoid".to_owned()], None, Arc::new(Accounts(Founder { tenant, account })));
     router(relay)

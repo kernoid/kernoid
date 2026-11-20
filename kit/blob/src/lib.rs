@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //! Originals stored by their SHA-256 hash, on any storage: in memory, in a folder, and – with the feature `object`
-//! or `s3` – in an object store such as S3. OPEN: kernoid.
+//! or `s3` – in object storage such as S3 ([`objects`], kernoid's own client, which kernoid's server uses too).
 //!
 //! A store keeps bytes under the hash of those bytes and checks them on every read, so damaged or changed bytes are
 //! reported, never returned. Storing the same bytes again changes nothing. Whether the bytes are plain or an
@@ -24,14 +24,14 @@ use sha2::{Digest, Sha256};
 
 #[cfg(feature = "object")]
 mod object;
+#[cfg(feature = "object")]
+pub mod objects;
 
 /// The bytes type of [`ObjectBlobs`]' async calls.
 #[cfg(feature = "object")]
 pub use bytes::Bytes;
 #[cfg(feature = "object")]
 pub use object::{ByteStream, ObjectBlobs, S3Config};
-#[cfg(feature = "object")]
-pub use object_store;
 
 /// Why a store failed.
 #[derive(Debug, thiserror::Error)]

@@ -15,7 +15,6 @@ use kernoid_identity::{
     tenant::{E2ePolicy, E2eRule},
 };
 use kernoid_store::{BlobStore, MainKeys, TenantKeys, crypto::Key};
-use object_store::memory::InMemory;
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -44,7 +43,7 @@ async fn setup(pool: PgPool) -> (Identity, Files, Uuid) {
         .insert(format!("{CHALLENGE_LABEL}.firma.example"), vec![format!("kernoid-verification={token}")]);
     identity.verify_tenant_domain(instance, tenant, &domain, &dns, WHO).await.unwrap();
     let keys = Arc::new(TenantKeys::with_main_keys(pool.clone(), MainKeys::new(Key::random().unwrap(), Vec::new())));
-    let files = Files::new(pool, BlobStore::new(Arc::new(InMemory::new()), keys), Limits::default());
+    let files = Files::new(pool, BlobStore::in_memory(keys), Limits::default());
     (identity, files, tenant)
 }
 

@@ -16,7 +16,6 @@ use kernoid_identity::{Address, CHALLENGE_LABEL, DomainName, Identity, TxtLookup
 use kernoid_jmap::{Caller, Jmap};
 use kernoid_mail::{Delivered, Delivery, Limits, Mail};
 use kernoid_store::{BlobStore, MainKeys, TenantKeys, crypto::Key};
-use object_store::memory::InMemory;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 
@@ -77,7 +76,7 @@ async fn mail_arrives_encrypted_to_the_key_the_client_made(pool: PgPool) {
         .insert(format!("{CHALLENGE_LABEL}.firma.example"), vec![format!("kernoid-verification={token}")]);
     identity.verify_tenant_domain(instance, tenant, &domain, &dns, WHO).await.unwrap();
     let keys = Arc::new(TenantKeys::with_main_keys(pool.clone(), MainKeys::new(Key::random().unwrap(), Vec::new())));
-    let mail = Mail::new(pool.clone(), BlobStore::new(Arc::new(InMemory::new()), keys), Limits::default());
+    let mail = Mail::new(pool.clone(), BlobStore::in_memory(keys), Limits::default());
     let jmap = Jmap::new(mail.clone(), 1_000_000, jiff::SignedDuration::from_hours(24 * 5))
         .with_identity(identity.clone())
         .with_key_directory(Arc::new(Directory));
@@ -223,7 +222,7 @@ async fn sent_mail_announces_a_compatible_key(pool: PgPool) {
     identity.add_tenant_domain(instance, tenant, &domain, WHO).await.unwrap();
     identity.trust_tenant_domain(instance, tenant, &domain, WHO).await.unwrap();
     let keys = Arc::new(TenantKeys::with_main_keys(pool.clone(), MainKeys::new(Key::random().unwrap(), Vec::new())));
-    let mail = Mail::new(pool.clone(), BlobStore::new(Arc::new(InMemory::new()), keys), Limits::default());
+    let mail = Mail::new(pool.clone(), BlobStore::in_memory(keys), Limits::default());
     let copy =
         || vec![kernoid_identity::openpgp::KeyCopy { label: "recovery".into(), protected: b"p".to_vec(), salt: None }];
 
@@ -262,7 +261,7 @@ async fn encrypted_calendars_hold_only_what_the_apps_encrypted(pool: PgPool) {
     identity.add_tenant_domain(instance, tenant, &domain, WHO).await.unwrap();
     identity.trust_tenant_domain(instance, tenant, &domain, WHO).await.unwrap();
     let keys = Arc::new(TenantKeys::with_main_keys(pool.clone(), MainKeys::new(Key::random().unwrap(), Vec::new())));
-    let mail = Mail::new(pool.clone(), BlobStore::new(Arc::new(InMemory::new()), keys.clone()), Limits::default());
+    let mail = Mail::new(pool.clone(), BlobStore::in_memory(keys.clone()), Limits::default());
     let groupware = kernoid_groupware::Groupware::new(mail.clone(), keys);
     let jmap = Jmap::new(mail, 1_000_000, jiff::SignedDuration::from_hours(24 * 5))
         .with_identity(identity.clone())

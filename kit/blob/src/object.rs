@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
-//! Originals in an object store – S3 and everything `object_store` reaches: `sha256/<two digits>/<64 digits>` below
-//! a prefix of the caller's choice.
+//! Originals in object storage – in memory, or S3 with the feature `s3` ([`crate::objects`]):
+//! `sha256/<two digits>/<64 digits>` below a prefix of the caller's choice.
 //!
 //! [`Blobs`] is synchronous; the object store is not. Every call runs on a runtime the store has – a small one of its
 //! own, or one the program hands over ([`ObjectBlobs::with_handle`]) – on a helper thread, so that it works from plain
@@ -8,8 +8,9 @@
 //! An async program may also call the async methods ([`ObjectBlobs::get_async`], [`ObjectBlobs::stream`] …): they
 //! run on the same runtime and are awaited from any other.
 //!
-//! Long originals are written in parts (a multipart upload below `incoming/`, moved to their place once their hash is
-//! known) and read as a stream of parts, never as a whole.
+//! Long originals are written in parts (a multipart upload below `incoming/`, copied to their place once their hash is
+//! known) and read as a stream of parts, never as a whole. OPEN: S3 copies at most 5 GiB in one request; a longer
+//! original would need `UploadPartCopy`.
 
 use std::{
     io::{self, Read},
@@ -18,9 +19,9 @@ use std::{
     sync::{Arc, mpsc},
 };
 
+use crate::objects::{ObjectError, Objects};
 use bytes::Bytes;
 use futures_util::{Stream, StreamExt};
-use object_store::{GetOptions, GetRange, ObjectStore, ObjectStoreExt, PutPayload, path::Path};
 use tokio::runtime::{Handle, Runtime};
 
 use crate::{BlobError, Blobs, Checked, Sha256Hash, checked, in_parts};
@@ -74,7 +75,7 @@ impl Drop for Own {
 /// Originals in an object store.
 #[derive(Clone)]
 pub struct ObjectBlobs {
-    inner: Arc<dyn ObjectStore>,
+    inner: Arc<dyn Objects>,
     prefix: String,
     handle: Handle,
     _own: Option<Arc<Own>>,
@@ -82,16 +83,16 @@ pub struct ObjectBlobs {
 
 impl std::fmt::Debug for ObjectBlobs {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ObjectBlobs").field("inner", &self.inner.to_string()).field("prefix", &self.prefix).finish()
+        f.debug_struct("ObjectBlobs").field("inner", &self.inner).field("prefix", &self.prefix).finish()
     }
 }
 
-fn store_error(error: object_store::Error) -> BlobError {
+fn store_error(error: ObjectError) -> BlobError {
     BlobError::Object(error.to_string())
 }
 
-fn not_found(error: &object_store::Error) -> bool {
-    matches!(error, object_store::Error::NotFound { .. })
+fn not_found(error: &ObjectError) -> bool {
+    matches!(error, ObjectError::NotFound)
 }
 
 fn prefix_of(prefix: &str) -> String {
@@ -100,7 +101,7 @@ fn prefix_of(prefix: &str) -> String {
 
 impl ObjectBlobs {
     /// Originals in any object store, below `prefix` (empty for the top), on a small runtime of their own.
-    pub fn new(inner: Arc<dyn ObjectStore>, prefix: &str) -> Result<Self, BlobError> {
+    pub fn new(inner: Arc<dyn Objects>, prefix: &str) -> Result<Self, BlobError> {
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(1)
             .thread_name("kernoid-blob")
@@ -113,7 +114,7 @@ impl ObjectBlobs {
     /// Originals in any object store, below `prefix`, on the program's runtime – no runtime of their own. The
     /// synchronous calls still run on a helper thread; call them from async code in `spawn_blocking`, or use the async
     /// methods.
-    pub fn with_handle(inner: Arc<dyn ObjectStore>, prefix: &str, handle: Handle) -> Self {
+    pub fn with_handle(inner: Arc<dyn Objects>, prefix: &str, handle: Handle) -> Self {
         ObjectBlobs { inner, prefix: prefix_of(prefix), handle, _own: None }
     }
 
@@ -130,21 +131,22 @@ impl ObjectBlobs {
     /// Originals in an S3 bucket, below `prefix`.
     #[cfg(feature = "s3")]
     pub fn s3(config: &S3Config, prefix: &str) -> Result<Self, BlobError> {
-        Self::new(s3_store(config)?, prefix)
+        let inner = crate::objects::s3::S3Objects::new(config).map_err(store_error)?;
+        Self::new(Arc::new(inner), prefix)
     }
 
-    fn root(&self) -> Path {
-        if self.prefix.is_empty() { Path::from("sha256") } else { Path::from(format!("{}/sha256", self.prefix)) }
+    fn root(&self) -> String {
+        if self.prefix.is_empty() { "sha256".to_owned() } else { format!("{}/sha256", self.prefix) }
     }
 
-    fn path(&self, hash: &Sha256Hash) -> Path {
+    fn path(&self, hash: &Sha256Hash) -> String {
         let hex = hash.hex();
-        self.root().join(&hex[..2]).join(hex.as_str())
+        format!("{}/{}/{hex}", self.root(), &hex[..2])
     }
 
-    fn incoming(&self) -> Path {
+    fn incoming(&self) -> String {
         let name = format!("incoming/{}", crate::hex_suffix());
-        if self.prefix.is_empty() { Path::from(name) } else { Path::from(format!("{}/{name}", self.prefix)) }
+        if self.prefix.is_empty() { name } else { format!("{}/{name}", self.prefix) }
     }
 
     /// Runs `work` on the store's runtime, on a helper thread, and waits for it.
@@ -161,8 +163,8 @@ impl ObjectBlobs {
     pub async fn get_async(&self, hash: &Sha256Hash) -> Result<Option<Bytes>, BlobError> {
         let (inner, path, hash) = (self.inner.clone(), self.path(hash), *hash);
         self.spawn(async move {
-            let bytes = match inner.get(&path).await {
-                Ok(result) => result.bytes().await.map_err(store_error)?,
+            let bytes = match inner.read(&path).await {
+                Ok(bytes) => bytes,
                 Err(error) if not_found(&error) => return Ok(None),
                 Err(error) => return Err(store_error(error)),
             };
@@ -181,7 +183,7 @@ impl ObjectBlobs {
                 Err(error) if not_found(&error) => {}
                 Err(error) => return Err(store_error(error)),
             }
-            inner.put(&path, PutPayload::from(bytes)).await.map_err(store_error)?;
+            inner.put(&path, bytes).await.map_err(store_error)?;
             Ok(hash)
         })
         .await
@@ -192,7 +194,7 @@ impl ObjectBlobs {
         let (inner, path) = (self.inner.clone(), self.path(hash));
         self.spawn(async move {
             match inner.head(&path).await {
-                Ok(meta) => Ok(Some(meta.size)),
+                Ok(size) => Ok(Some(size)),
                 Err(error) if not_found(&error) => Ok(None),
                 Err(error) => Err(store_error(error)),
             }
@@ -209,11 +211,8 @@ impl ObjectBlobs {
                 Err(error) if not_found(&error) => return Ok(false),
                 Err(error) => return Err(store_error(error)),
             }
-            match inner.delete(&path).await {
-                Ok(()) => Ok(true),
-                Err(error) if not_found(&error) => Ok(true),
-                Err(error) => Err(store_error(error)),
-            }
+            inner.delete(&path).await.map_err(store_error)?;
+            Ok(true)
         })
         .await
     }
@@ -231,7 +230,7 @@ impl ObjectBlobs {
         let opened = self
             .spawn(async move {
                 let size = match inner.head(&path).await {
-                    Ok(meta) => meta.size,
+                    Ok(size) => size,
                     Err(error) if not_found(&error) => return Ok(None),
                     Err(error) => return Err(store_error(error)),
                 };
@@ -239,17 +238,18 @@ impl ObjectBlobs {
                     let start = r.start.min(size);
                     start..r.end.clamp(start, size)
                 });
-                if range.as_ref().is_some_and(|r| r.is_empty()) {
+                if range.as_ref().is_some_and(|r| r.is_empty()) || size == 0 {
                     return Ok(Some((size, None)));
                 }
-                let options = GetOptions { range: range.clone().map(GetRange::Bounded), ..GetOptions::default() };
-                let result = inner.get_opts(&path, options).await.map_err(store_error)?;
-                Ok(Some((size, Some((result.into_stream(), range.is_none())))))
+                let body = inner.get(&path, range.clone()).await.map_err(store_error)?;
+                Ok(Some((size, Some((body, range.is_none())))))
             })
             .await?;
         let Some((size, stream)) = opened else { return Ok(None) };
         let Some((stream, whole)) = stream else {
-            return Ok(Some((size, Box::pin(futures_util::stream::empty()) as ByteStream)));
+            // Nothing to read – but an empty original is still checked against its hash.
+            let check = (size == 0 && Sha256Hash::of(b"") != hash).then_some(Err(BlobError::Damaged(hash)));
+            return Ok(Some((size, Box::pin(futures_util::stream::iter(check)) as ByteStream)));
         };
         // Polled on the store's runtime; the parts come over a channel of a few.
         let (sender, receiver) = tokio::sync::mpsc::channel::<Result<Bytes, BlobError>>(4);
@@ -279,22 +279,6 @@ impl ObjectBlobs {
     }
 }
 
-/// An S3 store as `object_store` makes it.
-#[cfg(feature = "s3")]
-pub(crate) fn s3_store(config: &S3Config) -> Result<Arc<dyn ObjectStore>, BlobError> {
-    let mut builder = object_store::aws::AmazonS3Builder::new()
-        .with_region(&config.region)
-        .with_bucket_name(&config.bucket)
-        .with_access_key_id(&config.access_key_id)
-        .with_secret_access_key(&config.secret_access_key)
-        .with_allow_http(config.allow_http);
-    if let Some(endpoint) = &config.endpoint {
-        // Self-hosted object storage is addressed by path, not by a bucket subdomain.
-        builder = builder.with_endpoint(endpoint).with_virtual_hosted_style_request(false);
-    }
-    Ok(Arc::new(builder.build().map_err(store_error)?))
-}
-
 /// A reader of a stream of parts that is polled on another runtime.
 struct Parts {
     receiver: mpsc::Receiver<Result<Bytes, BlobError>>,
@@ -319,16 +303,15 @@ impl Read for Parts {
 
 impl ObjectBlobs {
     /// A reader of `range` of the object at `path` (all of it if none), fed from the store's runtime.
-    fn reader(&self, path: Path, range: Option<Range<u64>>) -> Result<Parts, BlobError> {
+    fn reader(&self, path: String, range: Option<Range<u64>>) -> Result<Parts, BlobError> {
         let (sender, receiver) = mpsc::sync_channel::<Result<Bytes, BlobError>>(4);
         let inner = self.inner.clone();
         let (ready, opened) = mpsc::sync_channel::<Result<(), BlobError>>(1);
         self.handle.spawn(async move {
-            let options = GetOptions { range: range.map(GetRange::Bounded), ..GetOptions::default() };
-            let mut stream = match inner.get_opts(&path, options).await {
-                Ok(result) => {
+            let mut stream = match inner.get(&path, range).await {
+                Ok(body) => {
                     let _ = ready.send(Ok(()));
-                    result.into_stream()
+                    body
                 }
                 Err(error) => {
                     let _ = ready.send(Err(store_error(error)));
@@ -355,7 +338,7 @@ impl Blobs for ObjectBlobs {
         let hash = Sha256Hash::of(bytes);
         if !self.contains(&hash)? {
             let path = self.path(&hash);
-            let payload = PutPayload::from(bytes.to_vec());
+            let payload = Bytes::copy_from_slice(bytes);
             self.run(async { self.inner.put(&path, payload).await }).map_err(store_error)?;
         }
         Ok(hash)
@@ -364,9 +347,9 @@ impl Blobs for ObjectBlobs {
     fn get(&self, hash: &Sha256Hash) -> Result<Option<Vec<u8>>, BlobError> {
         let path = self.path(hash);
         let bytes = self.run(async {
-            match self.inner.get(&path).await {
-                Ok(result) => result.bytes().await.map(Some),
-                Err(object_store::Error::NotFound { .. }) => Ok(None),
+            match self.inner.read(&path).await {
+                Ok(bytes) => Ok(Some(bytes)),
+                Err(ObjectError::NotFound) => Ok(None),
                 Err(error) => Err(error),
             }
         });
@@ -377,23 +360,18 @@ impl Blobs for ObjectBlobs {
         let path = self.path(hash);
         match self.run(async { self.inner.head(&path).await }) {
             Ok(_) => Ok(true),
-            Err(object_store::Error::NotFound { .. }) => Ok(false),
+            Err(ObjectError::NotFound) => Ok(false),
             Err(error) => Err(store_error(error)),
         }
     }
 
     fn list(&self) -> Result<Vec<Sha256Hash>, BlobError> {
-        let root = self.root();
-        let found: Vec<Result<String, object_store::Error>> = self.run(async {
-            self.inner
-                .list(Some(&root))
-                .map(|meta| meta.map(|meta| meta.location.filename().unwrap_or("").to_owned()))
-                .collect()
-                .await
-        });
+        let root = format!("{}/", self.root());
+        let found = self.run(async { self.inner.list(&root).await }).map_err(store_error)?;
         let mut hashes = Vec::new();
-        for name in found {
-            if let Ok(hash) = format!("sha256:{}", name.map_err(store_error)?).parse() {
+        for key in found {
+            let name = key.rsplit('/').next().unwrap_or("");
+            if let Ok(hash) = format!("sha256:{name}").parse() {
                 hashes.push(hash);
             }
         }
@@ -406,17 +384,15 @@ impl Blobs for ObjectBlobs {
             return Ok(false);
         }
         let path = self.path(hash);
-        match self.run(async { self.inner.delete(&path).await }) {
-            Ok(()) | Err(object_store::Error::NotFound { .. }) => Ok(true),
-            Err(error) => Err(store_error(error)),
-        }
+        self.run(async { self.inner.delete(&path).await }).map_err(store_error)?;
+        Ok(true)
     }
 
     fn size(&self, hash: &Sha256Hash) -> Result<Option<u64>, BlobError> {
         let path = self.path(hash);
         match self.run(async { self.inner.head(&path).await }) {
-            Ok(meta) => Ok(Some(meta.size)),
-            Err(object_store::Error::NotFound { .. }) => Ok(None),
+            Ok(size) => Ok(Some(size)),
+            Err(ObjectError::NotFound) => Ok(None),
             Err(error) => Err(store_error(error)),
         }
     }
@@ -430,26 +406,24 @@ impl Blobs for ObjectBlobs {
 
     fn put_reader(&self, reader: &mut dyn Read) -> Result<Sha256Hash, BlobError> {
         let incoming = self.incoming();
-        let mut upload = self.run(async { self.inner.put_multipart(&incoming).await }).map_err(store_error)?;
-        let sent = in_parts(reader, PART, |part| {
-            let part = upload.put_part(PutPayload::from(part));
-            self.run(part).map_err(store_error)
-        });
+        let mut upload = self.run(async { self.inner.upload(&incoming).await }).map_err(store_error)?;
+        let sent = in_parts(reader, PART, |part| self.run(upload.part(Bytes::from(part))).map_err(store_error));
         let hash = match sent {
             Ok(hash) => hash,
             Err(error) => {
-                let _ = self.run(async { upload.abort().await });
+                let _ = self.run(upload.abort());
                 return Err(error);
             }
         };
-        self.run(async { upload.complete().await }).map_err(store_error)?;
+        self.run(upload.complete()).map_err(store_error)?;
         let path = self.path(&hash);
         self.run(async {
             match self.inner.head(&path).await {
-                Ok(_) => self.inner.delete(&incoming).await,
-                Err(error) if not_found(&error) => self.inner.rename(&incoming, &path).await,
-                Err(error) => Err(error),
+                Ok(_) => {}
+                Err(error) if not_found(&error) => self.inner.copy(&incoming, &path).await?,
+                Err(error) => return Err(error),
             }
+            self.inner.delete(&incoming).await
         })
         .map_err(store_error)?;
         Ok(hash)
@@ -475,25 +449,24 @@ impl Blobs for ObjectBlobs {
 
 #[cfg(test)]
 mod tests {
-    use object_store::memory::InMemory;
-
     use super::*;
+    use crate::objects::MemoryObjects;
 
     #[test]
     fn in_an_object_store() {
-        let inner = Arc::new(InMemory::new());
+        let inner = Arc::new(MemoryObjects::new());
         let store = ObjectBlobs::new(inner.clone(), "/archive/").unwrap();
         crate::tests::behaves(&store);
         let hash = Sha256Hash::of(b"<Invoice/>");
-        let at = Path::from(format!("archive/sha256/{}/{}", &hash.hex()[..2], hash.hex()));
+        let at = format!("archive/sha256/{}/{}", &hash.hex()[..2], hash.hex());
         let runtime = tokio::runtime::Runtime::new().unwrap();
-        runtime.block_on(async { inner.put(&at, PutPayload::from(b"changed".to_vec())).await }).unwrap();
+        runtime.block_on(inner.put(&at, Bytes::from_static(b"changed"))).unwrap();
         assert!(matches!(store.get(&hash), Err(BlobError::Damaged(_))));
     }
 
     #[test]
     fn works_from_within_another_runtime() {
-        let store = ObjectBlobs::new(Arc::new(InMemory::new()), "").unwrap();
+        let store = ObjectBlobs::new(Arc::new(MemoryObjects::new()), "").unwrap();
         let runtime = tokio::runtime::Runtime::new().unwrap();
         let hash = runtime.block_on(async { store.put(b"inside").unwrap() });
         assert_eq!(store.get(&hash).unwrap().as_deref(), Some(&b"inside"[..]));
@@ -501,7 +474,7 @@ mod tests {
 
     #[test]
     fn prefixes_share_one_store_and_runtime() {
-        let one = ObjectBlobs::new(Arc::new(InMemory::new()), "org-1").unwrap();
+        let one = ObjectBlobs::new(Arc::new(MemoryObjects::new()), "org-1").unwrap();
         let two = one.with_prefix("/org-2/");
         assert_eq!(two.prefix(), "org-2");
         let hash = one.put(b"score").unwrap();
@@ -513,7 +486,7 @@ mod tests {
 
     #[test]
     fn async_calls_and_streams_from_another_runtime() {
-        let inner: Arc<dyn ObjectStore> = Arc::new(InMemory::new());
+        let inner: Arc<dyn Objects> = Arc::new(MemoryObjects::new());
         let runtime = tokio::runtime::Runtime::new().unwrap();
         // The program's runtime only; and a store with a runtime of its own, both awaited from the program's.
         for store in [
@@ -549,7 +522,7 @@ mod tests {
 
     #[test]
     fn long_originals_go_up_in_parts_and_damage_is_reported_by_streams() {
-        let inner = Arc::new(InMemory::new());
+        let inner = Arc::new(MemoryObjects::new());
         let store = ObjectBlobs::new(inner.clone(), "").unwrap();
         let long: Vec<u8> = (0..(PART as u32 * 2 + 5)).map(|i| (i % 241) as u8).collect();
         let hash = store.put_reader(&mut &long[..]).unwrap();
@@ -558,11 +531,11 @@ mod tests {
         store.open(&hash).unwrap().unwrap().read_to_end(&mut back).unwrap();
         assert!(back == long);
         let runtime = tokio::runtime::Runtime::new().unwrap();
-        let leftovers = runtime.block_on(async { inner.list(Some(&Path::from("incoming"))).count().await });
+        let leftovers = runtime.block_on(inner.list("incoming/")).unwrap().len();
         assert_eq!(leftovers, 0, "nothing left below incoming/");
 
         let at = store.path(&hash);
-        runtime.block_on(async { inner.put(&at, PutPayload::from(b"changed".to_vec())).await }).unwrap();
+        runtime.block_on(inner.put(&at, Bytes::from_static(b"changed"))).unwrap();
         let mut read = Vec::new();
         assert_eq!(
             store.open(&hash).unwrap().unwrap().read_to_end(&mut read).unwrap_err().kind(),

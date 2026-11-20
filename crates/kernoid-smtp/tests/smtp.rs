@@ -19,7 +19,6 @@ use kernoid_store::{
     scan::{Scanner, Verdict},
 };
 use mail_auth::{ResolverCache, Txt, common::parse::TxtRecordParser, dmarc::Dmarc, spf::Spf};
-use object_store::memory::InMemory;
 use sqlx::PgPool;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
 use uuid::Uuid;
@@ -63,7 +62,7 @@ async fn setup_with(pool: PgPool, scanner: Option<Arc<dyn Scanner>>) -> Setup {
         .insert(format!("{CHALLENGE_LABEL}.firma.example"), vec![format!("kernoid-verification={token}")]);
     identity.verify_tenant_domain(instance, tenant, &domain, &dns, WHO).await.unwrap();
     let keys = Arc::new(TenantKeys::with_main_keys(pool.clone(), MainKeys::new(Key::random().unwrap(), Vec::new())));
-    let mut blobs = BlobStore::new(Arc::new(InMemory::new()), keys);
+    let mut blobs = BlobStore::in_memory(keys);
     if let Some(scanner) = scanner {
         blobs = blobs.with_scanner(scanner);
     }

@@ -41,6 +41,5 @@ kernoid-groupware = { path = "../kernoid-groupware" }
 kernoid-events = { path = "../kernoid-events" }
 kernoid-identity = { path = "../kernoid-identity" }
 kernoid-store = { path = "../kernoid-store" }
-object_store = "0.14.2"
 sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres", "macros", "migrate"] }
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros"] }

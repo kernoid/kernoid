@@ -7,6 +7,16 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 
 ## [Unreleased]
 
+### Changed
+
+- **Object storage through kernoid's own S3 client** (`kernoid_blob::objects`, MIT, in the kit) in place of the crate
+  object_store: requests signed with AWS Signature Version 4, ranges, multipart uploads, rustls on AWS-LC with
+  post-quantum key exchange preferred. Nothing to change in the configuration, and objects stay where they are; AWS
+  buckets are now reached by their own host (`<bucket>.s3.<region>.amazonaws.com`, by path if the name has a dot),
+  self-hosted storage by path as before. An endpoint over plain HTTP without `allow_http` is refused at start.
+  `kernoid-blob`: `ObjectBlobs::new` takes an `Arc<dyn Objects>` (`MemoryObjects`, `S3Objects`) – no more
+  `object_store` re-export.
+
 ## [0.5.1] – 2026-11-20
 
 kernoid becomes the core of a suite of building blocks ([RFC 0008](rfcs/0008-suite-and-building-blocks.md)–0011): an

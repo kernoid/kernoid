@@ -19,7 +19,6 @@ use kernoid_identity::{Address, CHALLENGE_LABEL, DomainName, Identity, TxtLookup
 use kernoid_jitsi::JitsiModule;
 use kernoid_module::{Caller, Context, Module, Sessions};
 use kernoid_store::{BlobStore, TenantKeys, crypto::Key};
-use object_store::memory::InMemory;
 use serde_json::Value;
 use sqlx::PgPool;
 use tower::ServiceExt;
@@ -68,7 +67,7 @@ async fn setup(pool: PgPool, guests: bool) -> Setup {
     let context = Context {
         db: pool.clone(),
         events: EventStore::new(pool.clone()),
-        blobs: BlobStore::new(Arc::new(InMemory::new()), keys),
+        blobs: BlobStore::in_memory(keys),
         sessions: Some(sessions.clone()),
         config,
     };

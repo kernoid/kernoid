@@ -32,7 +32,6 @@ uuid = { version = "1.28.0", features = ["v7"] }
 base64 = "0.22.1"
 kernoid-events = { path = "../kernoid-events" }
 kernoid-store = { path = "../kernoid-store" }
-object_store = "0.14.2"
 rcgen = { version = "0.14.10", default-features = false, features = ["aws_lc_rs", "pem"] }
 sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres", "macros", "migrate"] }
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros"] }
