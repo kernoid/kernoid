@@ -149,7 +149,7 @@ the code.
 - **SQL only through sqlx's checked macros** (`query!`, `query_as!`, `query_scalar!`): literal statements, values
   only as bound parameters, checked against the schema at build time. The unchecked functions and `QueryBuilder` are
   forbidden in `clippy.toml`; tests that need them (tables that exist only in the test) allow it per file, with a
-  reason. After changing a query, run `cargo sqlx prepare --workspace -- --all-targets` and commit `.sqlx/`.
+  reason. After changing a query, run `cargo sqlx prepare --workspace -- --all-targets` and commit `.sqlx/`. kernoid-auth, published alone, carries a copy of its queries in `crates/kernoid-auth/.sqlx` (CI compares it).
 - **Two database roles.** The owner runs migrations; the runtime role serves with only what
   `kernoid_grant_runtime` gives it. A migration that adds a table replaces that function with the complete list of
   grants – least privilege: no `UPDATE`/`DELETE` unless the runtime truly needs it. Connections carry a statement

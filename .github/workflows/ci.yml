@@ -52,6 +52,13 @@ jobs:
           (cd crates/kernoid-auth && cargo sqlx migrate run --source migrations)
       - name: Query cache (.sqlx) matches the queries and the schema
         run: cargo sqlx prepare --workspace --check -- --all-targets
+      # kernoid-auth goes to crates.io alone: its queries travel with it in its own .sqlx, a copy of the workspace's.
+      - name: kernoid-auth's own query cache matches the workspace's
+        run: |
+          want=$(grep -l kernoid_auth_sessions .sqlx/*.json | xargs -n1 basename | sort)
+          have=$(ls crates/kernoid-auth/.sqlx | sort)
+          test "$want" = "$have" || { echo "::error::copy the queries of kernoid_auth_sessions into crates/kernoid-auth/.sqlx"; exit 1; }
+          for f in crates/kernoid-auth/.sqlx/*.json; do cmp "$f" ".sqlx/$(basename "$f")"; done
       - run: cargo fmt --check
       - run: cargo clippy --locked --all-targets
       - name: Identity alone builds – kernoid-server without mail, calendars and files (RFC 0009, 3)

@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO kernoid_auth_sessions (id_hash, principal, id_token, subject, provider_session, expires_at)\n                 VALUES ($1, $2, $3, $4, $5, $6)\n                 ON CONFLICT (id_hash) DO UPDATE SET principal = EXCLUDED.principal, id_token = EXCLUDED.id_token,\n                   subject = EXCLUDED.subject, provider_session = EXCLUDED.provider_session, expires_at = EXCLUDED.expires_at",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Jsonb",
+        "Text",
+        "Text",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "acfeb0591d6ce9324cc1de8b16795975ba2dd670b153d732dc75f0e1e89bd82e"
+}
