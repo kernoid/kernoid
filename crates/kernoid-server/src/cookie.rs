@@ -93,6 +93,7 @@ fn own_origin(origin: &str, instance: &InstanceInfo, secure: bool) -> bool {
 
 /// The session of a change made with the cookie from a page of the instance: with the CSRF header and an `Origin` of
 /// the instance, as [`session_token`] takes it – for those who only see the headers (the relay's founders).
+#[cfg(feature = "relay")]
 pub(crate) fn posted_session(headers: &HeaderMap, instance: &InstanceInfo, secure: bool) -> Option<String> {
     let token = from_cookie(headers)?;
     let origin = headers.get(header::ORIGIN).and_then(|origin| origin.to_str().ok())?;
