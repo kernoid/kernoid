@@ -38,10 +38,10 @@ time the mailbox, the login for single sign-on and the owner of files. Free soft
 | `crates/kernoid-mail` | the mail store of each account: mailboxes, emails (raw messages sealed in object storage), threads, keywords, quotas, the journal of changes for JMAP and IMAP, and who may use whose mail (shared mailboxes, grants) |
 | `crates/kernoid-smtp` | mail over SMTP: the MX for the tenants' domains (SPF, DKIM, DMARC, ARC, iprev, a basic spam filter, Sieve), submission with app passwords, the queue's delivery with DKIM signing, MTA-STS and DANE, bounces, DNS checks |
 | `crates/kernoid-groupware` | calendars and contacts of each account: events and contacts parsed with kernoid-pim, sharing, invitations (iTIP/iMIP) |
-| `crates/kernoid-dav` | CalDAV and CardDAV; the protocol parser taken over from Stalwart |
+| `crates/kernoid-dav` | CalDAV and CardDAV, with the WebDAV protocol the files use too |
 | `crates/kernoid-files` | the file store of each account and of the tenant's team folders: directories, files of any size in sealed parts, versions, sharing, WebDAV locks |
 | `crates/kernoid-jmap` | JMAP Core, Mail, Calendars, Contacts and FileNode for programs and web apps, with push over EventSource |
-| `crates/kernoid-imap` | IMAP4rev2/IMAP4rev1 and POP3 for mail programs; the protocol parser taken over from Stalwart |
+| `crates/kernoid-imap` | IMAP4rev2/IMAP4rev1 and POP3 for mail programs |
 | `crates/kernoid-module` | the interface for modules – connections to one particular outside service, off unless switched on |
 | `crates/kernoid-server` | the HTTP server: REST (OpenAPI at `/openapi.json`), GraphQL (`/graphql`), sessions (`/v1/sessions`), the administration API (tenants, accounts, groups, roles, projects, applications, the instance), SCIM 2.0 at `/scim/v2`, health checks, problem details, TLS or reverse proxy |
 | `web/` | the TypeScript SDK (`@kernoid/sdk`), the login UI served at `/login` and the web app at `/app` (mail, calendar, contacts, files, account, administration) – AGPL like the server |
