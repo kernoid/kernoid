@@ -34,6 +34,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get signIn => 'Sign in';
 
   @override
+  String get onThisDevice => 'On this device only';
+
+  @override
   String get required => 'Required';
 
   @override

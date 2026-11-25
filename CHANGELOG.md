@@ -5,6 +5,16 @@ What changes from release to release, for those who run kernoid and those who bu
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org) –
 before 1.0, a minor version (0.2) may change the API and the configuration, and says how to upgrade here.
 
+## [Unreleased]
+
+### Added
+
+- **An app without an account** (RFC 0011, 3): a feature of the app kit that works on the device alone says so with
+  `KFeature.onDevice` and gives a page and a session without an account (`pageOnDevice`, `startOnDevice`). An app
+  with such a feature starts at its home before anyone signs in and offers the login in its side bar; signing in
+  starts the home again with the account. kernoid's own app, whose features all need an account, starts at the login
+  as before.
+
 ## [0.6.0] – 2026-11-20
 
 kernoid is its own code now: everything taken over from Stalwart, and the libraries that read calendars, contacts, mail,

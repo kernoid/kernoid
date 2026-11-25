@@ -8,6 +8,7 @@
   "appPassword": "App password",
   "appPasswordHint": "Make one on your account page.",
   "signIn": "Sign in",
+  "onThisDevice": "On this device only",
   "required": "Required",
   "account": "Account",
   "inbox": "Inbox",

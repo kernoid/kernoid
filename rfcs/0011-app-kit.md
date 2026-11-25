@@ -59,6 +59,15 @@ void main() => runKernoidApp(features: [MailFeature(), CalendarFeature(), Contac
   session has `urn:ietf:params:jmap:mail`, files when it has the FileNode capability, and so on (RFC 0008, 4: a
   service that is off is missing from the session and from `GET /v1/services`). Against a kernoid that is identity
   alone, the app shows the account and nothing else.
+- **Without an account** (aktujo RFC 0012, 8, item 4): a feature may work on the device alone – a program's personal
+  archive, say – and says so with `onDevice`; it then has a page and a session without an account (`pageOnDevice`,
+  `startOnDevice`). An app with one such feature starts at its home before anyone signs in, shows only those features
+  and puts the login where the account would be (the foot of the side bar, the end of the bottom bar). Once an account
+  signs in, the home starts again with it: the sessions on the device end, `start` and `page` take over, and a
+  feature that works on the device answers `offeredBy` with `true` whatever the server offers. Signing out returns
+  to the home without an account; what a feature keeps on the device stays. A kept login that cannot be resumed
+  (offline) leaves the app at that home, the reason shown with the login. An app whose features all need an account –
+  kernoid's own – starts at the login, as before.
 - A **program built on kernoid** writes its own features (`aktujo_documents` …) in its own packages and puts together
   its own app from `kernoid_shell`, `kernoid_ui` and whichever of kernoid's features it wants – under its own name,
   bundle and brand (`KTokens` per brand).

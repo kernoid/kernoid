@@ -140,6 +140,12 @@ abstract class AppLocalizations {
   /// **'Sign in'**
   String get signIn;
 
+  /// No description provided for @onThisDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'On this device only'**
+  String get onThisDevice;
+
   /// No description provided for @required.
   ///
   /// In en, this message translates to:

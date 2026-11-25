@@ -34,6 +34,9 @@ class AppLocalizationsDe extends AppLocalizations {
   String get signIn => 'Anmelden';
 
   @override
+  String get onThisDevice => 'Nur auf diesem Gerät';
+
+  @override
   String get required => 'Pflichtfeld';
 
   @override

@@ -25,7 +25,9 @@ Future<void> runKernoidApp({required List<KFeature> features}) async {
   runApp(KernoidApp(features: features));
 }
 
-/// The app: the login until an account is signed in, then its home. A login kept from before is resumed at start.
+/// The app: the login until an account is signed in, then its home. A login kept from before is resumed at start. An
+/// app with a feature that works on the device alone ([KFeature.onDevice]) starts at its home without an account and
+/// offers the login in its side bar (RFC 0011, 3).
 class KernoidApp extends StatefulWidget {
   const KernoidApp({super.key, required this.features});
 
@@ -47,6 +49,9 @@ class _KernoidAppState extends State<KernoidApp> {
 
   /// Why a kept login could not be resumed – shown on the login page.
   String? _resumeError;
+
+  /// Whether the app works before anyone signs in.
+  bool get _onDevice => widget.features.any((feature) => feature.onDevice);
 
   @override
   void initState() {
@@ -109,9 +114,17 @@ class _KernoidAppState extends State<KernoidApp> {
           supportedLocales: AppLocalizations.supportedLocales,
           home: _resuming
               ? const KScaffold(body: KLoading())
-              : account == null
+              : account == null && !_onDevice
               ? LoginPage(onSignedIn: _signedIn, notice: _resumeError)
-              : HomePage(account: account, features: widget.features, onSignOut: _signOut),
+              // A new home for every account: the features' sessions start again with it.
+              : HomePage(
+                  key: ObjectKey(account),
+                  account: account,
+                  features: widget.features,
+                  onSignOut: _signOut,
+                  onSignedIn: _signedIn,
+                  notice: _resumeError,
+                ),
         ),
       ),
     );

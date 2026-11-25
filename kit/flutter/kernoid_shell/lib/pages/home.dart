@@ -8,21 +8,38 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../feature.dart';
 import 'account.dart';
+import 'login.dart';
 
 /// Where the wide layout begins: a side bar and panes side by side instead of a bar and pages on top of each other.
 const wideLayout = 840.0;
 
 /// The signed-in app: the features the server offers and the account – the same functions on every screen size, laid
 /// out for it. Wide: a side bar with the word mark, the sections and the account at its foot; narrow: a bar of the
-/// sections at the bottom (RFC 0011, 3).
+/// sections at the bottom (RFC 0011, 3). Without an account – an app with features that work on the device – it shows
+/// those features alone, and the login where the account would be.
 class HomePage extends StatefulWidget {
-  const HomePage({super.key, required this.account, required this.features, required this.onSignOut});
+  const HomePage({
+    super.key,
+    required this.account,
+    required this.features,
+    required this.onSignOut,
+    this.onSignedIn,
+    this.notice,
+  });
 
-  final Kernoid account;
+  /// None before anyone signs in.
+  final Kernoid? account;
 
-  /// The app's features, in their order; those the server does not offer are left out.
+  /// The app's features, in their order; those the server does not offer – without an account: those that need one –
+  /// are left out.
   final List<KFeature> features;
   final VoidCallback onSignOut;
+
+  /// Called by the login shown without an account.
+  final ValueChanged<Kernoid>? onSignedIn;
+
+  /// Why a kept login could not be resumed – shown with the login.
+  final String? notice;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -41,17 +58,24 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    _features = [
-      for (final feature in widget.features)
-        if (feature.offeredBy(widget.account)) (feature, feature.start(context, widget.account)),
-    ];
+    final account = widget.account;
+    _features = account == null
+        ? [
+            for (final feature in widget.features)
+              if (feature.onDevice) (feature, feature.startOnDevice(context)),
+          ]
+        : [
+            for (final feature in widget.features)
+              if (feature.offeredBy(account)) (feature, feature.start(context, account)),
+          ];
     _loadPicture();
   }
 
   Future<void> _loadPicture() async {
-    if (!widget.account.settingsAvailable()) return;
+    final account = widget.account;
+    if (account == null || !account.settingsAvailable()) return;
     try {
-      final picture = await widget.account.ownAvatar();
+      final picture = await account.ownAvatar();
       if (mounted) _picture.value = picture;
     } catch (_) {
       // Without the picture the initials stand in for it.
@@ -71,11 +95,21 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final k = context.k;
+    final account = widget.account;
     final sections = [for (final (feature, _) in _features) (feature.id, feature.icon, feature.label(l))];
-    final page = _section < _features.length
-        ? KeyedSubtree(key: ValueKey(_features[_section].$1.id), child: _features[_section].$1.page(widget.account))
-        : AccountPage(account: widget.account, onSignOut: widget.onSignOut, features: _features, picture: _picture);
-    final name = widget.account.username;
+    final Widget page;
+    if (_section < _features.length) {
+      final feature = _features[_section].$1;
+      page = KeyedSubtree(
+        key: ValueKey(feature.id),
+        child: account == null ? feature.pageOnDevice() : feature.page(account),
+      );
+    } else if (account == null) {
+      page = LoginPage(key: const ValueKey('login'), onSignedIn: widget.onSignedIn ?? (_) {}, notice: widget.notice);
+    } else {
+      page = AccountPage(account: account, onSignOut: widget.onSignOut, features: _features, picture: _picture);
+    }
+    final name = account?.username;
     if (MediaQuery.sizeOf(context).width >= wideLayout) {
       return KScaffold(
         background: k.bg,
@@ -107,9 +141,9 @@ class _HomePageState extends State<HomePage> {
                       const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: KDivider()),
                       _AccountItem(
                         key: const ValueKey('nav-account'),
-                        name: name,
-                        picture: _picture,
-                        label: l.account,
+                        name: name ?? l.onThisDevice,
+                        picture: account == null ? null : _picture,
+                        label: account == null ? l.signIn : l.account,
                         selected: _section == sections.length,
                         onTap: () => setState(() => _section = sections.length),
                       ),
@@ -136,7 +170,10 @@ class _HomePageState extends State<HomePage> {
             height: 60,
             child: Row(
               children: [
-                for (final (i, (id, icon, label)) in [...sections, ('account', LucideIcons.user, l.account)].indexed)
+                for (final (i, (id, icon, label)) in [
+                  ...sections,
+                  account == null ? ('account', LucideIcons.logIn, l.signIn) : ('account', LucideIcons.user, l.account),
+                ].indexed)
                   Expanded(
                     child: _BottomItem(
                       key: ValueKey('nav-$id'),
@@ -167,7 +204,9 @@ class _AccountItem extends StatefulWidget {
   });
 
   final String name;
-  final ValueListenable<Uint8List?> picture;
+
+  /// None without an account: an icon of signing in stands in for the avatar.
+  final ValueListenable<Uint8List?>? picture;
   final String label;
   final bool selected;
   final VoidCallback onTap;
@@ -203,10 +242,13 @@ class _AccountItemState extends State<_AccountItem> {
             ),
             child: Row(
               children: [
-                ValueListenableBuilder(
-                  valueListenable: widget.picture,
-                  builder: (context, picture, _) => KAvatar(name: widget.name, size: 30, image: picture),
-                ),
+                if (widget.picture case final kept?)
+                  ValueListenableBuilder(
+                    valueListenable: kept,
+                    builder: (context, picture, _) => KAvatar(name: widget.name, size: 30, image: picture),
+                  )
+                else
+                  SizedBox(width: 30, height: 30, child: Icon(LucideIcons.logIn, size: 18, color: k.muted)),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
