@@ -17,10 +17,11 @@ import 'pages/login.dart';
 
 export 'feature.dart';
 
-/// Starts the app: the Rust side, the look kept on this device, then [KernoidApp] with `features`.
-Future<void> runKernoidApp({required List<KFeature> features}) async {
+/// Starts the app: the Rust side, the look kept on this device, then [KernoidApp] with `features`. A program's app names
+/// its own native library – its crate on `kernoid_bridge`, the app's only one (RFC 0011, 4).
+Future<void> runKernoidApp({required List<KFeature> features, String? library}) async {
   WidgetsFlutterBinding.ensureInitialized();
-  await RustLib.init();
+  await loadKernoid(library: library);
   await Appearance.load();
   runApp(KernoidApp(features: features));
 }

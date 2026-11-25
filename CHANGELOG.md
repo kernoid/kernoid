@@ -14,6 +14,10 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   with such a feature starts at its home before anyone signs in and offers the login in its side bar; signing in
   starts the home again with the account. kernoid's own app, whose features all need an account, starts at the login
   as before.
+- **A program's Rust in kernoid's library** (RFC 0011, 4): a program's crate on `kernoid_bridge` is its app's one
+  native library; it registers a `kernoid_bridge::program::Program` through `kernoid_programs`, and its Dart code
+  calls it with `programCall`/`programWatch` (or `Kernoid.programCall`/`programWatch` for the signed-in account),
+  bytes in and out. `runKernoidApp(library: …)` loads such a library (`loadKernoid`).
 
 ## [0.6.0] – 2026-11-20
 

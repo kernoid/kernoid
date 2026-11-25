@@ -4,6 +4,7 @@
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
 import 'api/kernoid.dart';
+import 'api/program.dart';
 import 'api/windows_files.dart';
 
 import 'dart:async';
@@ -54,6 +55,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   RustStreamSink<List<String>> dco_decode_StreamSink_list_String_Sse(dynamic raw);
+
+  @protected
+  RustStreamSink<Uint8List> dco_decode_StreamSink_list_prim_u_8_strict_Sse(dynamic raw);
 
   @protected
   RustStreamSink<UploadProgress> dco_decode_StreamSink_upload_progress_Sse(dynamic raw);
@@ -339,6 +343,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   RustStreamSink<List<String>> sse_decode_StreamSink_list_String_Sse(SseDeserializer deserializer);
+
+  @protected
+  RustStreamSink<Uint8List> sse_decode_StreamSink_list_prim_u_8_strict_Sse(SseDeserializer deserializer);
 
   @protected
   RustStreamSink<UploadProgress> sse_decode_StreamSink_upload_progress_Sse(SseDeserializer deserializer);
@@ -630,6 +637,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_StreamSink_list_String_Sse(RustStreamSink<List<String>> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_StreamSink_list_prim_u_8_strict_Sse(RustStreamSink<Uint8List> self, SseSerializer serializer);
 
   @protected
   void sse_encode_StreamSink_upload_progress_Sse(RustStreamSink<UploadProgress> self, SseSerializer serializer);

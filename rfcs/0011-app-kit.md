@@ -76,10 +76,38 @@ void main() => runKernoidApp(features: [MailFeature(), CalendarFeature(), Contac
 
 Two Rust libraries in one app would each carry a standard library and an async runtime, and on iOS they would clash
 when linked. So an app has **one** Rust library: kernoid's apps take `kernoid_bridge` as it is; a program's app makes
-its own bridge crate that depends on kernoid's Rust crates and adds its own API – and generates its own Dart code.
-**OPEN:** whether kernoid's feature packages can then call the program's bridge (flutter_rust_bridge with several
-crates in one library) or each program generates kernoid's API once more – a spike, when aktujo's app moves (RFC
-0008, 1).
+its own crate on `kernoid_bridge` – the app's library – and reaches its own Rust through kernoid's generated API.
+
+**Not two generations in one library** (spike, 2026-11-25, flutter_rust_bridge 2.13.0): the generated code exports
+fixed global symbols – `frb_pde_ffi_dispatcher_primary`, `frb_get_rust_content_hash`, `store_dart_post_cobject` and
+more – and dispatches by the function ids of one generation. Two crates exporting the same symbol link without an
+error on macOS, and one of them silently wins. And a program generating kernoid's API once more would give Dart types
+of its own, which kernoid's feature packages do not take.
+
+**So kernoid's generated API is the only one, and a program's part goes through it** (`kernoid_bridge::program`):
+
+- The program's crate depends on `kernoid_bridge` and is built as the app's library; kernoid's generated symbols come
+  along with it (checked in the `cdylib` and the `staticlib`). It implements `Program` – `call` answers bytes,
+  `watch` sends bytes to a `Sink` – and exports `kernoid_programs`, a C function without arguments that registers it
+  (`program::register("aktujo", …)`).
+- Dart calls it with `programCall`/`programWatch` before anyone signs in, and with `Kernoid.programCall`/
+  `programWatch` for the account – then the program's Rust is handed kernoid's `Kernoid` of that login. What the bytes
+  are is the program's: JSON, CBOR, its own types behind a Dart class of its own – as the file shells talk JSON to
+  Swift and Kotlin.
+- `runKernoidApp(features: …, library: 'aktujo_bridge')` loads that library (`loadKernoid`): kernoid's `RustLib` from
+  it – flutter_rust_bridge's content hash refuses a library built on another version of the bridge –, then
+  `kernoid_programs`, if the library has it. kernoid's own app names no library.
+- The program's crate takes `kernoid_bridge` from git at the tag of the release whose Dart packages the app uses.
+
+Checked on macOS with a debug build: a crate on `kernoid_bridge` as the one library, kernoid's own calls (an async
+login, its error), a program's call, its errors and a stream, all from Dart; `kernoid_bridge`'s test of the registry.
+**OPEN:** the other platforms and release builds – that a linker does not drop `kernoid_programs` from a static
+library on iOS –, and a program's call with a signed-in account.
+
+**OPEN, before a program's app builds:** `kernoid_bridge` is an FFI plugin, so Flutter builds its crate in every app
+that depends on it – a program's app would carry two libraries again. The package splits: the generated Dart code
+without a native build, and the native build (cargokit and the platform folders) in a plugin package of each app –
+kernoid's, and the program's for its own crate.
 
 ## 5. The system's file integration
 
@@ -110,4 +138,4 @@ with the system; the apps of programs built on kernoid show files inside the app
 
 ## 8. Open
 
-- **OPEN:** several bridges in one native library (section 4).
+- **OPEN:** the bridge's Dart code apart from its native build, and the other platforms (section 4).

@@ -4,4 +4,5 @@
 
 pub mod api;
 mod frb_generated;
+pub mod program;
 pub mod provider;

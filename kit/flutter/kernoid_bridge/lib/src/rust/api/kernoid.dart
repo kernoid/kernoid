@@ -241,6 +241,12 @@ abstract class Kernoid implements RustOpaqueInterface {
   /// The people and groups named.
   Future<List<Principal>> principals({required List<String> ids});
 
+  /// Calls `method` of `program` for this account.
+  Future<Uint8List> programCall({required String program, required String method, required List<int> input});
+
+  /// Starts `method` of `program` sending to `sink`, for this account.
+  Stream<Uint8List> programWatch({required String program, required String method, required List<int> input});
+
   Future<void> removeFileLink({required String accountId, required String id});
 
   Future<void> removeOwnAvatar();
