@@ -70,7 +70,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   int get rustContentHash => 1964834871;
 
   static const kDefaultExternalLibraryLoaderConfig = ExternalLibraryLoaderConfig(
-    stem: 'UNKNOWN',
+    stem: 'kernoid_bridge',
     ioDirectory: 'rust/target/release/',
     webPrefix: 'pkg/',
     wasmBindgenName: 'wasm_bindgen',
