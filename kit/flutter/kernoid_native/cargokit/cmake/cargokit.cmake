@@ -34,10 +34,18 @@ function(apply_cargokit target manifest_dir lib_name any_symbol_name)
     endif()
     set(CARGOKIT_OHOS_SDK_HOME $ENV{OHOS_SDK_HOME})
 
+    # kernoid: an absolute manifest_dir is taken as it is – the crate of kernoid_native lies in another package, which
+    # Windows cannot reach by ".." through Flutter's links of plugins.
+    if (IS_ABSOLUTE "${manifest_dir}")
+        set(CARGOKIT_MANIFEST "${manifest_dir}")
+    else()
+        set(CARGOKIT_MANIFEST "${CMAKE_CURRENT_SOURCE_DIR}/${manifest_dir}")
+    endif()
+
     set(CARGOKIT_ENV
         "CARGOKIT_CMAKE=${CMAKE_COMMAND}"
         "CARGOKIT_CONFIGURATION=$<CONFIG>"
-        "CARGOKIT_MANIFEST_DIR=${CMAKE_CURRENT_SOURCE_DIR}/${manifest_dir}"
+        "CARGOKIT_MANIFEST_DIR=${CARGOKIT_MANIFEST}"
         "CARGOKIT_TARGET_TEMP_DIR=${CARGOKIT_TEMP_DIR}"
         "CARGOKIT_OUTPUT_DIR=${CARGOKIT_OUTPUT_DIR}"
         "CARGOKIT_TARGET_PLATFORM=${CARGOKIT_TARGET_PLATFORM}"

@@ -9,7 +9,15 @@ set(PROJECT_NAME "kernoid_native")
 project(${PROJECT_NAME} LANGUAGES CXX)
 
 include("../cargokit/cmake/cargokit.cmake")
-apply_cargokit(${PROJECT_NAME} ../../kernoid_bridge/rust kernoid_bridge "")
+# The crate is kernoid_bridge's, beside this package. Flutter reaches this folder through a link
+# (flutter/ephemeral/.plugin_symlinks), and Windows reads ".." from there as a name, not through the link: the crate is
+# found from this folder's real path instead, resolved as cargokit resolves its own.
+execute_process(
+  COMMAND powershell -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_LIST_DIR}/../cargokit/cmake/resolve_symlinks.ps1"
+          "${CMAKE_CURRENT_SOURCE_DIR}"
+  OUTPUT_VARIABLE kernoid_native_dir OUTPUT_STRIP_TRAILING_WHITESPACE)
+get_filename_component(kernoid_bridge_crate "${kernoid_native_dir}/../../kernoid_bridge/rust" ABSOLUTE)
+apply_cargokit(${PROJECT_NAME} "${kernoid_bridge_crate}" kernoid_bridge "")
 
 # List of absolute paths to libraries that should be bundled with the plugin.
 # This list could contain prebuilt libraries, or libraries created by an
