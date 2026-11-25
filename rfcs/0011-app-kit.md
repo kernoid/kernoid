@@ -20,7 +20,8 @@ In `kit/flutter/`, each a Dart package under MIT:
 | Package | Holds | Was in `kernoid/apps` |
 |---|---|---|
 | `kernoid_ui` | the design system: `KApp`, `KTheme`/`KTokens`, text input, dialogs, menus, pickers, controls; IBM Plex and Lucide | `lib/ui/` |
-| `kernoid_bridge` | the Rust side (`rust/`, crate `kernoid_bridge` on `kit/client`, `kit/e2e`, `kit/sync` by path), the Dart code flutter_rust_bridge generates from it, cargokit to build it; the core of the file shells (`provider`) | `rust/`, `rust_builder/`, `lib/src/rust/` |
+| `kernoid_bridge` | the Rust side (`rust/`, crate `kernoid_bridge` on `kit/client`, `kit/e2e`, `kit/sync` by path), the Dart code flutter_rust_bridge generates from it – no native build (section 4); a program's part (`program`); the core of the file shells (`provider`) | `rust/`, `lib/src/rust/` |
+| `kernoid_native` | the FFI plugin that builds the bridge's crate into kernoid's app with cargokit, the platform folders for it – no Dart (section 4) | `rust_builder/` |
 | `kernoid_l10n` | the strings of the kit, English and German, as one `KernoidLocalizations` | `lib/l10n/` |
 | `kernoid_shell` | the frame of an app: logging in (OpenID Connect, app passwords, kept login), the home with its side bar built from **features**, the account page, appearance, the tray, what the server offers | `lib/app/`, `pages/home.dart`, `login.dart`, `account.dart` |
 | `kernoid_mail` | mail: folders, list, reading (HTML, end to end), writing | `pages/mail.dart`, `compose.dart`, `widgets/html_body.dart`, `e2e.dart` |
@@ -101,13 +102,17 @@ of its own, which kernoid's feature packages do not take.
 
 Checked on macOS with a debug build: a crate on `kernoid_bridge` as the one library, kernoid's own calls (an async
 login, its error), a program's call, its errors and a stream, all from Dart; `kernoid_bridge`'s test of the registry.
-**OPEN:** the other platforms and release builds – that a linker does not drop `kernoid_programs` from a static
-library on iOS –, and a program's call with a signed-in account.
+**OPEN:** the other platforms and release builds, and a program's call with a signed-in account.
 
-**OPEN, before a program's app builds:** `kernoid_bridge` is an FFI plugin, so Flutter builds its crate in every app
-that depends on it – a program's app would carry two libraries again. The package splits: the generated Dart code
-without a native build, and the native build (cargokit and the platform folders) in a plugin package of each app –
-kernoid's, and the program's for its own crate.
+**The bridge's Dart code apart from its native build** (implemented 2026-11-25): an FFI plugin's crate is built into
+every app that depends on the plugin, so `kernoid_bridge` holds the crate and the generated Dart code and is no plugin,
+and `kernoid_native` – cargokit and the platform folders – builds the crate into kernoid's app as `kernoid_bridge`.
+kernoid's app depends on both; a program's app depends on `kernoid_bridge` and on a package of its own like
+`kernoid_native` that builds its crate – never on `kernoid_native`. iOS and macOS link the static library with
+`-force_load`, so `kernoid_programs` stays in it. There the framework is named after the plugin package, not the
+library, so `loadKernoid` finds the symbols in the process (`ExternalLibrary.process`) – safe, since an app has one
+library with flutter_rust_bridge's symbols; elsewhere it opens the library by name. Checked: kernoid's macOS app
+built with `kernoid_native` has that one framework with Rust in it, and starts.
 
 ## 5. The system's file integration
 
@@ -138,4 +143,4 @@ with the system; the apps of programs built on kernoid show files inside the app
 
 ## 8. Open
 
-- **OPEN:** the bridge's Dart code apart from its native build, and the other platforms (section 4).
+- **OPEN:** a program's library on the platforms besides macOS, and in release builds (section 4).

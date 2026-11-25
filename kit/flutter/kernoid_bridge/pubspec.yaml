@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
-# The Rust side of kernoid's apps (RFC 0011, 2): the crate in rust/ (on the kit's crates, by path), the Dart code
-# flutter_rust_bridge generates from it (lib/src/rust/), and cargokit (cargokit/, MIT OR Apache-2.0) to build it for
-# every platform – an FFI plugin.
+# The Rust side of kernoid's apps (RFC 0011, 2): the crate in rust/ (on the kit's crates, by path) and the Dart code
+# flutter_rust_bridge generates from it (lib/src/rust/). No native build here: kernoid_native builds the crate into
+# kernoid's app, a program's own package builds its crate on this one into its app (RFC 0011, 4).
 name: kernoid_bridge
 description: "The Rust side of kernoid's apps: the kit's SDK, called from Dart"
 version: 0.6.0
@@ -20,16 +20,3 @@ dependencies:
 dev_dependencies:
   flutter_lints: 6.0.0
 
-flutter:
-  plugin:
-    platforms:
-      android:
-        ffiPlugin: true
-      ios:
-        ffiPlugin: true
-      linux:
-        ffiPlugin: true
-      macos:
-        ffiPlugin: true
-      windows:
-        ffiPlugin: true

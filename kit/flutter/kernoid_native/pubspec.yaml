@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: MIT
+# kernoid's native library (RFC 0011, 4): an FFI plugin that builds the crate of kernoid_bridge (../kernoid_bridge/rust)
+# for every platform with cargokit (cargokit/, MIT OR Apache-2.0). kernoid's app depends on it; a program built on
+# kernoid has a package like it for its own crate on kernoid_bridge instead – an app has one Rust library.
+name: kernoid_native
+description: "kernoid's native library: the crate of kernoid_bridge, built for every platform"
+version: 0.6.0
+publish_to: 'none'
+repository: https://github.com/kernoid/kernoid
+
+environment:
+  sdk: ^3.14.0
+  flutter: ">=3.47.8"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_lints: 6.0.0
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        ffiPlugin: true
+      ios:
+        ffiPlugin: true
+      linux:
+        ffiPlugin: true
+      macos:
+        ffiPlugin: true
+      windows:
+        ffiPlugin: true

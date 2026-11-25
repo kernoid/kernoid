@@ -19,6 +19,13 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   calls it with `programCall`/`programWatch` (or `Kernoid.programCall`/`programWatch` for the signed-in account),
   bytes in and out. `runKernoidApp(library: …)` loads such a library (`loadKernoid`).
 
+### Changed
+
+- **`kernoid_bridge` is no plugin any more:** it holds the crate and the generated Dart code; the new package
+  `kernoid_native` (cargokit and the platform folders) builds the crate into kernoid's app, still as the library
+  `kernoid_bridge`. An app on the kit depends on `kernoid_native` besides its features (RFC 0011, 4); a program's app
+  has a package like it for its own crate instead.
+
 ## [0.6.0] – 2026-11-20
 
 kernoid is its own code now: everything taken over from Stalwart, and the libraries that read calendars, contacts, mail,

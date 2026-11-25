@@ -1,6 +1,6 @@
 // The Android Gradle Plugin builds the native code with the Android NDK.
 
-group 'com.flutter_rust_bridge.kernoid_bridge'
+group 'dev.kernoid.kernoid_native'
 version '1.0'
 
 buildscript {
@@ -26,7 +26,7 @@ apply plugin: 'com.android.library'
 
 android {
     if (project.android.hasProperty("namespace")) {
-        namespace 'com.flutter_rust_bridge.kernoid_bridge'
+        namespace 'dev.kernoid.kernoid_native'
     }
 
     // Bumping the plugin compileSdkVersion requires all clients of this plugin
@@ -51,6 +51,6 @@ android {
 
 apply from: "../cargokit/gradle/plugin.gradle"
 cargokit {
-    manifestDir = "../rust"
+    manifestDir = "../../kernoid_bridge/rust"
     libname = "kernoid_bridge"
 }
