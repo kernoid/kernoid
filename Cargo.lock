@@ -2840,6 +2840,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "kernoid-node"
+version = "0.6.0"
+dependencies = [
+ "axum",
+ "kernoid-base",
+ "kernoid-crypt",
+ "kernoid-log",
+ "kernoid-relay",
+ "kernoid-spaces",
+ "kernoid-store",
+ "serde_json",
+ "sqlx",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "kernoid-oidc"
 version = "0.6.0"
 dependencies = [
@@ -2998,6 +3015,24 @@ dependencies = [
  "webpki-roots",
  "x509-cert",
  "zeroize",
+]
+
+[[package]]
+name = "kernoid-spaces"
+version = "0.6.0"
+dependencies = [
+ "hex",
+ "js-sys",
+ "kernoid-base",
+ "kernoid-blob",
+ "kernoid-crypt",
+ "kernoid-log",
+ "reqwest",
+ "rustls",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
 ]
 
 [[package]]

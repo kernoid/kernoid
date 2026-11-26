@@ -3,21 +3,31 @@
 //! has read each, which are due for a new generation, where each was linked from, the records received and the events
 //! in them. In the same database as the rest of the store (schema version 2).
 //!
+//! [`StreamBackend`] is what [`crate::streams::Streams`] keeps it in: [`Store`] in SQLite on a device (the feature
+//! `sqlite`), or a server's store – kernoid's `kernoid-node` keeps a server's in PostgreSQL, so that a server is one
+//! more node of a space (RFC 0010, 8).
+//!
 //! OPEN: the keys of streams are kept here beside the data, as the seeds of 0.4 are; the key store of the operating
 //! system is not used yet.
 
 use std::collections::BTreeMap;
 
-use kernoid_base::{SpaceId, from_root, to_root};
+use kernoid_base::SpaceId;
+#[cfg(feature = "sqlite")]
+use kernoid_base::{from_root, to_root};
 use kernoid_crypt::{
     Domain,
     stream::{PersonId, Roster, RosterRecord, StreamId, StreamKey},
 };
 use kernoid_log::Log;
+#[cfg(feature = "sqlite")]
 use rusqlite::{OptionalExtension, params};
 
-use super::{Store, StoreError};
+#[cfg(feature = "sqlite")]
+use super::Store;
+use super::StoreError;
 
+#[cfg(feature = "sqlite")]
 pub(crate) const SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS roster (
     space TEXT NOT NULL,
@@ -79,10 +89,191 @@ pub struct StreamState {
     pub inbox: bool,
 }
 
-fn identity<T: std::str::FromStr>(text: String) -> Result<T, StoreError> {
+/// Reads a stored identity – of a space, a stream or a person.
+pub fn identity<T: std::str::FromStr>(text: String) -> Result<T, StoreError> {
     text.parse().map_err(|_| StoreError::Identity(text))
 }
 
+/// What a node keeps of its spaces of streams. Every write of a value that is there already leaves it as it is.
+pub trait StreamBackend: Send {
+    /// The state of a space of streams on this node (JSON, the engine's own) – it holds the node's seed.
+    fn space_state(&self, space: &SpaceId) -> Result<Option<String>, StoreError>;
+
+    /// Keeps the state of a space of streams.
+    fn set_space_state(&self, space: &SpaceId, state: &str) -> Result<(), StoreError>;
+
+    /// The roster's records of a space, in order.
+    fn roster_records(&self, space: &SpaceId) -> Result<Vec<RosterRecord>, StoreError>;
+
+    /// The roster of a space, every record checked again.
+    fn roster(&self, domain: Domain, space: &SpaceId) -> Result<Roster, StoreError> {
+        Roster::from_records(domain, space.clone(), &self.roster_records(space)?)
+            .map_err(|error| StoreError::Record { space: space.clone(), error: error.to_string() })
+    }
+
+    /// Applies a record to the roster and stores it – only if it is the next valid one.
+    fn add_roster_record(&mut self, domain: Domain, record: &RosterRecord) -> Result<(), StoreError>;
+
+    /// The spaces of streams on this node, in order.
+    fn stream_spaces(&self) -> Result<Vec<SpaceId>, StoreError>;
+
+    /// Notes a stream the node can open; returns whether it was new.
+    fn add_stream(&self, space: &SpaceId, stream: &StreamId, inbox: bool) -> Result<bool, StoreError>;
+
+    /// The streams of a space the node can open, in order.
+    fn streams(&self, space: &SpaceId) -> Result<Vec<StreamState>, StoreError>;
+
+    fn stream(&self, space: &SpaceId, stream: &StreamId) -> Result<Option<StreamState>, StoreError> {
+        Ok(self.streams(space)?.into_iter().find(|state| state.stream == *stream))
+    }
+
+    /// Moves the position read up to forward – never back.
+    fn set_position(&self, space: &SpaceId, stream: &StreamId, position: i64) -> Result<(), StoreError>;
+
+    fn set_due(&self, space: &SpaceId, stream: &StreamId, due: bool) -> Result<(), StoreError>;
+
+    /// Forgets a space of streams with all the node kept of it – its roster, streams, keys and state –, all or none.
+    fn remove_stream_space(&mut self, space: &SpaceId) -> Result<(), StoreError>;
+
+    /// Forgets a stream with what the node kept of it, all or none.
+    fn remove_stream(&mut self, space: &SpaceId, stream: &StreamId) -> Result<(), StoreError>;
+
+    fn put_stream_key(
+        &self,
+        space: &SpaceId,
+        stream: &StreamId,
+        generation: u32,
+        key: &StreamKey,
+    ) -> Result<(), StoreError>;
+
+    /// The keys of a stream the node holds, by generation.
+    fn stream_keys(&self, space: &SpaceId, stream: &StreamId) -> Result<BTreeMap<u32, StreamKey>, StoreError>;
+
+    fn add_parent(&self, space: &SpaceId, stream: &StreamId, parent: &Parent) -> Result<(), StoreError>;
+
+    /// The streams and persons a stream's key was linked from.
+    fn parents(&self, space: &SpaceId, stream: &StreamId) -> Result<Vec<Parent>, StoreError>;
+
+    /// The streams linked from `parent`, in order.
+    fn children(&self, space: &SpaceId, parent: &Parent) -> Result<Vec<StreamId>, StoreError>;
+
+    fn put_stream_record(
+        &self,
+        space: &SpaceId,
+        stream: &StreamId,
+        position: i64,
+        canonical: &[u8],
+    ) -> Result<(), StoreError>;
+
+    /// The records of a stream the node received, in the relay's order.
+    fn stream_records(&self, space: &SpaceId, stream: &StreamId) -> Result<Vec<(i64, Vec<u8>)>, StoreError>;
+
+    /// The events of a stream: its log.
+    fn stream_log(&self, space: &SpaceId, stream: &StreamId) -> Result<Log, StoreError>;
+
+    /// Stores an event of a stream (its canonical encoding); whether it was new.
+    fn add_stream_event(
+        &self,
+        space: &SpaceId,
+        stream: &StreamId,
+        hash: &str,
+        canonical: &[u8],
+    ) -> Result<bool, StoreError>;
+
+    /// Whether the node knows this stream.
+    fn has_stream(&self, space: &SpaceId, stream: &StreamId) -> Result<bool, StoreError>;
+}
+
+/// The setting of a space under which [`Store`] keeps the state of a space of streams.
+#[cfg(feature = "sqlite")]
+const STATE: &str = "streams";
+
+#[cfg(feature = "sqlite")]
+impl StreamBackend for Store {
+    fn space_state(&self, space: &SpaceId) -> Result<Option<String>, StoreError> {
+        super::Backend::setting(self, Some(space), STATE)
+    }
+    fn set_space_state(&self, space: &SpaceId, state: &str) -> Result<(), StoreError> {
+        super::Backend::set_setting(self, Some(space), STATE, state)
+    }
+    fn roster_records(&self, space: &SpaceId) -> Result<Vec<RosterRecord>, StoreError> {
+        Store::roster_records(self, space)
+    }
+    fn add_roster_record(&mut self, domain: Domain, record: &RosterRecord) -> Result<(), StoreError> {
+        Store::add_roster_record(self, domain, record)
+    }
+    fn stream_spaces(&self) -> Result<Vec<SpaceId>, StoreError> {
+        Store::stream_spaces(self)
+    }
+    fn add_stream(&self, space: &SpaceId, stream: &StreamId, inbox: bool) -> Result<bool, StoreError> {
+        Store::add_stream(self, space, stream, inbox)
+    }
+    fn streams(&self, space: &SpaceId) -> Result<Vec<StreamState>, StoreError> {
+        Store::streams(self, space)
+    }
+    fn set_position(&self, space: &SpaceId, stream: &StreamId, position: i64) -> Result<(), StoreError> {
+        Store::set_position(self, space, stream, position)
+    }
+    fn set_due(&self, space: &SpaceId, stream: &StreamId, due: bool) -> Result<(), StoreError> {
+        Store::set_due(self, space, stream, due)
+    }
+    fn remove_stream_space(&mut self, space: &SpaceId) -> Result<(), StoreError> {
+        Store::remove_stream_space(self, space)
+    }
+    fn remove_stream(&mut self, space: &SpaceId, stream: &StreamId) -> Result<(), StoreError> {
+        Store::remove_stream(self, space, stream)
+    }
+    fn put_stream_key(
+        &self,
+        space: &SpaceId,
+        stream: &StreamId,
+        generation: u32,
+        key: &StreamKey,
+    ) -> Result<(), StoreError> {
+        Store::put_stream_key(self, space, stream, generation, key)
+    }
+    fn stream_keys(&self, space: &SpaceId, stream: &StreamId) -> Result<BTreeMap<u32, StreamKey>, StoreError> {
+        Store::stream_keys(self, space, stream)
+    }
+    fn add_parent(&self, space: &SpaceId, stream: &StreamId, parent: &Parent) -> Result<(), StoreError> {
+        Store::add_parent(self, space, stream, parent)
+    }
+    fn parents(&self, space: &SpaceId, stream: &StreamId) -> Result<Vec<Parent>, StoreError> {
+        Store::parents(self, space, stream)
+    }
+    fn children(&self, space: &SpaceId, parent: &Parent) -> Result<Vec<StreamId>, StoreError> {
+        Store::children(self, space, parent)
+    }
+    fn put_stream_record(
+        &self,
+        space: &SpaceId,
+        stream: &StreamId,
+        position: i64,
+        canonical: &[u8],
+    ) -> Result<(), StoreError> {
+        Store::put_stream_record(self, space, stream, position, canonical)
+    }
+    fn stream_records(&self, space: &SpaceId, stream: &StreamId) -> Result<Vec<(i64, Vec<u8>)>, StoreError> {
+        Store::stream_records(self, space, stream)
+    }
+    fn stream_log(&self, space: &SpaceId, stream: &StreamId) -> Result<Log, StoreError> {
+        Store::stream_log(self, space, stream)
+    }
+    fn add_stream_event(
+        &self,
+        space: &SpaceId,
+        stream: &StreamId,
+        hash: &str,
+        canonical: &[u8],
+    ) -> Result<bool, StoreError> {
+        Store::add_stream_event(self, space, stream, hash, canonical)
+    }
+    fn has_stream(&self, space: &SpaceId, stream: &StreamId) -> Result<bool, StoreError> {
+        Store::has_stream(self, space, stream)
+    }
+}
+
+#[cfg(feature = "sqlite")]
 impl Store {
     /// The roster's records of a space, in order.
     pub fn roster_records(&self, space: &SpaceId) -> Result<Vec<RosterRecord>, StoreError> {

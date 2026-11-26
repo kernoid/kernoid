@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT canonical FROM node_roster WHERE node = $1 AND space = $2 ORDER BY seq",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "canonical",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "node_roster",
+            "name": "canonical"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "76e1b1811123929b8516677a474a3b9f3a11e0dee6e2b0b0d63843ee0d3a2b15"
+}

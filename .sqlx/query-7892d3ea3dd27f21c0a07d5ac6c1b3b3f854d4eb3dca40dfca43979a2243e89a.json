@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM node_stream_records WHERE node = $1 AND space = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7892d3ea3dd27f21c0a07d5ac6c1b3b3f854d4eb3dca40dfca43979a2243e89a"
+}

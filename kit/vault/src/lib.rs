@@ -500,7 +500,7 @@ pub fn remove_member(streams: &mut Streams, space: &SpaceId, account: &str) -> R
 pub fn sync(streams: &mut Streams, space: &SpaceId) -> Result<bool> {
     match streams.sync(space) {
         Ok(_) => Ok(true),
-        Err(error) if Streams::is_removed(&error) => {
+        Err(error) if kernoid_spaces::streams::is_removed(&error) => {
             streams.forget(space)?;
             Ok(false)
         }

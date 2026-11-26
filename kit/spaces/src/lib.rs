@@ -16,7 +16,9 @@ pub mod transport;
 
 use std::{collections::BTreeMap, sync::Arc};
 
-use crate::store::{Backend, Store, StoreError};
+#[cfg(feature = "sqlite")]
+use crate::store::Store;
+use crate::store::{Backend, StoreError};
 use kernoid_base::{Sha256Hash, SpaceId, base64url, from_base64url, from_root, to_root};
 use kernoid_blob::{BlobError, Blobs};
 use kernoid_crypt::{
@@ -249,7 +251,18 @@ fn current_key(list: &MemberList, keys: &MemberKeys) -> Result<SpaceKey, SyncErr
 
 /// What one device holds: its spaces, their originals and its clock – and how it synchronises them. The store is
 /// SQLite ([`Store`]) on a device, or any other [`Backend`].
+#[cfg(feature = "sqlite")]
 pub struct Replica<S: Backend = Store> {
+    domain: Domain,
+    device: DeviceId,
+    store: S,
+    blobs: Arc<dyn Blobs>,
+    clock: Clock,
+}
+
+/// What one device holds: its spaces, their originals and its clock – and how it synchronises them, in any [`Backend`].
+#[cfg(not(feature = "sqlite"))]
+pub struct Replica<S: Backend> {
     domain: Domain,
     device: DeviceId,
     store: S,
@@ -688,7 +701,7 @@ impl<S: Backend> Replica<S> {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "sqlite"))]
 mod tests {
     use super::*;
 

@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: MIT -->
 # kernoid-spaces
 
-A device's end-to-end encrypted spaces: their store in SQLite (`store`; SQLCipher with the feature `sqlcipher`) –
+A device's end-to-end encrypted spaces: their store in SQLite (`store`, the feature `sqlite`, on by default; SQLCipher with the feature `sqlcipher`) – a server keeps them in PostgreSQL instead, through `StreamBackend` (kernoid's `kernoid-node`) –
 events, member records and rosters, streams with their keys, settings, what was sent – and their synchronisation
 through a relay – kernoid's (`kernoid-relay`, the service `relay`): founding, invitations, recovery, members, streams
 with generations of keys (`streams`), and protocol 1 (`Replica`). Until 0.5.0 the crates `kernoid-replica` and

@@ -18,8 +18,26 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
   native library; it registers a `kernoid_bridge::program::Program` through `kernoid_programs`, and its Dart code
   calls it with `programCall`/`programWatch` (or `Kernoid.programCall`/`programWatch` for the signed-in account),
   bytes in and out. `runKernoidApp(library: …)` loads such a library (`loadKernoid`).
+- **A server as one more node of a space** (RFC 0010, 8): the new crate `kernoid-node` keeps a node's spaces of streams
+  in PostgreSQL (migration 0059, `node_*`), so that a program's server founds, joins, follows and writes like a device
+  (`Streams<Node>`), with no SQLite in its build. Its seed, the keys of streams and the events it reads are sealed
+  under the node's key. `kernoid-spaces` keeps its engine apart from its store: the trait `StreamBackend`, with
+  SQLite (`Store`) behind the feature `sqlite`, on by default.
+- **A relay without object storage:** `[blob] kind = "database"` is allowed with the relay too – only mail and files
+  need object storage – so that a small relay keeps its large envelopes in PostgreSQL; `deploy/compose/relay.yaml`
+  runs a relay and nothing else with PostgreSQL alone.
 
 ### Changed
+
+- **Streams: who writes what of a person** (RFC 0012, 7 and 11), from a first reading of `kernoid_crypt::stream` and
+  `pq` ahead of their review: the roster takes a person's key only from a device of that person, the device adding the
+  person, or – after removing one of its devices – a device with `members`; seals and links of the space stream are
+  never replaced, and a link names the person's current key. Before, any device of a space could rotate another
+  person's key to a seed of its own, or lock a person out of the space stream. A device checks a seed against the
+  published receiving key; the relay lets only a person's own devices make the person's stream, the only inbox.
+  Spaces whose roster holds such records from before no longer read – none are known.
+- **Security fixes:** `url` 2.5.9 (RUSTSEC-2026-0592) everywhere, `kube` 4.2.1 in the operator (RUSTSEC-2026-0600 –
+  the operator uses rustls, not the affected OpenSSL connector).
 
 - **`kernoid_bridge` is no plugin any more:** it holds the crate and the generated Dart code; the new package
   `kernoid_native` (cargokit and the platform folders) builds the crate into kernoid's app, still as the library

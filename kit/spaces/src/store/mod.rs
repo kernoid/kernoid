@@ -7,26 +7,37 @@
 //! Every event and record is kept in its canonical encoding – the form it is hashed and passed on in. The store
 //! knows the frame of events, not their kinds; a program builds its own views on the events.
 //!
-//! What the foundation keeps is the trait [`Backend`]: [`Store`] keeps it in SQLite, on a device. A server keeps spaces
-//! through kernoid's relay (`kernoid-relay`, PostgreSQL), not here.
+//! What the foundation keeps is the trait [`Backend`] (and [`streams::StreamBackend`] for spaces of streams): [`Store`]
+//! keeps them in SQLite, on a device (the feature `sqlite`). A server keeps the spaces of the relay in `kernoid-relay`, and
+//! those it is a node of in `kernoid-node` – both on PostgreSQL.
 
 pub mod streams;
 
-use std::{collections::BTreeSet, fmt, path::Path};
+#[cfg(feature = "sqlite")]
+use std::path::Path;
+use std::{collections::BTreeSet, fmt};
 
-use kernoid_base::{Sha256Hash, SpaceId, to_root};
+#[cfg(feature = "sqlite")]
+use kernoid_base::to_root;
+use kernoid_base::{Sha256Hash, SpaceId};
 use kernoid_crypt::{Domain, MemberList, MemberRecord, RecordProblem};
 use kernoid_log::{EventError, Log};
 /// The SQLite binding of the store, for programs that keep tables of their own beside it ([`Store::connection`]).
+#[cfg(feature = "sqlite")]
 pub use rusqlite;
+#[cfg(feature = "sqlite")]
 use rusqlite::{Connection, OptionalExtension, params};
 
 /// Why the store failed.
 #[derive(Debug, thiserror::Error)]
 pub enum StoreError {
     /// The database.
+    #[cfg(feature = "sqlite")]
     #[error("database: {0}")]
     Database(#[from] rusqlite::Error),
+    /// The store of another backend – a server's database.
+    #[error("store: {0}")]
+    Backend(String),
     /// A name of a schema in PostgreSQL that is not a plain one.
     #[error("{0:?} is not a name of a schema: a–z, 0–9 and _, starting with a letter, at most 63")]
     Schema(String),
@@ -60,6 +71,7 @@ pub enum StoreError {
 /// The version of the schema, kept in `user_version`.
 pub const SCHEMA_VERSION: i64 = 2;
 
+#[cfg(feature = "sqlite")]
 const SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS settings (
     space TEXT NOT NULL,          -- '' for settings of the device
@@ -138,16 +150,19 @@ pub trait Backend: fmt::Debug + Send {
 }
 
 /// Reads stored identities – a space's or a hash.
+#[cfg(feature = "sqlite")]
 fn parse<T: std::str::FromStr>(id: String) -> Result<T, StoreError> {
     id.parse().map_err(|_| StoreError::Identity(id))
 }
 
 /// The store of a device.
+#[cfg(feature = "sqlite")]
 #[derive(Debug)]
 pub struct Store {
     connection: Connection,
 }
 
+#[cfg(feature = "sqlite")]
 impl Store {
     /// Opens the database file at `path`, creating it if needed.
     pub fn open(path: &Path) -> Result<Self, StoreError> {
@@ -211,6 +226,7 @@ impl Store {
     }
 }
 
+#[cfg(feature = "sqlite")]
 impl Backend for Store {
     fn spaces(&self) -> Result<Vec<SpaceId>, StoreError> {
         let mut statement =
@@ -318,7 +334,7 @@ impl Backend for Store {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "sqlite"))]
 mod tests {
     use std::path::PathBuf;
 

@@ -8,10 +8,9 @@
 
 use std::{collections::BTreeMap, sync::Arc};
 
-use crate::store::{
-    Backend, Store,
-    streams::{Parent, StreamState},
-};
+#[cfg(feature = "sqlite")]
+use crate::store::Store;
+use crate::store::streams::{Parent, StreamBackend, StreamState};
 use kernoid_base::{Bytes, Sha256Hash, SpaceId, base64url, from_base64url, from_root, to_root};
 use kernoid_crypt::{
     Domain, EncryptionError, RecoveryCode,
@@ -28,8 +27,6 @@ use serde_json::{Value, json};
 
 use crate::{FOUNDER_HEADER, INVITATION_LIFETIME, SyncError, now_ms, relay_error, state_error, transport::Transport};
 
-/// The setting under which the state of a space of streams is kept.
-const STATE: &str = "streams";
 /// The largest part of an original: the relay takes requests of at most 64 MiB.
 pub const PART: usize = 16 * 1024 * 1024;
 
@@ -187,38 +184,56 @@ fn stream_tokens(domain: Domain, key: &StreamKey, stream: &StreamId, generation:
     .expect("JSON")
 }
 
-/// What one device holds of its spaces of streams, and how it synchronises them.
-pub struct Streams {
+/// Whether a node was removed from a space it had: its device is no longer in the roster at the relay.
+pub fn is_removed(error: &SyncError) -> bool {
+    matches!(error, SyncError::State(message) if message.contains("removed from the space"))
+}
+
+/// What one node – a device, or a server – holds of its spaces of streams, and how it synchronises them; kept in a
+/// [`StreamBackend`]: SQLite on a device ([`Store`], the default), PostgreSQL on a server (`kernoid-node`).
+#[cfg(feature = "sqlite")]
+pub struct Streams<B: StreamBackend = Store> {
     domain: Domain,
     device: DeviceId,
-    store: Store,
+    store: B,
     clock: Clock,
     transport: Arc<dyn Transport>,
 }
 
-impl std::fmt::Debug for Streams {
+/// What one node – a device, or a server – holds of its spaces of streams, and how it synchronises them; kept in a
+/// [`StreamBackend`] – PostgreSQL on a server (`kernoid-node`).
+#[cfg(not(feature = "sqlite"))]
+pub struct Streams<B: StreamBackend> {
+    domain: Domain,
+    device: DeviceId,
+    store: B,
+    clock: Clock,
+    transport: Arc<dyn Transport>,
+}
+
+impl<B: StreamBackend> std::fmt::Debug for Streams<B> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Streams").field("domain", &self.domain).field("device", &self.device).finish_non_exhaustive()
     }
 }
 
-impl Streams {
+impl<B: StreamBackend> Streams<B> {
     /// The spaces of streams of a device named `device`, kept in `store`.
-    pub fn open(domain: Domain, device: DeviceId, store: Store) -> Self {
+    pub fn open(domain: Domain, device: DeviceId, store: B) -> Self {
         Self::with_transport(domain, device, store, crate::transport::default_transport())
     }
 
     /// The same, reaching relays through `transport` – e.g. a web page's worker.
-    pub fn with_transport(domain: Domain, device: DeviceId, store: Store, transport: Arc<dyn Transport>) -> Self {
+    pub fn with_transport(domain: Domain, device: DeviceId, store: B, transport: Arc<dyn Transport>) -> Self {
         Streams { domain, clock: Clock::new(device.clone()), device, store, transport }
     }
 
     /// The store, to change it as a whole – e.g. to keep it elsewhere than in a file.
-    pub fn store_mut(&mut self) -> &mut Store {
+    pub fn store_mut(&mut self) -> &mut B {
         &mut self.store
     }
 
-    pub fn store(&self) -> &Store {
+    pub fn store(&self) -> &B {
         &self.store
     }
 
@@ -228,12 +243,12 @@ impl Streams {
     }
 
     fn state(&self, space: &SpaceId) -> Result<State, SyncError> {
-        let text = self.store.setting(Some(space), STATE)?.ok_or_else(|| state_error("not a space of streams here"))?;
+        let text = self.store.space_state(space)?.ok_or_else(|| state_error("not a space of streams here"))?;
         serde_json::from_str(&text).map_err(|e| state_error(e.to_string()))
     }
 
     fn save_state(&self, space: &SpaceId, state: &State) -> Result<(), SyncError> {
-        Ok(self.store.set_setting(Some(space), STATE, &serde_json::to_string(state).expect("JSON"))?)
+        Ok(self.store.set_space_state(space, &serde_json::to_string(state).expect("JSON"))?)
     }
 
     fn device_keys(&self, state: &State) -> Result<HybridKeys, SyncError> {
@@ -374,7 +389,7 @@ impl Streams {
         person_name: Option<&str>,
     ) -> Result<SpaceId, SyncError> {
         let (relay, space, secret, new_person) = parse_invitation(invitation)?;
-        if self.store.setting(Some(&space), STATE)?.is_some() {
+        if self.store.space_state(&space)?.is_some() {
             return Err(state_error("this space is on this device already"));
         }
         let keys = HybridKeys::generate(self.domain);
@@ -509,14 +524,15 @@ impl Streams {
         Ok(self.store.remove_stream_space(space)?)
     }
 
-    /// Whether this device was removed from a space it had: its device is no longer in the roster at the relay.
+    /// Whether this device was removed from a space it had: its device is no longer in the roster at the relay. The
+    /// same as [`is_removed`], which needs no type of store.
     pub fn is_removed(error: &SyncError) -> bool {
-        matches!(error, SyncError::State(message) if message.contains("removed from the space"))
+        is_removed(error)
     }
 
     /// Whether this device is a device of the space already (it may still wait to be added).
     pub fn has_space(&self, space: &SpaceId) -> Result<bool, SyncError> {
-        Ok(self.store.setting(Some(space), STATE)?.is_some())
+        Ok(self.store.space_state(space)?.is_some())
     }
 
     /// The relay a space is kept at.

@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO node_stream_keys (node, space, stream, generation, key) VALUES ($1, $2, $3, $4, $5)\n                 ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Int8",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4d49bb92705c3512b22bd095647f64fd1126075f722c4e59ebef8d0f39d48fc4"
+}

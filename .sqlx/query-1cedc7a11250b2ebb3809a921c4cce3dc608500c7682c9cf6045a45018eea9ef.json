@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM node_roster WHERE node = $1 AND space = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1cedc7a11250b2ebb3809a921c4cce3dc608500c7682c9cf6045a45018eea9ef"
+}

@@ -27,7 +27,7 @@ kernoid-crypt = { version = "0.6.0", path = "../crypt" }
 kernoid-log = { version = "0.6.0", path = "../log" }
 # SQLite built in, 3.54.1 – the fix of RUSTSEC-2026-0459 that SQLCipher has too (one version for the kit: kernoid-sync
 # takes the same).
-rusqlite = { version = "0.42.0", features = ["bundled"] }
+rusqlite = { version = "0.42.0", features = ["bundled"], optional = true }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 thiserror = "2.0.21"
@@ -42,13 +42,25 @@ tokio = { version = "1.53.3", features = ["rt-multi-thread", "time", "net"], opt
 js-sys = "0.3.91"
 
 [features]
-default = ["native"]
+default = ["native", "sqlite"]
 # Reaching relays through reqwest; without it, the program gives a transport of its own (a web page's worker).
 native = ["dep:reqwest", "dep:rustls", "dep:tokio"]
 # The store encrypted as a whole: SQLCipher (BSD-3-Clause) with OpenSSL (Apache-2.0) built in, instead of SQLite.
-sqlcipher = ["rusqlite/bundled-sqlcipher-vendored-openssl"]
+# A device's store in SQLite (`store::Store`); without it, a program brings its own `StreamBackend` – a server's on
+# PostgreSQL (kernoid's `kernoid-node`) – and keeps SQLite out of its build.
+sqlite = ["dep:rusqlite"]
+sqlcipher = ["sqlite", "rusqlite/bundled-sqlcipher-vendored-openssl"]
 # The store as bytes and back (`Store::to_bytes`, `from_bytes`), for a store kept elsewhere than in a file.
-serialize = ["rusqlite/serialize"]
+serialize = ["sqlite", "rusqlite/serialize"]
 
 [dev-dependencies]
 serde_json = "1.0.154"
+
+# The tests keep their devices in SQLite.
+[[test]]
+name = "streams"
+required-features = ["sqlite"]
+
+[[test]]
+name = "server"
+required-features = ["sqlite"]
