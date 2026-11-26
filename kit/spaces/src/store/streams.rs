@@ -151,6 +151,9 @@ pub trait StreamBackend: Send {
 
     fn add_parent(&self, space: &SpaceId, stream: &StreamId, parent: &Parent) -> Result<(), StoreError>;
 
+    /// Forgets that a stream's key was linked from `parent` – a person taken out of its audience.
+    fn remove_parent(&self, space: &SpaceId, stream: &StreamId, parent: &Parent) -> Result<(), StoreError>;
+
     /// The streams and persons a stream's key was linked from.
     fn parents(&self, space: &SpaceId, stream: &StreamId) -> Result<Vec<Parent>, StoreError>;
 
@@ -237,6 +240,9 @@ impl StreamBackend for Store {
     }
     fn add_parent(&self, space: &SpaceId, stream: &StreamId, parent: &Parent) -> Result<(), StoreError> {
         Store::add_parent(self, space, stream, parent)
+    }
+    fn remove_parent(&self, space: &SpaceId, stream: &StreamId, parent: &Parent) -> Result<(), StoreError> {
+        Store::remove_parent(self, space, stream, parent)
     }
     fn parents(&self, space: &SpaceId, stream: &StreamId) -> Result<Vec<Parent>, StoreError> {
         Store::parents(self, space, stream)
@@ -417,6 +423,18 @@ impl Store {
         };
         self.connection.execute(
             "INSERT INTO stream_parents (space, stream, kind, parent) VALUES (?1, ?2, ?3, ?4) ON CONFLICT DO NOTHING",
+            params![space.as_str(), stream.as_str(), kind, parent],
+        )?;
+        Ok(())
+    }
+
+    pub fn remove_parent(&self, space: &SpaceId, stream: &StreamId, parent: &Parent) -> Result<(), StoreError> {
+        let (kind, parent) = match parent {
+            Parent::Stream(id) => ("stream", id.to_string()),
+            Parent::Person(id) => ("person", id.to_string()),
+        };
+        self.connection.execute(
+            "DELETE FROM stream_parents WHERE space = ?1 AND stream = ?2 AND kind = ?3 AND parent = ?4",
             params![space.as_str(), stream.as_str(), kind, parent],
         )?;
         Ok(())

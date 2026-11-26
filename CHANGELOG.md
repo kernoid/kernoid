@@ -8,7 +8,7 @@ before 1.0, a minor version (0.2) may change the API and the configuration, and 
 ## [0.7.0] – DATE
 
 What aktujo waits for (its RFC 0012, 8): an app that starts without an account, a program's Rust in kernoid's one native
-library, a server as one more node of a space, and a relay without object storage – with the first fixes from a
+library, a server as one more node of a space, groups, and a relay without object storage – with the first fixes from a
 reading of the streams' cryptography ahead of its review. Upgrade by pulling the image `ghcr.io/kernoid/kernoid:0.7.0`
 (the Helm chart and the crates follow the version): `kernoid migrate` adds the tables of migration 0059 (`node_*`).
 
@@ -36,6 +36,11 @@ reading of the streams' cryptography ahead of its review. Upgrade by pulling the
   (`Streams<Node>`), with no SQLite in its build. Its seed, the keys of streams and the events it reads are sealed
   under the node's key. `kernoid-spaces` keeps its engine apart from its store: the trait `StreamBackend`, with
   SQLite (`Store`) behind the feature `sqlite`, on by default.
+- **Groups** (RFC 0012, 7): a group is a stream of the foundation that names its members in an event of kind
+  `kernoid_audience`; streams shown to it are linked below it. Taking a person out renews the group and makes every
+  stream below it get a new key before its next write, on every device that reads the group – what is written from
+  then on, the person cannot read. `kernoid-spaces`: `new_group`, `show_to_group`, `add_to_group`,
+  `remove_from_group`, `audience`; a stream with an audience is linked to all of it when renewed.
 - **A relay without object storage:** `[blob] kind = "database"` is allowed with the relay too – only mail and files
   need object storage – so that a small relay keeps its large envelopes in PostgreSQL; `deploy/compose/relay.yaml`
   runs a relay and nothing else with PostgreSQL alone.

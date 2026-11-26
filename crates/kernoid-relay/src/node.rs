@@ -370,6 +370,23 @@ impl StreamBackend for Node {
         Ok(())
     }
 
+    fn remove_parent(&self, space: &SpaceId, stream: &StreamId, parent: &Parent) -> Result<(), StoreError> {
+        let (kind, parent) = parent_parts(parent);
+        self.wait(
+            sqlx::query!(
+                "DELETE FROM node_stream_parents WHERE node = $1 AND space = $2 AND stream = $3 AND kind = $4
+                 AND parent = $5",
+                self.node,
+                space.as_str(),
+                stream.as_str(),
+                kind,
+                parent
+            )
+            .execute(&self.pool),
+        )?;
+        Ok(())
+    }
+
     fn parents(&self, space: &SpaceId, stream: &StreamId) -> Result<Vec<Parent>, StoreError> {
         let rows = self.wait(
             sqlx::query!(

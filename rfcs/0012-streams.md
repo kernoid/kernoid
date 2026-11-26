@@ -136,6 +136,21 @@ stream are written once and never replaced; a link names the person's current ke
 generation goes only to a person added in the same record. The relay lets only a person's own devices make the
 person's stream, the only stream that is an inbox.
 
+**Groups** (aktujo RFC 0012, 8, item 7; implemented 2026-11-26) are streams of the foundation: a group is a stream
+whose key is sealed into its members' person streams, and which names them in an event of kind `kernoid_audience`
+(`{"kind": "kernoid_audience", "persons": [...]}`) – inside the stream, so encrypted and signed like every event, and
+read by every device that opens the group. What is shown to a group is linked below it; whoever opens the group opens
+it. A person's links into a stream are sealed into that person's stream, which only the person reads – so a device
+renewing a stream knows only the persons it linked itself; with an audience it links every person the newest audience
+names instead. Taking a person out writes the audience without the person and renews the group; every device that
+reads the new audience forgets the person as a target and marks the streams below the group due, so that the next
+write gives each a new generation the person cannot open – it compares the audience before and after the records
+it read, so that also a device that never linked the person renews. Taken in again, a person reads on, also what was
+written while out: a device takes the keys of older generations from the generation records of newer ones it holds,
+before it reads. No record kind is new and the relay sees nothing of it.
+`kernoid-spaces`: `new_group`, `show_to_group`, `add_to_group`, `remove_from_group`, `audience`. Kinds beginning with
+`kernoid_` are the foundation's; who may change a group (aktujo's `groups`) is the program's, checked at `at`.
+
 Roles and the other permissions of aktujo RFC 0009, 6 (`roles`, `groups`, `share`, `link`, `lock`, `unlock`) are data
 of the space stream, checked by the devices at a record's `at` – the relay cannot see them. A program defines its
 permissions and roles; the foundation knows the four the relay enforces.
@@ -202,6 +217,9 @@ then go. kernoid's own vaults move onto `v2` with [0010](0010-foundation.md), 5.
     requests are told apart by their encoding alone, not by a label.
   - The relay builds the roster again for every request and checks every signature, which costs O(n²) as the roster
     grows.
+  - Groups (section 7) came after that reading: the audience is the newest event of its kind in the log's order, so
+    two devices changing a group at once end with one of them; a device that reads a stream below a group but not
+    the group itself does not learn that someone left it, and does not renew before it writes.
   - Whether ml-kem 0.2's `EncapsulationKey::from_bytes` reduces coefficients modulo q, so that the check in `pq`
     really is FIPS 203's. Whether a person's inbox gets a new generation when the person's key rotates.
 - Settled for kernoid's vaults ([0010](0010-foundation.md), 5, 9): their store is kept sealed under a key of the

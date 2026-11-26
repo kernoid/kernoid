@@ -6,7 +6,10 @@
 //! generation first when the stream is due since someone was removed), makes streams below others or for a person
 //! alone, shares a stream with a person, keeps originals of a stream (large ones in parts), and purges a stream.
 
-use std::{collections::BTreeMap, sync::Arc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 
 #[cfg(feature = "sqlite")]
 use crate::store::Store;
@@ -27,6 +30,9 @@ use serde_json::{Value, json};
 
 use crate::{FOUNDER_HEADER, INVITATION_LIFETIME, SyncError, now_ms, relay_error, state_error, transport::Transport};
 
+/// The kind of the event that names a stream's audience – the members of a group (RFC 0012, 7): the persons whose
+/// streams its keys are sealed into. Kinds beginning with `kernoid_` are the foundation's.
+pub const AUDIENCE: &str = "kernoid_audience";
 /// The largest part of an original: the relay takes requests of at most 64 MiB.
 pub const PART: usize = 16 * 1024 * 1024;
 
@@ -757,11 +763,21 @@ impl<B: StreamBackend> Streams<B> {
         for (stream, result) in answer["streams"].as_object().into_iter().flatten() {
             let stream: StreamId = stream.parse().map_err(relay_error)?;
             let Some(records) = result["records"].as_array() else { continue };
+            if records.is_empty() {
+                continue;
+            }
+            // The audience before these records: whoever is not in it after them has left.
+            let before = self.audience(space, &stream)?;
+            self.unchain(space, &stream, &roster, records)?;
+            let mut events = false;
             for item in records {
                 let position = item["position"].as_i64().unwrap_or(0);
                 let record: StreamRecord = from_root(item["record"].to_string().as_bytes()).map_err(relay_error)?;
                 match self.take(space, &stream, &roster, person, seeds, &record)? {
-                    Taken::Event => report.received += 1,
+                    Taken::Event => {
+                        report.received += 1;
+                        events = true;
+                    }
                     Taken::Stream(child) => found.push(child),
                     Taken::Key => *more = true,
                     Taken::Nothing => {}
@@ -771,8 +787,43 @@ impl<B: StreamBackend> Streams<B> {
                 self.store.put_stream_record(space, &stream, position, &to_root(&record).expect("canonical"))?;
                 self.store.set_position(space, &stream, position)?;
             }
+            // A new audience: whoever left it is no longer linked, and what lies below gets new keys.
+            if events {
+                self.reconcile(space, &stream, before.as_ref(), true)?;
+            }
         }
         Ok(found)
+    }
+
+    /// Keys of older generations from newer ones this device holds, out of the generation records among `records`
+    /// (each seals the key before with its own) – what a device linked to a newer generation only reads back with: a
+    /// person taken into a group again. The records are checked as [`Streams::take`] checks them.
+    fn unchain(&self, space: &SpaceId, stream: &StreamId, roster: &Roster, records: &[Value]) -> Result<(), SyncError> {
+        let mut generations = Vec::new();
+        for item in records {
+            let Ok(record) = from_root::<StreamRecord>(item["record"].to_string().as_bytes()) else { continue };
+            if record.kind != RecordKind::Generation || record.generation == 0 {
+                continue;
+            }
+            let author = roster
+                .device_ever(&record.author)
+                .ok_or_else(|| relay_error("a record of a device not in the roster"))?;
+            if record.space != *space || record.stream != *stream || !record.is_authentic(self.domain, author) {
+                return Err(relay_error("a record that is not authentic"));
+            }
+            generations.push(record);
+        }
+        generations.sort_by_key(|record| std::cmp::Reverse(record.generation));
+        for record in generations {
+            let keys = self.store.stream_keys(space, stream)?;
+            if let Some(key) = keys.get(&record.generation)
+                && !keys.contains_key(&(record.generation - 1))
+            {
+                let previous = record.open_generation(key)?;
+                self.store.put_stream_key(space, stream, record.generation - 1, &previous)?;
+            }
+        }
+        Ok(())
     }
 
     /// What a received record brings.
@@ -962,8 +1013,10 @@ impl<B: StreamBackend> Streams<B> {
     }
 
     /// A new generation of a stream: registered at the relay, chained to the one before, and linked again for every
-    /// parent still there – what is written from now on, nobody removed can read.
+    /// parent still there – what is written from now on, nobody removed can read. A stream with an audience is linked
+    /// to every person of it, also those this device did not share it with itself.
     pub fn renew(&mut self, space: &SpaceId, stream: &StreamId) -> Result<u32, SyncError> {
+        self.reconcile(space, stream, None, false)?;
         // The space stream's generation is a record of the roster, which follows its newest one: read what is new
         // first (all of it, so that who left since marks the streams due).
         if self.store.roster(self.domain, space)?.space_stream() == Some(stream) {
@@ -1009,14 +1062,8 @@ impl<B: StreamBackend> Streams<B> {
         self.post_record(space, &client, &record, Some(key.token_text(self.domain, Token::Write, stream, next)))?;
         self.store.set_due(space, stream, false)?;
         if !is_space {
-            for parent in self.store.parents(space, stream)? {
-                let still = match &parent {
-                    Parent::Stream(above) => self.store.has_stream(space, above)?,
-                    Parent::Person(person) => roster.person(person).is_some(),
-                };
-                if still {
-                    self.link(space, stream, &parent)?;
-                }
+            for parent in self.link_targets(space, stream, &roster)? {
+                self.link(space, stream, &parent)?;
             }
         }
         Ok(next)
@@ -1083,6 +1130,146 @@ impl<B: StreamBackend> Streams<B> {
         )?;
         self.store.add_roster_record(self.domain, &record)?;
         self.mark_due(space)
+    }
+
+    /// Where a new generation of a stream is linked: the streams above it still here, and the persons of its audience
+    /// – or, without one, the persons this device linked it to – still in the space.
+    fn link_targets(&self, space: &SpaceId, stream: &StreamId, roster: &Roster) -> Result<Vec<Parent>, SyncError> {
+        let mut targets = Vec::new();
+        for parent in self.store.parents(space, stream)? {
+            match &parent {
+                Parent::Stream(above) if self.store.has_stream(space, above)? => targets.push(parent),
+                Parent::Person(_) | Parent::Stream(_) => {}
+            }
+        }
+        let persons: Vec<PersonId> = match self.audience(space, stream)? {
+            Some(audience) => audience.into_iter().collect(),
+            None => self
+                .store
+                .parents(space, stream)?
+                .into_iter()
+                .filter_map(|parent| match parent {
+                    Parent::Person(person) => Some(person),
+                    Parent::Stream(_) => None,
+                })
+                .collect(),
+        };
+        targets.extend(persons.into_iter().filter(|person| roster.person(person).is_some()).map(Parent::Person));
+        Ok(targets)
+    }
+
+    /// The persons a stream is shown to as its audience names them – a group's members –, from the newest event of kind
+    /// [`AUDIENCE`] in it; none if it names none.
+    pub fn audience(&self, space: &SpaceId, stream: &StreamId) -> Result<Option<BTreeSet<PersonId>>, SyncError> {
+        let log = self.store.stream_log(space, stream)?;
+        let Some((_, event)) = log.ordered().into_iter().rev().find(|(_, event)| event.kind == AUDIENCE) else {
+            return Ok(None);
+        };
+        let persons = event.members.get("persons").and_then(Value::as_array).cloned().unwrap_or_default();
+        persons
+            .iter()
+            .map(|person| {
+                person
+                    .as_str()
+                    .and_then(|text| text.parse().ok())
+                    .ok_or_else(|| state_error("an audience of no persons"))
+            })
+            .collect::<Result<_, _>>()
+            .map(Some)
+    }
+
+    /// Follows a stream's audience: a person no longer in it – no longer than in `before`, or linked by this device
+    /// – is forgotten as a parent, and every stream below it is due for a new generation, as the person holds their
+    /// keys of now; with `due_too`, the stream itself as well. Whether someone left.
+    fn reconcile(
+        &self,
+        space: &SpaceId,
+        stream: &StreamId,
+        before: Option<&BTreeSet<PersonId>>,
+        due_too: bool,
+    ) -> Result<bool, SyncError> {
+        let Some(audience) = self.audience(space, stream)? else { return Ok(false) };
+        let mut left = before.is_some_and(|before| before.iter().any(|person| !audience.contains(person)));
+        for parent in self.store.parents(space, stream)? {
+            if let Parent::Person(person) = &parent
+                && !audience.contains(person)
+            {
+                self.store.remove_parent(space, stream, &parent)?;
+                left = true;
+            }
+        }
+        if left {
+            if due_too {
+                self.store.set_due(space, stream, true)?;
+            }
+            let mut below = self.store.children(space, &Parent::Stream(stream.clone()))?;
+            let mut seen = BTreeSet::new();
+            while let Some(child) = below.pop() {
+                if seen.insert(child.clone()) {
+                    self.store.set_due(space, &child, true)?;
+                    below.extend(self.store.children(space, &Parent::Stream(child))?);
+                }
+            }
+        }
+        Ok(left)
+    }
+
+    /// Makes a group: a stream shown to `persons` – sealed into their streams – that names them as its audience.
+    /// Streams shown to the group are linked below it ([`Streams::show_to_group`]); whoever is in the group opens them.
+    pub fn new_group(&mut self, space: &SpaceId, persons: &[PersonId]) -> Result<StreamId, SyncError> {
+        let (first, rest) = persons.split_first().ok_or_else(|| state_error("a group of nobody"))?;
+        let group = self.new_stream(space, &Parent::Person(first.clone()))?;
+        for person in rest {
+            self.share(space, &group, person)?;
+        }
+        self.write_audience(space, &group, persons.iter())?;
+        Ok(group)
+    }
+
+    /// Shows a stream to a group: whoever is in the group, now or later, opens it.
+    pub fn show_to_group(&mut self, space: &SpaceId, stream: &StreamId, group: &StreamId) -> Result<(), SyncError> {
+        self.link_below(space, stream, group)
+    }
+
+    /// Adds a person to a group: the group's key sealed to the person, the audience written anew.
+    pub fn add_to_group(&mut self, space: &SpaceId, group: &StreamId, person: &PersonId) -> Result<(), SyncError> {
+        let mut audience = self.audience(space, group)?.ok_or_else(|| state_error("not a group"))?;
+        if !audience.insert(person.clone()) {
+            return Ok(());
+        }
+        self.share(space, group, person)?;
+        self.write_audience(space, group, audience.iter())
+    }
+
+    /// Takes a person out of a group: the audience written without the person, a new generation of the group linked to
+    /// those left, and every stream below it due for a new one before it is written again – what is written from then
+    /// on, the person cannot read. What the person read before stays read.
+    pub fn remove_from_group(&mut self, space: &SpaceId, group: &StreamId, person: &PersonId) -> Result<(), SyncError> {
+        // The newest audience first, as another device may have changed it.
+        self.sync(space)?;
+        let mut audience = self.audience(space, group)?.ok_or_else(|| state_error("not a group"))?;
+        if !audience.remove(person) {
+            return Ok(());
+        }
+        if audience.is_empty() {
+            return Err(state_error("a group keeps one person at least"));
+        }
+        let before = self.audience(space, group)?;
+        self.write_audience(space, group, audience.iter())?;
+        self.reconcile(space, group, before.as_ref(), false)?;
+        self.renew(space, group)?;
+        Ok(())
+    }
+
+    fn write_audience<'a>(
+        &mut self,
+        space: &SpaceId,
+        group: &StreamId,
+        persons: impl Iterator<Item = &'a PersonId>,
+    ) -> Result<(), SyncError> {
+        let persons: Vec<String> = persons.map(ToString::to_string).collect();
+        self.write(space, group, &json!({"kind": AUDIENCE, "persons": persons}))?;
+        Ok(())
     }
 
     fn mark_due(&self, space: &SpaceId) -> Result<(), SyncError> {

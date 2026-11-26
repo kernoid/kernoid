@@ -117,3 +117,48 @@ fn persons_devices_streams_and_a_removal() {
     tablet.purge(&space, &folder).unwrap();
     assert!(!tablet.streams(&space).unwrap().iter().any(|s| s.stream == folder));
 }
+
+#[test]
+fn groups_take_persons_in_and_out() {
+    let Some(url) = relay() else { return };
+    let mut laptop = device("alice-laptop2");
+    let (space, _code) = laptop.found(&url, None, Some("Laptop"), Some("Alice")).unwrap();
+    let alice = laptop.person(&space).unwrap();
+    let mut join = |name: &str, person: &str| {
+        let mut streams = device(name);
+        let invitation = laptop.invite(&space, true).unwrap();
+        streams.join(&invitation, Some(name), Some(person)).unwrap();
+        assert_eq!(laptop.sync(&space).unwrap().added.len(), 1);
+        streams.sync(&space).unwrap();
+        let id = streams.person(&space).unwrap();
+        (streams, id)
+    };
+    let (mut bob, bob_person) = join("bob-tablet2", "Bob");
+    let (mut carol, carol_person) = join("carol-phone2", "Carol");
+
+    // A group of the three, and a document shown to it.
+    let group = laptop.new_group(&space, &[alice.clone(), bob_person.clone(), carol_person.clone()]).unwrap();
+    let document = laptop.new_stream(&space, &Parent::Stream(group.clone())).unwrap();
+    laptop.write(&space, &document, &json!({"kind": "note", "title": "Plan"})).unwrap();
+    for streams in [&mut bob, &mut carol] {
+        streams.sync(&space).unwrap();
+        assert_eq!(titles(streams, &space, &document), ["Plan"]);
+    }
+    let members = bob.audience(&space, &group).unwrap().unwrap();
+    assert_eq!(members, [alice.clone(), bob_person.clone(), carol_person.clone()].into_iter().collect());
+
+    // Alice takes Carol out. Bob – another device than the one that did – writes to the document afterwards: it gets a
+    // new key first, linked below the group's new generation, which Carol cannot open.
+    laptop.remove_from_group(&space, &group, &carol_person).unwrap();
+    bob.sync(&space).unwrap();
+    bob.write(&space, &document, &json!({"kind": "note", "title": "Without Carol"})).unwrap();
+    carol.sync(&space).unwrap();
+    assert_eq!(titles(&carol, &space, &document), ["Plan"]);
+    laptop.sync(&space).unwrap();
+    assert_eq!(titles(&laptop, &space, &document), ["Plan", "Without Carol"]);
+
+    // Taken in again, Carol reads on.
+    laptop.add_to_group(&space, &group, &carol_person).unwrap();
+    carol.sync(&space).unwrap();
+    assert_eq!(titles(&carol, &space, &document), ["Plan", "Without Carol"]);
+}
