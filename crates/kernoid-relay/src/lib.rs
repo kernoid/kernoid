@@ -89,6 +89,8 @@ pub struct Relay {
     /// The tenant whose storage keeps the spaces anyone founds; None where only accounts found spaces.
     open_for: Option<Uuid>,
     founders: Arc<dyn Founders>,
+    /// The rosters of protocol 2 read last, by space: a roster only grows, so what was checked once is checked.
+    rosters: v2::Rosters,
 }
 
 /// An error answered to a request, as `{"error": …}`.
@@ -166,7 +168,7 @@ impl Relay {
                 (scheme.to_owned(), Domain { label, scheme })
             })
             .collect();
-        Self { db, blobs, domains: Arc::new(domains), open_for, founders }
+        Self { db, blobs, domains: Arc::new(domains), open_for, founders, rosters: v2::Rosters::default() }
     }
 
     fn domain(&self, scheme: &str) -> Result<Domain, RelayError> {
@@ -307,6 +309,7 @@ impl Relay {
         )
         .fetch_all(&mut *transaction)
         .await?;
+        self.rosters.lock().expect("no panic while held").remove(space);
         let removed = sqlx::query!("DELETE FROM relay_spaces WHERE space = $1 AND tenant_id = $2", space, tenant)
             .execute(&mut *transaction)
             .await?

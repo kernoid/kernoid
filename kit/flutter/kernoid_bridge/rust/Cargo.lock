@@ -1996,6 +1996,7 @@ dependencies = [
  "sha3",
  "thiserror",
  "x25519-dalek 3.0.0",
+ "zeroize",
 ]
 
 [[package]]

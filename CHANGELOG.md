@@ -19,6 +19,11 @@ reading of the streams' cryptography ahead of its review. Upgrade by pulling the
 - **A space whose roster holds a person's key, seal or link written by a device that may not write it** no longer
   reads (section Changed). None are known; kernoid's own apps never wrote one.
 - **kernoid-spaces without its default features** has no SQLite: name the feature `sqlite` (or `serialize`).
+- **Spaces of streams – kernoid's vaults on spaces, and what programs keep in them – do not carry over.** The format
+  of protocol 2 changed throughout (below, "Streams: what a device takes"): rosters, records, links, tokens and the
+  signature of requests. Spaces made before 0.7.0 no longer read, apps and servers before 0.7.0 no longer talk to
+  newer ones, invitations and recovery codes made before are void. Found the spaces again – a vault on a space is
+  made anew and filled again; vaults of the OpenPGP kind (RFC 0006) and everything else are untouched.
 
 ### Added
 
@@ -54,6 +59,37 @@ reading of the streams' cryptography ahead of its review. Upgrade by pulling the
   person's key to a seed of its own, or lock a person out of the space stream. A device checks a seed against the
   published receiving key; the relay lets only a person's own devices make the person's stream, the only inbox.
   Spaces whose roster holds such records from before no longer read – none are known.
+- **Streams: what a device takes** (RFC 0012, 5, 7, 8 and 11), from a second reading of `kernoid_crypt::stream`, how
+  `kernoid-spaces` and the relay use it, and groups. All of it reaches back to 0.5.1:
+  - A relay could hand a device that joined or recovered a roster of its own making, and read what the device wrote
+    then. Invitations name the roster's first record; a recovery code's device carries the code's proof of it.
+  - A person invited to a space could give its device `members` and `purge` in its request. Invited devices get
+    `write`.
+  - Any device with `write` could seal a link with a key of its own into a person's stream and lock the person out
+    of that stream for good – or, with the relay's help, have the person write under that key. A link's key is taken
+    only when the stream's generation records lead back to the key held, or the relay keeps the stream under it.
+  - One record that did not open – any device with `write` could send one – stopped every reader's synchronisation
+    for good. Such records are passed over and counted (`StreamsReport::refused`).
+  - Any device with `write` could make a generation of the space stream with links that open nothing, after which
+    nobody opened any generation of it. Keys are read link by link; the next writer makes a generation past the
+    broken one (`SpaceLinks::previous_generation`), which the relay takes from who made it in the roster.
+  - The write token of an older generation still wrote: a person taken out of a group went on writing into it – also
+    an audience naming itself again. The relay asks for the latest generation's token, devices take no record of a
+    generation that had ended, and an audience only from one of the group's members.
+  - Records were checked against their author as last added: now as the roster was at the position they name, with
+    `write`.
+  - After a device with `members` removed another person's device – and so made that person's next key – the
+    person's devices move on to a key of their own.
+  - Requests to the relay were signed without their body and tokens.
+  - New: `Streams::remove_devices`, `Roster::added_by` – the devices a device added go with it when it is removed
+    because it fell into other hands.
+  - The format, made what RFC 0012 says: a record names the record its author wrote before it, so a reader sees one
+    left out (`StreamsReport::missing`), and its identity covers its header; the key that seals is derived from a
+    stream's key, apart from its tokens; a link is of one space; a generation of the space stream names its read
+    token's hash, which persons and the relay hold its key to; persons' streams are made by the relay from the
+    roster, by nobody else; the roster is read by the space's devices and by a device that asked to join; a server's
+    node says that it is one (`Streams::as_server`); seeds and keys are wiped from memory when dropped. The relay
+    keeps the rosters it checked instead of checking each again for every request.
 - **Security fixes:** `url` 2.5.9 (RUSTSEC-2026-0592) everywhere, `kube` 4.2.1 in the operator (RUSTSEC-2026-0600 –
   the operator uses rustls, not the affected OpenSSL connector).
 

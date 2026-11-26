@@ -22,12 +22,13 @@ use chacha20poly1305::{
 };
 use hkdf::Hkdf;
 use kernoid_base::{
-    Bytes, Object, ParseError, Sha256Hash, SpaceId, base64url, from_base64url, random, to_canonical_vec, to_root,
-    unsigned,
+    Bytes, MAX_SAFE_INTEGER, Object, ParseError, Sha256Hash, SpaceId, base64url, from_base64url, random,
+    to_canonical_vec, to_root, unsigned,
 };
 use kernoid_log::{DeviceId, Event};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use sha2::Sha256;
+use zeroize::Zeroize as _;
 
 use crate::{
     Domain, EncryptionError,
@@ -139,6 +140,12 @@ pub enum Permission {
 #[derive(Clone, PartialEq, Eq)]
 pub struct StreamKey(pub [u8; 32]);
 
+impl Drop for StreamKey {
+    fn drop(&mut self) {
+        self.0.zeroize();
+    }
+}
+
 impl fmt::Debug for StreamKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("StreamKey(…)")
@@ -171,24 +178,46 @@ impl StreamKey {
         derive(&self.0, &format!("{} stream {what} {stream} {generation}", domain.label))
     }
 
+    /// SHA-256 of the read token of this generation: what the relay keeps of it, and what the roster names of a
+    /// generation of the space stream so that every person knows its key for the one everyone else has.
+    pub fn read_hash(&self, domain: Domain, stream: &StreamId, generation: u32) -> Sha256Hash {
+        token_hash(&self.token(domain, Token::Read, stream, generation))
+    }
+
+    /// SHA-256 of the write token of this generation.
+    pub fn write_hash(&self, domain: Domain, stream: &StreamId, generation: u32) -> Sha256Hash {
+        token_hash(&self.token(domain, Token::Write, stream, generation))
+    }
+
     /// The token as a request carries it, base64url.
     pub fn token_text(&self, domain: Domain, which: Token, stream: &StreamId, generation: u32) -> String {
         base64url(&self.token(domain, which, stream, generation))
     }
 
+    /// The key that seals: the stream key itself only derives – this one and the tokens –, so that no key is used
+    /// for two things.
+    fn sealing(&self) -> [u8; 32] {
+        derive(&self.0, "kernoid stream seal v1")
+    }
+
     fn seal(&self, plaintext: &[u8], aad: &[u8]) -> ([u8; 24], Vec<u8>) {
         let nonce: [u8; 24] = random();
-        let ciphertext = XChaCha20Poly1305::new(&self.0.into())
+        let mut key = self.sealing();
+        let ciphertext = XChaCha20Poly1305::new(&key.into())
             .encrypt(&XNonce::from(nonce), Payload { msg: plaintext, aad })
             .expect("XChaCha20-Poly1305 encrypts any length");
+        key.zeroize();
         (nonce, ciphertext)
     }
 
     fn open(&self, nonce: &[u8], ciphertext: &[u8], aad: &[u8]) -> Result<Vec<u8>, EncryptionError> {
         let nonce: [u8; 24] = nonce.try_into().map_err(|_| EncryptionError::Format("nonce"))?;
-        XChaCha20Poly1305::new(&self.0.into())
+        let mut key = self.sealing();
+        let opened = XChaCha20Poly1305::new(&key.into())
             .decrypt(&XNonce::from(nonce), Payload { msg: ciphertext, aad })
-            .map_err(|_| EncryptionError::Decrypt)
+            .map_err(|_| EncryptionError::Decrypt);
+        key.zeroize();
+        opened
     }
 
     /// `previous`, sealed with this key – what lets whoever has this generation read the ones before.
@@ -232,6 +261,36 @@ fn derive(seed: &[u8; 32], info: &str) -> [u8; 32] {
     out
 }
 
+fn recovery_mac(domain: Domain, seed: &[u8; 32], space: &SpaceId, founding: &Sha256Hash) -> hmac::Hmac<Sha256> {
+    use hmac::Mac;
+    let key = derive(seed, &format!("{} recovery anchor", domain.label));
+    let mut mac = <hmac::Hmac<Sha256> as hmac::KeyInit>::new_from_slice(&key).expect("HMAC takes any key");
+    mac.update(format!("{space} {}", founding.hex()).as_bytes());
+    mac
+}
+
+/// What only who knows a recovery code can make: HMAC-SHA256, keyed from the code's seed, over the space and the hash
+/// of record 0 of its roster. The code's device carries it in the roster ([`Device::proof`]); whoever comes back with
+/// the code checks it ([`proves_recovery`]) before trusting a roster a relay hands out.
+pub fn recovery_proof(domain: Domain, seed: &[u8; 32], space: &SpaceId, founding: &Sha256Hash) -> Bytes {
+    use hmac::Mac;
+    Bytes(recovery_mac(domain, seed, space, founding).finalize().into_bytes().to_vec())
+}
+
+/// Whether the roster is the one the recovery code of `seed` was made for: the code's device is in it, with the
+/// code's proof of the roster's record 0.
+pub fn proves_recovery(roster: &Roster, seed: &[u8; 32]) -> bool {
+    use hmac::Mac;
+    let keys = HybridKeys::from_seed(roster.domain, *seed);
+    let (Some(device), Some(founding)) = (roster.device(&keys.verifying().id()), roster.founding()) else {
+        return false;
+    };
+    device
+        .proof
+        .as_ref()
+        .is_some_and(|proof| recovery_mac(roster.domain, seed, &roster.space, &founding).verify_slice(&proof.0).is_ok())
+}
+
 // The roster
 
 /// A device of the space.
@@ -255,6 +314,10 @@ pub struct Device {
     /// A server: always online, every key sealed for it too – every member sees that its operator can read the space.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub server: bool,
+    /// Of a recovery code's device: [`recovery_proof`] – what tells whoever comes with the code that this roster is
+    /// the one the code was made for, and not one a relay made up.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proof: Option<Bytes>,
 }
 
 impl Object for Device {
@@ -273,7 +336,14 @@ impl Device {
             name,
             permissions: BTreeSet::new(),
             server: false,
+            proof: None,
         }
+    }
+
+    /// The device of a recovery code, with the code's proof of the roster it belongs to.
+    pub fn with_proof(mut self, proof: Bytes) -> Self {
+        self.proof = Some(proof);
+        self
     }
 
     pub fn with(mut self, permissions: &[Permission]) -> Self {
@@ -323,6 +393,10 @@ pub struct PersonKey {
     pub generation: u32,
     /// The receiving key of the person's [`HybridKeys`] of this seed.
     pub receiving: Bytes,
+    /// SHA-256 of the read and of the write token of the person's stream in this generation ([`StreamKey::of_person`]):
+    /// the relay makes the person's stream from them, so that nobody else can make it first.
+    pub inbox_read: Sha256Hash,
+    pub inbox_write: Sha256Hash,
     pub seals: Vec<Seal>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub previous: Option<Bytes>,
@@ -340,10 +414,19 @@ pub struct PersonLink {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SpaceLinks {
     pub generation: u32,
+    /// With a new generation: SHA-256 of its read token ([`StreamKey::read_hash`]). A person takes the key a link
+    /// opens to only if it is this generation's – whoever makes a generation cannot give persons different keys –,
+    /// and the relay registers the generation under it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub read: Option<Sha256Hash>,
     pub links: Vec<PersonLink>,
     /// The generation before, sealed with this one; only with a new generation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub previous: Option<Bytes>,
+    /// Which generation `previous` is the key of, when it is not the one before – a generation made by a device that
+    /// could not open the one before (whose links or chain were broken) chains to the newest it holds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub previous_generation: Option<u32>,
 }
 
 /// A record of the roster.
@@ -448,7 +531,10 @@ pub struct Roster {
     seals: BTreeMap<(PersonId, u32, DeviceKeyId), Bytes>,
     /// Links of the space stream: (generation, person) → (person generation, sealed).
     space_links: BTreeMap<(u32, PersonId), (u32, Bytes)>,
-    space_chain: BTreeMap<u32, Bytes>,
+    /// The chain of the space stream: generation → (the generation its chained key is of, that key sealed).
+    space_chain: BTreeMap<u32, (u32, Bytes)>,
+    /// SHA-256 of the read token of each generation of the space stream.
+    space_reads: BTreeMap<u32, Sha256Hash>,
     space_generation: Option<u32>,
 }
 
@@ -465,6 +551,7 @@ impl Roster {
             seals: BTreeMap::new(),
             space_links: BTreeMap::new(),
             space_chain: BTreeMap::new(),
+            space_reads: BTreeMap::new(),
             space_generation: None,
         }
     }
@@ -501,6 +588,11 @@ impl Roster {
         self.space_generation
     }
 
+    /// SHA-256 of the read token of a generation of the space stream, as whoever made it wrote it into the roster.
+    pub fn space_read(&self, generation: u32) -> Option<Sha256Hash> {
+        self.space_reads.get(&generation).copied()
+    }
+
     pub fn device(&self, id: &DeviceKeyId) -> Option<&Device> {
         self.devices.get(id)
     }
@@ -508,6 +600,74 @@ impl Roster {
     /// A device as it was last added – current or removed since; what it wrote as a member stays its.
     pub fn device_ever(&self, id: &DeviceKeyId) -> Option<&Device> {
         self.records.iter().rev().flat_map(|record| &record.add_devices).find(|device| device.id == *id)
+    }
+
+    /// A device as it was a member once the roster's record `at` was applied – what a record that names `at` is
+    /// checked against: who wrote it, under which device name, with which permissions. None if it was not a member
+    /// then, or the roster has no record `at` (yet).
+    pub fn device_at(&self, id: &DeviceKeyId, at: u64) -> Option<&Device> {
+        if at >= self.records.len() as u64 {
+            return None;
+        }
+        let mut found: Option<&Device> = None;
+        for record in &self.records[..=at as usize] {
+            if record.remove_devices.contains(id)
+                || found.is_some_and(|device| record.remove_persons.contains(&device.person))
+            {
+                found = None;
+            }
+            if let Some(device) = record.add_devices.iter().find(|device| device.id == *id) {
+                found = Some(device);
+            }
+        }
+        found
+    }
+
+    /// The hash of record 0: what a space is known by to whoever joins it (an invitation names it).
+    pub fn founding(&self) -> Option<Sha256Hash> {
+        self.records.first().map(RosterRecord::hash)
+    }
+
+    /// The devices of the roster a device added, and those they added – what goes with a device that is removed
+    /// because it fell into other hands: it could add devices of its person without anyone's leave.
+    pub fn added_by(&self, id: &DeviceKeyId) -> Vec<DeviceKeyId> {
+        let mut adders: BTreeMap<DeviceKeyId, DeviceKeyId> = BTreeMap::new();
+        for record in &self.records {
+            for device in &record.add_devices {
+                if device.id != record.author {
+                    adders.insert(device.id, record.author);
+                }
+            }
+        }
+        let mut found = vec![*id];
+        let mut at = 0;
+        while at < found.len() {
+            let adder = found[at];
+            for (device, by) in &adders {
+                if *by == adder && self.devices.contains_key(device) && !found.contains(device) {
+                    found.push(*device);
+                }
+            }
+            at += 1;
+        }
+        found.remove(0);
+        found
+    }
+
+    /// The device that wrote a generation of a person's key first, as it was then.
+    pub fn person_key_author(&self, person: &PersonId, generation: u32) -> Option<&Device> {
+        let record = self.records.iter().find(|record| {
+            record.person_keys.iter().any(|key| key.person == *person && key.generation == generation)
+        })?;
+        self.device_at(&record.author, record.seq)
+    }
+
+    /// The device that made a generation of the space stream.
+    pub fn space_generation_author(&self, generation: u32) -> Option<DeviceKeyId> {
+        self.records
+            .iter()
+            .find(|record| record.space_links.as_ref().is_some_and(|links| links.generation == generation))
+            .map(|record| record.author)
     }
 
     pub fn devices(&self) -> impl Iterator<Item = &Device> {
@@ -633,7 +793,10 @@ impl Roster {
             let fits = match current {
                 None => key.generation == 0 && key.previous.is_none(),
                 Some(g) if g == key.generation => {
-                    key.previous.is_none() && person_keys[&(key.person.clone(), g)].receiving == key.receiving
+                    let known = &person_keys[&(key.person.clone(), g)];
+                    key.previous.is_none()
+                        && known.receiving == key.receiving
+                        && (known.inbox_read, known.inbox_write) == (key.inbox_read, key.inbox_write)
                 }
                 // The person's own device chains the seed before; a device of another person (one with `members`) cannot.
                 Some(g) => key.generation == g + 1,
@@ -645,6 +808,10 @@ impl Roster {
             let rotation = lost_a_device.contains(&key.person) && current.is_some_and(|g| key.generation == g + 1);
             if record.seq != 0 && !own && !added.contains(&key.person) && !rotation {
                 return Err(RosterProblem::NotAllowed("the key of another person"));
+            }
+            // Only the person's own device knows the seed before: a chain from anyone else is not one.
+            if record.seq != 0 && !own && key.previous.is_some() {
+                return Err(RosterProblem::NotAllowed("the chain of another person's key"));
             }
             for seal in &key.seals {
                 if devices.get(&seal.device).is_none_or(|d| d.person != key.person) {
@@ -679,6 +846,7 @@ impl Roster {
         // Links of the space stream.
         let mut space_links = self.space_links.clone();
         let mut space_chain = self.space_chain.clone();
+        let mut space_reads = self.space_reads.clone();
         let mut generation = self.space_generation;
         if let Some(links) = &record.space_links {
             let fits = match generation {
@@ -686,7 +854,10 @@ impl Roster {
                 Some(g) if g == links.generation => links.previous.is_none(),
                 Some(g) => links.generation == g + 1 && links.previous.is_some(),
             };
-            if !fits {
+            let chained = links.previous_generation.is_none_or(|to| links.previous.is_some() && to < links.generation);
+            // A new generation names its read token's hash; links of the current one do not name it again.
+            let named = links.read.is_some() != (generation == Some(links.generation));
+            if !fits || !chained || !named {
                 return Err(RosterProblem::SpaceLink(format!("generation {}", links.generation)));
             }
             let same = generation == Some(links.generation);
@@ -711,7 +882,11 @@ impl Roster {
                     .insert((links.generation, link.person.clone()), (link.person_generation, link.sealed.clone()));
             }
             if let Some(previous) = &links.previous {
-                space_chain.insert(links.generation, previous.clone());
+                let to = links.previous_generation.unwrap_or(links.generation.saturating_sub(1));
+                space_chain.insert(links.generation, (to, previous.clone()));
+            }
+            if let Some(read) = links.read {
+                space_reads.insert(links.generation, read);
             }
             generation = Some(links.generation);
         }
@@ -734,6 +909,7 @@ impl Roster {
         self.seals = seals;
         self.space_links = space_links;
         self.space_chain = space_chain;
+        self.space_reads = space_reads;
         self.space_generation = generation;
         self.records.push(record);
         Ok(())
@@ -746,75 +922,97 @@ impl Roster {
         record
     }
 
-    /// Every generation of my person's key I can open, newest first chained back: generation → seed.
+    /// Every generation of my person's key I can open: generation → seed. Each seal to this device is opened, and
+    /// from each seed the chain is followed back as far as it holds – a seal or a chain that does not open (written
+    /// by someone who meant harm, or could not know the seed before) costs the generations behind it, not the others.
     pub fn person_seeds(&self, me: &HybridKeys) -> Result<BTreeMap<u32, [u8; 32]>, EncryptionError> {
         let device = self.device(&me.verifying().id()).ok_or(EncryptionError::NoKey(0))?;
         let person = device.person.clone();
-        let (generation, sealed) = self
+        let mut sealed: Vec<(u32, &Bytes)> = self
             .seals
             .iter()
             .filter(|((p, _, d), _)| *p == person && *d == device.id)
             .map(|((_, g, _), sealed)| (*g, sealed))
-            .max_by_key(|(g, _)| *g)
-            .ok_or(EncryptionError::NoKey(0))?;
-        let seed: [u8; 32] = me
-            .open(&person_seal_context(self.domain, &self.space, &person, generation, &device.id), &sealed.0)?
-            .try_into()
-            .map_err(|_| EncryptionError::Decrypt)?;
+            .collect();
+        sealed.sort_by_key(|(g, _)| std::cmp::Reverse(*g));
         let mut seeds = BTreeMap::new();
-        let (mut g, mut seed) = (generation, seed);
-        loop {
-            // The seed must be the one whose receiving key the roster published – links go to that key.
-            let published = self.person_keys.get(&(person.clone(), g)).ok_or(EncryptionError::NoKey(g))?;
-            if HybridKeys::from_seed(self.domain, seed).receiving().0 != published.receiving.0 {
-                return Err(EncryptionError::Decrypt);
+        for (generation, sealed) in sealed {
+            if seeds.contains_key(&generation) {
+                continue;
             }
-            seeds.insert(g, seed);
-            if g == 0 {
-                break;
-            }
-            // Without a chain (a new generation made by another person's device), only the newer seeds are known.
-            let Some(previous) = self.person_keys.get(&(person.clone(), g)).and_then(|key| key.previous.as_ref())
-            else {
-                break;
+            let context = person_seal_context(self.domain, &self.space, &person, generation, &device.id);
+            let Some(seed) = me.open(&context, &sealed.0).ok().and_then(|seed| <[u8; 32]>::try_from(seed).ok()) else {
+                continue;
             };
-            seed = StreamKey(derive(&seed, &format!("{} person chain", self.domain.label)))
-                .unchain(&person_chain_label(self.domain, &person, g), previous)?;
-            g -= 1;
+            let (mut g, mut seed) = (generation, seed);
+            // The seed must be the one whose receiving key the roster published – links go to that key.
+            while let Some(published) = self.person_keys.get(&(person.clone(), g)) {
+                if HybridKeys::receiving_of(self.domain, &seed).0 != published.receiving.0 {
+                    break;
+                }
+                seeds.insert(g, seed);
+                // Without a chain (a new generation made by another person's device), only the newer seeds are known.
+                let Some(previous) = published.previous.as_ref() else { break };
+                if g == 0 || seeds.contains_key(&(g - 1)) {
+                    break;
+                }
+                let Ok(before) = StreamKey(derive(&seed, &format!("{} person chain", self.domain.label)))
+                    .unchain(&person_chain_label(self.domain, &person, g), previous)
+                else {
+                    break;
+                };
+                seed = before;
+                g -= 1;
+            }
         }
-        Ok(seeds)
+        if seeds.is_empty() { Err(EncryptionError::NoKey(0)) } else { Ok(seeds) }
     }
 
-    /// Every generation of the space stream my person can open: generation → key.
+    /// Every generation of the space stream my person can open: generation → key. Each link to my person is opened
+    /// by itself; generations before the first of them come through the chain, as far as it holds. A generation whose
+    /// links or chain do not open is not there – the others are.
     pub fn space_keys(&self, me: &HybridKeys) -> Result<BTreeMap<u32, StreamKey>, EncryptionError> {
         let current = self.space_generation.ok_or(EncryptionError::NoKey(0))?;
         let stream = self.space_stream.clone().ok_or(EncryptionError::NoKey(0))?;
         let device = self.device(&me.verifying().id()).ok_or(EncryptionError::NoKey(0))?;
         let seeds = self.person_seeds(me)?;
-        let (generation, (person_generation, sealed)) = self
-            .space_links
-            .iter()
-            .filter(|((_, p), (pg, _))| *p == device.person && seeds.contains_key(pg))
-            .map(|((g, _), link)| (*g, link))
-            .max_by_key(|(g, _)| *g)
-            .ok_or(EncryptionError::NoKey(current))?;
-        let person_keys = HybridKeys::from_seed(self.domain, seeds[person_generation]);
-        let key: [u8; 32] = person_keys
-            .open(&link_context(self.domain, &stream, generation), &sealed.0)?
-            .try_into()
-            .map_err(|_| EncryptionError::Decrypt)?;
+        let mut persons: BTreeMap<u32, HybridKeys> = BTreeMap::new();
         let mut keys = BTreeMap::new();
-        let (mut g, mut key) = (generation, StreamKey(key));
-        loop {
-            keys.insert(g, key.clone());
-            if g == 0 {
-                break;
+        for ((generation, person), (person_generation, sealed)) in &self.space_links {
+            let Some(seed) = seeds.get(person_generation).filter(|_| *person == device.person) else { continue };
+            let person_keys =
+                persons.entry(*person_generation).or_insert_with(|| HybridKeys::from_seed(self.domain, *seed));
+            let opened = person_keys.open(&link_context(self.domain, &self.space, &stream, *generation), &sealed.0);
+            if let Some(key) = opened.ok().and_then(|key| <[u8; 32]>::try_from(key).ok()).map(StreamKey)
+                && self.is_space_key(&stream, *generation, &key)
+            {
+                keys.insert(*generation, key);
             }
-            let previous = self.space_chain.get(&g).ok_or(EncryptionError::NoKey(g - 1))?;
-            key = StreamKey(key.unchain(&stream_chain_label(self.domain, &stream, g), previous)?);
-            g -= 1;
         }
-        Ok(keys)
+        let linked: Vec<u32> = keys.keys().rev().copied().collect();
+        for start in linked {
+            let (mut g, mut key) = (start, keys[&start].clone());
+            while let Some((to, chained)) = self.space_chain.get(&g) {
+                if keys.contains_key(to) {
+                    break;
+                }
+                let Ok(previous) = key.unchain(&stream_chain_label(self.domain, &stream, g), chained) else { break };
+                key = StreamKey(previous);
+                if !self.is_space_key(&stream, *to, &key) {
+                    break;
+                }
+                keys.insert(*to, key.clone());
+                g = *to;
+            }
+        }
+        if keys.is_empty() { Err(EncryptionError::NoKey(current)) } else { Ok(keys) }
+    }
+}
+
+impl Roster {
+    /// Whether `key` is the key of a generation of the space stream: its read token is the one the roster names.
+    fn is_space_key(&self, stream: &StreamId, generation: u32, key: &StreamKey) -> bool {
+        self.space_reads.get(&generation) == Some(&key.read_hash(self.domain, stream, generation))
     }
 }
 
@@ -837,8 +1035,8 @@ fn stream_chain_label(domain: Domain, stream: &StreamId, generation: u32) -> Str
 }
 
 /// The context a stream's key of a generation is sealed in to a person.
-pub fn link_context(domain: Domain, stream: &StreamId, generation: u32) -> Vec<u8> {
-    format!("{} link {stream} {generation}", domain.label).into_bytes()
+pub fn link_context(domain: Domain, space: &SpaceId, stream: &StreamId, generation: u32) -> Vec<u8> {
+    format!("{} link {space} {stream} {generation}", domain.label).into_bytes()
 }
 
 /// A person's key of a new generation: the seed sealed to the person's devices, chained to the one before.
@@ -866,12 +1064,23 @@ pub fn person_key(
         StreamKey(derive(seed, &format!("{} person chain", domain.label)))
             .chain(&person_chain_label(domain, person, generation), previous)
     });
-    Ok(PersonKey { person: person.clone(), generation, receiving: Bytes(keys.receiving().0.clone()), seals, previous })
+    let inbox = StreamId::of_person(domain, space, person);
+    let inbox_key = StreamKey::of_person(domain, person, seed);
+    Ok(PersonKey {
+        person: person.clone(),
+        generation,
+        receiving: Bytes(keys.receiving().0.clone()),
+        inbox_read: inbox_key.read_hash(domain, &inbox, generation),
+        inbox_write: inbox_key.write_hash(domain, &inbox, generation),
+        seals,
+        previous,
+    })
 }
 
 /// Seals a stream's key of a generation to a person's key of a generation.
 pub fn link_to_person(
     domain: Domain,
+    space: &SpaceId,
     stream: &StreamId,
     generation: u32,
     key: &StreamKey,
@@ -880,17 +1089,28 @@ pub fn link_to_person(
     let sealed = pq::seal(
         domain,
         &HybridReceivingKey(person.receiving.0.clone()),
-        &link_context(domain, stream, generation),
+        &link_context(domain, space, stream, generation),
         &key.0,
     )?;
     Ok(PersonLink { person: person.person.clone(), person_generation: person.generation, sealed: Bytes(sealed) })
 }
 
-/// A new generation of the space stream, linked to every current person.
+/// A new generation of the space stream, linked to every current person; `previous` is the key of the roster's
+/// current generation.
 pub fn new_space_generation(
     roster: &Roster,
     key: &StreamKey,
     previous: Option<&StreamKey>,
+) -> Result<SpaceLinks, EncryptionError> {
+    new_space_generation_from(roster, key, previous.map(|previous| (roster.space_generation.unwrap_or(0), previous)))
+}
+
+/// A new generation of the space stream, linked to every current person and chained to the key of the generation
+/// `previous` names – the roster's current one, or the newest this device can open when that one is broken.
+pub fn new_space_generation_from(
+    roster: &Roster,
+    key: &StreamKey,
+    previous: Option<(u32, &StreamKey)>,
 ) -> Result<SpaceLinks, EncryptionError> {
     let domain = roster.domain;
     let stream = roster.space_stream.clone().ok_or(EncryptionError::NoKey(0))?;
@@ -899,11 +1119,13 @@ pub fn new_space_generation(
         .persons
         .keys()
         .filter_map(|person| roster.person_key(person))
-        .map(|person| link_to_person(domain, &stream, generation, key, person))
+        .map(|person| link_to_person(domain, &roster.space, &stream, generation, key, person))
         .collect::<Result<_, _>>()?;
+    let previous_generation = previous.map(|(to, _)| to).filter(|to| to + 1 != generation);
     let previous =
-        previous.map(|previous| Bytes(key.chain(&stream_chain_label(domain, &stream, generation), &previous.0).0));
-    Ok(SpaceLinks { generation, links, previous })
+        previous.map(|(_, previous)| key.chain(&stream_chain_label(domain, &stream, generation), &previous.0));
+    let read = Some(key.read_hash(domain, &stream, generation));
+    Ok(SpaceLinks { generation, read, links, previous, previous_generation })
 }
 
 // Records of streams
@@ -946,10 +1168,14 @@ pub struct StreamRecord {
     /// The roster's position the author had seen; a program checks rights there.
     pub at: u64,
     pub kind: RecordKind,
+    /// The identity of the record its author wrote into this stream before – none for the first: a chain per device
+    /// and stream, by which a reader sees that a record was left out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub previous: Option<Sha256Hash>,
     #[serde(default, skip_serializing_if = "Bytes::is_empty")]
     pub nonce: Bytes,
     pub ciphertext: Bytes,
-    /// SHA-256 over the nonce and the ciphertext.
+    /// SHA-256 over the header (what the encryption is bound to), the nonce and the ciphertext.
     pub id: Sha256Hash,
     pub signature: Bytes,
 }
@@ -975,9 +1201,11 @@ fn record_aad(
     author: &DeviceKeyId,
     at: u64,
     kind: RecordKind,
+    previous: Option<&Sha256Hash>,
 ) -> Vec<u8> {
     let header = serde_json::json!({
         "space": space, "stream": stream, "generation": generation, "author": author, "at": at, "kind": kind,
+        "previous": previous,
     });
     to_canonical_vec(&header).expect("a header has a canonical encoding")
 }
@@ -989,11 +1217,17 @@ pub struct Writer<'a> {
     pub space: &'a SpaceId,
     pub keys: &'a HybridKeys,
     pub at: u64,
+    /// The identity of the record this device wrote into the stream before.
+    pub previous: Option<Sha256Hash>,
 }
 
 impl StreamRecord {
+    fn identity(&self) -> Sha256Hash {
+        Sha256Hash::of(&[self.aad().as_slice(), &self.nonce.0, &self.ciphertext.0].concat())
+    }
+
     fn finish(mut self, writer: &Writer<'_>) -> Self {
-        self.id = Sha256Hash::of(&[self.nonce.0.as_slice(), &self.ciphertext.0].concat());
+        self.id = self.identity();
         self.signature = Bytes(writer.keys.sign(&unsigned(&self)));
         self
     }
@@ -1007,7 +1241,7 @@ impl StreamRecord {
         plaintext: &[u8],
     ) -> Self {
         let author = writer.keys.verifying().id();
-        let aad = record_aad(writer.space, stream, generation, &author, writer.at, kind);
+        let aad = record_aad(writer.space, stream, generation, &author, writer.at, kind, writer.previous.as_ref());
         let (nonce, ciphertext) = key.seal(plaintext, &aad);
         StreamRecord {
             space: writer.space.clone(),
@@ -1016,6 +1250,7 @@ impl StreamRecord {
             author,
             at: writer.at,
             kind,
+            previous: writer.previous,
             nonce: Bytes(nonce.to_vec()),
             ciphertext: Bytes(ciphertext),
             id: Sha256Hash([0; 32]),
@@ -1055,7 +1290,15 @@ impl StreamRecord {
         body: &LinkBody,
     ) -> Result<Self, EncryptionError> {
         let author = writer.keys.verifying().id();
-        let aad = record_aad(writer.space, person_stream, person.generation, &author, writer.at, RecordKind::Sealed);
+        let aad = record_aad(
+            writer.space,
+            person_stream,
+            person.generation,
+            &author,
+            writer.at,
+            RecordKind::Sealed,
+            writer.previous.as_ref(),
+        );
         let plaintext = to_root(body).expect("a link has a canonical encoding");
         let sealed = pq::seal(writer.domain, &HybridReceivingKey(person.receiving.0.clone()), &aad, &plaintext)?;
         Ok(StreamRecord {
@@ -1065,6 +1308,7 @@ impl StreamRecord {
             author,
             at: writer.at,
             kind: RecordKind::Sealed,
+            previous: writer.previous,
             nonce: Bytes(vec![]),
             ciphertext: Bytes(sealed),
             id: Sha256Hash([0; 32]),
@@ -1075,13 +1319,15 @@ impl StreamRecord {
 
     /// Whether the identity is that of the ciphertext and the signature is that of the device it names.
     pub fn is_authentic(&self, domain: Domain, author: &Device) -> bool {
-        author.id == self.author
-            && self.id == Sha256Hash::of(&[self.nonce.0.as_slice(), &self.ciphertext.0].concat())
+        // A position no canonical encoding holds is nobody's.
+        self.at <= MAX_SAFE_INTEGER
+            && author.id == self.author
+            && self.id == self.identity()
             && author.verify(domain, &unsigned(self), &self.signature.0)
     }
 
     fn aad(&self) -> Vec<u8> {
-        record_aad(&self.space, &self.stream, self.generation, &self.author, self.at, self.kind)
+        record_aad(&self.space, &self.stream, self.generation, &self.author, self.at, self.kind, self.previous.as_ref())
     }
 
     /// The plaintext of a record sealed with the stream's key.
@@ -1117,14 +1363,15 @@ impl StreamRecord {
         kernoid_base::from_root(&plaintext).map_err(|_| EncryptionError::Format("a link"))
     }
 
-    /// The canonical event of an `event` record; its device must be the author's device name.
+    /// The canonical event of an `event` record; its device must be the device name its author had at the roster's
+    /// position the record names.
     pub fn open_event(&self, key: &StreamKey, roster: &Roster) -> Result<Vec<u8>, EncryptionError> {
         if self.kind != RecordKind::Event {
             return Err(EncryptionError::Format("an event"));
         }
         let plaintext = self.open(key)?;
         let event = Event::read(&plaintext)?;
-        let device = roster.device_ever(&self.author).map(|device| &device.device);
+        let device = roster.device_at(&self.author, self.at).map(|device| &device.device);
         if device != Some(&event.time.device) {
             return Err(EncryptionError::Signature);
         }
@@ -1134,17 +1381,50 @@ impl StreamRecord {
 
 // Requests
 
-/// The value of `Authorization` of a request to a relay's `v2`: `<scheme>-pq <device> <time> <signature>`, the hybrid
-/// signature over `{method} {path} {time}`.
-pub fn request_signature(domain: Domain, keys: &HybridKeys, method: &str, path: &str, time: u64) -> String {
-    let signature = keys.sign(format!("{method} {path} {time}").as_bytes());
-    format!("{}-pq {} {time} {}", domain.scheme, keys.verifying().id().hex(), base64url(&signature))
+/// What a request's signature covers: the method, the path with its query, the time, and the hashes of the body and
+/// of the tokens it carries – so that nothing of a request seen on its way serves another one.
+fn request_message(
+    method: &str,
+    path: &str,
+    time: u64,
+    body: &[u8],
+    read: Option<&str>,
+    write: Option<&str>,
+) -> Vec<u8> {
+    let hash = |bytes: &[u8]| Sha256Hash::of(bytes).hex();
+    format!(
+        "{method} {path} {time} {} {} {}",
+        hash(body),
+        hash(read.unwrap_or_default().as_bytes()),
+        hash(write.unwrap_or_default().as_bytes()),
+    )
+    .into_bytes()
+}
+
+/// The parts of a request its signature covers besides the time.
+#[derive(Debug, Clone, Copy)]
+pub struct Request<'a> {
+    pub method: &'a str,
+    /// The path with its query.
+    pub path: &'a str,
+    pub body: &'a [u8],
+    /// The read and the write token as the headers carry them.
+    pub read: Option<&'a str>,
+    pub write: Option<&'a str>,
+}
+
+/// The value of `Authorization` of a request to a relay's `v2`: `<scheme>-pq2 <device> <time> <signature>`, the hybrid
+/// signature over the method, the path, the time and the SHA-256 of the body, of the read token and of the write token
+/// (of nothing where there is none).
+pub fn request_signature(domain: Domain, keys: &HybridKeys, request: &Request<'_>, time: u64) -> String {
+    let message = request_message(request.method, request.path, time, request.body, request.read, request.write);
+    format!("{}-pq2 {} {time} {}", domain.scheme, keys.verifying().id().hex(), base64url(&keys.sign(&message)))
 }
 
 /// The device and the signature of a request, as the header says: to be checked against the roster with
 /// [`verify_request`].
 pub fn parse_request(domain: Domain, header: &str) -> Option<(DeviceKeyId, u64, Vec<u8>)> {
-    let rest = header.strip_prefix(domain.scheme)?.strip_prefix("-pq ")?;
+    let rest = header.strip_prefix(domain.scheme)?.strip_prefix("-pq2 ")?;
     let mut parts = rest.split(' ');
     let (device, time, signature) = (parts.next()?, parts.next()?, parts.next()?);
     if parts.next().is_some() || device.len() != 64 {
@@ -1156,12 +1436,17 @@ pub fn parse_request(domain: Domain, header: &str) -> Option<(DeviceKeyId, u64, 
 }
 
 /// The device of the roster that signed a request, if its time is within 300 seconds of `now`.
-pub fn verify_request<'a>(roster: &'a Roster, header: &str, method: &str, path: &str, now: u64) -> Option<&'a Device> {
-    let (id, time, signature) = parse_request(roster.domain, header)?;
+pub fn verify_request<'a>(roster: &'a Roster, header: &str, request: &Request<'_>, now: u64) -> Option<&'a Device> {
+    let (id, ..) = parse_request(roster.domain, header)?;
     let device = roster.device(&id)?;
-    (now.abs_diff(time) <= 300
-        && device.verify(roster.domain, format!("{method} {path} {time}").as_bytes(), &signature))
-    .then_some(device)
+    signed_request(roster.domain, device, header, request, now).then_some(device)
+}
+
+/// Whether `device` – one not in a roster yet, which asked to join – signed a request, within 300 seconds of `now`.
+pub fn signed_request(domain: Domain, device: &Device, header: &str, request: &Request<'_>, now: u64) -> bool {
+    let Some((id, time, signature)) = parse_request(domain, header) else { return false };
+    let message = request_message(request.method, request.path, time, request.body, request.read, request.write);
+    id == device.id && now.abs_diff(time) <= 300 && device.verify(domain, &message, &signature)
 }
 
 /// A request to join a space with a device: a device of an existing person, or of a new person who brings its key.
@@ -1221,6 +1506,19 @@ pub fn found(
     device_name: Option<String>,
     person_name: Option<String>,
 ) -> Result<Founding, EncryptionError> {
+    found_as(domain, space, keys, device, device_name, person_name, false)
+}
+
+/// [`found`], by a server's node if `server` says so: its device is marked as one.
+pub fn found_as(
+    domain: Domain,
+    space: &SpaceId,
+    keys: &HybridKeys,
+    device: DeviceId,
+    device_name: Option<String>,
+    person_name: Option<String>,
+    server: bool,
+) -> Result<Founding, EncryptionError> {
     let person = PersonId::generate();
     let person_seed: [u8; 32] = random();
     let founder = Device::new(keys, person.clone(), device, device_name).with(&[
@@ -1228,16 +1526,24 @@ pub fn found(
         Permission::Members,
         Permission::Purge,
     ]);
+    let founder = if server { founder.as_server() } else { founder };
     let key = person_key(domain, space, &person, 0, &person_seed, None, &[&founder])?;
     let space_stream = StreamId::generate();
     let space_key = StreamKey::generate();
-    let link = link_to_person(domain, &space_stream, 0, &space_key, &key)?;
+    let link = link_to_person(domain, space, &space_stream, 0, &space_key, &key)?;
+    let read = Some(space_key.read_hash(domain, &space_stream, 0));
     let record = RosterRecord {
         space_stream: Some(space_stream.clone()),
         add_persons: vec![Person { id: person.clone(), name: person_name }],
         add_devices: vec![founder],
         person_keys: vec![key],
-        space_links: Some(SpaceLinks { generation: 0, links: vec![link], previous: None }),
+        space_links: Some(SpaceLinks {
+            generation: 0,
+            read,
+            links: vec![link],
+            previous: None,
+            previous_generation: None,
+        }),
         ..RosterRecord::blank(space)
     }
     .sign(keys);

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO relay_streams (space, stream, inbox) VALUES ($1, $2, false) ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6c9f5e70b3500e68f9960ca8f2a2ca7a14896a252001d0f305ad9807babac534"
+}

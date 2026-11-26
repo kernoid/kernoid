@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM relay_stream_tokens WHERE space = $1 AND stream = $2 AND generation = $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2d649446745280926fa4b3ac5e5fc9fe5ed69a5a4e52de3c970f7aaf4235d38c"
+}

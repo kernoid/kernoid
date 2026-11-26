@@ -6,9 +6,9 @@ use kernoid_crypt::{
     Domain, EncryptionError,
     pq::HybridKeys,
     stream::{
-        Device, Joining, LinkBody, Permission, Person, PersonId, RecordKind, Roster, RosterProblem, RosterRecord,
-        StreamId, StreamKey, StreamRecord, Token, Writer, link_to_person, new_space_generation, person_key,
-        request_signature, verify_request,
+        Device, Joining, LinkBody, Permission, Person, PersonId, RecordKind, Request, Roster, RosterProblem,
+        RosterRecord, StreamId, StreamKey, StreamRecord, Token, Writer, link_to_person, new_space_generation,
+        person_key, request_signature, verify_request,
     },
 };
 use kernoid_log::{Clock, DeviceId, Event};
@@ -42,13 +42,19 @@ fn found() -> Founded {
     let key = person_key(D, &space, &alice, 0, &alice_seed, None, &[&phone_device]).unwrap();
     let space_stream = StreamId::generate();
     let space_key = StreamKey::generate();
-    let link = link_to_person(D, &space_stream, 0, &space_key, &key).unwrap();
+    let link = link_to_person(D, &space, &space_stream, 0, &space_key, &key).unwrap();
     let record = RosterRecord {
-        space_stream: Some(space_stream),
+        space_stream: Some(space_stream.clone()),
         add_persons: vec![Person { id: alice.clone(), name: Some("Alice".into()) }],
         add_devices: vec![phone_device],
         person_keys: vec![key],
-        space_links: Some(kernoid_crypt::stream::SpaceLinks { generation: 0, links: vec![link], previous: None }),
+        space_links: Some(kernoid_crypt::stream::SpaceLinks {
+            generation: 0,
+            read: Some(space_key.read_hash(D, &space_stream, 0)),
+            links: vec![link],
+            previous: None,
+            previous_generation: None,
+        }),
         ..RosterRecord::blank(&space)
     }
     .sign(&phone);
@@ -90,12 +96,18 @@ fn a_new_person_joins_and_a_lost_device_takes_its_persons_key_along() {
         Joining::new(&secret, laptop_device.clone(), Some((Person { id: bob.clone(), name: None }, bob_key.clone())));
     assert!(joining.proves(&secret));
     assert!(!joining.proves(&[0; 16]));
-    let link = link_to_person(D, f.roster.space_stream().unwrap(), 0, &f.space_key, &bob_key).unwrap();
+    let link = link_to_person(D, &f.space, f.roster.space_stream().unwrap(), 0, &f.space_key, &bob_key).unwrap();
     let record = f.roster.next(RosterRecord {
         add_persons: vec![Person { id: bob.clone(), name: None }],
         add_devices: vec![laptop_device.clone()],
         person_keys: vec![bob_key.clone()],
-        space_links: Some(kernoid_crypt::stream::SpaceLinks { generation: 0, links: vec![link], previous: None }),
+        space_links: Some(kernoid_crypt::stream::SpaceLinks {
+            generation: 0,
+            read: None,
+            links: vec![link],
+            previous: None,
+            previous_generation: None,
+        }),
         ..RosterRecord::blank(&f.space)
     });
     // Without the link to Bob, the record is refused.
@@ -127,7 +139,8 @@ fn a_new_person_joins_and_a_lost_device_takes_its_persons_key_along() {
         f.roster.next(RosterRecord { remove_devices: vec![laptop_device.id], ..RosterRecord::blank(&f.space) });
     assert!(matches!(f.roster.clone().apply(removal.clone().sign(&f.phone)), Err(RosterProblem::PersonKey(_))));
     let new_seed = kernoid_base::random::<32>();
-    let new_key = person_key(D, &f.space, &bob, 1, &new_seed, Some(&bob_seed), &[&tablet_device]).unwrap();
+    // Alice's phone cannot chain Bob's seed before; his tablet keeps the seal it had of it.
+    let new_key = person_key(D, &f.space, &bob, 1, &new_seed, None, &[&tablet_device]).unwrap();
     f.roster.apply(RosterRecord { person_keys: vec![new_key], ..removal }.sign(&f.phone)).unwrap();
     let seeds = f.roster.person_seeds(&tablet).unwrap();
     assert_eq!((seeds[&0], seeds[&1]), (bob_seed, new_seed));
@@ -148,7 +161,7 @@ fn a_new_person_joins_and_a_lost_device_takes_its_persons_key_along() {
 fn records_open_with_their_generation_and_links_lead_down() {
     let f = found();
     let space_stream = f.roster.space_stream().unwrap().clone();
-    let writer = Writer { domain: D, space: &f.space, keys: &f.phone, at: 0 };
+    let writer = Writer { domain: D, space: &f.space, keys: &f.phone, at: 0, previous: None };
     let phone = f.roster.device(&f.phone.verifying().id()).unwrap().clone();
 
     // An event in the space stream.
@@ -198,30 +211,45 @@ fn records_open_with_their_generation_and_links_lead_down() {
 #[test]
 fn requests_are_signed_by_a_device_of_the_roster() {
     let f = found();
-    let header = request_signature(D, &f.phone, "GET", "/relay/kernoid/v2/spaces/x/members", 1_800_000_000);
-    let device =
-        verify_request(&f.roster, &header, "GET", "/relay/kernoid/v2/spaces/x/members", 1_800_000_100).unwrap();
+    let path = "/relay/kernoid/v2/spaces/x/streams/y/records";
+    let request = Request { method: "POST", path, body: b"{}", read: None, write: Some("token") };
+    let header = request_signature(D, &f.phone, &request, 1_800_000_000);
+    let device = verify_request(&f.roster, &header, &request, 1_800_000_100).unwrap();
     assert_eq!(device.id, f.phone.verifying().id());
-    assert!(verify_request(&f.roster, &header, "POST", "/relay/kernoid/v2/spaces/x/members", 1_800_000_100).is_none());
-    assert!(verify_request(&f.roster, &header, "GET", "/relay/kernoid/v2/spaces/x/members", 1_800_001_000).is_none());
+    // Another method, time, body or token: not this request.
+    assert!(verify_request(&f.roster, &header, &Request { method: "PUT", ..request }, 1_800_000_100).is_none());
+    assert!(verify_request(&f.roster, &header, &request, 1_800_001_000).is_none());
+    assert!(verify_request(&f.roster, &header, &Request { body: b"{ }", ..request }, 1_800_000_100).is_none());
+    assert!(verify_request(&f.roster, &header, &Request { write: Some("other"), ..request }, 1_800_000_100).is_none());
+    assert!(
+        verify_request(&f.roster, &header, &Request { write: None, read: Some("token"), ..request }, 1_800_000_100)
+            .is_none()
+    );
+    // The signature of protocol 2's first version – without the body and the tokens – is no longer one.
+    assert!(verify_request(&f.roster, &header.replacen("-pq2 ", "-pq ", 1), &request, 1_800_000_100).is_none());
     let stranger = HybridKeys::generate(D);
-    let header = request_signature(D, &stranger, "GET", "/x", 1_800_000_000);
-    assert!(verify_request(&f.roster, &header, "GET", "/x", 1_800_000_000).is_none());
+    let header = request_signature(D, &stranger, &request, 1_800_000_000);
+    assert!(verify_request(&f.roster, &header, &request, 1_800_000_000).is_none());
 }
 
-/// Bob joins Alice's space as a person of his own, with `write` only; his laptop's keys.
 fn with_bob(f: &mut Founded) -> (HybridKeys, PersonId) {
     let laptop = HybridKeys::generate(D);
     let bob = PersonId::generate();
     let bob_seed = kernoid_base::random::<32>();
     let laptop_device = Device::new(&laptop, bob.clone(), device("bob-laptop"), None).with(&[Permission::Write]);
     let bob_key = person_key(D, &f.space, &bob, 0, &bob_seed, None, &[&laptop_device]).unwrap();
-    let link = link_to_person(D, f.roster.space_stream().unwrap(), 0, &f.space_key, &bob_key).unwrap();
+    let link = link_to_person(D, &f.space, f.roster.space_stream().unwrap(), 0, &f.space_key, &bob_key).unwrap();
     let record = f.roster.next(RosterRecord {
         add_persons: vec![Person { id: bob.clone(), name: None }],
         add_devices: vec![laptop_device],
         person_keys: vec![bob_key],
-        space_links: Some(kernoid_crypt::stream::SpaceLinks { generation: 0, links: vec![link], previous: None }),
+        space_links: Some(kernoid_crypt::stream::SpaceLinks {
+            generation: 0,
+            read: None,
+            links: vec![link],
+            previous: None,
+            previous_generation: None,
+        }),
         ..RosterRecord::blank(&f.space)
     });
     f.roster.apply(record.sign(&f.phone)).unwrap();
@@ -247,6 +275,8 @@ fn nobody_writes_another_persons_key_seals_or_links() {
     // Nor may it replace the seal of Alice's phone in her current generation – which would lock the phone out.
     let garbage = kernoid_crypt::stream::PersonKey {
         receiving: alice_key.receiving.clone(),
+        inbox_read: alice_key.inbox_read,
+        inbox_write: alice_key.inbox_write,
         ..person_key(D, &f.space, &f.alice, 0, &chosen, None, &[&phone_device]).unwrap()
     };
     let record = f.roster.next(RosterRecord { person_keys: vec![garbage.clone()], ..RosterRecord::blank(&f.space) });
@@ -255,9 +285,16 @@ fn nobody_writes_another_persons_key_seals_or_links() {
     assert!(matches!(f.roster.clone().apply(record.sign(&f.phone)), Err(RosterProblem::Duplicate(_))));
 
     // Nor may it link the current generation of the space stream to Alice again, with a key of its own.
-    let link = link_to_person(D, f.roster.space_stream().unwrap(), 0, &StreamKey::generate(), &alice_key).unwrap();
+    let link =
+        link_to_person(D, &f.space, f.roster.space_stream().unwrap(), 0, &StreamKey::generate(), &alice_key).unwrap();
     let record = f.roster.next(RosterRecord {
-        space_links: Some(kernoid_crypt::stream::SpaceLinks { generation: 0, links: vec![link], previous: None }),
+        space_links: Some(kernoid_crypt::stream::SpaceLinks {
+            generation: 0,
+            read: None,
+            links: vec![link],
+            previous: None,
+            previous_generation: None,
+        }),
         ..RosterRecord::blank(&f.space)
     });
     assert!(matches!(f.roster.clone().apply(record.clone().sign(&laptop)), Err(RosterProblem::NotAllowed(_))));
@@ -273,5 +310,188 @@ fn nobody_writes_another_persons_key_seals_or_links() {
     };
     let record = f.roster.next(RosterRecord { person_keys: vec![mismatch], ..RosterRecord::blank(&f.space) });
     f.roster.apply(record.sign(&f.phone)).unwrap();
-    assert!(matches!(f.roster.person_seeds(&f.phone), Err(EncryptionError::Decrypt)));
+    assert_eq!(f.roster.person_seeds(&f.phone).unwrap(), [(0, f.alice_seed)].into_iter().collect());
+}
+
+/// Bob joined with `write` alone; his laptop adds a tablet of his.
+fn with_bobs_tablet(f: &mut Founded) -> (HybridKeys, HybridKeys, PersonId, [u8; 32]) {
+    let laptop = HybridKeys::generate(D);
+    let bob = PersonId::generate();
+    let seed = kernoid_base::random::<32>();
+    let laptop_device = Device::new(&laptop, bob.clone(), device("bob-laptop"), None).with(&[Permission::Write]);
+    let key = person_key(D, &f.space, &bob, 0, &seed, None, &[&laptop_device]).unwrap();
+    let link = link_to_person(D, &f.space, f.roster.space_stream().unwrap(), 0, &f.space_key, &key).unwrap();
+    let record = f.roster.next(RosterRecord {
+        add_persons: vec![Person { id: bob.clone(), name: None }],
+        add_devices: vec![laptop_device],
+        person_keys: vec![key],
+        space_links: Some(kernoid_crypt::stream::SpaceLinks {
+            generation: 0,
+            read: None,
+            links: vec![link],
+            previous: None,
+            previous_generation: None,
+        }),
+        ..RosterRecord::blank(&f.space)
+    });
+    f.roster.apply(record.sign(&f.phone)).unwrap();
+    let tablet = HybridKeys::generate(D);
+    let tablet_device = Device::new(&tablet, bob.clone(), device("bob-tablet"), None).with(&[Permission::Write]);
+    let seals = person_key(D, &f.space, &bob, 0, &seed, None, &[&tablet_device]).unwrap();
+    let record = f.roster.next(RosterRecord {
+        add_devices: vec![tablet_device],
+        person_keys: vec![seals],
+        ..RosterRecord::blank(&f.space)
+    });
+    f.roster.apply(record.sign(&laptop)).unwrap();
+    (laptop, tablet, bob, seed)
+}
+
+#[test]
+fn a_generation_of_broken_links_costs_only_itself() {
+    use kernoid_base::Bytes;
+    use kernoid_crypt::stream::{PersonLink, SpaceLinks, new_space_generation_from};
+    let mut f = found();
+    let (laptop, _, bob, _) = with_bobs_tablet(&mut f);
+    // Bob's laptop – `write` alone – makes a generation whose links and chain open nothing. The roster cannot tell.
+    let broken =
+        |person: &PersonId| PersonLink { person: person.clone(), person_generation: 0, sealed: Bytes(vec![7; 1300]) };
+    let record = f.roster.next(RosterRecord {
+        space_links: Some(SpaceLinks {
+            generation: 1,
+            read: Some(kernoid_base::Sha256Hash([5; 32])),
+            links: vec![broken(&f.alice), broken(&bob)],
+            previous: Some(Bytes(vec![9; 72])),
+            previous_generation: None,
+        }),
+        ..RosterRecord::blank(&f.space)
+    });
+    f.roster.apply(record.sign(&laptop)).unwrap();
+    // Everyone keeps what they had.
+    let keys = f.roster.space_keys(&f.phone).unwrap();
+    assert_eq!(keys.keys().copied().collect::<Vec<_>>(), [0]);
+    assert_eq!(keys[&0], f.space_key);
+    // Alice makes the next generation, chained to the newest she can open; it reads back past the broken one.
+    let next = StreamKey::generate();
+    let links = new_space_generation_from(&f.roster, &next, Some((0, &f.space_key))).unwrap();
+    assert_eq!((links.generation, links.previous_generation), (2, Some(0)));
+    let record = f.roster.next(RosterRecord { space_links: Some(links), ..RosterRecord::blank(&f.space) });
+    f.roster.apply(record.sign(&f.phone)).unwrap();
+    for keys in [&f.phone, &laptop] {
+        let keys = f.roster.space_keys(keys).unwrap();
+        assert_eq!(keys.keys().copied().collect::<Vec<_>>(), [0, 2]);
+        assert_eq!((&keys[&0], &keys[&2]), (&f.space_key, &next));
+    }
+    assert_eq!(f.roster.space_generation_author(2), Some(f.phone.verifying().id()));
+    // A chain that names no older generation is none.
+    let links =
+        SpaceLinks { previous_generation: Some(3), ..new_space_generation(&f.roster, &next, Some(&next)).unwrap() };
+    let record = f.roster.next(RosterRecord { space_links: Some(links), ..RosterRecord::blank(&f.space) });
+    assert!(matches!(f.roster.clone().apply(record.sign(&f.phone)), Err(RosterProblem::SpaceLink(_))));
+}
+
+#[test]
+fn another_persons_device_chains_no_key_and_a_broken_chain_costs_only_what_is_behind_it() {
+    use kernoid_base::Bytes;
+    let mut f = found();
+    let (laptop, tablet, bob, seed) = with_bobs_tablet(&mut f);
+    let laptop_device = f.roster.device(&laptop.verifying().id()).unwrap().clone();
+    let rotated = kernoid_base::random::<32>();
+    // Alice (`members`) removes Bob's tablet and makes his next key: she cannot chain it, and may not pretend to.
+    let mut key = person_key(D, &f.space, &bob, 1, &rotated, None, &[&laptop_device]).unwrap();
+    key.previous = Some(Bytes(vec![1; 72]));
+    let removal = |key| RosterRecord {
+        remove_devices: vec![tablet.verifying().id()],
+        person_keys: vec![key],
+        ..RosterRecord::blank(&f.space)
+    };
+    let record = f.roster.next(removal(key.clone()));
+    assert_eq!(
+        f.roster.clone().apply(record.sign(&f.phone)),
+        Err(RosterProblem::NotAllowed("the chain of another person's key"))
+    );
+    key.previous = None;
+    let record = f.roster.next(removal(key));
+    f.roster.apply(record.sign(&f.phone)).unwrap();
+    assert_eq!(f.roster.person_key_author(&bob, 1).unwrap().person, f.alice);
+    assert_eq!(f.roster.person_key_author(&bob, 0).unwrap().person, f.alice, "she added him with the key he brought");
+    // Bob's laptop moves on to a seed of its own and chains hers – but breaks the chain: the newest seed still opens.
+    let own = kernoid_base::random::<32>();
+    let mut key = person_key(D, &f.space, &bob, 2, &own, Some(&rotated), &[&laptop_device]).unwrap();
+    key.previous = Some(Bytes(vec![2; 72]));
+    let record = f.roster.next(RosterRecord { person_keys: vec![key], ..RosterRecord::blank(&f.space) });
+    f.roster.apply(record.sign(&laptop)).unwrap();
+    let seeds = f.roster.person_seeds(&laptop).unwrap();
+    // Generation 2 from its seal, 1 and 0 from the seals the laptop was given then.
+    assert_eq!(seeds, [(0, seed), (1, rotated), (2, own)].into_iter().collect());
+    assert!(f.roster.space_keys(&laptop).is_ok());
+}
+
+#[test]
+fn a_record_is_its_authors_as_the_roster_was_where_it_says() {
+    let mut f = found();
+    let (laptop, tablet, bob, seed) = with_bobs_tablet(&mut f);
+    let joined = f.roster.records().len() as u64 - 1;
+    let laptop_device = f.roster.device(&laptop.verifying().id()).unwrap().clone();
+    let rotated = kernoid_base::random::<32>();
+    let key = person_key(D, &f.space, &bob, 1, &rotated, None, &[&laptop_device]).unwrap();
+    let record = f.roster.next(RosterRecord {
+        remove_devices: vec![tablet.verifying().id()],
+        person_keys: vec![key],
+        ..RosterRecord::blank(&f.space)
+    });
+    f.roster.apply(record.sign(&f.phone)).unwrap();
+    let removed = f.roster.records().len() as u64 - 1;
+    let id = tablet.verifying().id();
+    assert!(f.roster.device_at(&id, joined - 1).is_none(), "not yet");
+    assert_eq!(f.roster.device_at(&id, joined).unwrap().device, device("bob-tablet"));
+    assert!(f.roster.device_at(&id, removed).is_none(), "no longer");
+    assert!(f.roster.device_at(&id, removed + 1).is_none(), "a position the roster does not have");
+    // What the tablet wrote while it was Bob's stays its; what it says it wrote after is nobody's.
+    let mut clock = Clock::new(device("bob-tablet"));
+    let event = Event::new(clock.now(1_800_000_000_000), 1, None, &serde_json::json!({"kind": "note"})).unwrap();
+    let stream = f.roster.space_stream().unwrap().clone();
+    let at = |at| Writer { domain: D, space: &f.space, keys: &tablet, at, previous: None };
+    let before = StreamRecord::event(&at(joined), &stream, 0, &f.space_key, &event);
+    assert!(before.open_event(&f.space_key, &f.roster).is_ok());
+    let after = StreamRecord::event(&at(removed), &stream, 0, &f.space_key, &event);
+    assert_eq!(after.open_event(&f.space_key, &f.roster), Err(EncryptionError::Signature));
+    // The laptop added the tablet: it goes with a laptop that is removed.
+    let _ = (bob, seed);
+    let mut again = found();
+    let (laptop, tablet, ..) = with_bobs_tablet(&mut again);
+    assert_eq!(again.roster.added_by(&laptop.verifying().id()), [tablet.verifying().id()]);
+    assert!(again.roster.added_by(&tablet.verifying().id()).is_empty());
+}
+
+#[test]
+fn a_recovery_code_proves_the_roster_it_was_made_for() {
+    use kernoid_crypt::stream::{proves_recovery, recovery_proof};
+    let mut f = found();
+    let code = kernoid_base::random::<32>();
+    let recovery = HybridKeys::from_seed(D, code);
+    let proof = recovery_proof(D, &code, &f.space, &f.roster.founding().unwrap());
+    let recovery_device = Device::new(&recovery, f.alice.clone(), device("recovery-1"), None).with_proof(proof.clone());
+    let seals = person_key(D, &f.space, &f.alice, 0, &f.alice_seed, None, &[&recovery_device]).unwrap();
+    let record = f.roster.next(RosterRecord {
+        add_devices: vec![recovery_device.clone()],
+        person_keys: vec![seals],
+        ..RosterRecord::blank(&f.space)
+    });
+    f.roster.apply(record.sign(&f.phone)).unwrap();
+    assert!(proves_recovery(&f.roster, &code));
+    assert!(!proves_recovery(&f.roster, &kernoid_base::random::<32>()));
+    // A roster a relay makes up – its own founder, the code's device copied in with its proof – is not that roster.
+    let mut forged = found();
+    let forged_seed = forged.alice_seed;
+    let copied = Device { person: forged.alice.clone(), ..recovery_device };
+    let seals = person_key(D, &forged.space, &forged.alice, 0, &forged_seed, None, &[&copied]).unwrap();
+    let record = forged.roster.next(RosterRecord {
+        add_devices: vec![copied],
+        person_keys: vec![seals],
+        ..RosterRecord::blank(&forged.space)
+    });
+    forged.roster.apply(record.sign(&forged.phone)).unwrap();
+    assert!(forged.roster.person_seeds(&recovery).is_ok(), "it opens what the relay sealed to it");
+    assert!(!proves_recovery(&forged.roster, &code));
 }

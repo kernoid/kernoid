@@ -2,7 +2,8 @@
 //! A server as one more node of spaces of streams (RFC 0010, 8; RFC 0012): what a device keeps of its spaces in SQLite
 //! (`kernoid_spaces::store::Store`), [`Node`] keeps in PostgreSQL, so that a server – a program built on kernoid, its
 //! identity built in – follows a space like a device does, holds every key it was given, writes when due and answers
-//! for the people it acts for. The engine is kernoid-spaces' own: `Streams::open(domain, device, Node::new(…))`.
+//! for the people it acts for. The engine is kernoid-spaces' own: `Streams::open(domain, device, Node::new(…))`
+//! – with `.as_server()`, which marks the node's devices as a server's in the roster (RFC 0012, 7).
 //! The feature `node` of kernoid-relay: the relay is where spaces meet, a node is one of their members.
 //!
 //! The engine is synchronous, as on devices: run it on a thread of its own (`tokio::task::spawn_blocking`) – [`Node`]

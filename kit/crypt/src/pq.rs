@@ -10,6 +10,9 @@
 //! | signing | ML-DSA-65 (FIPS 204, deterministic) and Ed25519 (RFC 8032) over the same labelled message; both must hold |
 //! | deriving the halves from one seed | HKDF-SHA256 (RFC 5869), a label per half |
 //!
+//! Seeds and shared secrets are wiped when they are dropped (`zeroize`) – as far as this code holds them: a seed
+//! handed out ([`HybridKeys::seed`]) is its holder's to wipe.
+//!
 //! X-Wing is built here from ml-kem and x25519-dalek because the X-Wing of the HPKE library needs an ml-kem that rpgp
 //! (kernoid-e2e) does not accept yet; it is checked against the draft's test vector. OPEN: the HPKE library's X-Wing
 //! once rpgp takes ml-kem 0.3 – the bytes stay the same.
@@ -29,6 +32,8 @@ use sha3::{
     Sha3_256, Shake256,
     digest::{ExtendableOutput as _, Update as _, XofReader as _},
 };
+
+use zeroize::Zeroize as _;
 
 use crate::{Domain, EncryptionError, derive};
 
@@ -68,7 +73,15 @@ pub mod xwing {
         let (mlkem, mlkem_public) = MlKem768::generate_deterministic(&d, &z);
         let x25519: [u8; 32] = expanded[64..96].try_into().expect("32 bytes");
         let x25519_public = x25519_dalek::x25519(x25519, x25519_dalek::X25519_BASEPOINT_BYTES);
+        expanded.zeroize();
         Expanded { mlkem, mlkem_public, x25519, x25519_public }
+    }
+
+    // ML-KEM's key wipes itself (ml-kem's `zeroize`).
+    impl Drop for Expanded {
+        fn drop(&mut self) {
+            self.x25519.zeroize();
+        }
     }
 
     fn combine(ss_m: &[u8], ss_x: &[u8; 32], ct_x: &[u8; 32], pk_x: &[u8; 32]) -> [u8; 32] {
@@ -113,10 +126,10 @@ pub mod xwing {
 
     /// `Encapsulate`.
     pub fn encapsulate(public: &[u8]) -> Result<([u8; 32], Vec<u8>), EncryptionError> {
-        let mut eseed = [0u8; 64];
-        eseed[..32].copy_from_slice(&random::<32>());
-        eseed[32..].copy_from_slice(&random::<32>());
-        encapsulate_derand(public, &eseed)
+        let mut eseed: [u8; 64] = random();
+        let encapsulated = encapsulate_derand(public, &eseed);
+        eseed.zeroize();
+        encapsulated
     }
 
     /// `Decapsulate`.
@@ -201,6 +214,14 @@ pub struct HybridKeys {
     receiving: HybridReceivingKey,
 }
 
+// Ed25519's and ML-DSA's keys wipe themselves.
+impl Drop for HybridKeys {
+    fn drop(&mut self) {
+        self.seed.zeroize();
+        self.receiving_seed.zeroize();
+    }
+}
+
 impl fmt::Debug for HybridKeys {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "HybridKeys({:?})", self.verifying)
@@ -224,6 +245,11 @@ impl HybridKeys {
         verifying.extend_from_slice(&mldsa.verifying_key().encode());
         let receiving = HybridReceivingKey(xwing::public_key(&receiving_seed));
         HybridKeys { domain, seed, ed25519, mldsa, receiving_seed, verifying: HybridVerifyingKey(verifying), receiving }
+    }
+
+    /// The receiving key of a seed's keys alone – what checking a seed against a published key needs.
+    pub fn receiving_of(domain: Domain, seed: &[u8; 32]) -> HybridReceivingKey {
+        HybridReceivingKey(xwing::public_key(&derive(seed, &format!("{} hybrid x-wing", domain.label))))
     }
 
     pub fn domain(&self) -> Domain {
@@ -262,11 +288,14 @@ impl HybridKeys {
         }
         let (encapsulated, rest) = sealed.split_at(CIPHERTEXT_LEN);
         let (nonce, ciphertext) = rest.split_at(24);
-        let shared = xwing::decapsulate(encapsulated, &self.receiving_seed)?;
-        let key = sealing_key(self.domain, &shared, encapsulated, &self.receiving, context);
-        XChaCha20Poly1305::new(&key.into())
+        let mut shared = xwing::decapsulate(encapsulated, &self.receiving_seed)?;
+        let mut key = sealing_key(self.domain, &shared, encapsulated, &self.receiving, context);
+        let opened = XChaCha20Poly1305::new(&key.into())
             .decrypt(&XNonce::try_from(nonce).expect("24 bytes"), Payload { msg: ciphertext, aad: context })
-            .map_err(|_| EncryptionError::Decrypt)
+            .map_err(|_| EncryptionError::Decrypt);
+        shared.zeroize();
+        key.zeroize();
+        opened
     }
 }
 
@@ -295,12 +324,14 @@ pub fn seal(
     context: &[u8],
     plaintext: &[u8],
 ) -> Result<Vec<u8>, EncryptionError> {
-    let (shared, encapsulated) = xwing::encapsulate(&to.0)?;
-    let key = sealing_key(domain, &shared, &encapsulated, to, context);
+    let (mut shared, encapsulated) = xwing::encapsulate(&to.0)?;
+    let mut key = sealing_key(domain, &shared, &encapsulated, to, context);
     let nonce: [u8; 24] = random();
     let ciphertext = XChaCha20Poly1305::new(&key.into())
         .encrypt(&XNonce::from(nonce), Payload { msg: plaintext, aad: context })
         .expect("XChaCha20-Poly1305 encrypts any length");
+    shared.zeroize();
+    key.zeroize();
     let mut sealed = encapsulated;
     sealed.extend_from_slice(&nonce);
     sealed.extend_from_slice(&ciphertext);

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT canonical FROM relay_roster WHERE space = $1 ORDER BY seq",
+  "query": "SELECT canonical FROM relay_requests\n             WHERE space = $1 AND member = $2 AND received_at >= now() - make_interval(secs => $3)",
   "describe": {
     "columns": [
       {
@@ -9,7 +9,7 @@
         "type_info": "Bytea",
         "origin": {
           "Table": {
-            "table": "relay_roster",
+            "table": "relay_requests",
             "name": "canonical"
           }
         }
@@ -17,12 +17,14 @@
     ],
     "parameters": {
       "Left": [
-        "Text"
+        "Text",
+        "Text",
+        "Float8"
       ]
     },
     "nullable": [
       false
     ]
   },
-  "hash": "7347868b9b8c061146866675b300d6e15b3bbcae32ae68b2d5d3b74cf41d8a10"
+  "hash": "111d3ad796701081454c69779e5ceeb49db78f9bc3c83f21bda2408c3fc8ac57"
 }

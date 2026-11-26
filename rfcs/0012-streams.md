@@ -36,19 +36,26 @@ A **stream** has an identity `s-` and 26 characters of `a-z0-9` (random, 130 bit
 
 ```text
 record = {
-  stream, generation,           // which stream, sealed under which generation's key
+  space, stream, generation,    // which stream, sealed under which generation's key
   author,                       // the device: SHA-256 of its hybrid verifying key
-  at,                           // the position in the space stream the author had seen (rights are checked there)
-  previous,                     // hash of the author's previous record in this stream (a chain per device and stream)
-  clock,                        // the device's hybrid logical clock – one across all of its streams
-  nonce, ciphertext,            // XChaCha20-Poly1305 under the generation's key; the payload is the program's event
+  at,                           // the position in the roster the author had seen (rights are checked there)
+  kind,                         // event, generation, link or sealed
+  previous,                     // identity of the author's previous record in this stream (a chain per device and stream)
+  nonce, ciphertext,            // XChaCha20-Poly1305 under a key derived from the generation's key
+  id,                           // SHA-256 of the header above, the nonce and the ciphertext
   signature                     // pq hybrid signature of the canonical encoding of everything above (RFC 8785)
 }
 ```
 
-The associated data of the encryption is the canonical encoding of `stream`, `generation`, `author`, `at`, `previous`
-and `clock`, so that a ciphertext moved into another record does not open. A record is identified by the SHA-256 of
-its canonical encoding, as events are today ([0010](0010-foundation.md), 3); merging stays union.
+The associated data of the encryption is the canonical encoding of the header – `space`, `stream`, `generation`,
+`author`, `at`, `kind` and `previous` –, so that a ciphertext moved into another record does not open. The payload of
+an `event` is the program's event, which carries its device's hybrid logical clock, its position in the device's chain
+of events and the hash of the event before ([0010](0010-foundation.md), 3); merging stays union. A reader that is
+handed a record whose `previous` is not the last record it saw of that device counts it
+(`StreamsReport::missing`): the relay left one out, or changed their order.
+
+**A key is used for one thing.** The key of a generation seals nothing itself: the key that seals
+(`HKDF(key, "kernoid stream seal v1")`) and the two tokens (section 5) are derived from it.
 
 **Generations.** A stream's first generation is made with it. A new one is a record of kind `generation` in the
 stream, written under the **new** key, holding the previous key sealed with the new one – so that whoever gets the
@@ -70,11 +77,14 @@ link = { stream, generation, sealed }   // a record in the stream above
 - To a **stream** above (a folder for a document in it): `sealed` is XChaCha20-Poly1305 under that stream's current
   key, associated data `link`, the stream and the generation.
 - To a **person** (a document shown to them; the space stream to every person): `sealed` is `pq::seal` to the person's
-  receiving key, context the same.
+  receiving key, context the same – with the space, so that a link is of one space.
 - A **person stream** has a derived identity (`StreamId::of_person`: SHA-256 of the domain, the space and the person)
-  so that any device can find it, and a key per generation of the person's key (`StreamKey::of_person`). It is an
-  **inbox** *(settled while building)*: a device with `write` appends records of kind `sealed` to it **without** its
-  write token – a link sealed to the person, which only the person opens; everything else there needs the token, and
+  so that any device can find it, and a key per generation of the person's key (`StreamKey::of_person`). **The roster
+  makes it** *(settled 2026-11-26)*: each generation of a person's key names the hashes of the stream's tokens
+  (`PersonKey::inbox_read`, `inbox_write`), and the relay makes the stream and its generations from them as it takes
+  the record – no device makes or removes a person's stream, and none can be there first. It is an **inbox**
+  *(settled while building)*: a device with `write` appends records of kind `sealed` to it **without** its write
+  token – a link sealed to the person, which only the person opens; everything else there needs the token, and
   reading always does.
 
 A device starts at its person stream, opens the links there and follows them down; it knows every stream it may read
@@ -91,9 +101,26 @@ write = HKDF-SHA256(stream key, info = "<domain label> stream write " || stream 
 ```
 
 The relay keeps only `SHA-256(token)`. Whoever makes a stream or a generation registers both hashes. A request to read
-a stream carries a read token of one of its generations; a request to write carries the write token **and** is signed
-by a device that is a member with `write` at the relay's head of the member list. Both also need the device to be a
-member now (section 7): the relay checks the request's signature against the member list, as it does today.
+a stream carries a read token of one of its generations; a request to write – a record, an original, the stream's
+removal – carries the write token of its **latest** generation **and** is signed by a device that is a member with
+`write` at the relay's head of the member list, and a record is of that generation: the key of a generation before is
+one somebody was to lose (section 8), and writes nothing more. Both also need the device to be a member now (section
+7): the relay checks the request's signature against the member list.
+
+**A request's signature** (`<scheme>-pq2`, since 0.7.0) is over the method, the path with its query, the time (±300 s)
+and the SHA-256 of the body, of the read token and of the write token – so that what a proxy sees of a request serves
+no other one. The first form (`-pq`: method, path and time alone) is no longer taken.
+
+**The space stream is the roster's.** Its generations are records of the roster (section 3), each naming the hash of
+its read token (`SpaceLinks::read`). The relay takes a generation's token hashes from the device that made it there,
+under that read hash, with no write token: a generation whose links open for nobody (section 7) must not be the last
+one. Devices take the space stream's keys from the roster alone, and only a key whose read token has the hash named –
+so whoever makes a generation cannot give different persons different keys.
+
+**Who reads a stream can write it**, if its device has `write`: the write token comes from the stream's key like the
+read token. That is meant *(settled 2026-11-26)*: the relay's rights are per device (`write`), finer ones – who may
+change what in a stream – are the program's, checked by the devices at a record's `at` (section 7). A stream that
+some may only read is two streams to the foundation: one they are linked to, and one they are not.
 
 A reader with an old generation's token reads the stream's records **up to** the next generation and the `generation`
 record that follows, which it cannot open without the new key – it learns that there is a newer one, nothing more.
@@ -104,14 +131,14 @@ Beside today's `/relay/<scheme>/v1/spaces/…`, a protocol `v2` below `/relay/<s
 
 | Request | What |
 |---|---|
-| `GET members?after=` / `POST members` | the member list, ordered by the relay, as today – now with hybrid keys (section 7) |
-| `PUT streams/{stream}` | makes a stream with its first generation's token hashes (write signature) |
-| `POST streams/{stream}/generations` | adds a generation's token hashes (write token of the previous generation, write signature) |
-| `POST streams/{stream}/records` | appends records (write token, write signature); the relay gives each a position |
+| `GET roster?after=` / `POST roster` | the member list, ordered by the relay – read by the space's devices and by a device that asked to join, no one else (section 7) |
+| `PUT streams/{stream}` | makes a stream with its first generation's token hashes (write signature); not a person's stream – the roster makes those |
+| `POST streams/{stream}/generations` | adds a generation's token hashes (write token of the previous generation, write signature; the space stream's: by who made the generation in the roster) |
+| `POST streams/{stream}/records` | appends a record (write token, write signature); the relay gives it a position and answers with it |
 | `GET streams/{stream}/records?after=` | records after a position (read token) |
 | `POST follow` | for a list of `{stream, position, read token}`: what is new, and which streams said `changed` |
 | `PUT`/`GET streams/{stream}/originals/{hash}` | originals of a stream, by their hash (write / read token) |
-| `DELETE streams/{stream}` | removes a stream with its originals (a member with `purge`, write token) |
+| `DELETE streams/{stream}` | removes a stream with its originals (a member with `purge`, write token); not the space stream or a person's |
 
 The relay learns identities, sizes and times of streams and who follows which together – not what is in them (aktujo
 RFC 0009, 3). Storage, quotas and limits stay as [0010](0010-foundation.md), 4 says, in new tables of kernoid's one
@@ -127,7 +154,9 @@ signed hybrid and name:
   its generations *(settled while building)*, which every device of the person needs;
 - **persons** – an identity (`p-` and 26 characters) and their receiving key;
 - **servers** – a device marked `server` (aktujo RFC 0009, 5): every member sees that the server's operator can read
-  everything.
+  what the server is shown. A device says so of itself (`Streams::as_server`, which a server's node sets); the mark
+  asks for less trust, so anyone may carry it, and nothing can make a server that hides it show it – whoever adds a
+  device knows whose it is.
 
 **Who writes what of a person** (settled 2026-11-26, section 11): a person's key – a new generation, or seals of
 the current one for new devices – comes from a device of that person, from the device that adds the person in the
@@ -135,6 +164,29 @@ same record, or, after removing one of the person's devices, from a device with 
 stream are written once and never replaced; a link names the person's current key, and a link of the current
 generation goes only to a person added in the same record. The relay lets only a person's own devices make the
 person's stream, the only stream that is an inbox.
+
+**What a device takes** (settled 2026-11-26, section 11). The relay and the other devices of a space are not trusted to
+mean well; a device checks what it is handed before it keeps it:
+
+- **A roster** begins with the record this device knows the space by: an invitation carries the hash of record 0
+  (`…#streams=<space>.<secret>.<p|d>.<hash>`), a recovery code's device carries the code's proof of it
+  (`recovery_proof`: HMAC-SHA256, keyed from the code's seed, over the space and that hash), a device that founded or
+  joined keeps it. A relay that makes a roster up – its own founder, the invited device taken in – is found out.
+- **An invited device gets `write`**, whatever its request asks for; a request the roster's rules refuse is passed
+  over. A person who asked to join checks that the roster gives the person the key its device made.
+- **A record** is its author's as the roster was at the position it names (`at`): a member then, with `write`, under
+  the device name it had then. A record of a generation that had ended in the relay's order is not taken.
+- **A link's key** is taken only when the stream vouches for it: a newer generation of a stream the device reads
+  must lead back, through the stream's generation records, to the key it holds – only who held that key could have
+  made them; a stream it does not read yet must be one the relay keeps under that key's read token. A link names
+  neither the space stream nor a person's stream. Any device with `write` seals a link into anyone's stream; without
+  this check it could hand a person a key of its own for a stream the person reads.
+- **What does not open is passed over** and counted (`StreamsReport::refused`): a record, a link, a seal or a chain
+  written to do harm costs itself, never the synchronisation. Keys of persons and of the space stream are read link
+  by link and seal by seal; a generation of the space stream may chain to an older one than the one before
+  (`previous_generation`), so that the device that follows a broken generation makes one that reads back past it.
+- **Who names a group's members is one of them** (below): an audience written by someone not in the audience before
+  it is not taken.
 
 **Groups** (aktujo RFC 0012, 8, item 7; implemented 2026-11-26) are streams of the foundation: a group is a stream
 whose key is sealed into its members' person streams, and which names them in an event of kind `kernoid_audience`
@@ -161,8 +213,10 @@ permissions and roles; the foundation knows the four the relay enforces.
    original, sealed or not (its signatures no longer verify against the list).
 2. Its person gets a new seed, sealed to the person's other devices (a new generation of the person's key in the
    roster). The person's own device chains the seed before to it; a device of another person with `members` cannot
-   *(settled while building)* – the person's devices then keep the keys they had learned, and links sealed to the old
-   generation are read by devices that already read them, not by devices added later.
+   *(settled while building)* and may not pretend to – the person's devices then keep the keys they had learned, and
+   links sealed to the old generation are read by devices that already read them, not by devices added later. That
+   device knows the new seed: the first device of the person that reads the roster moves the person on to a seed of
+   its own, chained to that one *(settled 2026-11-26)*.
 3. Every device of the space marks **due** each stream the removed device could open – those it reached from that
    person stream. A device knows them: it follows the same links.
 4. The first device that writes into a due stream first makes a new generation, writes the links for the stream's
@@ -202,21 +256,57 @@ then go. kernoid's own vaults move onto `v2` with [0010](0010-foundation.md), 5.
     Before, any device with `write` could make another person's inbox first and hold its tokens.
   - A device's receiving key must have the right length; printing a short key no longer panics.
 
-  **OPEN** for the review, from the same reading:
-  - A device with `members` that removes another person's device makes that person's next seed itself and so knows
-    it (section 8). That is part of trusting `members`. Should the person's own device re-key after such a rotation?
-  - Request signatures cover the method, the path and the time (±300 s), not the body or the token headers. A header
-    seen by a proxy can be replayed for five minutes with another body. The fix needs a new version of the request
-    signature.
-  - The write token comes from the stream key like the read token (section 5): whoever reads a stream can compute
-    its write token, and only the device's `write` stands between them. Finer rights are the devices' check of `at`.
-  - The code and this text differ in details: `StreamRecord` has no `previous` or `clock`; a record's id hashes the
-    nonce and ciphertext; an id carries 128 bits; the link context leaves out the space.
-  - Secrets are not zeroized (stream keys, seeds, X25519 and ML-KEM keys; ml-kem's `zeroize` is off).
-  - The stream key is both the AEAD key and the input of the tokens; signatures of roster records, stream records and
-    requests are told apart by their encoding alone, not by a label.
-  - The relay builds the roster again for every request and checks every signature, which costs O(n²) as the roster
-    grows.
+  A second reading (2026-11-26, as an outside reviewer would: the code as an attacker with `write`, an invitation or
+  the relay has it; again no replacement for the review) found `pq` sound – X-Wing as the draft has it, and ml-kem
+  0.2.3 reduces a key's coefficients modulo q as it decodes, so the check in `pq` is FIPS 203's – and the weaknesses
+  around `stream`, in how the roster's rules, `kernoid-spaces` and the relay use it. Changed since (section 7, "What a
+  device takes"; sections 5 and 8):
+  - **Joining and recovering had no anchor**: a relay could hand a new device a roster of its own making and read
+    what the device wrote. Invitations name record 0; recovery codes prove it.
+  - **An invited person chose its own permissions** (`members`, `purge`): the inviting device signed the device of
+    the request as it came.
+  - **A link was taken as its writer said**, the first one for a generation kept: any device with `write` could lock
+    a person out of any stream by sealing a key of its own into the person's stream – or, with the relay's help, have
+    the person write under that key.
+  - **One record that did not open stopped a device's synchronisation for good** – an event sealed with another
+    key, a link with a key of the wrong length, an audience naming no person.
+  - **A generation of the space stream with links or a chain of bytes that open nothing** – any device with `write`
+    could write one – left nobody with any key of the space stream, for good; the same for a person's key with a
+    chain that did not open.
+  - **A write token of an older generation still wrote**: a person taken out of a group, or a device not yet
+    removed everywhere, went on writing – also an audience naming itself.
+  - **Records were checked against a device as it was last added**, at no position: `at` and `write` are checked now.
+  - **Requests were signed without their body and tokens**, and the roster was handed to anyone who knew a space's
+    identity, with the names of its persons and devices.
+  - Removing several devices in one record (`Streams::remove_devices`) and naming the devices a device added
+    (`Roster::added_by`): a device adds devices of its own person without anyone's leave, so one that fell into other
+    hands may have added others first.
+
+  With them, for 0.7.0 (2026-11-26, "nothing needs to stay compatible"): a record names its author's record before
+  it and its identity covers its header (section 3); the key that seals is derived from the stream's key, apart
+  from the tokens; a link's context names the space; a generation of the space stream names its read token's hash
+  (section 5); persons' streams are made by the roster (section 4); the roster is read by the space's devices alone;
+  seeds, stream keys and shared secrets are wiped when dropped (`zeroize`, ml-kem's too); the relay keeps the rosters
+  it checked and reads only what was added; a server's node marks its devices; recovery codes without a proof and
+  the first form of the request's signature are gone.
+
+  **OPEN** for the review:
+  - A device adds devices of its own person without `members`: whoever removes a device must look at what it added
+    (`Roster::added_by`, `Streams::remove_devices`) – no rule does it, because a phone that added a laptop is the
+    usual case. Should a device added by one without `members` need a second word?
+  - A removed device that kept a stream's key can still, with the relay's help, have records taken that name a
+    position at which it was a member: nothing orders records and the roster against each other but the relay.
+    A relay can also withhold the end of a stream, or of the roster – a device sees what is missing in between
+    (`previous`), not what never came.
+  - Whoever writes a stream can make a generation of it whose key nobody else gets: the stream is then read up to
+    there and written no more. For the space stream the next writer makes a generation past it; for other streams
+    the program makes a new stream.
+  - XChaCha20-Poly1305 does not commit to its key. A stream's key is checked against the relay's token hash (the
+    roster's, for the space stream), so two keys for one generation need the relay's help – then one ciphertext
+    could open to two texts.
+  - A seed handed out of `kernoid_crypt` (`HybridKeys::seed`, `Roster::person_seeds`) is a plain array: its holder
+    wipes it, or does not. Keys in the store on the device are another question (below).
+  - `Device::server` is what a device says of itself (section 7).
   - Groups (section 7) came after that reading: the audience is the newest event of its kind in the log's order, so
     two devices changing a group at once end with one of them; a device that reads a stream below a group but not
     the group itself does not learn that someone left it, and does not renew before it writes.

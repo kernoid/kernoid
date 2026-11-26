@@ -59,7 +59,7 @@ async fn relay(pool: &PgPool) -> String {
 
 fn node(pool: &PgPool, runtime: &Handle, name: &str, key: &str) -> Streams<Node> {
     let node = Node::new(pool.clone(), name, Key::from_hex(key).unwrap(), runtime.clone()).unwrap();
-    Streams::open(D, name.parse().unwrap(), node)
+    Streams::open(D, name.parse().unwrap(), node).as_server()
 }
 
 fn titles(streams: &Streams<Node>, space: &SpaceId, stream: &StreamId) -> Vec<String> {

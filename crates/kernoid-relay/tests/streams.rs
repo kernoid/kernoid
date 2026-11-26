@@ -15,8 +15,8 @@ use kernoid_crypt::{
     Domain,
     pq::HybridKeys,
     stream::{
-        Device, LinkBody, Permission, RosterRecord, StreamId, StreamKey, StreamRecord, Token, Writer, found,
-        person_key, request_signature, token_hash,
+        Device, LinkBody, Permission, Request as Signed, RosterRecord, StreamId, StreamKey, StreamRecord, Token,
+        Writer, found, person_key, request_signature, token_hash,
     },
 };
 use kernoid_log::{Clock, Event};
@@ -67,13 +67,22 @@ struct Call<'a> {
     founder: bool,
     read: Option<String>,
     write: Option<String>,
+    /// What the signature is made over instead of the body sent: a request changed on its way.
+    signed: Option<Vec<u8>>,
 }
 
 async fn send(app: &Router, method: &str, path: &str, call: Call<'_>, body: Vec<u8>) -> (StatusCode, Vec<u8>) {
     let mut request = Request::builder().method(method).uri(path).header("content-type", "application/json");
     if let Some(keys) = call.keys {
         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
-        request = request.header("authorization", request_signature(D, keys, method, path, now));
+        let signed = Signed {
+            method,
+            path,
+            body: call.signed.as_deref().unwrap_or(&body),
+            read: call.read.as_deref(),
+            write: call.write.as_deref(),
+        };
+        request = request.header("authorization", request_signature(D, keys, &signed, now));
     }
     if call.founder {
         request = request.header(kernoid_relay::FOUNDER_HEADER, TOKEN);
@@ -101,12 +110,10 @@ fn path(what: &str) -> String {
     format!("/relay/kernoid/v2/spaces/{}/{what}", space())
 }
 
-fn tokens(key: &StreamKey, stream: &StreamId, generation: u32, inbox: bool) -> Vec<u8> {
+fn tokens(key: &StreamKey, stream: &StreamId, generation: u32) -> Vec<u8> {
     let hash = |which| Bytes(token_hash(&key.token(D, which, stream, generation)).0.to_vec());
-    serde_json::to_vec(
-        &json!({ "generation": generation, "read": hash(Token::Read), "write": hash(Token::Write), "inbox": inbox }),
-    )
-    .unwrap()
+    serde_json::to_vec(&json!({ "generation": generation, "read": hash(Token::Read), "write": hash(Token::Write) }))
+        .unwrap()
 }
 
 #[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
@@ -129,19 +136,18 @@ async fn streams_are_read_and_written_with_their_tokens(pool: PgPool) {
     let v1 = format!("/relay/kernoid/v1/spaces/{}/envelopes", space());
     assert_eq!(send(&app, "GET", &v1, Call::default(), vec![]).await.0, StatusCode::NOT_FOUND);
 
-    // The space stream: made with its token hashes, written with the write token, read with the read token.
-    let stream = &founding.space_stream;
-    let key = &founding.space_key;
+    // A stream: made with its token hashes, written with the write token, read with the read token.
+    let (stream, key) = (&StreamId::generate(), &StreamKey::generate());
     let stream_path = path(&format!("streams/{stream}"));
     let me = || Call { keys: Some(&phone), ..Call::default() };
     assert_eq!(
-        send(&app, "PUT", &stream_path, Call::default(), tokens(key, stream, 0, false)).await.0,
+        send(&app, "PUT", &stream_path, Call::default(), tokens(key, stream, 0)).await.0,
         StatusCode::UNAUTHORIZED
     );
-    assert_eq!(send(&app, "PUT", &stream_path, me(), tokens(key, stream, 0, false)).await.0, StatusCode::CREATED);
-    assert_eq!(send(&app, "PUT", &stream_path, me(), tokens(key, stream, 0, false)).await.0, StatusCode::CONFLICT);
+    assert_eq!(send(&app, "PUT", &stream_path, me(), tokens(key, stream, 0)).await.0, StatusCode::CREATED);
+    assert_eq!(send(&app, "PUT", &stream_path, me(), tokens(key, stream, 0)).await.0, StatusCode::CONFLICT);
 
-    let writer = Writer { domain: D, space: &space(), keys: &phone, at: 0 };
+    let writer = Writer { domain: D, space: &space(), keys: &phone, at: 0, previous: None };
     let mut clock = Clock::new("alice-phone".parse().unwrap());
     let event = Event::new(clock.now(1_800_000_000_000), 1, None, &json!({"kind": "hello"})).unwrap();
     let record = StreamRecord::event(&writer, stream, 0, key, &event);
@@ -169,11 +175,11 @@ async fn streams_are_read_and_written_with_their_tokens(pool: PgPool) {
     let next = StreamKey::generate();
     let generations = path(&format!("streams/{stream}/generations"));
     assert_eq!(
-        send(&app, "POST", &generations, with(None, Some(&read)), tokens(&next, stream, 1, false)).await.0,
+        send(&app, "POST", &generations, with(None, Some(&read)), tokens(&next, stream, 1)).await.0,
         StatusCode::FORBIDDEN
     );
     assert_eq!(
-        send(&app, "POST", &generations, with(None, Some(&write)), tokens(&next, stream, 1, false)).await.0,
+        send(&app, "POST", &generations, with(None, Some(&write)), tokens(&next, stream, 1)).await.0,
         StatusCode::CREATED
     );
     let new_write = next.token_text(D, Token::Write, stream, 1);
@@ -187,6 +193,49 @@ async fn streams_are_read_and_written_with_their_tokens(pool: PgPool) {
             StatusCode::CREATED
         );
     }
+    // What generation 0's key still writes: nothing – not a record of its own generation, not one that says it is of
+    // the new one, not an original. Whoever was to lose the stream holds that key.
+    let event = Event::new(clock.now(1_800_000_000_002), 3, None, &json!({"kind": "too_late"})).unwrap();
+    for (generation, token) in [(0, &write), (1, &write), (0, &new_write)] {
+        let key = if generation == 0 { key } else { &next };
+        let record = StreamRecord::event(&writer, stream, generation, key, &event);
+        assert_eq!(
+            send(&app, "POST", &records_path, with(None, Some(token)), to_root(&record).unwrap()).await.0,
+            StatusCode::FORBIDDEN,
+            "generation {generation}"
+        );
+    }
+    let sealed = key.seal_original(D, stream, b"too late");
+    let original = path(&format!("streams/{stream}/originals/{}", Sha256Hash::of(&sealed)));
+    assert_eq!(send(&app, "PUT", &original, with(None, Some(&write)), sealed).await.0, StatusCode::FORBIDDEN);
+    // A request's signature is of its body and its tokens: neither serves with another.
+    let record = StreamRecord::event(&writer, stream, 1, &next, &event);
+    let changed = Call { signed: Some(b"{}".to_vec()), ..with(None, Some(&new_write)) };
+    assert_eq!(send(&app, "POST", &records_path, changed, to_root(&record).unwrap()).await.0, StatusCode::UNAUTHORIZED);
+
+    // The space stream is the roster's: a generation of it is registered by who made it there, not with a token.
+    let space_generations = path(&format!("streams/{}/generations", founding.space_stream));
+    let space_path = path(&format!("streams/{}", founding.space_stream));
+    let space_key = &founding.space_key;
+    assert_eq!(
+        send(&app, "PUT", &space_path, me(), tokens(space_key, &founding.space_stream, 0)).await.0,
+        StatusCode::CREATED
+    );
+    let space_write = space_key.token_text(D, Token::Write, &founding.space_stream, 0);
+    assert_eq!(
+        send(
+            &app,
+            "POST",
+            &space_generations,
+            with(None, Some(&space_write)),
+            tokens(&next, &founding.space_stream, 1)
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN,
+        "no generation 1 in the roster"
+    );
+
     let old = json(&send(&app, "GET", &list, with(Some(&read), None), vec![]).await.1);
     assert_eq!(old["records"].as_array().unwrap().len(), 2, "{old}");
     let new = json(&send(&app, "GET", &list, with(Some(&new_read), None), vec![]).await.1);
@@ -255,19 +304,12 @@ async fn a_removed_device_gets_nothing_and_sealed_links_need_no_token(pool: PgPo
     let person_stream = StreamId::of_person(D, &space(), &founding.person);
     let stream_key = StreamKey::of_person(D, &founding.person, &founding.person_seed);
     let stream_path = path(&format!("streams/{person_stream}"));
-    // Only a person's own stream is an inbox; another stream may not be one.
-    let other = StreamId::generate();
+    // The roster made it, from the hashes Alice's key names there: nobody makes a person's stream by hand.
     assert_eq!(
-        send(&app, "PUT", &path(&format!("streams/{other}")), call(&phone), tokens(&stream_key, &other, 0, true))
-            .await
-            .0,
-        StatusCode::BAD_REQUEST
+        send(&app, "PUT", &stream_path, call(&phone), tokens(&stream_key, &person_stream, 0)).await.0,
+        StatusCode::FORBIDDEN
     );
-    assert_eq!(
-        send(&app, "PUT", &stream_path, call(&phone), tokens(&stream_key, &person_stream, 0, true)).await.0,
-        StatusCode::CREATED
-    );
-    let writer = Writer { domain: D, space: &space(), keys: &laptop, at: 1 };
+    let writer = Writer { domain: D, space: &space(), keys: &laptop, at: 1, previous: None };
     let body = LinkBody { stream: StreamId::generate(), generation: 0, key: Bytes(vec![1; 32]) };
     let alice = roster.person_key(&founding.person).unwrap().clone();
     let sealed = StreamRecord::sealed_link(&writer, &person_stream, &alice, &body).unwrap();
@@ -303,11 +345,10 @@ async fn a_removed_device_gets_nothing_and_sealed_links_need_no_token(pool: PgPo
     let phone_call = Call { keys: Some(&phone), read: Some(read), ..Call::default() };
     assert_eq!(send(&app, "GET", &list, phone_call, vec![]).await.0, StatusCode::OK);
 
-    // Purging a stream needs `purge` and its write token.
-    let write = stream_key.token_text(D, Token::Write, &person_stream, 0);
+    // A person's stream is the roster's: nobody purges it, with whatever token.
+    let write = StreamKey::of_person(D, &founding.person, &new_seed).token_text(D, Token::Write, &person_stream, 1);
     let purge = Call { keys: Some(&phone), write: Some(write), ..Call::default() };
-    assert_eq!(send(&app, "DELETE", &stream_path, purge, vec![]).await.0, StatusCode::NO_CONTENT);
-    assert_eq!(send(&app, "GET", &list, call(&phone), vec![]).await.0, StatusCode::FORBIDDEN);
+    assert_eq!(send(&app, "DELETE", &stream_path, purge, vec![]).await.0, StatusCode::FORBIDDEN);
 }
 
 #[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
@@ -329,28 +370,46 @@ async fn another_persons_inbox_is_not_taken(pool: PgPool) {
     let bob_seed = kernoid_base::random::<32>();
     let bob_key = person_key(D, &space(), &bob, 0, &bob_seed, None, &[&laptop_device]).unwrap();
     let link =
-        kernoid_crypt::stream::link_to_person(D, &founding.space_stream, 0, &founding.space_key, &bob_key).unwrap();
+        kernoid_crypt::stream::link_to_person(D, &space(), &founding.space_stream, 0, &founding.space_key, &bob_key)
+            .unwrap();
     let record = roster
         .next(RosterRecord {
             add_persons: vec![kernoid_crypt::stream::Person { id: bob.clone(), name: None }],
             add_devices: vec![laptop_device],
             person_keys: vec![bob_key],
-            space_links: Some(kernoid_crypt::stream::SpaceLinks { generation: 0, links: vec![link], previous: None }),
+            space_links: Some(kernoid_crypt::stream::SpaceLinks {
+                generation: 0,
+                read: None,
+                links: vec![link],
+                previous: None,
+                previous_generation: None,
+            }),
             ..RosterRecord::blank(&space())
         })
         .sign(&phone);
     let call = |keys| Call { keys: Some(keys), ..Call::default() };
     assert_eq!(send(&app, "POST", &roster_path, call(&phone), to_root(&record).unwrap()).await.0, StatusCode::CREATED);
 
-    // Alice's phone may write, but not make Bob's stream first – it would hold its tokens, and Bob none.
+    // Alice's phone may write, but not make Bob's stream – nor may Bob's own device: the roster made it when it
+    // took Bob in, under the tokens of the key he brought.
     let bobs = StreamId::of_person(D, &space(), &bob);
     let mine = StreamKey::generate();
     let bobs_path = path(&format!("streams/{bobs}"));
-    assert_eq!(
-        send(&app, "PUT", &bobs_path, call(&phone), tokens(&mine, &bobs, 0, false)).await.0,
-        StatusCode::FORBIDDEN
-    );
-    // Bob's own device makes it.
+    for keys in [&phone, &laptop] {
+        assert_eq!(send(&app, "PUT", &bobs_path, call(keys), tokens(&mine, &bobs, 0)).await.0, StatusCode::FORBIDDEN);
+    }
     let key = StreamKey::of_person(D, &bob, &bob_seed);
-    assert_eq!(send(&app, "PUT", &bobs_path, call(&laptop), tokens(&key, &bobs, 0, true)).await.0, StatusCode::CREATED);
+    let list = format!("{bobs_path}/records?after=0");
+    let read = |key: &StreamKey| Call {
+        keys: Some(&laptop),
+        read: Some(key.token_text(D, Token::Read, &bobs, 0)),
+        ..Call::default()
+    };
+    assert_eq!(send(&app, "GET", &list, read(&mine), vec![]).await.0, StatusCode::FORBIDDEN);
+    assert_eq!(send(&app, "GET", &list, read(&key), vec![]).await.0, StatusCode::OK);
+    // The roster is for the space's devices.
+    assert_eq!(send(&app, "GET", &roster_path, Call::default(), vec![]).await.0, StatusCode::UNAUTHORIZED);
+    let stranger = HybridKeys::generate(D);
+    assert_eq!(send(&app, "GET", &roster_path, call(&stranger), vec![]).await.0, StatusCode::UNAUTHORIZED);
+    assert_eq!(send(&app, "GET", &roster_path, call(&laptop), vec![]).await.0, StatusCode::OK);
 }
