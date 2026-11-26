@@ -21,6 +21,9 @@
 //!
 //! Protocol 2 – streams (RFC 0012) – is in [`v2`], below `/relay/<scheme>/v2/`; a space is of one protocol.
 
+/// A server as one more node of spaces of streams (RFC 0010, 8), with the feature `node`.
+#[cfg(feature = "node")]
+pub mod node;
 mod v2;
 
 pub use v2::{READ_HEADER, WRITE_HEADER};

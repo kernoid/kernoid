@@ -31,7 +31,7 @@ reading of the streams' cryptography ahead of its review. Upgrade by pulling the
   native library; it registers a `kernoid_bridge::program::Program` through `kernoid_programs`, and its Dart code
   calls it with `programCall`/`programWatch` (or `Kernoid.programCall`/`programWatch` for the signed-in account),
   bytes in and out. `runKernoidApp(library: …)` loads such a library (`loadKernoid`).
-- **A server as one more node of a space** (RFC 0010, 8): the new crate `kernoid-node` keeps a node's spaces of streams
+- **A server as one more node of a space** (RFC 0010, 8): `kernoid-relay` with its new feature `node` keeps a node's spaces of streams
   in PostgreSQL (migration 0059, `node_*`), so that a program's server founds, joins, follows and writes like a device
   (`Streams<Node>`), with no SQLite in its build. Its seed, the keys of streams and the events it reads are sealed
   under the node's key. `kernoid-spaces` keeps its engine apart from its store: the trait `StreamBackend`, with

@@ -30,7 +30,7 @@ RFCs 0007–0011) comes after 0.5.1, in this repository, when aktujo moves onto 
 | `aktujo-crypt` | `kernoid-crypt` | MIT | members and their keys from a seed, the chain of space keys, envelopes, signed requests, invitations, recovery codes |
 | `aktujo-store` (SQLite), `aktujo-sync` | `kernoid-spaces` | MIT | a device's spaces: their store in SQLite (`store`: events, member records, settings, what was sent) and their synchronisation through a relay – writing, invitations, removing members, recovery (until 0.5.0 `kernoid-space-store` and `kernoid-replica`) |
 | `aktujo-relay` | `kernoid-relay` | **AGPL** | the relay: member lists and envelopes per space over HTTP, on kernoid's PostgreSQL and object storage |
-| `aktujo-store` (PostgreSQL) | `kernoid-node` | **AGPL** | not taken over as it was: a server keeps the spaces it relays in `kernoid-relay`, and those it is a node of in `kernoid-node` (section 8) |
+| `aktujo-store` (PostgreSQL) | `kernoid-relay`, feature `node` | **AGPL** | not taken over as it was: a server keeps the spaces it relays in `kernoid-relay`, and those it is a node of in its module `node` (section 8) |
 
 The MIT crates are in `kit/` (RFC 0008, 3): the apps of every program built on kernoid use them on the device. The
 relay is a server crate.
@@ -174,10 +174,10 @@ version). ML-DSA is ml-dsa 0.1, which signs in constant time – the server sign
 - **OPEN:** vaults on spaces (section 5) – with streams.
 - **A server as a node with keys** (aktujo RFC 0009, 5; implemented 2026-11-26): `kernoid-spaces` keeps a node's spaces
   of streams behind the trait `StreamBackend` – `Store` in SQLite on a device (the feature `sqlite`, on by default),
-  and `kernoid-node`'s `Node` in PostgreSQL on a server, whose build has no SQLite (`default-features = false`). A
+  and `kernoid_relay::node::Node` (the feature `node`) in PostgreSQL on a server, whose build has no SQLite. A
   server is then a device of the space like any other: `Streams<Node>` founds, joins, follows the streams it can open,
   writes and renews when due. What only the node may read – the state with its seed, the keys of streams, the events
   read from them – is sealed under the node's key, a secret of the program's; the roster and the records are as public
   as at the relay. One database holds several nodes by name. Checked against kernoid's relay on PostgreSQL
-  (`crates/kernoid-node/tests/node.rs`). What the server does as a node – the role `server`, acting for people without
+  (`crates/kernoid-relay/tests/node.rs`). What the server does as a node – the role `server`, acting for people without
   devices, evaluating a program's rules – is the program's (aktujo RFC 0009, 5).

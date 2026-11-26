@@ -9,7 +9,7 @@
 //!
 //! What the foundation keeps is the trait [`Backend`] (and [`streams::StreamBackend`] for spaces of streams): [`Store`]
 //! keeps them in SQLite, on a device (the feature `sqlite`). A server keeps the spaces of the relay in `kernoid-relay`, and
-//! those it is a node of in `kernoid-node` – both on PostgreSQL.
+//! those it is a node of in its module `node` – both on PostgreSQL.
 
 pub mod streams;
 

@@ -4,7 +4,7 @@
 //! in them. In the same database as the rest of the store (schema version 2).
 //!
 //! [`StreamBackend`] is what [`crate::streams::Streams`] keeps it in: [`Store`] in SQLite on a device (the feature
-//! `sqlite`), or a server's store – kernoid's `kernoid-node` keeps a server's in PostgreSQL, so that a server is one
+//! `sqlite`), or a server's store – kernoid-relay's `node` keeps a server's in PostgreSQL, so that a server is one
 //! more node of a space (RFC 0010, 8).
 //!
 //! OPEN: the keys of streams are kept here beside the data, as the seeds of 0.4 are; the key store of the operating

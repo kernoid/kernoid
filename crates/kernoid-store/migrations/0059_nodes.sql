@@ -1,5 +1,5 @@
 -- SPDX-License-Identifier: AGPL-3.0-or-later
--- A server as one more node of spaces of streams (RFC 0010, 8; RFC 0012; crate kernoid-node): what a device keeps in
+-- A server as one more node of spaces of streams (RFC 0010, 8; RFC 0012; kernoid-relay's feature node): what a device keeps in
 -- SQLite (kernoid-spaces' store), a server keeps here. `node` names the node, so that one database holds several – a
 -- program's organisations, say. What only the node may read – the state of a space with the node's seed, the keys of
 -- streams and the events read from them – is sealed under the node's key, bound to its node, space, stream and kind;
@@ -160,7 +160,7 @@ BEGIN
                    relay_stream_originals TO %I', runtime);
     -- Spaces of destroyed vaults wait for the worker.
     EXECUTE format('GRANT SELECT, INSERT, DELETE ON relay_space_removals TO %I', runtime);
-    -- A server as a node of spaces (kernoid-node): its state, streams and positions change; the rest is added and
+    -- A server as a node of spaces (kernoid-relay's node): its state, streams and positions change; the rest is added and
     -- removed with its stream or space.
     EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON node_spaces, node_streams TO %I', runtime);
     EXECUTE format('GRANT SELECT, INSERT, DELETE ON node_roster, node_stream_keys, node_stream_parents, node_stream_records,

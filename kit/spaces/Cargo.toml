@@ -47,7 +47,7 @@ default = ["native", "sqlite"]
 native = ["dep:reqwest", "dep:rustls", "dep:tokio"]
 # The store encrypted as a whole: SQLCipher (BSD-3-Clause) with OpenSSL (Apache-2.0) built in, instead of SQLite.
 # A device's store in SQLite (`store::Store`); without it, a program brings its own `StreamBackend` – a server's on
-# PostgreSQL (kernoid's `kernoid-node`) – and keeps SQLite out of its build.
+# PostgreSQL (kernoid-relay's feature `node`) – and keeps SQLite out of its build.
 sqlite = ["dep:rusqlite"]
 sqlcipher = ["sqlite", "rusqlite/bundled-sqlcipher-vendored-openssl"]
 # The store as bytes and back (`Store::to_bytes`, `from_bytes`), for a store kept elsewhere than in a file.

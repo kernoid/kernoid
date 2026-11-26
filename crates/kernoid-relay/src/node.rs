@@ -3,6 +3,7 @@
 //! (`kernoid_spaces::store::Store`), [`Node`] keeps in PostgreSQL, so that a server – a program built on kernoid, its
 //! identity built in – follows a space like a device does, holds every key it was given, writes when due and answers
 //! for the people it acts for. The engine is kernoid-spaces' own: `Streams::open(domain, device, Node::new(…))`.
+//! The feature `node` of kernoid-relay: the relay is where spaces meet, a node is one of their members.
 //!
 //! The engine is synchronous, as on devices: run it on a thread of its own (`tokio::task::spawn_blocking`) – [`Node`]
 //! waits for PostgreSQL there through the runtime's handle, and must never be called on one of the runtime's workers.

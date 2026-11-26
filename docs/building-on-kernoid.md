@@ -132,7 +132,7 @@ is in them – and remove them: `GET /v1/relay/spaces`, `DELETE /v1/relay/spaces
 (`deploy/compose/relay.yaml`).
 
 A program's **server can be one more node** of its spaces – a member that holds every key it is given, always online
-(aktujo RFC 0009, 5): `kernoid-node` keeps what a device keeps in SQLite in PostgreSQL instead, and kernoid-spaces'
+(aktujo RFC 0009, 5): `kernoid-relay` with its feature `node` keeps what a device keeps in SQLite in PostgreSQL instead, and kernoid-spaces'
 engine runs on it – `Streams::open(domain, device, Node::new(pool, "acme", key, Handle::current())?)`, on a blocking
 thread (`spawn_blocking`). The node's seed, the keys of streams and the events it reads are sealed under `key`, a secret
 of the program's; one database holds several nodes by name. The migration of its tables is kernoid's (0059): a program

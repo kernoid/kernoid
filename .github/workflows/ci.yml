@@ -61,6 +61,11 @@ jobs:
       - run: cargo clippy --locked --all-targets
       - name: Identity alone builds – kernoid-server without mail, calendars and files (RFC 0009, 3)
         run: cargo clippy --locked -p kernoid-server --no-default-features
+      # Its queries are checked against the database here: the workspace's .sqlx is made without the feature (its
+      # library's are in crates/kernoid-relay/.sqlx, which sqlx-crates.sh makes with all features).
+      - name: A server as a node of spaces – kernoid-relay's feature node (RFC 0010, 8)
+        env: { SQLX_OFFLINE: "false" }
+        run: cargo clippy --locked -p kernoid-relay --features node --all-targets
       - name: The API files of the documentation (docs/) match the code
         run: |
           df -h .
@@ -68,6 +73,9 @@ jobs:
           ./target/debug/kernoid openapi | diff - docs/_data/openapi.json
           ./target/debug/kernoid graphql-schema | diff - docs/api/schema.graphql
       - run: cargo test --locked
+      - name: The node against the relay
+        env: { SQLX_OFFLINE: "false" }
+        run: cargo test --locked -p kernoid-relay --features node --test node
       - name: The kit against this kernoid
         run: scripts/client-check.sh target/debug/kernoid
       - name: Small installations – identity alone, a relay alone, a built-in identity taken over (RFC 0008, 5; 0009, 7)

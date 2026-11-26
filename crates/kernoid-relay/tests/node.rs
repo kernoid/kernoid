@@ -8,7 +8,7 @@ use std::sync::Arc;
 use axum::http::{Extensions, HeaderMap};
 use kernoid_base::SpaceId;
 use kernoid_crypt::{Domain, stream::StreamId};
-use kernoid_node::Node;
+use kernoid_relay::node::Node;
 use kernoid_relay::{BoxFuture, Founder, Founders, Relay, router};
 use kernoid_spaces::streams::Streams;
 use kernoid_store::{BlobStore, TenantKeys, crypto::Key};

@@ -2840,23 +2840,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "kernoid-node"
-version = "0.7.0"
-dependencies = [
- "axum",
- "kernoid-base",
- "kernoid-crypt",
- "kernoid-log",
- "kernoid-relay",
- "kernoid-spaces",
- "kernoid-store",
- "serde_json",
- "sqlx",
- "tokio",
- "uuid",
-]
-
-[[package]]
 name = "kernoid-oidc"
 version = "0.7.0"
 dependencies = [
@@ -2906,6 +2889,7 @@ dependencies = [
  "kernoid-config",
  "kernoid-crypt",
  "kernoid-log",
+ "kernoid-spaces",
  "kernoid-store",
  "serde",
  "serde_json",

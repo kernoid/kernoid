@@ -190,7 +190,7 @@ pub fn is_removed(error: &SyncError) -> bool {
 }
 
 /// What one node – a device, or a server – holds of its spaces of streams, and how it synchronises them; kept in a
-/// [`StreamBackend`]: SQLite on a device ([`Store`], the default), PostgreSQL on a server (`kernoid-node`).
+/// [`StreamBackend`]: SQLite on a device ([`Store`], the default), PostgreSQL on a server (kernoid-relay's `node`).
 #[cfg(feature = "sqlite")]
 pub struct Streams<B: StreamBackend = Store> {
     domain: Domain,
@@ -201,7 +201,7 @@ pub struct Streams<B: StreamBackend = Store> {
 }
 
 /// What one node – a device, or a server – holds of its spaces of streams, and how it synchronises them; kept in a
-/// [`StreamBackend`] – PostgreSQL on a server (`kernoid-node`).
+/// [`StreamBackend`] – PostgreSQL on a server (kernoid-relay's `node`).
 #[cfg(not(feature = "sqlite"))]
 pub struct Streams<B: StreamBackend> {
     domain: Domain,
