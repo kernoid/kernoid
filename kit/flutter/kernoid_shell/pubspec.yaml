@@ -3,7 +3,7 @@
 # when taken; the packages of the kit refer to each other by path – an app overrides them all at once.
 name: kernoid_shell
 description: "The frame of an app on kernoid: logging in, the home with the server's features, the account"
-version: 0.6.0
+version: 0.7.0
 publish_to: 'none'
 repository: https://github.com/kernoid/kernoid
 

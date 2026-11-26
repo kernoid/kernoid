@@ -4,7 +4,7 @@
 # kernoid has a package like it for its own crate on kernoid_bridge instead – an app has one Rust library.
 name: kernoid_native
 description: "kernoid's native library: the crate of kernoid_bridge, built for every platform"
-version: 0.6.0
+version: 0.7.0
 publish_to: 'none'
 repository: https://github.com/kernoid/kernoid
 

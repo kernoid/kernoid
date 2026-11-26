@@ -20,11 +20,11 @@ jiff-sqlx = { version = "1.0.0", features = ["postgres", "serde"] }
 futures-util = { version = "0.3.34", default-features = false }
 getrandom = "0.4.3"
 hmac = "0.13.0"
-kernoid-e2e = { version = "0.6.0", path = "../../kit/e2e" }
-kernoid-sieve = { version = "0.6.0", path = "../kernoid-sieve" }
-kernoid-store = { version = "0.6.0", path = "../kernoid-store" }
+kernoid-e2e = { version = "0.7.0", path = "../../kit/e2e" }
+kernoid-sieve = { version = "0.7.0", path = "../kernoid-sieve" }
+kernoid-store = { version = "0.7.0", path = "../kernoid-store" }
 # Mail messages: the kit's library (MIT), by path.
-kernoid-mime = { version = "0.6.0", path = "../../kit/mime" }
+kernoid-mime = { version = "0.7.0", path = "../../kit/mime" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 sha2 = "0.11.1"

@@ -11,7 +11,7 @@ name: kernoid-relay
 
 services:
   kernoid:
-    image: ${KERNOID_IMAGE:-ghcr.io/kernoid/kernoid:0.6.0}
+    image: ${KERNOID_IMAGE:-ghcr.io/kernoid/kernoid:0.7.0}
     pull_policy: missing
     depends_on:
       migrate: { condition: service_completed_successfully }
@@ -34,7 +34,7 @@ services:
 
   # Brings the schema up to date before kernoid starts. Only this step knows the owner's password.
   migrate:
-    image: ${KERNOID_IMAGE:-ghcr.io/kernoid/kernoid:0.6.0}
+    image: ${KERNOID_IMAGE:-ghcr.io/kernoid/kernoid:0.7.0}
     pull_policy: missing
     command: ["migrate"]
     depends_on:

@@ -36,24 +36,24 @@ futures-util = { version = "0.3.34", default-features = false }
 jiff = { version = "1.0.1", features = ["serde"] }
 jiff-sqlx = { version = "1.0.0", features = ["postgres", "serde"] }
 ipnet = "2.12.2"
-kernoid-e2e = { version = "0.6.0", path = "../../kit/e2e" }
-kernoid-config = { version = "0.6.0", path = "../kernoid-config" }
-kernoid-events = { version = "0.6.0", path = "../kernoid-events" }
-kernoid-identity = { version = "0.6.0", path = "../kernoid-identity" }
-kernoid-dav = { version = "0.6.0", path = "../kernoid-dav", optional = true }
-kernoid-files = { version = "0.6.0", path = "../kernoid-files", optional = true }
-kernoid-groupware = { version = "0.6.0", path = "../kernoid-groupware", optional = true }
-kernoid-jmap = { version = "0.6.0", path = "../kernoid-jmap", optional = true }
-kernoid-mail = { version = "0.6.0", path = "../kernoid-mail", optional = true }
-kernoid-module = { version = "0.6.0", path = "../kernoid-module" }
-kernoid-oidc = { version = "0.6.0", path = "../kernoid-oidc" }
-kernoid-relay = { version = "0.6.0", path = "../kernoid-relay", optional = true }
+kernoid-e2e = { version = "0.7.0", path = "../../kit/e2e" }
+kernoid-config = { version = "0.7.0", path = "../kernoid-config" }
+kernoid-events = { version = "0.7.0", path = "../kernoid-events" }
+kernoid-identity = { version = "0.7.0", path = "../kernoid-identity" }
+kernoid-dav = { version = "0.7.0", path = "../kernoid-dav", optional = true }
+kernoid-files = { version = "0.7.0", path = "../kernoid-files", optional = true }
+kernoid-groupware = { version = "0.7.0", path = "../kernoid-groupware", optional = true }
+kernoid-jmap = { version = "0.7.0", path = "../kernoid-jmap", optional = true }
+kernoid-mail = { version = "0.7.0", path = "../kernoid-mail", optional = true }
+kernoid-module = { version = "0.7.0", path = "../kernoid-module" }
+kernoid-oidc = { version = "0.7.0", path = "../kernoid-oidc" }
+kernoid-relay = { version = "0.7.0", path = "../kernoid-relay", optional = true }
 # Always its client (kernoid's own messages through a relay); its server with `data`.
-kernoid-smtp = { version = "0.6.0", path = "../kernoid-smtp", default-features = false }
-kernoid-store = { version = "0.6.0", path = "../kernoid-store" }
+kernoid-smtp = { version = "0.7.0", path = "../kernoid-smtp", default-features = false }
+kernoid-store = { version = "0.7.0", path = "../kernoid-store" }
 # The login UI and the web app, built (served at /login and /app unless `http.login_ui`/`http.web_app` name a directory).
-kernoid-web = { version = "0.6.0", path = "../kernoid-web" }
-kernoid-mime = { version = "0.6.0", path = "../../kit/mime", optional = true }
+kernoid-web = { version = "0.7.0", path = "../kernoid-web" }
+kernoid-mime = { version = "0.7.0", path = "../../kit/mime", optional = true }
 metrics = "0.24.6"
 percent-encoding = "2.3.2"
 rustls = { version = "0.23.46", default-features = false, features = ["aws-lc-rs", "prefer-post-quantum", "std", "tls12"] }

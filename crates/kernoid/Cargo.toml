@@ -18,24 +18,24 @@ bytes = "1.12.1"
 getrandom = "0.4.3"
 jiff = { version = "1.0.1", features = ["serde"] }
 clap = { version = "4.6.7", features = ["derive", "env"] }
-kernoid-clamav = { version = "0.6.0", path = "../kernoid-clamav" }
-kernoid-config = { version = "0.6.0", path = "../kernoid-config" }
-kernoid-events = { version = "0.6.0", path = "../kernoid-events" }
-kernoid-identity = { version = "0.6.0", path = "../kernoid-identity" }
-kernoid-jitsi = { version = "0.6.0", path = "../kernoid-jitsi" }
-kernoid-ldap = { version = "0.6.0", path = "../kernoid-ldap" }
-kernoid-imap = { version = "0.6.0", path = "../kernoid-imap" }
-kernoid-dav = { version = "0.6.0", path = "../kernoid-dav" }
-kernoid-files = { version = "0.6.0", path = "../kernoid-files" }
-kernoid-groupware = { version = "0.6.0", path = "../kernoid-groupware" }
-kernoid-jmap = { version = "0.6.0", path = "../kernoid-jmap" }
-kernoid-mail = { version = "0.6.0", path = "../kernoid-mail" }
-kernoid-module = { version = "0.6.0", path = "../kernoid-module" }
-kernoid-oidc = { version = "0.6.0", path = "../kernoid-oidc" }
-kernoid-relay = { version = "0.6.0", path = "../kernoid-relay" }
-kernoid-server = { version = "0.6.0", path = "../kernoid-server" }
-kernoid-smtp = { version = "0.6.0", path = "../kernoid-smtp" }
-kernoid-store = { version = "0.6.0", path = "../kernoid-store" }
+kernoid-clamav = { version = "0.7.0", path = "../kernoid-clamav" }
+kernoid-config = { version = "0.7.0", path = "../kernoid-config" }
+kernoid-events = { version = "0.7.0", path = "../kernoid-events" }
+kernoid-identity = { version = "0.7.0", path = "../kernoid-identity" }
+kernoid-jitsi = { version = "0.7.0", path = "../kernoid-jitsi" }
+kernoid-ldap = { version = "0.7.0", path = "../kernoid-ldap" }
+kernoid-imap = { version = "0.7.0", path = "../kernoid-imap" }
+kernoid-dav = { version = "0.7.0", path = "../kernoid-dav" }
+kernoid-files = { version = "0.7.0", path = "../kernoid-files" }
+kernoid-groupware = { version = "0.7.0", path = "../kernoid-groupware" }
+kernoid-jmap = { version = "0.7.0", path = "../kernoid-jmap" }
+kernoid-mail = { version = "0.7.0", path = "../kernoid-mail" }
+kernoid-module = { version = "0.7.0", path = "../kernoid-module" }
+kernoid-oidc = { version = "0.7.0", path = "../kernoid-oidc" }
+kernoid-relay = { version = "0.7.0", path = "../kernoid-relay" }
+kernoid-server = { version = "0.7.0", path = "../kernoid-server" }
+kernoid-smtp = { version = "0.7.0", path = "../kernoid-smtp" }
+kernoid-store = { version = "0.7.0", path = "../kernoid-store" }
 percent-encoding = "2.3.2"
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls"] }
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "signal", "time"] }

@@ -4,7 +4,7 @@
 # kernoid's app, a program's own package builds its crate on this one into its app (RFC 0011, 4).
 name: kernoid_bridge
 description: "The Rust side of kernoid's apps: the kit's SDK, called from Dart"
-version: 0.6.0
+version: 0.7.0
 publish_to: 'none'
 repository: https://github.com/kernoid/kernoid
 

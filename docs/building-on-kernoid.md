@@ -68,7 +68,7 @@ A program that runs on its own can build kernoid's identity into its process ins
 its default features compiles nothing of mail, calendars or files. kernoid's crates are on crates.io since 0.6.0:
 
 ```toml
-kernoid-server = { version = "0.6.0", default-features = false }
+kernoid-server = { version = "0.7.0", default-features = false }
 ```
 
 kernoid's crates carry their checked queries (sqlx's offline data) and read the database of their own build from

@@ -5,7 +5,20 @@ What changes from release to release, for those who run kernoid and those who bu
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org) –
 before 1.0, a minor version (0.2) may change the API and the configuration, and says how to upgrade here.
 
-## [Unreleased]
+## [0.7.0] – DATE
+
+What aktujo waits for (its RFC 0012, 8): an app that starts without an account, a program's Rust in kernoid's one native
+library, a server as one more node of a space, and a relay without object storage – with the first fixes from a
+reading of the streams' cryptography ahead of its review. Upgrade by pulling the image `ghcr.io/kernoid/kernoid:0.7.0`
+(the Helm chart and the crates follow the version): `kernoid migrate` adds the tables of migration 0059 (`node_*`).
+
+### Upgrading
+
+- **Apps on the kit** depend on `kernoid_native` besides their features: `kernoid_bridge` no longer builds a native
+  library. A program's app depends on a package like it for its own crate instead (RFC 0011, 4).
+- **A space whose roster holds a person's key, seal or link written by a device that may not write it** no longer
+  reads (section Changed). None are known; kernoid's own apps never wrote one.
+- **kernoid-spaces without its default features** has no SQLite: name the feature `sqlite` (or `serialize`).
 
 ### Added
 
@@ -688,7 +701,8 @@ Marked `OPEN` in the documentation, among them: public links to files, resumable
 OAUTHBEARER and LDAP, IMAP `SORT` and `THREAD`, a week and a day view, an audit log in the web app, a Kubernetes
 operator – planned for 0.2.
 
-[Unreleased]: https://github.com/kernoid/kernoid/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/kernoid/kernoid/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/kernoid/kernoid/compare/v0.6.0...v0.7.0
 [0.3.0]: https://github.com/kernoid/kernoid/compare/v0.2.3...v0.3.0
 [0.2.3]: https://github.com/kernoid/kernoid/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/kernoid/kernoid/compare/v0.2.1...v0.2.2

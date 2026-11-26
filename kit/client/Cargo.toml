@@ -30,14 +30,14 @@ iana-time-zone = "0.1.65"
 jiff = "1.0.1"
 # End-to-end encryption (RFC 0006): keys, PGP/MIME, building and reading mail in the client – kernoid's own library
 # (MIT), shared with the web app and the server.
-kernoid-e2e = { version = "0.6.0", path = "../e2e" }
+kernoid-e2e = { version = "0.7.0", path = "../e2e" }
 # iCalendar and vCard files, JSCalendar and JSContact – kernoid's own library (MIT), the one the server stores with.
-kernoid-pim = { version = "0.6.0", path = "../pim" }
+kernoid-pim = { version = "0.7.0", path = "../pim" }
 # Vaults on spaces (RFC 0010, 5): the foundation's streams, kept on the device in SQLite.
-kernoid-base = { version = "0.6.0", path = "../base" }
-kernoid-crypt = { version = "0.6.0", path = "../crypt" }
-kernoid-spaces = { version = "0.6.0", path = "../spaces" }
-kernoid-vault = { version = "0.6.0", path = "../vault" }
+kernoid-base = { version = "0.7.0", path = "../base" }
+kernoid-crypt = { version = "0.7.0", path = "../crypt" }
+kernoid-spaces = { version = "0.7.0", path = "../spaces" }
+kernoid-vault = { version = "0.7.0", path = "../vault" }
 # HTTPS with rustls on AWS-LC and the system's trust store (rustls-platform-verifier).
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls", "http2", "json", "stream"] }
 # Named only for its feature: prefer the post-quantum key exchange X25519MLKEM768 (RFC 0006, 2).

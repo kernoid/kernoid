@@ -30,13 +30,13 @@ jiff = { version = "1.0.1", features = ["serde"], optional = true }
 jiff-sqlx = { version = "1.0.0", features = ["postgres", "serde"], optional = true }
 idna = { version = "1.1.0", optional = true }
 hickory-resolver = { version = "0.26.3", features = ["dnssec-aws-lc-rs"], optional = true }
-kernoid-config = { version = "0.6.0", path = "../kernoid-config", optional = true }
-kernoid-groupware = { version = "0.6.0", path = "../kernoid-groupware", optional = true }
-kernoid-identity = { version = "0.6.0", path = "../kernoid-identity", optional = true }
-kernoid-mail = { version = "0.6.0", path = "../kernoid-mail", optional = true }
-kernoid-oidc = { version = "0.6.0", path = "../kernoid-oidc", optional = true }
-kernoid-store = { version = "0.6.0", path = "../kernoid-store", optional = true }
-kernoid-mime = { version = "0.6.0", path = "../../kit/mime", optional = true }
+kernoid-config = { version = "0.7.0", path = "../kernoid-config", optional = true }
+kernoid-groupware = { version = "0.7.0", path = "../kernoid-groupware", optional = true }
+kernoid-identity = { version = "0.7.0", path = "../kernoid-identity", optional = true }
+kernoid-mail = { version = "0.7.0", path = "../kernoid-mail", optional = true }
+kernoid-oidc = { version = "0.7.0", path = "../kernoid-oidc", optional = true }
+kernoid-store = { version = "0.7.0", path = "../kernoid-store", optional = true }
+kernoid-mime = { version = "0.7.0", path = "../../kit/mime", optional = true }
 rustls = { version = "0.23.46", default-features = false, features = ["aws-lc-rs", "prefer-post-quantum", "std", "tls12"] }
 rustls-webpki = { version = "0.103.16", default-features = false, features = ["aws-lc-rs", "std"], optional = true }
 sha2 = { version = "0.11.1", optional = true }

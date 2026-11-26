@@ -16,17 +16,17 @@ workspace = true
 bytes = "1.12.1"
 jiff = { version = "1.0.1", features = ["serde", "tzdb-bundle-always"] }
 jiff-sqlx = { version = "1.0.0", features = ["postgres", "serde"] }
-kernoid-e2e = { version = "0.6.0", path = "../../kit/e2e" }
-kernoid-pim = { version = "0.6.0", path = "../../kit/pim" }
-kernoid-files = { version = "0.6.0", path = "../kernoid-files" }
-kernoid-groupware = { version = "0.6.0", path = "../kernoid-groupware" }
-kernoid-identity = { version = "0.6.0", path = "../kernoid-identity" }
-kernoid-store = { version = "0.6.0", path = "../kernoid-store" }
+kernoid-e2e = { version = "0.7.0", path = "../../kit/e2e" }
+kernoid-pim = { version = "0.7.0", path = "../../kit/pim" }
+kernoid-files = { version = "0.7.0", path = "../kernoid-files" }
+kernoid-groupware = { version = "0.7.0", path = "../kernoid-groupware" }
+kernoid-identity = { version = "0.7.0", path = "../kernoid-identity" }
+kernoid-store = { version = "0.7.0", path = "../kernoid-store" }
 base64 = "0.22.1"
 futures-util = { version = "0.3.34", default-features = false }
-kernoid-mail = { version = "0.6.0", path = "../kernoid-mail" }
+kernoid-mail = { version = "0.7.0", path = "../kernoid-mail" }
 # Mail messages: the kit's library (MIT), by path.
-kernoid-mime = { version = "0.6.0", path = "../../kit/mime" }
+kernoid-mime = { version = "0.7.0", path = "../../kit/mime" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 sha2 = "0.11.1"
