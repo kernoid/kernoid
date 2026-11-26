@@ -5,7 +5,7 @@ What changes from release to release, for those who run kernoid and those who bu
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org) –
 before 1.0, a minor version (0.2) may change the API and the configuration, and says how to upgrade here.
 
-## [0.7.0] – DATE
+## [0.7.0] – 2026-11-26
 
 What aktujo waits for (its RFC 0012, 8): an app that starts without an account, a program's Rust in kernoid's one native
 library, a server as one more node of a space, groups, and a relay without object storage – with the first fixes from a
