@@ -342,10 +342,19 @@ async fn add_stream(
 ) -> Result<StatusCode, RelayError> {
     let (space, stream) = (space_id(&space)?, stream_id(&stream)?);
     let (domain, _) = relay.held_v2(&scheme, &space).await?;
-    let (_, device) = relay.device(domain, &space, &headers, &method, &uri, None).await?;
+    let (roster, device) = relay.device(domain, &space, &headers, &method, &uri, None).await?;
     // Every device makes its own person's inbox, also one that may only read (RFC 0012, 4); else `write`.
-    if !own_inbox(domain, &space, &stream, &device) && !device.may(Permission::Write) {
+    let own = own_inbox(domain, &space, &stream, &device);
+    if !own && !device.may(Permission::Write) {
         return Err(forbidden("not allowed"));
+    }
+    // Another person's inbox is that person's to make: its id anyone can compute, and whoever made it first would
+    // hold its tokens. And only a person's own stream is an inbox – one takes sealed links from every device.
+    if !own && roster.persons().any(|person| stream == StreamId::of_person(domain, &space, &person.id)) {
+        return Err(forbidden("the stream of another person"));
+    }
+    if body.inbox && !own {
+        return Err(bad("only a person's own stream is an inbox"));
     }
     if body.generation != 0 || body.read.0.len() != 32 || body.write.0.len() != 32 {
         return Err(bad("a stream starts with generation 0 and two token hashes of 32 bytes"));

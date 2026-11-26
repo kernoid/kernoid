@@ -208,3 +208,70 @@ fn requests_are_signed_by_a_device_of_the_roster() {
     let header = request_signature(D, &stranger, "GET", "/x", 1_800_000_000);
     assert!(verify_request(&f.roster, &header, "GET", "/x", 1_800_000_000).is_none());
 }
+
+/// Bob joins Alice's space as a person of his own, with `write` only; his laptop's keys.
+fn with_bob(f: &mut Founded) -> (HybridKeys, PersonId) {
+    let laptop = HybridKeys::generate(D);
+    let bob = PersonId::generate();
+    let bob_seed = kernoid_base::random::<32>();
+    let laptop_device = Device::new(&laptop, bob.clone(), device("bob-laptop"), None).with(&[Permission::Write]);
+    let bob_key = person_key(D, &f.space, &bob, 0, &bob_seed, None, &[&laptop_device]).unwrap();
+    let link = link_to_person(D, f.roster.space_stream().unwrap(), 0, &f.space_key, &bob_key).unwrap();
+    let record = f.roster.next(RosterRecord {
+        add_persons: vec![Person { id: bob.clone(), name: None }],
+        add_devices: vec![laptop_device],
+        person_keys: vec![bob_key],
+        space_links: Some(kernoid_crypt::stream::SpaceLinks { generation: 0, links: vec![link], previous: None }),
+        ..RosterRecord::blank(&f.space)
+    });
+    f.roster.apply(record.sign(&f.phone)).unwrap();
+    (laptop, bob)
+}
+
+#[test]
+fn nobody_writes_another_persons_key_seals_or_links() {
+    let mut f = found();
+    let (laptop, _bob) = with_bob(&mut f);
+    let phone_device = f.roster.device(&f.phone.verifying().id()).cloned().unwrap();
+    let alice_key = f.roster.person_key(&f.alice).cloned().unwrap();
+
+    // Bob's laptop rotates Alice's key to a seed it chose: refused – it would read what is sealed to her from then on.
+    let chosen = kernoid_base::random::<32>();
+    let rotation = person_key(D, &f.space, &f.alice, 1, &chosen, None, &[&phone_device]).unwrap();
+    let record = f.roster.next(RosterRecord { person_keys: vec![rotation], ..RosterRecord::blank(&f.space) });
+    assert_eq!(
+        f.roster.clone().apply(record.sign(&laptop)).unwrap_err(),
+        RosterProblem::NotAllowed("the key of another person")
+    );
+
+    // Nor may it replace the seal of Alice's phone in her current generation – which would lock the phone out.
+    let garbage = kernoid_crypt::stream::PersonKey {
+        receiving: alice_key.receiving.clone(),
+        ..person_key(D, &f.space, &f.alice, 0, &chosen, None, &[&phone_device]).unwrap()
+    };
+    let record = f.roster.next(RosterRecord { person_keys: vec![garbage.clone()], ..RosterRecord::blank(&f.space) });
+    assert!(matches!(f.roster.clone().apply(record.clone().sign(&laptop)), Err(RosterProblem::NotAllowed(_))));
+    // Alice's own phone may not either: a seal stays as it was written.
+    assert!(matches!(f.roster.clone().apply(record.sign(&f.phone)), Err(RosterProblem::Duplicate(_))));
+
+    // Nor may it link the current generation of the space stream to Alice again, with a key of its own.
+    let link = link_to_person(D, f.roster.space_stream().unwrap(), 0, &StreamKey::generate(), &alice_key).unwrap();
+    let record = f.roster.next(RosterRecord {
+        space_links: Some(kernoid_crypt::stream::SpaceLinks { generation: 0, links: vec![link], previous: None }),
+        ..RosterRecord::blank(&f.space)
+    });
+    assert!(matches!(f.roster.clone().apply(record.clone().sign(&laptop)), Err(RosterProblem::NotAllowed(_))));
+    assert!(matches!(f.roster.clone().apply(record.sign(&f.phone)), Err(RosterProblem::NotAllowed(_))));
+    assert_eq!(f.roster.space_keys(&f.phone).unwrap()[&0], f.space_key);
+
+    // A key whose receiving key is not its seed's: the roster takes it from Alice's own device, but her devices do not
+    // use it – links to it would go to whoever holds the other key.
+    let other = HybridKeys::generate(D);
+    let mismatch = kernoid_crypt::stream::PersonKey {
+        receiving: kernoid_base::Bytes(other.receiving().0.clone()),
+        ..person_key(D, &f.space, &f.alice, 1, &chosen, Some(&f.alice_seed), &[&phone_device]).unwrap()
+    };
+    let record = f.roster.next(RosterRecord { person_keys: vec![mismatch], ..RosterRecord::blank(&f.space) });
+    f.roster.apply(record.sign(&f.phone)).unwrap();
+    assert!(matches!(f.roster.person_seeds(&f.phone), Err(EncryptionError::Decrypt)));
+}

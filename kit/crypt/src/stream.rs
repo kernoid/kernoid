@@ -577,6 +577,9 @@ impl Roster {
                 return Err(RosterProblem::NotAllowed("a new generation of the space stream needs `write`"));
             }
         }
+        // Who may write a person's key (aktujo RFC 0009, 5; RFC 0012, 8): a device of that person, the device that adds the
+        // person in this record, or – after removing one of the person's devices – a device with `members`.
+        let added: BTreeSet<PersonId> = record.add_persons.iter().map(|person| person.id.clone()).collect();
         for id in &record.remove_persons {
             if persons.remove(id).is_none() {
                 return Err(RosterProblem::Unknown(id.to_string()));
@@ -595,6 +598,7 @@ impl Roster {
                 None => return Err(RosterProblem::Unknown(id.to_string())),
             }
         }
+        let lost_a_device = rotated.clone();
         for person in &record.add_persons {
             if persons.contains_key(&person.id) || self.person_keys.keys().any(|(id, _)| *id == person.id) {
                 return Err(RosterProblem::Duplicate(person.id.to_string()));
@@ -608,6 +612,9 @@ impl Roster {
             }
             if !persons.contains_key(&device.person) {
                 return Err(RosterProblem::Unknown(device.person.to_string()));
+            }
+            if device.receiving.0.len() != pq::RECEIVING_KEY_LEN {
+                return Err(RosterProblem::NotAllowed("a device's receiving key of the wrong length"));
             }
             devices.insert(device.id, device.clone());
         }
@@ -634,11 +641,21 @@ impl Roster {
             if !fits || key.receiving.0.len() != pq::RECEIVING_KEY_LEN {
                 return Err(RosterProblem::PersonKey(key.person.to_string()));
             }
+            let own = author.person == key.person;
+            let rotation = lost_a_device.contains(&key.person) && current.is_some_and(|g| key.generation == g + 1);
+            if record.seq != 0 && !own && !added.contains(&key.person) && !rotation {
+                return Err(RosterProblem::NotAllowed("the key of another person"));
+            }
             for seal in &key.seals {
                 if devices.get(&seal.device).is_none_or(|d| d.person != key.person) {
                     return Err(RosterProblem::PersonKey(format!("{} for {}", key.person, seal.device)));
                 }
-                seals.insert((key.person.clone(), key.generation, seal.device), seal.sealed.clone());
+                // A seal stays as it was written: replacing it would lock its device out, or hand it another seed.
+                let at = (key.person.clone(), key.generation, seal.device);
+                if seals.contains_key(&at) {
+                    return Err(RosterProblem::Duplicate(format!("the seal of {} for {}", key.person, seal.device)));
+                }
+                seals.insert(at, seal.sealed.clone());
             }
             let entry = person_keys.entry((key.person.clone(), key.generation)).or_insert_with(|| key.clone());
             if entry.previous.is_none() {
@@ -672,11 +689,23 @@ impl Roster {
             if !fits {
                 return Err(RosterProblem::SpaceLink(format!("generation {}", links.generation)));
             }
+            let same = generation == Some(links.generation);
             for link in &links.links {
-                if !persons.contains_key(&link.person)
-                    || !person_keys.contains_key(&(link.person.clone(), link.person_generation))
-                {
+                // To the person's current key – a key a removed device knows opens nothing new.
+                let person_current = person_keys
+                    .range((link.person.clone(), 0)..=(link.person.clone(), u32::MAX))
+                    .next_back()
+                    .map(|((_, g), _)| *g);
+                if !persons.contains_key(&link.person) || person_current != Some(link.person_generation) {
                     return Err(RosterProblem::SpaceLink(link.person.to_string()));
+                }
+                // The current generation is linked again only to a person added in this record; a link stays as it
+                // was written.
+                if same && record.seq != 0 && !added.contains(&link.person) {
+                    return Err(RosterProblem::NotAllowed("a link of the space stream to a person not added here"));
+                }
+                if space_links.contains_key(&(links.generation, link.person.clone())) {
+                    return Err(RosterProblem::Duplicate(format!("the link of the space stream to {}", link.person)));
                 }
                 space_links
                     .insert((links.generation, link.person.clone()), (link.person_generation, link.sealed.clone()));
@@ -735,6 +764,11 @@ impl Roster {
         let mut seeds = BTreeMap::new();
         let (mut g, mut seed) = (generation, seed);
         loop {
+            // The seed must be the one whose receiving key the roster published – links go to that key.
+            let published = self.person_keys.get(&(person.clone(), g)).ok_or(EncryptionError::NoKey(g))?;
+            if HybridKeys::from_seed(self.domain, seed).receiving().0 != published.receiving.0 {
+                return Err(EncryptionError::Decrypt);
+            }
             seeds.insert(g, seed);
             if g == 0 {
                 break;

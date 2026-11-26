@@ -252,9 +252,17 @@ async fn a_removed_device_gets_nothing_and_sealed_links_need_no_token(pool: PgPo
     roster.apply(record).unwrap();
 
     // Alice's person stream is an inbox: the laptop seals a link to her into it without the stream's write token.
-    let person_stream = StreamId::generate();
+    let person_stream = StreamId::of_person(D, &space(), &founding.person);
     let stream_key = StreamKey::of_person(D, &founding.person, &founding.person_seed);
     let stream_path = path(&format!("streams/{person_stream}"));
+    // Only a person's own stream is an inbox; another stream may not be one.
+    let other = StreamId::generate();
+    assert_eq!(
+        send(&app, "PUT", &path(&format!("streams/{other}")), call(&phone), tokens(&stream_key, &other, 0, true))
+            .await
+            .0,
+        StatusCode::BAD_REQUEST
+    );
     assert_eq!(
         send(&app, "PUT", &stream_path, call(&phone), tokens(&stream_key, &person_stream, 0, true)).await.0,
         StatusCode::CREATED
@@ -300,4 +308,49 @@ async fn a_removed_device_gets_nothing_and_sealed_links_need_no_token(pool: PgPo
     let purge = Call { keys: Some(&phone), write: Some(write), ..Call::default() };
     assert_eq!(send(&app, "DELETE", &stream_path, purge, vec![]).await.0, StatusCode::NO_CONTENT);
     assert_eq!(send(&app, "GET", &list, call(&phone), vec![]).await.0, StatusCode::FORBIDDEN);
+}
+
+#[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
+async fn another_persons_inbox_is_not_taken(pool: PgPool) {
+    let app = setup(&pool).await;
+    let phone = HybridKeys::generate(D);
+    let founding = found(D, &space(), &phone, "alice-phone".parse().unwrap(), None, None).unwrap();
+    let mut roster = kernoid_crypt::stream::Roster::new(D, space());
+    roster.apply(founding.record.clone()).unwrap();
+    let roster_path = path("roster");
+    send(&app, "POST", &roster_path, Call { founder: true, ..Call::default() }, to_root(&founding.record).unwrap())
+        .await;
+
+    // Bob comes in as a person of his own.
+    let laptop = HybridKeys::generate(D);
+    let bob = kernoid_crypt::stream::PersonId::generate();
+    let laptop_device =
+        Device::new(&laptop, bob.clone(), "bob-laptop".parse().unwrap(), None).with(&[Permission::Write]);
+    let bob_seed = kernoid_base::random::<32>();
+    let bob_key = person_key(D, &space(), &bob, 0, &bob_seed, None, &[&laptop_device]).unwrap();
+    let link =
+        kernoid_crypt::stream::link_to_person(D, &founding.space_stream, 0, &founding.space_key, &bob_key).unwrap();
+    let record = roster
+        .next(RosterRecord {
+            add_persons: vec![kernoid_crypt::stream::Person { id: bob.clone(), name: None }],
+            add_devices: vec![laptop_device],
+            person_keys: vec![bob_key],
+            space_links: Some(kernoid_crypt::stream::SpaceLinks { generation: 0, links: vec![link], previous: None }),
+            ..RosterRecord::blank(&space())
+        })
+        .sign(&phone);
+    let call = |keys| Call { keys: Some(keys), ..Call::default() };
+    assert_eq!(send(&app, "POST", &roster_path, call(&phone), to_root(&record).unwrap()).await.0, StatusCode::CREATED);
+
+    // Alice's phone may write, but not make Bob's stream first – it would hold its tokens, and Bob none.
+    let bobs = StreamId::of_person(D, &space(), &bob);
+    let mine = StreamKey::generate();
+    let bobs_path = path(&format!("streams/{bobs}"));
+    assert_eq!(
+        send(&app, "PUT", &bobs_path, call(&phone), tokens(&mine, &bobs, 0, false)).await.0,
+        StatusCode::FORBIDDEN
+    );
+    // Bob's own device makes it.
+    let key = StreamKey::of_person(D, &bob, &bob_seed);
+    assert_eq!(send(&app, "PUT", &bobs_path, call(&laptop), tokens(&key, &bobs, 0, true)).await.0, StatusCode::CREATED);
 }

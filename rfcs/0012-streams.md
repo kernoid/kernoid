@@ -129,6 +129,13 @@ signed hybrid and name:
 - **servers** – a device marked `server` (aktujo RFC 0009, 5): every member sees that the server's operator can read
   everything.
 
+**Who writes what of a person** (settled 2026-11-26, section 11): a person's key – a new generation, or seals of
+the current one for new devices – comes from a device of that person, from the device that adds the person in the
+same record, or, after removing one of the person's devices, from a device with `members`. Seals and links of the space
+stream are written once and never replaced; a link names the person's current key, and a link of the current
+generation goes only to a person added in the same record. The relay lets only a person's own devices make the
+person's stream, the only stream that is an inbox.
+
 Roles and the other permissions of aktujo RFC 0009, 6 (`roles`, `groups`, `share`, `link`, `lock`, `unlock`) are data
 of the space stream, checked by the devices at a record's `at` – the relay cannot see them. A program defines its
 permissions and roles; the foundation knows the four the relay enforces.
@@ -166,7 +173,37 @@ then go. kernoid's own vaults move onto `v2` with [0010](0010-foundation.md), 5.
 ## 11. Open
 
 - **OPEN:** a review of sections 3 to 5, `kernoid_crypt::stream` and `kernoid_crypt::pq` by someone who reviews
-  cryptography, besides their author.
+  cryptography, besides their author. A first reading by a separate model (2026-11-26) – no replacement for it –
+  found X-Wing (draft-11, its three vectors), the KEM–DEM, the hybrid signatures and the separation of keys sound,
+  and led to these changes:
+  - **The roster checks who writes a person's key** (section 7): a device of that person, the device adding the
+    person in the same record, or – after removing one of the person's devices – a device with `members`. Before,
+    any device could rotate another person's key to a seed of its own and read what was sealed to that person.
+  - **Seals and links of the space stream are never replaced**, and a link names the person's current key. A link
+    of the current generation goes only to a person added in the same record. Before, any device could replace
+    another person's link and lock that person out of the space stream.
+  - A device opens a person's seed only if its receiving key is the one the roster published.
+  - **The relay lets only a person's own devices make the person's stream**, and only that stream is an inbox.
+    Before, any device with `write` could make another person's inbox first and hold its tokens.
+  - A device's receiving key must have the right length; printing a short key no longer panics.
+
+  **OPEN** for the review, from the same reading:
+  - A device with `members` that removes another person's device makes that person's next seed itself and so knows
+    it (section 8). That is part of trusting `members`. Should the person's own device re-key after such a rotation?
+  - Request signatures cover the method, the path and the time (±300 s), not the body or the token headers. A header
+    seen by a proxy can be replayed for five minutes with another body. The fix needs a new version of the request
+    signature.
+  - The write token comes from the stream key like the read token (section 5): whoever reads a stream can compute
+    its write token, and only the device's `write` stands between them. Finer rights are the devices' check of `at`.
+  - The code and this text differ in details: `StreamRecord` has no `previous` or `clock`; a record's id hashes the
+    nonce and ciphertext; an id carries 128 bits; the link context leaves out the space.
+  - Secrets are not zeroized (stream keys, seeds, X25519 and ML-KEM keys; ml-kem's `zeroize` is off).
+  - The stream key is both the AEAD key and the input of the tokens; signatures of roster records, stream records and
+    requests are told apart by their encoding alone, not by a label.
+  - The relay builds the roster again for every request and checks every signature, which costs O(n²) as the roster
+    grows.
+  - Whether ml-kem 0.2's `EncapsulationKey::from_bytes` reduces coefficients modulo q, so that the check in `pq`
+    really is FIPS 203's. Whether a person's inbox gets a new generation when the person's key rotates.
 - Settled for kernoid's vaults ([0010](0010-foundation.md), 5, 9): their store is kept sealed under a key of the
   system's key store. **OPEN** for the foundation's other programs: keys of streams and seeds are kept in the store on
   the device, not yet in the key store of the operating

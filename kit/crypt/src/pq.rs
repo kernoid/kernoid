@@ -140,7 +140,8 @@ pub struct HybridReceivingKey(pub Vec<u8>);
 
 impl fmt::Debug for HybridReceivingKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "HybridReceivingKey({})", hex::encode(&self.0[RECEIVING_KEY_LEN - 8..]))
+        let tail = self.0.get(self.0.len().saturating_sub(8)..).unwrap_or_default();
+        write!(f, "HybridReceivingKey({})", hex::encode(tail))
     }
 }
 
@@ -150,7 +151,7 @@ pub struct HybridVerifyingKey(pub Vec<u8>);
 
 impl fmt::Debug for HybridVerifyingKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "HybridVerifyingKey({})", hex::encode(&self.0[..8]))
+        write!(f, "HybridVerifyingKey({})", hex::encode(self.0.get(..8).unwrap_or(&self.0)))
     }
 }
 
