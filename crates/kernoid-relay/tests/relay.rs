@@ -48,6 +48,11 @@ struct Setup {
 
 /// A tenant with an account, and the relay for kernoid's and aktujo's spaces.
 async fn setup(pool: &PgPool, open: bool) -> Setup {
+    setup_with(pool, open, false).await
+}
+
+/// The same, with large envelopes in PostgreSQL instead of object storage when `database` (`[blob] kind = "database"`).
+async fn setup_with(pool: &PgPool, open: bool, database: bool) -> Setup {
     let (instance, tenant, account) = (Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7());
     sqlx::query!("INSERT INTO instances (id, name) VALUES ($1, 'Test')", instance).execute(pool).await.unwrap();
     sqlx::query!("INSERT INTO tenants (id, instance_id, name) VALUES ($1, $2, 'Firma')", tenant, instance)
@@ -63,7 +68,8 @@ async fn setup(pool: &PgPool, open: bool) -> Setup {
     .await
     .unwrap();
     let founder = Founder { tenant, account };
-    let blobs = BlobStore::in_memory(Arc::new(TenantKeys::new(pool.clone(), Key::random().unwrap())));
+    let keys = Arc::new(TenantKeys::new(pool.clone(), Key::random().unwrap()));
+    let blobs = if database { BlobStore::in_database(pool.clone(), keys) } else { BlobStore::in_memory(keys) };
     let relay = Relay::new(
         pool.clone(),
         blobs,
@@ -250,4 +256,30 @@ async fn large_envelopes_go_to_object_storage_and_leave_with_their_space(pool: P
     assert_eq!(garbage, [stored.blob.unwrap()]);
     let (status, _) = relay.send("GET", &format!("{envelopes}?after=0"), Some(&laptop), false, vec![]).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[sqlx::test(migrator = "kernoid_store::MIGRATOR")]
+async fn a_relay_alone_keeps_large_envelopes_in_postgresql(pool: PgPool) {
+    let relay = setup_with(&pool, false, true).await;
+    let laptop = MemberKeys::generate(D);
+    let (first, key) = founded(&laptop);
+    relay.send("POST", &path("kernoid", "members"), None, true, to_root(&first).unwrap()).await;
+    let original = vec![7u8; 200 * 1024];
+    let envelope = Envelope::seal(&space(), 0, &key, &laptop, EnvelopeContent::Original, &original);
+    let envelopes = path("kernoid", "envelopes");
+    assert_eq!(
+        relay.send("POST", &envelopes, Some(&laptop), false, to_root(&envelope).unwrap()).await.0,
+        StatusCode::CREATED
+    );
+    // Outside the row, as with object storage – in `blob_objects`, sealed with the tenant's key.
+    let stored = sqlx::query_scalar!("SELECT blob FROM relay_envelopes").fetch_one(&pool).await.unwrap().unwrap();
+    let content = sqlx::query_scalar!("SELECT content FROM blob_objects").fetch_one(&pool).await.unwrap();
+    assert!(content.len() > 200 * 1024 && !content.windows(64).any(|w| w == [7u8; 64]), "sealed");
+    let (status, page) = relay.send("GET", &format!("{envelopes}?after=0"), Some(&laptop), false, vec![]).await;
+    assert_eq!(status, StatusCode::OK);
+    let received: Envelope = from_root(page["envelopes"][0]["envelope"].to_string().as_bytes()).unwrap();
+    assert_eq!(received, envelope);
+    assert!(relay.relay.remove_space(relay.founder.tenant, space().as_str()).await.unwrap());
+    let garbage = sqlx::query_scalar!(r#"SELECT key AS "key!" FROM blob_garbage"#).fetch_all(&pool).await.unwrap();
+    assert_eq!(garbage, [stored]);
 }

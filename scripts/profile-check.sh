@@ -5,7 +5,7 @@
 #
 # - identity alone: no object storage (`[blob] kind = "database"`), no JMAP, CalDAV or WebDAV – but logging in and a
 #   picture of the account, kept in PostgreSQL;
-# - a relay alone, open: the relay's routes, nothing of mail, calendars or files;
+# - a relay alone, open, without object storage: the relay's routes, nothing of mail, calendars or files;
 # - a built-in identity taken over (RFC 0009, 7): kernoid's schema in a program's database, dumped and restored into a
 #   database of its own, served at another host – the accounts and their passwords are there.
 #
@@ -134,7 +134,8 @@ echo "identity alone works: logins and pictures without object storage, nothing 
 # A relay alone, open for the tenant: the same database, other services.
 kill "$server" && wait "$server" 2>/dev/null || true
 server=""
-sed -e 's/^files = false$/files = false\nrelay = true/' -e 's/^kind = "database"$/kind = "memory"/' "$work/config.toml" >"$work/relay.toml"
+# Without object storage too (`[blob] kind = "database"`): a small relay keeps its large envelopes in PostgreSQL.
+sed -e 's/^files = false$/files = false\nrelay = true/' "$work/config.toml" >"$work/relay.toml"
 printf '\n[relay]\nopen_for_tenant = "%s"\n' "$tenant" >>"$work/relay.toml"
 "$binary" --config "$work/relay.toml" serve >"$work/server.log" 2>&1 &
 server=$!
@@ -147,7 +148,7 @@ services=$(curl -fsS -H "Host: $host:$port" "http://127.0.0.1:$port/v1/services"
 expect 404 GET /jmap/session
 expect 200 GET "/relay/kernoid/v1/spaces/0192f1e4-0000-7000-8000-0000000000c1/members?after=-1"
 expect 404 GET "/relay/spezado/v1/spaces/0192f1e4-0000-7000-8000-0000000000c1/members?after=-1"
-echo "a relay alone works: its routes, nothing of mail, calendars or files"
+echo "a relay alone works without object storage: its routes, nothing of mail, calendars or files"
 
 # A built-in identity taken over: what a program that builds kernoid in keeps in its database (`database.schema`),
 # moved into a kernoid of its own at another host.

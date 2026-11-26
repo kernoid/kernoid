@@ -556,6 +556,12 @@ impl Services {
         self.mail || self.files || self.relay
     }
 
+    /// Whether a service needs object storage: mail and files do; the relay of a small installation keeps its large
+    /// envelopes in PostgreSQL too (`[blob] kind = "database"`, aktujo RFC 0012, 8).
+    pub fn needs_object_storage(&self) -> bool {
+        self.mail || self.files
+    }
+
     /// Whether JMAP is served: for mail, calendars or files.
     pub fn jmap(&self) -> bool {
         self.mail || self.calendars || self.files
@@ -745,9 +751,9 @@ impl Config {
                 return Err(Error::Conflict("database.schema: lower-case letters, digits and _, at most 63"));
             }
         }
-        if matches!(self.blob, Blob::Database) && self.services.keeps_content() {
+        if matches!(self.blob, Blob::Database) && self.services.needs_object_storage() {
             return Err(Error::Conflict(
-                "[blob] kind = \"database\" is only for installations without mail, files and the relay: use object storage",
+                "[blob] kind = \"database\" is only for installations without mail and files: use object storage",
             ));
         }
         Ok(())
@@ -840,6 +846,10 @@ mod tests {
         assert!(!config.services.relay);
         let relay = format!("{MINIMAL}\n[services]\nfiles = false\nrelay = true\n");
         assert!(Config::from_sources(&relay, []).unwrap().services.relay);
+        // A relay alone may keep its large envelopes in PostgreSQL.
+        let small = MINIMAL.replace("kind = \"memory\"", "kind = \"database\"")
+            + "\n[services]\nmail = false\ncalendars = false\nfiles = false\nrelay = true\n";
+        assert!(matches!(Config::from_sources(&small, []).unwrap().blob, Blob::Database));
     }
 
     #[test]

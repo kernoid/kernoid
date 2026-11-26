@@ -50,6 +50,10 @@ files = false
 kind = "database"
 ```
 
+A **relay alone** – the spaces of a program's apps on a small server – needs nothing but PostgreSQL as well: with
+only `relay = true` in `[services]`, `[blob] kind = "database"` keeps its envelopes larger than 64 KiB in PostgreSQL.
+`deploy/compose/relay.yaml` runs one. Only mail and files need object storage.
+
 A service the installation runs can still be switched off for **one tenant** – a plan without files, a tenant that
 only logs in: `kernoid tenant service <TENANT> files --enabled false` (or `PUT /v1/tenant/services/files` by an
 instance administrator). Its accounts then do not see it; what they keep there stays until it is switched on again.
